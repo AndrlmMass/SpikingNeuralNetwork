@@ -8,12 +8,10 @@ import numpy as np
 import networkx as nx
 import tensorflow as tf
 import matplotlib.pyplot as plt
-os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN_scripts_folder')
-
+os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
 
 # Initialize class variable
-class SNN_STDP():
-    
+class SNN_STDP:
     # Initialize neuron parameters
     def __init__(self, V_th=-50, V_reset=-65, C=10, R=1, 
                  dt=0.001, T=0.1, V_rest=-70, duration=0.1):
@@ -28,28 +26,23 @@ class SNN_STDP():
         self.duration = duration 
 
     def prep_data_(self):
-        # Import data
-        #mnist = tf.keras.datasets.mnist
-        # Prepare data
-        #(train_images, train_labels), (test_images, test_labels) = mnist.load_data()
-        #del test_images, test_labels
-        #train_images = train_images/train_images.max()
-        #training, labels = train_images[:10].reshape(10,28*28), train_labels[:10]
         training_simplified = np.random.rand(100, 3)
-        
         return training_simplified
 
     # Initialize neuronal & weight layers
-    def gen_neuron_layer(self, num_neurons=3):
-        self.num_neurons = num_neurons
-        # Initialize membrane potential array
-        MembranePotentials = np.full((int(self.T/self.dt), num_neurons), self.V_rest)
-        
-        # Initialize spike array (binary)
-        Spikes = np.zeros((int(self.T/self.dt), self.num_neurons))
+    def gen_neuron_layer(self, input_neurons=3, output_neurons=1):
+        self.input_neurons = input_neurons
+        self.output_neurons = output_neurons
+        self.total_neurons = input_neurons+output_neurons
 
-        # Random initial weights
-        Weights = np.random.rand(num_neurons, num_neurons)
+        # Initialize membrane potential array 10000 x 4
+        MembranePotentials = np.full((int(self.T/self.dt), self.total_neurons), self.V_rest)
+        
+        # Initialize spike array (binary) as 10000 x 4
+        Spikes = np.zeros((int(self.T/self.dt), self.total_neurons))
+
+        # Random initial weights (3 x 1)
+        Weights = np.random.rand(input_neurons)
 
         return MembranePotentials, Spikes, Weights
     
@@ -61,7 +54,7 @@ class SNN_STDP():
         # 3D array: inputs x neurons x time steps
         fixed_input = np.zeros((num_inputs, num_neurons, self.num_steps))
 
-        input *= 100000
+        input *= 10000 #Adjust based on plotting afterwards
 
         for i in range(num_inputs):
             for j in range(num_neurons):
@@ -72,26 +65,28 @@ class SNN_STDP():
 
 
     # Neuronal activity
-    def neuronal_activity(self, W_ff, spikes, X, V, tau_stdp=0.02, A_plus=0.01):
-        [num_items, num_neurons, num_timesteps] = X.shape
+    def neuronal_activity(self, Ws, spikes, X, V):
+        [num_items, _, num_timesteps] = X.shape
 
         '''
-        W_ff   = feedforward weights (num_neurons x num_neurons)
-        spikes = spikes array (num_neurons x num_timesteps)
-        X      = spike-encoded array (samples x features x timesteps)
-        V      = membrane potential (num_neurons x num_timesteps)
+        Ws     = weights (output_neurons x input_neurons)
+        Spikes = spikes array (num_timesteps x total_neurons)
+        X      = spike-encoded array (samples x timesteps x total_neurons)
+        V      = membrane potential (num_timesteps x total_neurons)
         '''
 
         for l in tqdm(range(num_items), desc="Processing items"):
             for t in range(1, num_timesteps):
                 # Calculate feedforward current 
-                I_ff = np.dot(W_ff, spikes[t-1, :])
+                I_ff = np.dot(Ws, spikes[t-1, 0:3])
                 
                 # Calculate total input current for all neurons
                 I_in = X[l, :, t] + I_ff
+                I_out = np.sum(I_in)
 
                 # Update membrane potential
-                V[t, :] = V[t-1, :] + (-V[t-1, :] + self.V_rest + I_in * self.R * self.dt) / self.tau_m
+                V[t, 0:3] = V[t-1, 0:3] + (-V[t-1, 0:3] + self.V_rest + I_in * self.dt / self.tau_m) / self.tau_m
+                V[t, 3] = V[t-1, 3] + (-V[t-1, 3] + self.V_rest + I_out * self.dt / self.tau_m) / self.tau_m
 
                 # Generate spikes
                 spike_indices = np.where(V[t, :] > self.V_th)[0]
@@ -102,32 +97,30 @@ class SNN_STDP():
                 refractory_indices = np.where(spikes[t-1, :] == 1)[0]
                 V[t, refractory_indices] = self.V_rest
 
-                # STDP learning rule
-                for ip in range(num_neurons):
-                    for jp in range(num_neurons):
-                        if spikes[t-1, ip] == 1 and spikes[t, jp] == 1:
-                            delta_w = A_plus * np.exp(-(t - 1 - tau_stdp) / tau_stdp)
-                            W_ff[ip, jp] += delta_w
-
-        return spikes, V, W_ff
+        return spikes, V, Ws
 
     def visualize_learning(self, spikes, V):
         num_neurons = spikes.shape[1]
-        num_timesteps = spikes.shape[0]
         
+        # Define colors for each neuron
+        colors = plt.cm.jet(np.linspace(0, 1, num_neurons))  # Using the jet colormap
+
         # Plotting Spike Raster Plot
         plt.figure(figsize=(12, 8))
         
         # Subplot for Spike Raster Plot
         plt.subplot(2, 1, 1)  # 2 rows, 1 column, 1st subplot
-        spike_times = []
-        neuron_ids = []
+        spike_data = []
         for neuron in range(num_neurons):
-            for time in range(num_timesteps):
-                if spikes[time, neuron] == 1:
-                    spike_times.append(time)
-                    neuron_ids.append(neuron)
-        plt.eventplot([np.array(spike_times)[np.array(neuron_ids) == i] for i in range(num_neurons)])
+            neuron_spike_times = np.where(spikes[:, neuron] == 1)[0]
+            spike_data.append(neuron_spike_times)
+
+        # Set lineoffsets and linelengths for spacing
+        lineoffsets = np.arange(num_neurons)
+        linelengths = 0.8  # Adjust this value to control the length of spikes
+
+        plt.eventplot(spike_data, lineoffsets=lineoffsets, linelengths=linelengths, colors=colors)
+        plt.yticks(lineoffsets, labels=[f'Neuron {i}' for i in range(num_neurons)])
         plt.xlabel('Time')
         plt.ylabel('Neuron')
         plt.title('Spike Raster Plot')
@@ -135,15 +128,13 @@ class SNN_STDP():
         # Subplot for Membrane Potential Plot
         plt.subplot(2, 1, 2)  # 2 rows, 1 column, 2nd subplot
         for neuron in range(num_neurons):
-            plt.plot(V[:, neuron], label=f'Neuron {neuron}')
+            plt.plot(V[:, neuron], label=f'Neuron {neuron}', color=colors[neuron])
         plt.xlabel('Time')
         plt.ylabel('Membrane Potential (mV)')
         plt.title('Membrane Potential Over Time')
         plt.legend()
-
         plt.tight_layout()
         plt.show()
-
     
     # Generate network structure based on the Barabasi-Albert model
     def create_scale_free_network(num_neurons, m):
