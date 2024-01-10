@@ -8,22 +8,26 @@ import numpy as np
 import networkx as nx
 import tensorflow as tf
 import matplotlib.pyplot as plt
-os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
+#os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
+os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
 
 # Initialize class variable
 class SNN_STDP:
     # Initialize neuron parameters
-    def __init__(self, V_th=-50, V_reset=-65, C=10, R=1, 
-                 dt=0.001, T=0.1, V_rest=-70, duration=0.1):
+    def __init__(self, V_th=-50, V_reset=-75, C=10, R=1, A_minus=-0.1, tau_m=0.02, 
+                 tau_stdp=0.02, A_plus=0.1, dt=0.001, T=0.1, V_rest=-70, leakage_rate=0.99):
         self.V_th = V_th
         self.V_reset = V_reset
         self.C = C
         self.R = R
-        self.tau_m = C*R/100
+        self.tau_m = tau_m
+        self.tau_stdp = tau_stdp
         self.dt = dt
         self.T = T
         self.V_rest = V_rest
-        self.duration = duration 
+        self.A_minus = A_minus
+        self.A_plus = A_plus
+        self.leakage_rate = leakage_rate
 
     def prep_data_(self):
         training_simplified = np.random.rand(100, 3)
@@ -47,21 +51,26 @@ class SNN_STDP:
         return MembranePotentials, Spikes, Weights
     
     # Encode inputs into spike trains
-    def encode_input(self, input):
+
+    def encode_input_poisson(self, input):
         num_inputs, num_neurons = input.shape
-        self.num_steps = int(self.duration / self.dt)
+        self.num_steps = int(self.T / self.dt)
 
         # 3D array: inputs x neurons x time steps
-        fixed_input = np.zeros((num_inputs, num_neurons, self.num_steps))
-
-        input *= 10000 #Adjust based on plotting afterwards
+        poisson_input = np.zeros((num_inputs, num_neurons, self.num_steps))
 
         for i in range(num_inputs):
             for j in range(num_neurons):
-                spike_prob = input[i, j] * self.dt
-                spikes = np.random.rand(self.num_steps) < spike_prob
-                fixed_input[i, j, :] = spikes
-        return fixed_input
+                # Calculate the mean spike count for the Poisson distribution
+                # Assuming 'input' is the rate (spikes/sec), we multiply by 'dt' to get the average number of spikes per time step
+                lambda_poisson = input[i, j] * self.dt
+
+                # Generate spikes using Poisson distribution
+                for t in range(self.num_steps):
+                    spike_count = np.random.poisson(lambda_poisson)
+                    poisson_input[i, j, t] = 1 if spike_count > 0 else 0
+
+        return poisson_input
 
 
     # Neuronal activity
@@ -92,12 +101,30 @@ class SNN_STDP:
                 spike_indices = np.where(V[t, :] > self.V_th)[0]
                 spikes[t, spike_indices] = 1
                 V[t, spike_indices] = self.V_reset
+                
+                # Add leakage
+                V[t,:] = V[t,:] * self.leakage_rate
 
                 # Refractory period
                 refractory_indices = np.where(spikes[t-1, :] == 1)[0]
                 V[t, refractory_indices] = self.V_rest
 
+                # STDP learning rule
+                for neuron_id in range(self.input_neurons-1):
+                    if spikes[t, neuron_id] == 1:
+                        spike_diff = t-self.closest_spike_idx(output_idx=3,current_idx=t, spikes_arr=spikes)
+                        # perform STDP
+                        if spike_diff < 0:    
+                            Ws[neuron_id] += self.A_minus * np.exp(-(t - 1 - self.tau_stdp) / self.tau_stdp)
+                        else:
+                            Ws[neuron_id] += self.A_plus * np.exp(-(t - 1 - self.tau_stdp) / self.tau_stdp)
+
         return spikes, V, Ws
+    
+    def closest_spike_idx(self, output_idx, current_idx, spikes_arr):
+        for i in range(current_idx,current_idx-6,-1):
+            if spikes_arr[i,output_idx]:
+                return i
 
     def visualize_learning(self, spikes, V):
         num_neurons = spikes.shape[1]
