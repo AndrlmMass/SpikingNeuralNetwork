@@ -7,14 +7,31 @@ import networkx as nx
 from tqdm import tqdm
 import tensorflow as tf
 import matplotlib.pyplot as plt
-os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
-#os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
+#os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
+os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
+
+class LIFNeuron:
+    """ Leaky Integrate-and-Fire Neuron model """
+    def __init__(self, threshold=-55.0, dt=0.001, rest_potential=-70):
+        self.threshold = threshold
+        self.potential = rest_potential
+
+    def receive_spike(self, weight):
+        self.potential += weight
+
+    def update(self):
+        if self.potential >= self.threshold:
+            self.potential = 0
+            return 1
+        self.potential *= self.leak_factor
+        return 0
+
 
 # Initialize class variable
 class SNN_STDP:
     # Initialize neuron parameters
     def __init__(self, V_th=-55, V_reset=-75, C=10, R=1, A_minus=-0.1, tau_m=0.02, 
-                 tau_stdp=0.02, A_plus=0.1, dt=0.001, T=0.5, V_rest=-70, leakage_rate=0.99):
+                 tau_stdp=0.02, A_plus=0.1, dt=0.001, T=3.0, V_rest=-70, leakage_rate=0.99):
         self.V_th = V_th
         self.V_reset = V_reset
         self.C = C
@@ -46,11 +63,11 @@ class SNN_STDP:
 
         # Random initial weights (3 x 1)
         Weights = np.random.rand(input_neurons)
+        self.weights = Weights
 
         return MembranePotentials, Spikes, Weights
     
     # Encode inputs into spike trains
-
     def encode_input_poisson(self, input):
         num_inputs, num_neurons = input.shape
         self.num_steps = int(self.T / self.dt)
@@ -105,9 +122,9 @@ class SNN_STDP:
                                 Ws[neuron_id] += self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp)
                             else:
                                 Ws[neuron_id] += self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp)
-
-        # Constrain weights to prevent them from growing too large
-        Ws = np.clip(Ws, a_min=0, a_max=1)
+                # Constrain weights to prevent them from growing too large
+                Ws = np.clip(Ws, a_min=0, a_max=1)
+        
         return spikes, V, Ws
 
     
@@ -155,35 +172,6 @@ class SNN_STDP:
         plt.tight_layout()
         plt.show()
     
-    # Generate network structure based on the Barabasi-Albert model
-    def create_scale_free_network(num_neurons, m):
-        G = nx.barabasi_albert_graph(num_neurons, m)
-        Weights = np.zeros((num_neurons, num_neurons))
-
-        for i, j in G.edges():
-            Weights[i, j] = np.random.rand()
-
-        return G, Weights
-
-    def plot_network(G, title='Scale-Free Network'):
-        # Draw the network
-        pos = nx.spring_layout(G)  # Positions for all nodes
-        degrees = dict(G.degree())
-
-        # Scale node size by the degree (number of connections)
-        node_size = [v * 10 for v in degrees.values()]
-        nx.draw(G, pos, with_labels=False, node_size=node_size, node_color='lightblue', edge_color='gray')
-        plt.title(title)
-        plt.show()
-
-    # Example usage
-    #num_neurons = 250  # Number of neurons
-    #m = 2  # Number of edges to attach from a new node to existing nodes
-    #G = create_scale_free_network(num_neurons, m)
-
-    # Plot the network
-    #plot_network(G)
-
 
 
 

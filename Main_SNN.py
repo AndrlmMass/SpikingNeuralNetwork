@@ -2,8 +2,8 @@
 
 # Set cw
 import os
-os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
-#os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
+#os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
+os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
 
 # Import libraries
 from SNN_functions import *
@@ -21,4 +21,6 @@ spikes, Vt, W_ff = snn.neuronal_activity(Ws=Ws, spikes=Spikes, X=train_enc, V=Me
 
 # Visualize results
 snn.visualize_learning(spikes,Vt)
+#G = snn.create_scale_free_network(m=2)
+#snn.plot_network(G)
 
