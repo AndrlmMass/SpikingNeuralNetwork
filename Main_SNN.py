@@ -15,7 +15,6 @@ MemPot, Spikes, Ws = snn.gen_neuron_layer()
 # Prepare data
 train_simpl = snn.prep_data_()
 train_enc = snn.encode_input_poisson(train_simpl)
-print(train_enc[10,:])
 
 # Train network
 spikes, Vt, W_ff = snn.neuronal_activity(Ws=Ws, spikes=Spikes, X=train_enc, V=MemPot)

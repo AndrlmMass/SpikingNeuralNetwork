@@ -13,8 +13,8 @@ os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNet
 # Initialize class variable
 class SNN_STDP:
     # Initialize neuron parameters
-    def __init__(self, V_th=-55, V_reset=-70, C=10, R=1, A_minus=-0.5, tau_m=0.02, 
-                 tau_stdp=0.02, A_plus=0.5, dt=0.001, T=0.1, V_rest=-70, leakage_rate=0.99):
+    def __init__(self, V_th=-55, V_reset=-75, C=10, R=1, A_minus=-0.1, tau_m=0.02, 
+                 tau_stdp=0.02, A_plus=0.1, dt=0.001, T=0.5, V_rest=-70, leakage_rate=0.99):
         self.V_th = V_th
         self.V_reset = V_reset
         self.C = C
@@ -29,7 +29,7 @@ class SNN_STDP:
         self.leakage_rate = leakage_rate
 
     def prep_data_(self):
-        training_simplified = np.random.rand(100, 3)
+        training_simplified = np.random.rand(1, 3)
         return training_simplified
 
     # Initialize neuronal & weight layers
@@ -62,7 +62,7 @@ class SNN_STDP:
             for j in range(num_neurons):
                 # Calculate the mean spike count for the Poisson distribution
                 # Assuming 'input' is the rate (spikes/sec), we multiply by 'dt' to get the average number of spikes per time step
-                lambda_poisson = input[i, j]*self.dt*200
+                lambda_poisson = input[i, j]*self.dt*400
 
                 # Generate spikes using Poisson distribution
                 for t in range(self.num_steps):
