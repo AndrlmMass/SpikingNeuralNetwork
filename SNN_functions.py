@@ -2,29 +2,92 @@
 
 # Import libraries
 import os
+import random
 import numpy as np
-import networkx as nx
 from tqdm import tqdm
-import tensorflow as tf
 import matplotlib.pyplot as plt
-#os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
-os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
+os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
+#os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
 
 class LIFNeuron:
     """ Leaky Integrate-and-Fire Neuron model """
-    def __init__(self, threshold=-55.0, dt=0.001, rest_potential=-70):
+    def __init__(self, threshold=-55.0, dt=0.001, V_rest =-70, V_reset=-75, cell_type = ["input"], neuron_ID = 0, num_connections=3, exhib_labels=np.array([1,1,-1])):
         self.threshold = threshold
-        self.potential = rest_potential
+        self.num_connections = num_connections
+        self.V_reset = V_reset
+        self.V_rest = V_rest
+        self.potential = [self.V_rest]
+        if cell_type != "input":
+            self.weights = np.random.rand(self.num_connections) # These are the weights for the incoming
+        self.spikes = []
+        self.output_or_hidden = cell_type
+        self.neuron_ID = neuron_ID
+        self.weight_labels = exhib_labels
 
-    def receive_spike(self, weight):
-        self.potential += weight
+    def update_spike(self, current_potential):
+        if current_potential >= self.threshold:
+            self.potential.append(self.V_reset)
+            self.spikes.append(1)
+        else:
+            self.spikes.append(0)
+            self.potential.append(self.potential[-1])
 
-    def update(self):
-        if self.potential >= self.threshold:
-            self.potential = 0
-            return 1
-        self.potential *= self.leak_factor
-        return 0
+    def update_membrane_potential(self, t, input_data, l):
+        '''
+        t = time unit
+        X = previous spiking activity
+        l = num_unit (only relevant for input neurons)
+        '''
+        # Update this part to make sure the weights are applied correctly
+        if self.cell_type != "input":
+            # Update weights based on weight labels (i.e., whether they are excitatory or inhibitory)
+            weights_ = np.dot(self.weights,self.weight_labels)
+            I_in = np.sum(np.dot(weights_,self.spikes[t-1]))
+            self.potential[t] = self.potential[t-1] * np.exp(-self.dt / self.tau_m) + (self.V_rest * (1 - np.exp(-self.dt / self.tau_m)) + I_in * self.R)
+        else:
+            I_in = input_data[l,self.neuron_ID]+self.spikes[t-1] # Not sure if I should keep the previous spike in the input neuron to calculate the Vm or not
+            self.potential[t] = self.potential[t-1] * np.exp(-self.dt / self.tau_m) + (self.V_rest * (1 - np.exp(-self.dt / self.tau_m)) + I_in * self.R)
+
+    def previous_spike(self,X, current_idx):
+        prev_spike = np.zeros(shape=(4))
+        if self.cell_type == "hidden" or self.cell_type == "output":
+            # update time since spike for main neuron
+            for i in range(current_idx,0,-1):
+                if self.spikes[i]:
+                    prev_spike[0] = i
+                else:
+                    prev_spike[0] = None
+        
+        # update time since spike for projecting neurons
+        for l in range(current_idx,0,-1):
+            for t in range(0,3):
+                if X[i,t] == 1:
+                    prev_spike[t+1] = l
+                else:
+                    prev_spike[1] = None
+        
+        return prev_spike
+    
+    
+    def STDP_W_update(self):
+        
+        # Chec
+        for weight in self.weight:
+            # update weights for excitatory connections
+            if self.weight_label:
+                if self.cell_type == "hidden":
+                    if self.spike_diff < 0:
+                        self.weight[self.neuron_ID] += self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp)
+                    else:
+                        self.weight[self.neuron_ID] += self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp)
+            # Update weights for inhibitory connections
+            else:
+                if self.cell_type == "hidden":
+                    if self.spike_diff < 0:
+                        self.weight[self.neuron_ID] += self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp)
+                    else:
+                        self.weight[self.neuron_ID] += self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp)
+
 
 
 # Initialize class variable
