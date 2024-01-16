@@ -118,44 +118,38 @@ class SNN_STDP:
         self.out_labels = [-1 if i in inhibitory_indices_out else 1 for i in range(num_hidden_neurons)]
         self.hidden_neurons = LIF_Neuron(total_time=self.T, dt=self.dt, num_items=self.num_items,
                                         PSP_effect=None, weights=out_weights)
-
-    # Update the neuronal_activity method in the SNN_STDP class
+        
     def neuronal_activity(self, Ws, spikes, X, V):
         [num_items, _, num_timesteps] = X.shape
         for l in tqdm(range(num_items), desc="Processing items"):
             for t in range(1, num_timesteps):
-                # Calculate feedforward current 
-                I_ff = np.dot(Ws, spikes[t-1, 0:3])
-                
-                # Calculate total input current for all input neurons
-                I_in = X[l, :, t] + I_ff
+                for n in range(0,self.num_input_neurons):
+                    # initiate current neuron
+                    input_neuron = self.input_neurons[n]
+                    
+                    # update membrane potential
+                    I_in = input_neuron.get_spikes()
+                    Vm = input_neuron.get_membrane_potential[t-1]*np.exp(-self.dt/self.tau_m) + (self.V_rest * (1 - np.exp(-self.dt /self.tau_m)) + I_in*self.R)
+                    input_neuron.update_membrane_potential(new_Vm = Vm, t=t)
 
-                # Update membrane potential with exponential decay
-                V[t, 0:3] = V[t-1, 0:3] * np.exp(-self.dt / self.tau_m) + \
-                            (self.V_rest * (1 - np.exp(-self.dt / self.tau_m)) + I_in * self.R)
-                V[t, 3] = V[t-1, 3] * np.exp(-self.dt / self.tau_m) + \
-                        (self.V_rest * (1 - np.exp(-self.dt / self.tau_m)) + I_ff * self.R)
+                    # update spikes based on Vm
+                    if Vm > self.V_th:
+                        input_neuron.update_spikes(new_spike=1,t=t)
+                        input_neuron.update_membrane_potential(new_Vm = self.v_reset, t=t)
+                    else:
+                        input_neuron.update_spikes(new_spike=0,t=t)
+                    
+                    # update weights with STDP
 
-                # Generate spikes
-                spike_indices = np.where(V[t, :] > self.V_th)[0]
-                spikes[t, spike_indices] = 1
-                V[t, spike_indices] = self.V_reset
 
-                # STDP learning rule
-                prev_out_spike_idx = self.closest_spike_idx(output_idx=3, current_idx=t, spikes_arr=spikes)
-                if prev_out_spike_idx is not None:
-                    spike_diff = t - prev_out_spike_idx
-                    for neuron_id in range(self.input_neurons):
-                        if spikes[t, neuron_id] == 1:
-                            # Perform STDP
-                            if spike_diff < 0:
-                                Ws[neuron_id] += self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp)
-                            else:
-                                Ws[neuron_id] += self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp)
                 # Constrain weights to prevent them from growing too large
                 Ws = np.clip(Ws, a_min=0, a_max=1)
         
         return spikes, V, Ws
+
+    def previous_spike(self, X, current_idx, current_layer_size, next_layer_size):
+        spike_checks = current_layer_size
+        prev_spike = np.zeros(shape=())
 
     
     def closest_spike_idx(self, output_idx, current_idx, spikes_arr):
