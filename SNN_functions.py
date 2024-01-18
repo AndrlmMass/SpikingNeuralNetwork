@@ -11,45 +11,6 @@ import matplotlib.pyplot as plt
 #os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
 os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
 
-class LIFNeuron:
-    """ Leaky Integrate-and-Fire Neuron model """
-    def __init__(self, threshold=-55.0, dt=0.001, rest_potential=-70, cell_effect="excitatory", cell_type="input", V_reset=-75):
-        self.threshold = threshold
-        self.potential = [rest_potential]
-        self.V_reset = V_reset
-        self.V_rest = rest_potential
-        self.W = random.random()
-        self.spikes = [0]
-        self.cell_effect = cell_effect
-
-    def receive_spike(self, t=1, inp=0):
-        I_ff = self.W*self.spikes[t-1]
-        I_in = inp+I_ff
-        self.potential = self.potential[t-1] * np.exp(-self.dt / self.tau_m) + (self.V_rest * (1 - np.exp(-self.dt / self.tau_m)) + I_in * self.R)
-
-    def update(self, t):
-        if self.potential >= self.threshold:
-            self.spikes[t] = 1
-            self.potential = self.V_reset
-        else:
-            self.spikes[t] = 0
-
-    
-    def update_weight(self, t=0, spike_diff=0, A_plus=0.1, A_minus=-0.1):
-        if self.cell_effect == "excitatory":
-            if self.spikes[t] == 1:
-                # Here spike diff = current_spike - output neuron spike
-                if spike_diff < 0:
-                    self.W += A_plus * np.exp(abs(spike_diff) / self.tau_stdp)
-                else:
-                    self.W += A_minus * np.exp(abs(spike_diff) / self.tau_stdp)
-        else:
-            if self.spikes[t] == 1:
-                if spike_diff < 0:
-                    self.W += A_plus * np.exp(abs(spike_diff) / self.tau_stdp)
-                else:
-                    self.W += A_minus * np.exp(abs(spike_diff) / self.tau_stdp)
-
 class LIF_Neuron:
      def __init__(self, total_time, dt, num_items, weights, weight_labels):
           self.membrane_potential = np.zeros((total_time/dt)*num_items)
@@ -79,8 +40,7 @@ class LIF_Neuron:
 class SNN_STDP:
     # Initialize neuron parameters
     def __init__(self, V_th=-55, V_reset=-75, C=10, R=1, A_minus=-0.1, tau_m=0.02, num_items=100, 
-                 tau_stdp=0.02, A_plus=0.1, dt=0.001, T=3.0, V_rest=-70, leakage_rate=0.99, 
-                 num_input_neurons=3, num_hidden_neurons=3, num_output_neurons=1):
+                 tau_stdp=0.02, A_plus=0.1, dt=0.001, T=3.0, V_rest=-70, leakage_rate=0.99):
         self.V_th = V_th
         self.V_reset = V_reset
         self.C = C
@@ -92,56 +52,14 @@ class SNN_STDP:
         self.V_rest = V_rest
         self.A_minus = A_minus
         self.A_plus = A_plus
-        self.leakage_rate = leakage_rate #Not sure if I need this one
+        self.leakage_rate = leakage_rate 
         self.num_items = num_items
-        self.num_input_neurons = num_input_neurons
-        self.num_hidden_neurons = num_hidden_neurons
-        self.num_output_neurons = num_output_neurons
-
-    def initiate_network(self, num_input_neurons, num_hidden_neurons, hid_inhib):
-        #Initiate input neurons
-        inp_weights = np.ones(num_hidden_neurons)
-        inhibitory_indices_inp = random.sample(range(num_hidden_neurons), hid_inhib)
-        self.inp_labels = [-1 if i in inhibitory_indices_inp else 1 for i in range(num_input_neurons)]
-        self.input_neurons = [LIF_Neuron(total_time=self.T,dt=self.dt, num_items=self.num_items,  
-                                        weights=inp_weights) for _ in range(num_input_neurons)]
-
-        #Initiate hidden neurons
-        hid_weights = np.random.rand(num_input_neurons)
-        inhibitory_indices_hid = random.sample(range(num_hidden_neurons), hid_inhib)
-        self.hid_labels = [-1 if i in inhibitory_indices_hid else 1 for i in range(num_hidden_neurons)]
-        self.hidden_neurons = [LIF_Neuron(total_time=self.T, dt=self.dt, num_items=self.num_items,
-                                        weights=hid_weights) for _ in range(num_hidden_neurons)]
-        
-        #Initiate output neurons
-        out_weights = np.random.rand(num_hidden_neurons)
-        inhibitory_indices_out = random.sample(range(num_hidden_neurons), hid_inhib)
-        self.out_labels = [-1 if i in inhibitory_indices_out else 1 for i in range(num_hidden_neurons)]
-        self.hidden_neurons = LIF_Neuron(total_time=self.T, dt=self.dt, num_items=self.num_items,
-                                        PSP_effect=None, weights=out_weights)
-    
-    def spike_diff(output_spikes, input_spikes, t):
-        output_spike_idx, input_spike_idx = None, None
-        for j in range(t,0,-1):
-            if output_spikes[j] == 1:
-                output_spike_idx = j
-                break
-        for t in range(t,0,-1):
-            if input_spikes[t] == 1:
-                input_spike_idx = t
-        return output_spike_idx-input_spike_idx
     
     def neuronal_activity(self, Ws, spikes, X, V):
         [num_items, _, num_timesteps] = X.shape
         for l in tqdm(range(num_items), desc="Processing items"):
             for t in range(1, num_timesteps):
                 for n in range(0,self.num_input_neurons):
-                    # initiate current neuron, weights, spikes and membrane potential
-                    input_neuron = self.input_neurons[n]
-                    weights, weight_labels = input_neuron.get_weights()
-                    membrane_potential = input_neuron.get_membrane_potential()
-                    spikes = input_neuron.get_spikes()
-                    
                     # update membrane potential
                     I_in = spikes(X[l,n,t]) #Is this right?
                     Vm = membrane_potential[t-1]*np.exp(-self.dt/self.tau_m) + (self.V_rest * (1 - np.exp(-self.dt /self.tau_m)) + I_in*self.R)
@@ -213,6 +131,25 @@ class SNN_STDP:
                     poisson_input[i, j, t] = 1 if spike_count > 0 else 0
 
         return poisson_input
+    
+    def initiate_network(self, num_neurons, inhib_excit_ratio):
+        # Initiate data
+        Z = np.zeros(self.T/self.dt, 3, self.num_items)
+        Z[0,2,0] = [self.V_rest]*num_neurons
+        
+        # Initiate weights
+        self.weights = self.generate_small_world_network(num_neurons=num_neurons, inhib_excit_ratio=inhib_excit_ratio)
+
+    def spike_diff(output_spikes, input_spikes, t):
+        output_spike_idx, input_spike_idx = None, None
+        for j in range(t,0,-1):
+            if output_spikes[j] == 1:
+                output_spike_idx = j
+                break
+        for t in range(t,0,-1):
+            if input_spikes[t] == 1:
+                input_spike_idx = t
+        return output_spike_idx-input_spike_idx
 
     def visualize_learning(self, spikes, V):
         num_neurons = spikes.shape[1]
@@ -251,6 +188,60 @@ class SNN_STDP:
         plt.tight_layout()
         plt.show()
     
+def generate_small_world_network(num_neurons, inhib_excit_ratio):
+    # Array dimensions
+    #self.num_neurons = num_neurons
+    n_rows, n_cols = num_neurons, num_neurons
 
+    # Probabilities for multinomial distribution: positive float, zero, negative float
+    probabilities = [0.4, 0.2, 0.4]  # Sum should be 1.0
+
+    # Generate multinomial distribution for the entire matrix
+    multinomial_distribution = np.random.multinomial(1, probabilities, size=n_rows*n_cols)
+
+    # Initialize the array
+    array = np.zeros((n_rows, n_cols))
+
+    # Iterate through the matrix and assign values based on the distribution
+    for i in range(n_rows):
+        for j in range(n_cols):
+            distribution_result = multinomial_distribution[i*n_cols + j]
+            if distribution_result[0] == 1:  # Positive float
+                array[i, j] = [np.random.uniform(0, 1), np.random.choice(-1,1)]
+            elif distribution_result[2] == 1:  # Negative float
+                array[i, j] = [np.random.uniform(-1, 0), np.random.choice(-1,1)]
+            else:
+                array[i, j] = [0, np.random.choice(-1,1)]
+
+
+    # Adjusting the ratio of positive to negative floats to 80:20
+    # Count the number of positive and negative values
+    num_positives = np.sum(array > 0)
+    num_negatives = np.sum(array < 0)
+
+    # Desired ratio
+    desired_ratio = inhib_excit_ratio
+
+    # Number of positives and negatives to achieve the desired ratio
+    total_non_zeros = num_positives + num_negatives
+    desired_num_positives = int(total_non_zeros * desired_ratio)
+    desired_num_negatives = total_non_zeros - desired_num_positives
+
+    # Adjust the matrix to achieve the desired ratio
+    # If there are too many positives, randomly convert some to negatives
+    while num_positives > desired_num_positives:
+        i, j = np.random.randint(0, n_rows), np.random.randint(0, n_cols)
+        if array[i, j] > 0:
+            array[i, j] = np.random.uniform(-1, 0)
+            num_positives -= 1
+
+    # If there are too many negatives, randomly convert some to positives
+    while num_negatives > desired_num_negatives:
+        i, j = np.random.randint(0, n_rows), np.random.randint(0, n_cols)
+        if array[i, j] < 0:
+            array[i, j] = np.random.uniform(0, 1)
+            num_negatives -= 1
+
+    return array
 
 
