@@ -1,27 +1,29 @@
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
+from scipy.optimize import curve_fit
 
-def generate_small_world_network_power_law(num_neurons, inhib_excit_ratio, alpha):
-    # Array dimensions
+def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, FF_FB_ratio, alpha):
     n_rows, n_cols = num_neurons, num_neurons
 
-    # Generate power-law distribution for weights
-    weights = np.random.power(alpha, size=n_rows*n_cols)
+    # Generate power-law distribution for the probability of connections
+    connection_probabilities = np.random.power(alpha, size=n_rows*n_cols)
 
     # Initialize the arrays for weights and signs
     weight_array = np.zeros((n_rows, n_cols))
     sign_array = np.zeros((n_rows, n_cols), dtype=int)
 
-    # Assign weights and signs
+    # Assign weights and signs based on connection probability
     for i in range(n_rows):
         for j in range(n_cols):
-            if i != j:  # No self-connections
-                weight_array[i, j] = weights[i*n_cols + j]
-                sign_array[i, j] = 1 if np.random.rand() < inhib_excit_ratio else -1
-
-    # Adjust weights for sign
-    weight_array[sign_array == -1] *= -1
+            if i != j and connection_probabilities[i*n_cols + j] > np.random.rand():  # Determine if there is a connection
+                # Make weights either inhibitory (const = -1) or excitatory (const = 1) 
+                const = 1 if np.random.rand() < excit_inhib_ratio else -1
+                # Assign a fixed weight or a randomly chosen weight
+                weight_array[i, j] = np.random.rand()*const  # You can also multiply by a random or fixed weight factor here
+                # Sign array containing directionality of connections (1 = forward, -1 = backward, & 0 = no connection)
+                sign_array[i, j] = 1 if np.random.rand() < FF_FB_ratio else -1
 
     # Concatenate the weight and sign arrays
     combined_array = np.stack((weight_array, sign_array), axis=-1)
@@ -30,15 +32,14 @@ def generate_small_world_network_power_law(num_neurons, inhib_excit_ratio, alpha
 
 # Define the parameters for power-law distribution
 num_neurons = 20
+FF_FB_ratio = 0.5
 inhib_excit_ratio = 0.8
 alpha = 1  # Exponent for power-law distribution
 
 # Generate a small world network with power-law distribution
-combined_array_power_law = generate_small_world_network_power_law(num_neurons, inhib_excit_ratio, alpha)
+combined_array_power_law = generate_small_world_network_power_law(num_neurons, inhib_excit_ratio, FF_FB_ratio, alpha)
 
 # Draw the network and plot the distribution
-
-
 def draw_network(combined_array):
     n_rows, n_cols = combined_array.shape[0], combined_array.shape[1]
 
@@ -72,8 +73,50 @@ def draw_network(combined_array):
     # Draw labels
     nx.draw_networkx_labels(G, pos, font_size=5, font_family='sans-serif')
 
+    pos_2_neg = f"Percentage of positive edges: {round(len(positive_edges)/(len(negative_edges)+len(positive_edges)),2)}"
+    custom_line = mlines.Line2D([], [], color='black', marker='*', linestyle='None', label=pos_2_neg)
+
+    plt.legend(handles=[custom_line])
     plt.axis('off')
     plt.show()
 
+def power_law(x, a, b):
+    return a * np.power(x, b)
+
+def draw_edge_distribution(array):
+    # Extract the presence of edges and count them
+    edges = np.abs(array[:,:,0].flatten())  # Using absolute value to consider the strength of an edge regardless of sign
+    nonzero_edges = edges[edges != 0]  # Filter out zero weights which indicate no edge
+    sorted_edges = np.sort(nonzero_edges)[::-1]  # Sort in descending order
+
+    # Generate a rank for each edge (their index)
+    x_data = np.arange(1, len(sorted_edges) + 1)
+    
+    # Plotting the edge distribution
+    plt.figure(figsize=(10, 6))
+    plt.plot(x_data, sorted_edges, label='Edge Weight Distribution', marker='o', linestyle='-', markersize=4)
+
+    # Fit the distribution to a power law
+    # We need to fit it to the weight of edges, not their rank or presence
+    # Ensure that y_data for fitting does not contain zero values
+    params, _ = curve_fit(power_law, x_data, sorted_edges, maxfev=5000)
+
+    # We plot the fitted line using the parameters obtained from the curve fitting
+    fitted_line = power_law(x_data, *params)
+    plt.plot(x_data, fitted_line, label='Fitted Power Law', linestyle='--', color='red')
+
+    # Adding labels and title
+    plt.xlabel('Rank of Edge (Strongest to Weakest)')
+    plt.ylabel('Edge Weight')
+    plt.title('Edge Weight Distribution and Power Law Fit')
+    plt.legend()
+
+    plt.show()
+
+# Call the function with the generated network array
+draw_edge_distribution(combined_array_power_law)
+
+
 draw_network(combined_array_power_law)
+draw_edge_distribution(combined_array_power_law)
 
