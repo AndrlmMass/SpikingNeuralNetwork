@@ -68,7 +68,7 @@ def draw_network(combined_array):
 
     # Draw edges
     nx.draw_networkx_edges(G, pos, edgelist=positive_edges, width=1, edge_color='g', style='solid')
-    nx.draw_networkx_edges(G, pos, edgelist=negative_edges, width=1, edge_color='b', style='solid')
+    nx.draw_networkx_edges(G, pos, edgelist=negative_edges, width=1, edge_color='r', style='dotted')
 
     # Draw labels
     nx.draw_networkx_labels(G, pos, font_size=5, font_family='sans-serif')
@@ -85,19 +85,22 @@ def power_law(x, a, b):
 
 def draw_edge_distribution(array):
     # Extract the presence of edges and count them
-    edges = np.abs(array[:,:,0].flatten())  # Using absolute value to consider the strength of an edge regardless of sign
-    nonzero_edges = edges[edges != 0]  # Filter out zero weights which indicate no edge
-    sorted_edges = np.sort(nonzero_edges)[::-1]  # Sort in descending order
+    edges = np.abs(array[:,:,1])  # Using absolute value to consider the strength of an edge regardless of sign
+    edges_count = np.sum(edges, axis=0)
+    print(edges_count)
+    sorted_edges = np.sort(edges_count)[::-1] # Sort in descending order
+    print(sorted_edges)
 
     # Generate a rank for each edge (their index)
     x_data = np.arange(1, len(sorted_edges) + 1)
+    print(x_data)
     
     # Plotting the edge distribution
     plt.figure(figsize=(10, 6))
     plt.plot(x_data, sorted_edges, label='Edge Weight Distribution', marker='o', linestyle='-', markersize=4)
 
     # Fit the distribution to a power law
-    # We need to fit it to the weight of edges, not their rank or presence
+    # We need to fit it to the number of edges
     # Ensure that y_data for fitting does not contain zero values
     params, _ = curve_fit(power_law, x_data, sorted_edges, maxfev=5000)
 
@@ -106,15 +109,13 @@ def draw_edge_distribution(array):
     plt.plot(x_data, fitted_line, label='Fitted Power Law', linestyle='--', color='red')
 
     # Adding labels and title
-    plt.xlabel('Rank of Edge (Strongest to Weakest)')
-    plt.ylabel('Edge Weight')
-    plt.title('Edge Weight Distribution and Power Law Fit')
+    plt.xlabel('Number of nodes')
+    plt.ylabel('Number of edges')
+    plt.xticks(np.arange(min(x_data),max(x_data)+1,2.0))
+    plt.title('Edge/Node Distribution and Power Law Fit')
     plt.legend()
 
     plt.show()
-
-# Call the function with the generated network array
-draw_edge_distribution(combined_array_power_law)
 
 
 draw_network(combined_array_power_law)
