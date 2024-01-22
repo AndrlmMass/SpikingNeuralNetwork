@@ -43,7 +43,8 @@ class SNN_STDP:
         # Generate weights 
         self.weights = swn.generate_small_world_network_power_law(num_neurons=self.num_neurons, 
                                                              excit_inhib_ratio=self.excit_inhib_ratio, 
-                                                             FF_FB_ratio=self.FF_FB_ratio, alpha=self.alpha)
+                                                             FF_FB_ratio=self.FF_FB_ratio, alpha=self.alpha,
+                                                             perc_input_neurons=0.1)
         # Generate membrane potential and spikes array
         self.MemPot = np.zeros(shape=(self.num_timesteps, self.num_neurons, self.num_items))
         self.MemPot[0,:,0] = self.V_rest
@@ -51,14 +52,14 @@ class SNN_STDP:
 
     def prep_data(self):
         # Simulate data
-        self.data = self.encode_input_poisson(np.random.rand(self.num_items, self.num_input_neurons))
+        self.data = self.encode_input_poisson(np.random.rand(self.num_items, self.num_neurons))
     
     def neuronal_activity(self):
         for l in tqdm(range(self.num_items), desc="Processing items"):
             for t in range(1, self.num_timesteps):
                 for n in range(0,self.num_neurons):
                     # Check if neuron is an input neuron
-                    if np.any(self.Weights[:,:,1] < 0, axis=1):
+                    if (self.weights[:,:,1] < 0).any():
                         I_in = self.data[t,n,l]
                     else:
                         # Calculate the sum of incoming input from the previous step
@@ -81,16 +82,16 @@ class SNN_STDP:
                             # Calculate the spike diff for input and output neuron
                             spike_diff = self.t_since_spike[t,n,l] - self.t_since_spike[t,s,l]
                             # Check if excitatory or inhibitory 
-                            if self.weights[n,s] > 0:
+                            if self.weights[n,s,0] > 0:
                                 if spike_diff > 0:
-                                    self.W += self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp)
+                                    self.weights[n,s,0] += self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp)
                                 else:
-                                    self.W += self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp)
-                            elif self.weights[n,s] < 0:
+                                    self.weights[n,s,0] += self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp)
+                            elif self.weights[n,s,0] < 0:
                                 if spike_diff < 0:
-                                    self.W -= self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp)
+                                    self.weights[n,s,0] -= self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp)
                                 else:
-                                    self.W -= self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp)
+                                    self.weights[n,s,0] -= self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp)
                     
             # Perform clipping of weights
             self.weights = np.clip(self.weights, self.min_weight, self.max_weight)

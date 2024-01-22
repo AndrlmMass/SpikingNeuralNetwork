@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 from scipy.optimize import curve_fit
 
-def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, FF_FB_ratio, alpha):
+def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, FF_FB_ratio, alpha, perc_input_neurons):
     n_rows, n_cols = num_neurons, num_neurons
 
     # Generate power-law distribution for the probability of connections
@@ -25,11 +25,37 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, FF_FB
                 # Sign array containing directionality of connections (1 = forward, -1 = backward, & 0 = no connection)
                 sign_array[i, j] = 1 if np.random.rand() < FF_FB_ratio else -1
 
+    # Calculate ratio of input neurons to hidden neurons
+    perc_inp = np.mean(np.all(sign_array[:,:] >= 0, axis=1))
+
+    while perc_inp < perc_input_neurons:
+        # Choose a random neuron to become an input neuron
+        idx = np.random.randint(num_neurons)
+        sign_array[idx, :] = np.abs(sign_array[idx, :])
+
+        # Recalculate the percentage of input neurons
+        perc_inp = np.mean(np.all(sign_array >= 0, axis=1))
+
+        if perc_inp >= perc_input_neurons:
+            break
+
+    # Similarly, we can correct for too many input neurons. We assume 
+    # this to be more than 125% of the original desired ratio
+    while perc_inp > perc_input_neurons*1.25: #This is an arbitrary border
+        # Choose a random neuron to become an input neuron
+        idx = np.random.randint(num_neurons)
+        sign_array[idx, :, 1] = np.abs(sign_array[idx, :])
+
+        # Recalculate the percentage of input neurons
+        perc_inp = np.mean(np.all(sign_array >= 0, axis=1))
+
+        if perc_inp < perc_input_neurons*1.25:
+            break
+
     # Concatenate the weight and sign arrays
     combined_array = np.stack((weight_array, sign_array), axis=-1)
 
     return combined_array
-d = generate_small_world_network_power_law(num_neurons=10,excit_inhib_ratio=0.8, FF_FB_ratio=0.7, alpha=1)
 
 # Draw the network and plot the distribution
 def draw_network(combined_array):
