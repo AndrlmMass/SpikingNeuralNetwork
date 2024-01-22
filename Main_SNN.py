@@ -2,23 +2,25 @@
 
 # Set cw
 import os
-os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
-#os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
+#os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
+os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
 
 # Import libraries
 from SNN_functions import *
 
 # Initialize neurons
-snn = SNN_STDP()
-MemPot, Spikes, Ws = snn.gen_neuron_layer()
+snn = SNN_STDP(V_th=-55, V_reset=-75, C=10, R=1, A_minus=-0.1, tau_m=0.02, num_items=100, 
+                 tau_stdp=0.02, A_plus=0.1, dt=0.001, T=0.1, V_rest=-70, leakage_rate=0.99, num_neurons=20,
+                 excit_inhib_ratio = 0.8, FF_FB_ratio = 0.7, alpha=1, perc_input_neurons=0.1, interval=0.03,
+                 max_weight=1, min_weight=-1)
+snn.initialize_network()
 
 # Prepare data
-train_simpl = snn.prep_data_()
-train_enc = snn.encode_input_poisson(train_simpl)
+train_simpl = snn.prep_data()
 
 # Train network
-spikes, Vt, W_ff = snn.neuronal_activity(Ws=Ws, spikes=Spikes, X=train_enc, V=MemPot)
+snn.neuronal_activity()
 
 # Visualize results
-snn.visualize_learning(spikes,Vt)
+#snn.visualize_learning() #This function has not been corrected yet, so it does not work
 
