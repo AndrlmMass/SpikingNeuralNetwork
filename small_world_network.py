@@ -105,13 +105,10 @@ def draw_edge_distribution(array):
     # Extract the presence of edges and count them
     edges = np.abs(array[:,:,1])  # Using absolute value to consider the strength of an edge regardless of sign
     edges_count = np.sum(edges, axis=0)
-    print(edges_count)
     sorted_edges = np.sort(edges_count)[::-1] # Sort in descending order
-    print(sorted_edges)
 
     # Generate a rank for each edge (their index)
     x_data = np.arange(1, len(sorted_edges) + 1)
-    print(x_data)
     
     # Plotting the edge distribution
     plt.figure(figsize=(10, 6))

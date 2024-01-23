@@ -6,8 +6,8 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import small_world_network as swn
-#os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
-os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
+os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
+#os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
 
 # Initialize class variable
 class SNN_STDP:
@@ -78,7 +78,7 @@ class SNN_STDP:
 
                     # Perform STDP for hidden neurons
                     for s in range(0,self.num_neurons):
-                        if s != n:
+                        if s != n and (self.t_since_spike[t,n,l] == 0 or self.t_since_spike[t,s,l] == 0):
                             # Calculate the spike diff for input and output neuron
                             spike_diff = self.t_since_spike[t,n,l] - self.t_since_spike[t,s,l]
                             # Check if excitatory or inhibitory 
@@ -113,42 +113,60 @@ class SNN_STDP:
 
         return poisson_input
 
-    def visualize_learning(self, spikes, V):
-        num_neurons = spikes.shape[1]
-        
-        # Define colors for each neuron
-        colors = plt.cm.jet(np.linspace(0, 1, num_neurons))  # Using the jet colormap
+    def visualize_learning(self, num_items_to_plot=1, num_neurons_to_plot=5):
+        # Ensure that items and neurons to plot do not exceed actual count
+        num_neurons_to_plot = min(num_neurons_to_plot, self.num_neurons)
+        num_items_to_plot = min(num_items_to_plot, self.num_items)
 
-        # Plotting Spike Raster Plot
-        plt.figure(figsize=(12, 8))
-        
-        # Subplot for Spike Raster Plot
-        plt.subplot(2, 1, 1)  # 2 rows, 1 column, 1st subplot
-        spike_data = []
-        for neuron in range(num_neurons):
-            neuron_spike_times = np.where(spikes[:, neuron] == 1)[0]
-            spike_data.append(neuron_spike_times)
+        # Define colors for the neurons
+        colors = plt.cm.jet(np.linspace(0, 1, num_neurons_to_plot))
 
-        # Set lineoffsets and linelengths for spacing
-        lineoffsets = np.arange(num_neurons)
-        linelengths = 0.8  # Adjust this value to control the length of spikes
+        # Create a figure for the concatenated plot
+        fig_width = 12
+        fig_height = 5  # Height for the single subplot
+        fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
-        plt.eventplot(spike_data, lineoffsets=lineoffsets, linelengths=linelengths, colors=colors)
-        plt.yticks(lineoffsets, labels=[f'Neuron {i}' for i in range(num_neurons)])
-        plt.xlabel('Time')
-        plt.ylabel('Neuron')
-        plt.title('Spike Raster Plot')
+        for neuron_idx in range(num_neurons_to_plot):
+            concatenated_spike_times = np.array([])
+            for item_idx in range(num_items_to_plot):
+                # Find the time steps where the neuron spiked for each item
+                neuron_spike_times = np.where(self.t_since_spike[:, neuron_idx, item_idx] == 0)[0]
+                # Adjust spike times to account for the continuation in time
+                neuron_spike_times = neuron_spike_times + item_idx * self.num_timesteps
+                concatenated_spike_times = np.concatenate((concatenated_spike_times, neuron_spike_times))
 
-        # Subplot for Membrane Potential Plot
-        plt.subplot(2, 1, 2)  # 2 rows, 1 column, 2nd subplot
-        for neuron in range(num_neurons):
-            plt.plot(V[:, neuron], label=f'Neuron {neuron}', color=colors[neuron])
-        plt.xlabel('Time')
-        plt.ylabel('Membrane Potential (mV)')
-        plt.title('Membrane Potential Over Time')
-        plt.legend()
+            # Plot the concatenated spikes for the neuron
+            if concatenated_spike_times.size > 0:
+                ax.eventplot(concatenated_spike_times * self.dt,
+                            lineoffsets=neuron_idx,
+                            linelengths=0.8,
+                            colors=[colors[neuron_idx]])
+
+        # Set up the labels and title
+        ax.set_yticks(range(num_neurons_to_plot))
+        ax.set_yticklabels([f'Neuron {n}' for n in range(num_neurons_to_plot)])
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('Neuron')
+        ax.set_title(f'Concatenated Spike Raster Plot for {num_items_to_plot} Items')
+
+        # Add vertical lines to separate each item
+        for item_idx in range(1, num_items_to_plot):
+            ax.axvline(item_idx * self.num_timesteps * self.dt, color='grey', linestyle='dotted')
+
+        ax.set_xlim(0, num_items_to_plot * self.num_timesteps * self.dt)
         plt.tight_layout()
         plt.show()
+
+    def visualize_network(self, drw_edg = True, drw_netw = True):
+        if drw_netw:
+            swn.draw_network(self.weights)
+        if drw_edg:
+            swn.draw_edge_distribution(self.weights)
+
+
+
+
+
     
 
 
