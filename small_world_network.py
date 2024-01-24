@@ -44,7 +44,7 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, FF_FB
     while perc_inp > perc_input_neurons*1.25: #This is an arbitrary border
         # Choose a random neuron to become an input neuron
         idx = np.random.randint(num_neurons)
-        sign_array[idx, :, 1] = np.abs(sign_array[idx, :])
+        sign_array[idx, :] = np.abs(sign_array[idx, :])
 
         # Recalculate the percentage of input neurons
         perc_inp = np.mean(np.all(sign_array >= 0, axis=1))
@@ -131,5 +131,4 @@ def draw_edge_distribution(array):
     plt.legend()
 
     plt.show()
-
 
