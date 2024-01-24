@@ -63,12 +63,12 @@ class SNN_STDP:
             for t in range(1, self.num_timesteps):
                 for n in range(0,self.num_neurons):
                     # Check if neuron is an input neuron
-                    if (self.weights[:,:,1] < 0).any():
+                    if (self.weights[n,:,1] >= 0).all():
                         I_in = self.data[t,n,l]
                     else:
                         # Calculate the sum of incoming input from the previous step
                         spikes = (self.t_since_spike[t-1,:,l] == 0).astype(int) # This might be completely incorrect
-                        I_in = np.dot(self.Weights[n,:,0],spikes.T)
+                        I_in = np.dot(self.weights[n,:,0],spikes.T)
                     
                     # Update equation
                     self.MemPot[t,n,l] = self.MemPot[t-1,n,l] + (-self.MemPot[t-1,n,l] + self.V_rest + self.R * I_in) / self.tau_m * self.dt
@@ -96,9 +96,6 @@ class SNN_STDP:
                                     self.weights[n,s,0] -= self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp)
                                 else:
                                     self.weights[n,s,0] -= self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp)
-                    
-            # Perform clipping of weights
-            self.weights = np.clip(self.weights, self.min_weight, self.max_weight)
 
             # Update self.MemPot to include the membrane potential from the previous step
             # as the beginning of the next step. 
@@ -122,31 +119,34 @@ class SNN_STDP:
 
         return poisson_input
 
-    def visualize_combined(self, num_items_to_plot=10, num_neurons_to_plot_per_subplot=5):
-        # Ensure that items and neurons to plot do not exceed actual count
-        num_neurons_to_plot = min(num_neurons_to_plot_per_subplot, self.num_neurons)
+    def visualize_combined(self, num_items_to_plot=10):
+        # Ensure that items to plot do not exceed actual count
         num_items_to_plot = min(num_items_to_plot, self.num_items)
 
         # Time points for x-axis
         time_points = np.arange(self.num_timesteps * num_items_to_plot) * self.dt
-        
-        # Define colors for the neurons
-        colors = plt.cm.jet(np.linspace(0, 1, num_neurons_to_plot))
-        
+
+        # Find input neurons
+        input_neurons = [n for n in range(self.num_neurons) if (self.weights[n, :, 1] >= 0).all()]
+        print(input_neurons)
+
+        # Define colors for the input neurons
+        colors = plt.cm.jet(np.linspace(0, 1, len(input_neurons)))
+
         # Calculate an appropriate offset to align the lines with the labels
         offset_increment = 1
 
         # Create a figure for the concatenated plot
         fig_width = 12
-        fig_height = 5 * num_neurons_to_plot_per_subplot * 2  # Height adjusted for multiple subplots
-        fig, axes = plt.subplots(num_neurons_to_plot_per_subplot * 2, 1, figsize=(fig_width, fig_height), sharex=True)
-        
-        for neuron_idx in range(num_neurons_to_plot):
-            # Plot the spikes in the first row for each neuron
-            ax_spike = axes[neuron_idx * 2]
+        fig_height = 5 * len(input_neurons) * 2  # Height adjusted for multiple subplots
+        fig, axes = plt.subplots(len(input_neurons) * 2, 1, figsize=(fig_width, fig_height), sharex=True)
+
+        for idx, neuron_idx in enumerate(input_neurons):
+            # Plot the spikes in the first row for each input neuron
+            ax_spike = axes[idx * 2]
             concatenated_spike_times = np.array([])
             for item_idx in range(num_items_to_plot):
-                # Find the time steps where the neuron spiked for each item
+                # Find the time steps where the input neuron spiked for each item
                 neuron_spike_times = np.where(self.t_since_spike[:, neuron_idx, item_idx] == 0)[0]
                 # Adjust spike times to account for the continuation in time
                 neuron_spike_times = neuron_spike_times + item_idx * self.num_timesteps
@@ -156,32 +156,33 @@ class SNN_STDP:
                 ax_spike.eventplot(concatenated_spike_times * self.dt,
                                 lineoffsets=0,
                                 linelengths=0.8,
-                                colors=[colors[neuron_idx]])
+                                colors=[colors[idx]])
 
-            ax_spike.set_ylabel(f'Neuron {neuron_idx} Spikes')
+            ax_spike.set_ylabel(f'Input Neuron {neuron_idx} Spikes')
             ax_spike.set_xlim(0, num_items_to_plot * self.num_timesteps * self.dt)
-            
-            # Plot the membrane potentials in the second row for each neuron
-            ax_potential = axes[neuron_idx * 2 + 1]
+
+            # Plot the membrane potentials in the second row for each input neuron
+            ax_potential = axes[idx * 2 + 1]
             concatenated_mem_pot = np.array([])
             for item_idx in range(num_items_to_plot):
                 mem_pot = self.MemPot[:, neuron_idx, item_idx]
                 concatenated_mem_pot = np.concatenate((concatenated_mem_pot, mem_pot))
-            
-            # Offset for the current neuron's line
-            offset = neuron_idx * offset_increment
-            
-            # Plot the concatenated membrane potentials for the neuron
-            ax_potential.plot(time_points, concatenated_mem_pot + offset, color=colors[neuron_idx])
-            ax_potential.set_ylabel(f'Neuron {neuron_idx} MemPot')
+
+            # Offset for the current input neuron's line
+            offset = idx * offset_increment
+
+            # Plot the concatenated membrane potentials for the input neuron
+            ax_potential.plot(time_points, concatenated_mem_pot + offset, color=colors[idx])
+            ax_potential.set_ylabel(f'Input Neuron {neuron_idx} MemPot')
 
         # Set up the labels and title for the last subplot
         axes[-1].set_xlabel('Time (s)')
-        fig.suptitle(f'Combined Spike Raster and Membrane Potential Plot for {num_items_to_plot} Items')
+        fig.suptitle(f'Combined Spike Raster and Membrane Potential Plot for Input Neurons over {num_items_to_plot} Items')
 
         # Adjust layout to prevent overlap
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])  # Adjust the rect if the title overlaps
         plt.show()
+
 
     def visualize_network(self, drw_edg = True, drw_netw = True):
         if drw_netw:

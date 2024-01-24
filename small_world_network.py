@@ -8,54 +8,61 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, FF_FB
     n_rows, n_cols = num_neurons, num_neurons
 
     # Generate power-law distribution for the probability of connections
-    connection_probabilities = np.random.power(alpha, size=n_rows*n_cols)
+    connection_probabilities = np.random.power(alpha, size=n_rows * n_cols)
 
     # Initialize the arrays for weights and signs
-    weight_array = np.zeros((n_rows, n_cols))
-    sign_array = np.zeros((n_rows, n_cols), dtype=int)
+    weight_array = np.ones((n_rows, n_cols))
+    sign_array = np.ones((n_rows, n_cols), dtype=int)
+    np.fill_diagonal(weight_array, 0)
+    np.fill_diagonal(sign_array, 0)
 
     # Assign weights and signs based on connection probability
     for i in range(n_rows):
-        for j in range(n_cols):
-            if i != j and connection_probabilities[i*n_cols + j] > np.random.rand():  # Determine if there is a connection
-                # Make weights either inhibitory (const = -1) or excitatory (const = 1) 
-                const = 1 if np.random.rand() < excit_inhib_ratio else -1
-                # Assign a fixed weight or a randomly chosen weight
-                weight_array[i, j] = np.random.rand()*const  # You can also multiply by a random or fixed weight factor here
-                # Sign array containing directionality of connections (1 = forward, -1 = backward, & 0 = no connection)
-                sign_array[i, j] = 1 if np.random.rand() < FF_FB_ratio else -1
+        for j in range(n_cols):  
+            if weight_array[i, j] != 0:
+                if connection_probabilities[i * n_cols + j] > np.random.rand():
+                    # Assign weights
+                    const = 1 if np.random.rand() < excit_inhib_ratio else -1
+                    weight_array[i, j] = np.random.rand() * const
+                    weight_array[j, i] = 0
+
+                    # Assign signs
+                    sign = 1 if np.random.rand() < FF_FB_ratio else -1
+                    sign_array[i, j] = sign
+                    sign_array[j, i] = 0
+                else:
+                    weight_array[i, j] = 0
+                    sign_array[i, j] = 0
+    print(sign_array)
 
     # Calculate ratio of input neurons to hidden neurons
-    perc_inp = np.mean(np.all(sign_array[:,:] >= 0, axis=1))
+    perc_inp = np.mean(np.all(sign_array >= 0, axis=1))
+    print(perc_inp)
 
-    while perc_inp < perc_input_neurons:
-        # Choose a random neuron to become an input neuron
-        idx = np.random.randint(num_neurons)
-        sign_array[idx, :] = np.abs(sign_array[idx, :])
+    iteration = 0
+    if perc_inp < perc_input_neurons:
+        while perc_inp < perc_input_neurons and iteration < num_neurons:
+            # Choose a random neuron that is not an input neuron to become an input neuron
+            non_input_neurons = np.where(np.any(sign_array < 0, axis=1))[0]
+            print(non_input_neurons)
+            if non_input_neurons.size > 0:
+                idx = np.random.choice(non_input_neurons)
+                sign_array[idx, :] = np.abs(sign_array[idx, :])
+                weight_array[idx, :] = np.abs(weight_array[idx,:])
+                print(sign_array)
+            else:
+                break
+            # Recalculate the percentage of input neurons
+            perc_inp = np.mean(np.all(sign_array >= 0, axis=1))
+            iteration += 1
 
-        # Recalculate the percentage of input neurons
-        perc_inp = np.mean(np.all(sign_array >= 0, axis=1))
-
-        if perc_inp >= perc_input_neurons:
-            break
-
-    # Similarly, we can correct for too many input neurons. We assume 
-    # this to be more than 125% of the original desired ratio
-    while perc_inp > perc_input_neurons*1.25: #This is an arbitrary border
-        # Choose a random neuron to become an input neuron
-        idx = np.random.randint(num_neurons)
-        sign_array[idx, :] = np.abs(sign_array[idx, :])
-
-        # Recalculate the percentage of input neurons
-        perc_inp = np.mean(np.all(sign_array >= 0, axis=1))
-
-        if perc_inp < perc_input_neurons*1.25:
-            break
+    print(sign_array)
+    print(perc_inp)
 
     # Concatenate the weight and sign arrays
     combined_array = np.stack((weight_array, sign_array), axis=-1)
-
     return combined_array
+
 
 # Draw the network and plot the distribution
 def draw_network(combined_array):
