@@ -6,16 +6,15 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import small_world_network as swn
-#os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
-os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
+os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
+#os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
 
 # Initialize class variable
 class SNN_STDP:
     # Initialize neuron parameters
     def __init__(self, V_th=-55, V_reset=-75, C=10, R=1, A_minus=-0.1, tau_m=0.002, num_items=100, 
                  tau_stdp=0.02, A_plus=0.1, dt=0.001, T=1, V_rest=-70, num_neurons=20, excit_inhib_ratio = 0.8, 
-                 FF_FB_ratio = 0.7, alpha=1, perc_input_neurons=0.1, interval=0.03, max_weight=1, min_weight=-1,
-                 input_scaler=1000):
+                 alpha=1, perc_input_neurons=0.1, interval=0.03, max_weight=1, min_weight=-1, input_scaler=1000):
         self.V_th = V_th
         self.V_reset = V_reset
         self.C = C
@@ -33,7 +32,6 @@ class SNN_STDP:
         self.num_neurons = num_neurons
         self.perc_input_neurons = perc_input_neurons
         self.excit_inhib_ratio = excit_inhib_ratio
-        self.FF_FB_ratio = FF_FB_ratio
         self.alpha = alpha
         self.interval = interval
         self.max_weight = max_weight
@@ -63,12 +61,12 @@ class SNN_STDP:
             for t in range(1, self.num_timesteps):
                 for n in range(0,self.num_neurons):
                     # Check if neuron is an input neuron
-                    if (self.weights[n,:,1] >= 0).all():
+                    if (self.weights[n,:] == 0).all():
                         I_in = self.data[t,n,l]
                     else:
                         # Calculate the sum of incoming input from the previous step
-                        spikes = (self.t_since_spike[t-1,:,l] == 0).astype(int) # This might be completely incorrect
-                        I_in = np.dot(self.weights[n,:,0],spikes.T)
+                        spikes = (self.t_since_spike[t-1,:,l] == 0).astype(int) 
+                        I_in = np.dot(self.weights[n,:],spikes.T)
                     
                     # Update equation
                     self.MemPot[t,n,l] = self.MemPot[t-1,n,l] + (-self.MemPot[t-1,n,l] + self.V_rest + self.R * I_in) / self.tau_m * self.dt
@@ -86,16 +84,10 @@ class SNN_STDP:
                             # Calculate the spike diff for input and output neuron
                             spike_diff = self.t_since_spike[t,n,l] - self.t_since_spike[t,s,l]
                             # Check if excitatory or inhibitory 
-                            if self.weights[n,s,0] > 0:
-                                if spike_diff > 0:
-                                    self.weights[n,s,0] += self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp)
-                                else:
-                                    self.weights[n,s,0] += self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp)
-                            elif self.weights[n,s,0] < 0:
-                                if spike_diff < 0:
-                                    self.weights[n,s,0] -= self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp)
-                                else:
-                                    self.weights[n,s,0] -= self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp)
+                            if spike_diff > 0:
+                                self.weights[n,s] += self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp)
+                            else:
+                                self.weights[n,s] += self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp)
 
             # Update self.MemPot to include the membrane potential from the previous step
             # as the beginning of the next step. 
@@ -127,7 +119,7 @@ class SNN_STDP:
         time_points = np.arange(self.num_timesteps * num_items_to_plot) * self.dt
 
         # Find input neurons
-        input_neurons = [n for n in range(self.num_neurons) if (self.weights[n, :, 1] >= 0).all()]
+        input_neurons = [n for n in range(self.num_neurons) if (self.weights[n, :] == 0).all()]
         print(input_neurons)
 
         # Define colors for the input neurons

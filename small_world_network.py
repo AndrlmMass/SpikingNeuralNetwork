@@ -12,9 +12,7 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, FF_FB
 
     # Initialize the arrays for weights and signs
     weight_array = np.ones((n_rows, n_cols))
-    sign_array = np.ones((n_rows, n_cols), dtype=int)
     np.fill_diagonal(weight_array, 0)
-    np.fill_diagonal(sign_array, 0)
 
     # Assign weights and signs based on connection probability
     for i in range(n_rows):
@@ -26,42 +24,39 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, FF_FB
                     weight_array[i, j] = np.random.rand() * const
                     weight_array[j, i] = 0
 
-                    # Assign signs
-                    sign = 1 if np.random.rand() < FF_FB_ratio else -1
-                    sign_array[i, j] = sign
-                    sign_array[j, i] = 0
                 else:
                     weight_array[i, j] = 0
-                    sign_array[i, j] = 0
-    print(sign_array)
 
     # Calculate ratio of input neurons to hidden neurons
-    perc_inp = np.mean(np.all(sign_array >= 0, axis=1))
+    perc_inp = np.mean(np.all(weight_array == 0, axis=1))
     print(perc_inp)
 
     iteration = 0
     if perc_inp < perc_input_neurons:
         while perc_inp < perc_input_neurons and iteration < num_neurons:
             # Choose a random neuron that is not an input neuron to become an input neuron
-            non_input_neurons = np.where(np.any(sign_array < 0, axis=1))[0]
-            print(non_input_neurons)
-            if non_input_neurons.size > 0:
-                idx = np.random.choice(non_input_neurons)
-                sign_array[idx, :] = np.abs(sign_array[idx, :])
-                weight_array[idx, :] = np.abs(weight_array[idx,:])
-                print(sign_array)
-            else:
-                break
+            non_input_neurons = np.where(np.any(weight_array > 0, axis=1))[0]
+            idx = np.random.choice(non_input_neurons)
+            weight_array[idx, :] = np.zeros(num_neurons)
+
+            # Check if the new input neuron has any PSPs
+            if np.sum(weight_array[:,idx]) == 0:
+                rand_synapse = np.random.choice(non_input_neurons)
+                # Change rand_synapse if it's the same as the pre-synaptic potential idx
+                while rand_synapse == idx:
+                    if rand_synapse != idx and np.sum(weight_array[rand_synapse,:]) != 0:
+                        break
+                    else:
+                        rand_synapse = np.random.choice(non_input_neurons)
+                weight_array[rand_synapse,idx] = np.random.rand()
+
             # Recalculate the percentage of input neurons
-            perc_inp = np.mean(np.all(sign_array >= 0, axis=1))
+            perc_inp = np.mean(np.all(weight_array == 0, axis=1))
             iteration += 1
 
-    print(sign_array)
     print(perc_inp)
 
-    # Concatenate the weight and sign arrays
-    combined_array = np.stack((weight_array, sign_array), axis=-1)
-    return combined_array
+    return weight_array
 
 
 # Draw the network and plot the distribution
@@ -78,8 +73,8 @@ def draw_network(combined_array):
     # Add edges with weights
     for i in range(n_rows):
         for j in range(n_cols):
-            if i != j and combined_array[i, j, 0] != 0:
-                G.add_edge(i, j, weight=combined_array[i, j, 0])
+            if i != j and combined_array[i, j] != 0:
+                G.add_edge(j, i, weight=combined_array[i, j])
 
     # Draw the network
     pos = nx.spring_layout(G)  # positions for all nodes
@@ -110,9 +105,8 @@ def power_law(x, a, b):
 
 def draw_edge_distribution(array):
     # Extract the presence of edges and count them
-    edges = np.abs(array[:,:,1])  # Using absolute value to consider the strength of an edge regardless of sign
-    edges_count = np.sum(edges, axis=0)
-    sorted_edges = np.sort(edges_count)[::-1] # Sort in descending order
+    edges = np.count_nonzero(array, axis=0)
+    sorted_edges = np.sort(edges)[::-1] # Sort in descending order
 
     # Generate a rank for each edge (their index)
     x_data = np.arange(1, len(sorted_edges) + 1)
