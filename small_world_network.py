@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 from scipy.optimize import curve_fit
 
-def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, FF_FB_ratio, alpha, perc_input_neurons):
+def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, alpha, perc_input_neurons):
     n_rows, n_cols = num_neurons, num_neurons
 
     # Generate power-law distribution for the probability of connections
@@ -35,7 +35,7 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, FF_FB
     if perc_inp < perc_input_neurons:
         while perc_inp < perc_input_neurons and iteration < num_neurons:
             # Choose a random neuron that is not an input neuron to become an input neuron
-            non_input_neurons = np.where(np.any(weight_array > 0, axis=1))[0]
+            non_input_neurons = np.where(np.any(weight_array != 0, axis=1))[0]
             idx = np.random.choice(non_input_neurons)
             weight_array[idx, :] = np.zeros(num_neurons)
 
@@ -54,7 +54,26 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, FF_FB
             perc_inp = np.mean(np.all(weight_array == 0, axis=1))
             iteration += 1
 
+    # Add connections to neurons without post-synaptic connections
+    if np.any(np.all(weight_array == 0, axis=0)):
+        for j in range(num_neurons):
+            if np.all(weight_array[:,j] == 0):
+                idx = np.random.choice(num_neurons)
+                if idx == j:
+                    idx = np.random.choice(num_neurons)
+                else:
+                    const = 1 if np.random.rand() < excit_inhib_ratio else -1
+                    weight_array[idx, j] = np.random.rand() * const
+            if np.any(np.all(weight_array == 0, axis=0)) == False:
+                break
+                    
+
+    # Calculate ratio of excitatory to inhibitory connections
+    print(f"This is the current ratio of positive edges to all edges: {np.sum(weight_array > 0)/np.sum(weight_array != 0)}")
+
     print(perc_inp)
+    print(np.where(np.all(weight_array == 0, axis=1)))
+    print(weight_array)
 
     return weight_array
 
@@ -62,6 +81,7 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, FF_FB
 # Draw the network and plot the distribution
 def draw_network(combined_array):
     n_rows, n_cols = combined_array.shape[0], combined_array.shape[1]
+    print(combined_array)
 
     # Create a directed graph
     G = nx.DiGraph()
@@ -73,7 +93,7 @@ def draw_network(combined_array):
     # Add edges with weights
     for i in range(n_rows):
         for j in range(n_cols):
-            if i != j and combined_array[i, j] != 0:
+            if combined_array[i, j] != 0:
                 G.add_edge(j, i, weight=combined_array[i, j])
 
     # Draw the network
@@ -82,6 +102,8 @@ def draw_network(combined_array):
     # Define edges based on weight
     positive_edges = [(u, v) for u, v, d in G.edges(data=True) if d['weight'] > 0]
     negative_edges = [(u, v) for u, v, d in G.edges(data=True) if d['weight'] < 0]
+
+    print(len(positive_edges),len(negative_edges))
 
     # Draw nodes
     nx.draw_networkx_nodes(G, pos, node_size=100)

@@ -42,7 +42,6 @@ class SNN_STDP:
         # Generate weights 
         self.weights = swn.generate_small_world_network_power_law(num_neurons=self.num_neurons, 
                                                                   excit_inhib_ratio=self.excit_inhib_ratio, 
-                                                                  FF_FB_ratio=self.FF_FB_ratio, 
                                                                   alpha=self.alpha,
                                                                   perc_input_neurons=0.1)
         # Generate membrane potential and spikes array
@@ -61,22 +60,25 @@ class SNN_STDP:
             for t in range(1, self.num_timesteps):
                 for n in range(0,self.num_neurons):
                     # Check if neuron is an input neuron
-                    if (self.weights[n,:] == 0).all():
-                        I_in = self.data[t,n,l]
-                    else:
-                        # Calculate the sum of incoming input from the previous step
+                    if (self.weights[n,:] != 0).any():
                         spikes = (self.t_since_spike[t-1,:,l] == 0).astype(int) 
                         I_in = np.dot(self.weights[n,:],spikes.T)
                     
-                    # Update equation
-                    self.MemPot[t,n,l] = self.MemPot[t-1,n,l] + (-self.MemPot[t-1,n,l] + self.V_rest + self.R * I_in) / self.tau_m * self.dt
+                        # Update equation
+                        self.MemPot[t,n,l] = self.MemPot[t-1,n,l] + (-self.MemPot[t-1,n,l] + self.V_rest + self.R * I_in) / self.tau_m * self.dt
 
-                    # Update spikes
-                    if self.MemPot[t,n,l] > self.V_th:
-                        self.t_since_spike[t,n,l] = 0
-                        self.MemPot[t,n,l] = self.V_reset
+                        # Update spikes
+                        if self.MemPot[t,n,l] > self.V_th:
+                            self.t_since_spike[t,n,l] = 0
+                            self.MemPot[t,n,l] = self.V_reset
+                        else:
+                            self.t_since_spike[t,n,l] += 1
                     else:
-                        self.t_since_spike[t,n,l] += 1 
+                        # Update input neuron spike
+                        if self.data[t,n,l] == 1:
+                            self.t_since_spike[t,n,l] = 0
+                        else:
+                            self.t_since_spike[t,n,l] += 1
 
                     # Perform STDP for hidden neurons
                     for s in range(0,self.num_neurons):
@@ -84,10 +86,16 @@ class SNN_STDP:
                             # Calculate the spike diff for input and output neuron
                             spike_diff = self.t_since_spike[t,n,l] - self.t_since_spike[t,s,l]
                             # Check if excitatory or inhibitory 
-                            if spike_diff > 0:
-                                self.weights[n,s] += self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp)
-                            else:
-                                self.weights[n,s] += self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp)
+                            if self.weights[n,s] > 0:
+                                if spike_diff > 0:
+                                    self.weights[n,s] += self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp)
+                                else:
+                                    self.weights[n,s] += self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp)
+                            elif self.weights[n,s] < 0:
+                                if spike_diff < 0:
+                                    self.weights[n,s] -= self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp)
+                                else:
+                                    self.weights[n,s] -= self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp)
 
             # Update self.MemPot to include the membrane potential from the previous step
             # as the beginning of the next step. 
@@ -111,69 +119,46 @@ class SNN_STDP:
 
         return poisson_input
 
-    def visualize_combined(self, num_items_to_plot=10):
-        # Ensure that items to plot do not exceed actual count
-        num_items_to_plot = min(num_items_to_plot, self.num_items)
+    def visualize_learning(self):
+        num_items = self.t_since_spike.shape[2]
+        num_neurons = self.t_since_spike.shape[1]
 
-        # Time points for x-axis
-        time_points = np.arange(self.num_timesteps * num_items_to_plot) * self.dt
+        # Define colors for each neuron
+        colors = plt.cm.jet(np.linspace(0, 1, num_neurons))  # Using the jet colormap
 
-        # Find input neurons
-        input_neurons = [n for n in range(self.num_neurons) if (self.weights[n, :] == 0).all()]
-        print(input_neurons)
+        # Create a figure with subplots for each item
+        fig, axs = plt.subplots(num_items, 2, figsize=(12, 8 * num_items))  # 2 columns for each item
 
-        # Define colors for the input neurons
-        colors = plt.cm.jet(np.linspace(0, 1, len(input_neurons)))
+        spike_data = []
+        for item in range(num_items):
+            for neuron in range(num_neurons):
+                # Find the time steps where the neuron fired
+                neuron_spike_times = np.where(self.t_since_spike[:, neuron, item] == 0)[0]
+                spike_data.append(neuron_spike_times)
 
-        # Calculate an appropriate offset to align the lines with the labels
-        offset_increment = 1
+        # Set lineoffsets and linelengths for spacing
+        lineoffsets = np.arange(num_neurons)
+        linelengths = 0.8  # Adjust this value to control the length of spikes
 
-        # Create a figure for the concatenated plot
-        fig_width = 12
-        fig_height = 5 * len(input_neurons) * 2  # Height adjusted for multiple subplots
-        fig, axes = plt.subplots(len(input_neurons) * 2, 1, figsize=(fig_width, fig_height), sharex=True)
+        # Spike Raster Plot for each item
+        axs[item, 0].eventplot(spike_data, lineoffsets=lineoffsets, linelengths=linelengths, colors=colors)
+        axs[item, 0].set_yticks(lineoffsets)
+        axs[item, 0].set_yticklabels([f'Neuron {i}' for i in range(num_neurons)])
+        axs[item, 0].set_xlabel('Time')
+        axs[item, 0].set_ylabel('Neuron')
+        axs[item, 0].set_title(f'Item {item+1} - Spike Raster Plot')
 
-        for idx, neuron_idx in enumerate(input_neurons):
-            # Plot the spikes in the first row for each input neuron
-            ax_spike = axes[idx * 2]
-            concatenated_spike_times = np.array([])
-            for item_idx in range(num_items_to_plot):
-                # Find the time steps where the input neuron spiked for each item
-                neuron_spike_times = np.where(self.t_since_spike[:, neuron_idx, item_idx] == 0)[0]
-                # Adjust spike times to account for the continuation in time
-                neuron_spike_times = neuron_spike_times + item_idx * self.num_timesteps
-                concatenated_spike_times = np.concatenate((concatenated_spike_times, neuron_spike_times))
-
-            if concatenated_spike_times.size > 0:
-                ax_spike.eventplot(concatenated_spike_times * self.dt,
-                                lineoffsets=0,
-                                linelengths=0.8,
-                                colors=[colors[idx]])
-
-            ax_spike.set_ylabel(f'Input Neuron {neuron_idx} Spikes')
-            ax_spike.set_xlim(0, num_items_to_plot * self.num_timesteps * self.dt)
-
-            # Plot the membrane potentials in the second row for each input neuron
-            ax_potential = axes[idx * 2 + 1]
-            concatenated_mem_pot = np.array([])
-            for item_idx in range(num_items_to_plot):
-                mem_pot = self.MemPot[:, neuron_idx, item_idx]
-                concatenated_mem_pot = np.concatenate((concatenated_mem_pot, mem_pot))
-
-            # Offset for the current input neuron's line
-            offset = idx * offset_increment
-
-            # Plot the concatenated membrane potentials for the input neuron
-            ax_potential.plot(time_points, concatenated_mem_pot + offset, color=colors[idx])
-            ax_potential.set_ylabel(f'Input Neuron {neuron_idx} MemPot')
-
-        # Set up the labels and title for the last subplot
-        axes[-1].set_xlabel('Time (s)')
-        fig.suptitle(f'Combined Spike Raster and Membrane Potential Plot for Input Neurons over {num_items_to_plot} Items')
-
-        # Adjust layout to prevent overlap
-        plt.tight_layout(rect=[0, 0.03, 1, 0.95])  # Adjust the rect if the title overlaps
+        plt.tight_layout()
         plt.show()
+
+
+
+
+
+
+
+
+
 
 
     def visualize_network(self, drw_edg = True, drw_netw = True):
