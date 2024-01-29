@@ -1,8 +1,4 @@
 import numpy as np
-import networkx as nx
-import matplotlib.pyplot as plt
-import matplotlib.lines as mlines
-from scipy.optimize import curve_fit
 
 def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, alpha, perc_input_neurons):
     n_rows, n_cols = num_neurons, num_neurons
@@ -29,7 +25,6 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, alpha
 
     # Calculate ratio of input neurons to hidden neurons
     perc_inp = np.mean(np.all(weight_array == 0, axis=1))
-    print(perc_inp)
 
     iteration = 0
     if perc_inp < perc_input_neurons:
@@ -70,88 +65,52 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, alpha
 
     # Calculate ratio of excitatory to inhibitory connections
     print(f"This is the current ratio of positive edges to all edges: {np.sum(weight_array > 0)/np.sum(weight_array != 0)}")
-
     print(perc_inp)
     print(np.where(np.all(weight_array == 0, axis=1)))
-    print(weight_array)
 
     return weight_array
 
 
-# Draw the network and plot the distribution
-def draw_network(combined_array):
-    n_rows, n_cols = combined_array.shape[0], combined_array.shape[1]
-    print(combined_array)
-
-    # Create a directed graph
-    G = nx.DiGraph()
-
-    # Add nodes
-    for i in range(n_rows):
-        G.add_node(i)
-
-    # Add edges with weights
-    for i in range(n_rows):
-        for j in range(n_cols):
-            if combined_array[i, j] != 0:
-                G.add_edge(j, i, weight=combined_array[i, j])
-
-    # Draw the network
-    pos = nx.spring_layout(G)  # positions for all nodes
-
-    # Define edges based on weight
-    positive_edges = [(u, v) for u, v, d in G.edges(data=True) if d['weight'] > 0]
-    negative_edges = [(u, v) for u, v, d in G.edges(data=True) if d['weight'] < 0]
-
-    print(len(positive_edges),len(negative_edges))
-
-    # Draw nodes
-    nx.draw_networkx_nodes(G, pos, node_size=100)
-
-    # Draw edges
-    nx.draw_networkx_edges(G, pos, edgelist=positive_edges, width=1, edge_color='g', style='solid')
-    nx.draw_networkx_edges(G, pos, edgelist=negative_edges, width=1, edge_color='r', style='dotted')
-
-    # Draw labels
-    nx.draw_networkx_labels(G, pos, font_size=5, font_family='sans-serif')
-
-    pos_2_neg = f"Percentage of positive edges: {round(len(positive_edges)/(len(negative_edges)+len(positive_edges)),2)}"
-    custom_line = mlines.Line2D([], [], color='black', marker='*', linestyle='None', label=pos_2_neg)
-
-    plt.legend(handles=[custom_line])
-    plt.axis('off')
-    plt.show()
-
-def power_law(x, a, b):
-    return a * np.power(x, b)
-
-def draw_edge_distribution(array):
-    # Extract the presence of edges and count them
-    edges = np.count_nonzero(array, axis=0)
-    sorted_edges = np.sort(edges)[::-1] # Sort in descending order
-
-    # Generate a rank for each edge (their index)
-    x_data = np.arange(1, len(sorted_edges) + 1)
+def encode_input_poisson(input):
+    input = input[:,0:1]
+    labels = input[:,2]
     
-    # Plotting the edge distribution
-    plt.figure(figsize=(10, 6))
-    plt.plot(x_data, sorted_edges, label='Edge Weight Distribution', marker='o', linestyle='-', markersize=4)
+    # 2D-array: items x neurons
+    poisson_input = np.zeros((self.num_timesteps, self.num_neurons, self.num_items, self.num_classes))
 
-    # Fit the distribution to a power law
-    # We need to fit it to the number of edges
-    # Ensure that y_data for fitting does not contain zero values
-    params, _ = curve_fit(power_law, x_data, sorted_edges, maxfev=5000)
+    for i in range(self.num_items):
+        for j in range(self.num_neurons):
+            # Calculate the mean spike count for the Poisson distribution
+            # Assuming 'input' is the rate (spikes/sec), we multiply by 'dt' to get the average number of spikes per time step
+            lambda_poisson = input[i, j]*self.dt*self.input_scaler
 
-    # We plot the fitted line using the parameters obtained from the curve fitting
-    fitted_line = power_law(x_data, *params)
-    plt.plot(x_data, fitted_line, label='Fitted Power Law', linestyle='--', color='red')
+            # Generate spikes using Poisson distribution
+            for t in range(self.num_timesteps):
+                spike_count = np.random.poisson(lambda_poisson)
+                poisson_input[t, j, i] = 1 if spike_count > 0 else 0
 
-    # Adding labels and title
-    plt.xlabel('Number of nodes')
-    plt.ylabel('Number of edges')
-    plt.xticks(np.arange(min(x_data),max(x_data)+1,2.0))
-    plt.title('Edge/Node Distribution and Power Law Fit')
-    plt.legend()
+    return poisson_input, labels
 
-    plt.show()
+def prep_data():
+    # Simulate data
+    cov1 = np.array([[1,0],[0,1]])
+    cov2 = np.array([[1,0],[0,1]])
+    pts1 = np.random.multivariate_normal([5,5], cov1, size=200)
+    pts2 = np.random.multivariate_normal([8,8], cov2, size=200)
+    
+    # Create labels for the datasets
+    labels1 = np.zeros(pts1.shape[0], dtype=int)  # Class 0
+    labels2 = np.ones(pts2.shape[0], dtype=int)   # Class 1
 
+    # Combine the datasets
+    combined_pts = np.vstack((pts1, pts2))
+    combined_labels = np.concatenate((labels1, labels2))
+
+    # Combine the labels with the datasets
+    combined_data = np.column_stack((combined_pts, combined_labels))
+
+    # Shuffle the combined data
+    np.random.shuffle(combined_data)
+
+    self.data, self.classes = self.encode_input_poisson(combined_data)
+    return self.data, self.classes

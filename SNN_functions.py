@@ -5,14 +5,17 @@ import os
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-import small_world_network as swn
 os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
 #os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
+
+import plot_training as pt
+import plot_network as pn
+import Gen_weights_nd_data as gwd
 
 # Initialize class variable
 class SNN_STDP:
     # Initialize neuron parameters
-    def __init__(self, V_th=-55, V_reset=-75, C=10, R=1, A_minus=-0.1, tau_m=0.002, num_items=100, 
+    def __init__(self, V_th=-55, V_reset=-75, C=10, R=1, A_minus=-0.1, tau_m=0.002, num_items=100, num_input_neurons=2,
                  tau_stdp=0.02, A_plus=0.1, dt=0.001, T=1, V_rest=-70, num_neurons=20, excit_inhib_ratio = 0.8, 
                  alpha=1, perc_input_neurons=0.1, interval=0.03, max_weight=1, min_weight=-1, input_scaler=1000):
         self.V_th = V_th
@@ -37,26 +40,41 @@ class SNN_STDP:
         self.max_weight = max_weight
         self.min_weight = min_weight
         self.input_scaler = input_scaler
+        self.num_input_neurons = num_input_neurons
 
     def initialize_network(self):
         # Generate weights 
-        self.weights = swn.generate_small_world_network_power_law(num_neurons=self.num_neurons, 
+        self.weights = gwd.generate_small_world_network_power_law(num_neurons=self.num_neurons, 
                                                                   excit_inhib_ratio=self.excit_inhib_ratio, 
                                                                   alpha=self.alpha,
-                                                                  perc_input_neurons=0.1)
+                                                                  num_input_neurons=self.num_input_neurons)
         # Generate membrane potential and spikes array
         self.MemPot = np.zeros(shape=(self.num_timesteps, self.num_neurons, self.num_items))
         self.MemPot[0,:,:] = self.V_rest
         self.t_since_spike = np.ones(shape=(self.num_timesteps, self.num_neurons, self.num_items))
         return self.MemPot, self.t_since_spike, self.weights
 
-    def prep_data(self):
+    def prepping_data(self, m1=5, m2=8, v1=1, v2=1, num_features=2):
         # Simulate data
-        self.data = self.encode_input_poisson(np.random.rand(self.num_items, self.num_neurons))
-        return self.data
+        self.data, self.classes = gwd.prep_data(m1, m2, v1, v2,
+                                                 self.num_timesteps, self.num_input_neurons, 
+                                                 self.num_items, self.dt, self.input_scaler)
+        return self.data, self.classes
     
     def neuronal_activity(self):
-        for l in tqdm(range(self.num_items), desc="Processing items"):
+        spike_counts = np.zeros((self.num_neurons, self.num_items))
+
+        # Add input data before training
+        input_indices = np.where(np.all(self.weights == 0, axis=1))[0]
+        for j in range(len(input_indices)):
+            for t in range(self.num_timesteps):
+                for i in range(self.num_items):
+                    if self.data[t,j,i] == 1:
+                        self.t_since_spike[t,j,i] = 0
+                    else:
+                        self.t_since_spike[t,j,i] = self.t_since_spike[t-1,j,i] + 1
+
+        for l in tqdm(range(self.num_items), desc="Training network"):
             for t in range(1, self.num_timesteps):
                 for n in range(0,self.num_neurons):
                     # Check if neuron is an input neuron
@@ -71,14 +89,9 @@ class SNN_STDP:
                         if self.MemPot[t,n,l] > self.V_th:
                             self.t_since_spike[t,n,l] = 0
                             self.MemPot[t,n,l] = self.V_reset
+                            spike_counts[n,l] += 1
                         else:
-                            self.t_since_spike[t,n,l] += 1
-                    else:
-                        # Update input neuron spike
-                        if self.data[t,n,l] == 1:
-                            self.t_since_spike[t,n,l] = 0
-                        else:
-                            self.t_since_spike[t,n,l] += 1
+                            self.t_since_spike[t,n,l] = self.t_since_spike[t-1,n,l] + 1
 
                     # Perform STDP for hidden neurons
                     for s in range(0,self.num_neurons):
@@ -102,71 +115,18 @@ class SNN_STDP:
             if l < self.num_items-1:
                 self.MemPot[0,:,l+1] = self.MemPot[t,:,l]
 
-    def encode_input_poisson(self, input):
-        # 2D-array: items x neurons
-        poisson_input = np.zeros((self.num_timesteps, self.num_neurons, self.num_items))
-
-        for i in range(self.num_items):
-            for j in range(self.num_neurons):
-                # Calculate the mean spike count for the Poisson distribution
-                # Assuming 'input' is the rate (spikes/sec), we multiply by 'dt' to get the average number of spikes per time step
-                lambda_poisson = input[i, j]*self.dt*self.input_scaler
-
-                # Generate spikes using Poisson distribution
-                for t in range(self.num_timesteps):
-                    spike_count = np.random.poisson(lambda_poisson)
-                    poisson_input[t, j, i] = 1 if spike_count > 0 else 0
-
-        return poisson_input
-
-    def visualize_learning(self):
-        num_items = self.t_since_spike.shape[2]
-        num_neurons = self.t_since_spike.shape[1]
-
-        # Define colors for each neuron
-        colors = plt.cm.jet(np.linspace(0, 1, num_neurons))  # Using the jet colormap
-
-        # Create a figure with subplots for each item
-        fig, axs = plt.subplots(num_items, 2, figsize=(12, 8 * num_items))  # 2 columns for each item
-
-        spike_data = []
-        for item in range(num_items):
-            for neuron in range(num_neurons):
-                # Find the time steps where the neuron fired
-                neuron_spike_times = np.where(self.t_since_spike[:, neuron, item] == 0)[0]
-                spike_data.append(neuron_spike_times)
-
-        # Set lineoffsets and linelengths for spacing
-        lineoffsets = np.arange(num_neurons)
-        linelengths = 0.8  # Adjust this value to control the length of spikes
-
-        # Spike Raster Plot for each item
-        axs[item, 0].eventplot(spike_data, lineoffsets=lineoffsets, linelengths=linelengths, colors=colors)
-        axs[item, 0].set_yticks(lineoffsets)
-        axs[item, 0].set_yticklabels([f'Neuron {i}' for i in range(num_neurons)])
-        axs[item, 0].set_xlabel('Time')
-        axs[item, 0].set_ylabel('Neuron')
-        axs[item, 0].set_title(f'Item {item+1} - Spike Raster Plot')
-
-        plt.tight_layout()
-        plt.show()
-
-
-
-
-
-
-
-
-
-
+        # Calculate average spike count for each neuron per item
+        avg_spike_counts = spike_counts / self.num_timesteps
+        return avg_spike_counts
 
     def visualize_network(self, drw_edg = True, drw_netw = True):
         if drw_netw:
-            swn.draw_network(self.weights)
+            pn.draw_network(self.weights)
         if drw_edg:
-            swn.draw_edge_distribution(self.weights)
+            pn.draw_edge_distribution(self.weights)
 
+    def plot_training(self, num_neurons, num_items):
+        pt.plot_spikes(num_neurons_to_plot=num_neurons, num_items_to_plot=num_items, t_since_spike=self.t_since_spike)
 
     
 
