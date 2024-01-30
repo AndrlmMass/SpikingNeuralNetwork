@@ -21,7 +21,7 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, alpha
                 if connection_probabilities[i * n_cols + j] > np.random.rand():
                     # Assign weights
                     const = 1 if np.random.rand() < excit_inhib_ratio else -1
-                    weight_array[i, j] = np.random.rand() * const
+                    weight_array[i, j] = round(np.random.rand() * const,4)
                     weight_array[j, i] = 0
 
                 else:
@@ -36,7 +36,7 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, alpha
                     idx = np.random.choice(num_neurons)
                 else:
                     const = 1 if np.random.rand() < excit_inhib_ratio else -1
-                    weight_array[idx, j] = np.random.rand() * const
+                    weight_array[idx, j] = round(np.random.rand() * const,4)
             if np.any(np.all(weight_array == 0, axis=0)) == False:
                 break
                     
@@ -50,19 +50,17 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, alpha
 
 
 def encode_input_poisson(input, num_timesteps, num_neurons, num_items, dt, input_scaler):
-    print(input.shape)
+    # Extract labels and input features
     labels = input[:,-1]
-    input = input[:,0:num_neurons]
-    print(input.shape)
-    
-    # 2D-array: items x neurons
+    input_features = input[:,0:num_neurons]
+
+    # 3D-array: timesteps x neurons x items
     poisson_input = np.zeros((num_timesteps, num_neurons, num_items))
 
     for i in range(num_items):
         for j in range(num_neurons):
             # Calculate the mean spike count for the Poisson distribution
-            # Assuming 'input' is the rate (spikes/sec), we multiply by 'dt' to get the average number of spikes per time step
-            lambda_poisson = input[i, j]*dt*input_scaler
+            lambda_poisson = input_features[i, j] * dt * input_scaler
 
             # Generate spikes using Poisson distribution
             for t in range(num_timesteps):
@@ -71,28 +69,41 @@ def encode_input_poisson(input, num_timesteps, num_neurons, num_items, dt, input
 
     return poisson_input, labels
 
-def prep_data(m1, m2, v1, v2,  num_timesteps, num_neurons, 
-              num_items, dt, input_scaler):
-    
-    # Simulate data
-    cov1 = np.array([[v1,0],[0,v1]])
-    cov2 = np.array([[v2,0],[0,v2]])
-    pts1 = np.random.multivariate_normal([m1,m1], cov1, size=200)
-    pts2 = np.random.multivariate_normal([m2,m2], cov2, size=200)
-    
-    # Create labels for the datasets
-    labels1 = np.zeros(pts1.shape[0], dtype=int)  # Class 0
-    labels2 = np.ones(pts2.shape[0], dtype=int)   # Class 1
+def generate_multidimensional_data(num_classes, base_mean, mean_increment, variance, num_samples_per_class,
+                                   features, num_timesteps, num_items, dt, input_scaler):
+    """
+    Generate x-dimensional data with specified number of classes from multivariate normal distributions.
 
-    # Combine the datasets
-    combined_pts = np.vstack((pts1, pts2))
-    combined_labels = np.concatenate((labels1, labels2))
+    :param num_classes: Number of classes.
+    :param base_mean: Base mean for the first distribution.
+    :param mean_increment: Increment to be added to the mean for each subsequent class.
+    :param variance: Variance for the distributions.
+    :param num_samples_per_class: Number of samples to generate per class.
+    :param x: Number of dimensions for the data.
+    :return: A numpy array of the combined data and labels.
+    """
+    combined_pts = []
+    combined_labels = []
 
-    # Combine the labels with the datasets
+    for class_id in range(num_classes):
+        mean = base_mean + mean_increment * class_id
+        cov = np.eye(features) * variance
+        mean_vector = np.full(features, mean)
+
+        # Generate data points for this class
+        pts = np.random.multivariate_normal(mean_vector, cov, num_samples_per_class)
+        labels = np.full(num_samples_per_class, class_id, dtype=int)
+
+        combined_pts.append(pts)
+        combined_labels.append(labels)
+
+    # Combine and shuffle the datasets
+    combined_pts = np.vstack(combined_pts)
+    combined_labels = np.concatenate(combined_labels)
     combined_data = np.column_stack((combined_pts, combined_labels))
-
-    # Shuffle the combined data
     np.random.shuffle(combined_data)
 
-    data, classes = encode_input_poisson(combined_data,  num_timesteps, num_neurons, num_items, dt, input_scaler)
+    # Convert float-based array to spike-based
+    data, classes = encode_input_poisson(combined_data, num_timesteps, features, num_items, dt, input_scaler)
+    
     return data, classes

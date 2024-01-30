@@ -5,8 +5,8 @@ import os
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
-#os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
+#os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
+os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
 
 import plot_training as pt
 import plot_network as pn
@@ -15,9 +15,9 @@ import Gen_weights_nd_data as gwd
 # Initialize class variable
 class SNN_STDP:
     # Initialize neuron parameters
-    def __init__(self, V_th=-55, V_reset=-75, C=10, R=1, A_minus=-0.1, tau_m=0.002, num_items=100, num_input_neurons=2,
+    def __init__(self, V_th=-55, V_reset=-75, C=10, R=1, A_minus=-0.1, tau_m=0.002, num_items=100, num_input_neurons=4,
                  tau_stdp=0.02, A_plus=0.1, dt=0.001, T=1, V_rest=-70, num_neurons=20, excit_inhib_ratio = 0.8, 
-                 alpha=1, perc_input_neurons=0.1, interval=0.03, max_weight=1, min_weight=-1, input_scaler=1000):
+                 alpha=1, interval=0.03, max_weight=1, min_weight=-1, input_scaler=100):
         self.V_th = V_th
         self.V_reset = V_reset
         self.C = C
@@ -33,7 +33,7 @@ class SNN_STDP:
         self.leakage_rate = 1/self.R
         self.num_items = num_items
         self.num_neurons = num_neurons
-        self.perc_input_neurons = perc_input_neurons
+        self.num_classes = num_input_neurons
         self.excit_inhib_ratio = excit_inhib_ratio
         self.alpha = alpha
         self.interval = interval
@@ -54,11 +54,11 @@ class SNN_STDP:
         self.t_since_spike = np.ones(shape=(self.num_timesteps, self.num_neurons, self.num_items))
         return self.MemPot, self.t_since_spike, self.weights
 
-    def prepping_data(self, m1=5, m2=8, v1=1, v2=1, num_features=2):
+    def prepping_data(self, base_mean, mean_increment, variance, ):
         # Simulate data
-        self.data, self.classes = gwd.prep_data(m1, m2, v1, v2,
-                                                 self.num_timesteps, self.num_input_neurons, 
-                                                 self.num_items, self.dt, self.input_scaler)
+        self.data, self.classes = gwd.generate_multidimensional_data(self.num_classes, base_mean, 
+                                        mean_increment, variance, self.num_items, self.num_input_neurons,
+                                        self.num_timesteps, self.num_items, self.dt, self.input_scaler)
         return self.data, self.classes
     
     def neuronal_activity(self):
@@ -66,6 +66,7 @@ class SNN_STDP:
 
         # Add input data before training
         input_indices = np.where(np.all(self.weights == 0, axis=1))[0]
+        print(self.data.shape)
         for j in range(len(input_indices)):
             for t in range(self.num_timesteps):
                 for i in range(self.num_items):
@@ -101,14 +102,17 @@ class SNN_STDP:
                             # Check if excitatory or inhibitory 
                             if self.weights[n,s] > 0:
                                 if spike_diff > 0:
-                                    self.weights[n,s] += self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp)
+                                    self.weights[n,s] += round(self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp),4)
                                 else:
-                                    self.weights[n,s] += self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp)
+                                    self.weights[n,s] += round(self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp),4)
                             elif self.weights[n,s] < 0:
                                 if spike_diff < 0:
-                                    self.weights[n,s] -= self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp)
+                                    self.weights[n,s] -= round(self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp),4)
                                 else:
-                                    self.weights[n,s] -= self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp)
+                                    self.weights[n,s] -= round(self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp),4)
+
+                # Clip weights to avoid exploding or diminishing gradients
+                self.weights = np.clip(self.weights, a_max=self.max_weight, a_min=self.min_weight)
 
             # Update self.MemPot to include the membrane potential from the previous step
             # as the beginning of the next step. 
