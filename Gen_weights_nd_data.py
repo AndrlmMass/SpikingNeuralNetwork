@@ -1,50 +1,53 @@
 import numpy as np
 
-def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, alpha, num_input_neurons):
+def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, alpha, num_input_neurons, num_timesteps, num_items):
     n_rows, n_cols = num_neurons, num_neurons
 
     # Generate power-law distribution for the probability of connections
     connection_probabilities = np.random.power(alpha, size=n_rows * n_cols)
 
     # Initialize the arrays for weights and signs
-    weight_array = np.ones((n_rows, n_cols))
-    np.fill_diagonal(weight_array, 0)
+    weight_array = np.ones((n_rows, n_cols, num_items))
+    print(weight_array[:,:,0])
+    # Fill diagonal for 3d array
+    for j in range(num_items):
+        np.fill_diagonal(weight_array[:,:,j],0)
+    print(weight_array[:,:,0])
 
     # Add weights to input neurons
     input_indices = np.random.choice(np.arange(num_neurons),num_input_neurons)
-    weight_array[input_indices,:] = np.zeros(shape=num_neurons)
+    weight_array[input_indices,:,0] = np.zeros(shape=num_neurons)
 
     # Assign weights and signs based on connection probability
     for i in range(n_rows):
         for j in range(n_cols):  
-            if weight_array[i, j] != 0:
+            if weight_array[i, j, 0] != 0:
                 if connection_probabilities[i * n_cols + j] > np.random.rand():
                     # Assign weights
                     const = 1 if np.random.rand() < excit_inhib_ratio else -1
-                    weight_array[i, j] = round(np.random.rand() * const,4)
-                    weight_array[j, i] = 0
+                    weight_array[i, j, 0] = round(np.random.rand() * const,4)
+                    weight_array[j, i, 0] = 0
 
                 else:
-                    weight_array[i, j] = 0
+                    weight_array[i, j, 0] = 0
 
     # Add connections to neurons without post-synaptic connections
-    if np.any(np.all(weight_array == 0, axis=0)):
+    if np.any(np.all(weight_array[:,:,0] == 0, axis=0)):
         for j in range(num_neurons):
-            if np.all(weight_array[:,j] == 0):
+            if np.all(weight_array[:,j,0] == 0):
                 idx = np.random.choice(num_neurons)
                 if idx == j:
                     idx = np.random.choice(num_neurons)
                 else:
                     const = 1 if np.random.rand() < excit_inhib_ratio else -1
-                    weight_array[idx, j] = round(np.random.rand() * const,4)
-            if np.any(np.all(weight_array == 0, axis=0)) == False:
-                break
-                    
+                    weight_array[idx,j,0] = round(np.random.rand() * const,4)
+            if np.any(np.all(weight_array[:,:,0] == 0, axis=0)) == False:
+                break           
 
     # Calculate ratio of excitatory to inhibitory connections
-    print(f"This is the current ratio of positive edges to all edges: {np.sum(weight_array > 0)/np.sum(weight_array != 0)}")
-    print(np.where(np.all(weight_array == 0, axis=1)))
-    print(weight_array)
+    print(f"This is the current ratio of positive edges to all edges: {np.sum(weight_array[:,:,0] > 0)/np.sum(weight_array[:,:,0] != 0)}")
+    print(np.where(np.all(weight_array[:,:,0] == 0, axis=1)))
+    print(weight_array[:,:,0])
 
     return weight_array
 

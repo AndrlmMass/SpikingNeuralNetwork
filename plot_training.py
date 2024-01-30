@@ -66,3 +66,18 @@ def plot_gif_evolution(avg_spike_counts, epochs, num_neurons, num_items):
         images.append(imageio.imread(filename))
 
     imageio.mimsave('neuron_activity.gif', images, fps=1)
+
+def plot_weights(weights, num_weights):
+    # Flatten the first two dimensions
+    flattened_weights = weights.reshape(-1, num_weights)
+
+    # Plotting
+    time_steps = range(num_weights)
+    for i in range(flattened_weights.shape[0]):
+        plt.plot(time_steps, flattened_weights[i, :], label=f'Weight {i+1}')
+
+    plt.xlabel('Time')
+    plt.ylabel('Weight Value')
+    plt.title('Weight Changes Over Time')
+    plt.legend()
+    plt.show()

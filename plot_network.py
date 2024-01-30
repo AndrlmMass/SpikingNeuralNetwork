@@ -19,8 +19,8 @@ def draw_network(combined_array):
     # Add edges with weights
     for i in range(n_rows):
         for j in range(n_cols):
-            if combined_array[i, j] != 0:
-                G.add_edge(j, i, weight=combined_array[i, j])
+            if combined_array[i, j,0] != 0:
+                G.add_edge(j, i, weight=combined_array[i, j,0])
 
     # Draw the network
     pos = nx.spring_layout(G)  # positions for all nodes
@@ -52,6 +52,7 @@ def power_law(x, a, b):
     return a * np.power(x, b)
 
 def draw_edge_distribution(array):
+    array = array[:,:,0]
     # Extract the presence of edges and count them
     edges = np.count_nonzero(array, axis=0)
     sorted_edges = np.sort(edges)[::-1] # Sort in descending order
