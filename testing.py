@@ -1,6 +1,5 @@
 import numpy as np
 
 
-arr = np.arange(20)
-print(arr)
-
+nu_vekt =-0.5 - 0.001 * np.exp(abs(-20) / 100)
+print(nu_vekt)

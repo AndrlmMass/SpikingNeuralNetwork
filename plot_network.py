@@ -7,7 +7,6 @@ import numpy as np
 # Draw the network and plot the distribution
 def draw_network(combined_array):
     n_rows, n_cols = combined_array.shape[0], combined_array.shape[1]
-    print(combined_array)
 
     # Create a directed graph
     G = nx.DiGraph()
@@ -19,7 +18,7 @@ def draw_network(combined_array):
     # Add edges with weights
     for i in range(n_rows):
         for j in range(n_cols):
-            if combined_array[i, j,0] != 0:
+            if combined_array[i, j, 0] != 0:
                 G.add_edge(j, i, weight=combined_array[i, j,0])
 
     # Draw the network
@@ -28,8 +27,6 @@ def draw_network(combined_array):
     # Define edges based on weight
     positive_edges = [(u, v) for u, v, d in G.edges(data=True) if d['weight'] > 0]
     negative_edges = [(u, v) for u, v, d in G.edges(data=True) if d['weight'] < 0]
-
-    print(len(positive_edges),len(negative_edges))
 
     # Draw nodes
     nx.draw_networkx_nodes(G, pos, node_size=100)

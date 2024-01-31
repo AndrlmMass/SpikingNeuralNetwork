@@ -15,8 +15,8 @@ import Gen_weights_nd_data as gwd
 # Initialize class variable
 class SNN_STDP:
     # Initialize neuron parameters
-    def __init__(self, V_th=0.7, V_reset=-0.2, C=10, R=1, A_minus=-0.1, tau_m=0.002, num_items=100, num_input_neurons=4,
-                 tau_stdp=0.1, A_plus=0.1, dt=0.001, T=1, V_rest=0, num_neurons=20, excit_inhib_ratio = 0.8, 
+    def __init__(self, V_th=0.7, V_reset=-0.2, C=10, R=1, A_minus_ex=-0.01, A_minus_in=-0.1, tau_m=0.002, num_items=100, num_input_neurons=4,
+                 tau_stdp=0.1, A_plus_ex=0.1, A_plus_in = 0.01, dt=0.001, T=1, V_rest=0, num_neurons=20, excit_inhib_ratio = 0.8, 
                  alpha=1, max_weight=1, min_weight=-1, input_scaler=100, num_epochs=10):
         self.V_th = V_th
         self.V_reset = V_reset
@@ -28,8 +28,10 @@ class SNN_STDP:
         self.T = T
         self.num_timesteps = int(T/dt)
         self.V_rest = V_rest
-        self.A_minus = A_minus
-        self.A_plus = A_plus
+        self.A_minus_ex = A_minus_ex
+        self.A_plus_ex = A_plus_ex
+        self.A_minus_in = A_minus_in
+        self.A_plus_in = A_plus_in
         self.leakage_rate = 1/self.R
         self.num_items = num_items
         self.num_neurons = num_neurons
@@ -41,7 +43,7 @@ class SNN_STDP:
         self.input_scaler = input_scaler
         self.num_input_neurons = num_input_neurons
         self.num_epochs = num_epochs
-        self.max_spike_diff = int(self.num_timesteps*0.05)
+        self.max_spike_diff = int(self.num_timesteps*0.1)
 
     def initialize_network(self):
         # Generate weights 
@@ -105,21 +107,21 @@ class SNN_STDP:
                             if self.weights[n,s,l] > 0:
                                 if spike_diff > 0:
                                     count[0] += 1
-                                    self.weights[n,s,l] += round(self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp),4)
+                                    self.weights[n,s,l] += round(self.A_plus_ex * np.exp(abs(spike_diff) / self.tau_stdp),4)
                                 else:
                                     count[1] += 1
-                                    self.weights[n,s,l] += round(self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp),4)
-                                if self.weights[n,s,l] < 0:
-                                    self.weights[n,s,l] = 0
+                                    self.weights[n,s,l] += round(self.A_minus_ex * np.exp(abs(spike_diff) / self.tau_stdp),4)
+                                if self.weights[n,s,l] <= 0:
+                                    self.weights[n,s,l] = 0.1
                             elif self.weights[n,s,l-1] < 0:
                                 if spike_diff < 0:
                                     count[2] += 1
-                                    self.weights[n,s,l] -= round(self.A_plus * np.exp(abs(spike_diff) / self.tau_stdp),4)
+                                    self.weights[n,s,l] -= round(self.A_plus_in * np.exp(abs(spike_diff) / self.tau_stdp),4)
                                 else:
                                     count[3] += 1
-                                    self.weights[n,s,l] -= round(self.A_minus * np.exp(abs(spike_diff) / self.tau_stdp),4)
-                                if self.weights[n,s,l] > 0:
-                                    self.weights[n,s,l] = 0
+                                    self.weights[n,s,l] -= round(self.A_minus_in * np.exp(abs(spike_diff) / self.tau_stdp),4)
+                                if self.weights[n,s,l] >= 0:
+                                    self.weights[n,s,l] = -0.1
             # Clip weights to avoid exploding or diminishing gradients
             self.weights[:,:,l] = np.clip(self.weights[:,:,l], a_max=self.max_weight, a_min=self.min_weight)
 
@@ -132,7 +134,9 @@ class SNN_STDP:
         # Calculate average spike count for each neuron per item
         avg_spike_counts = spike_counts / self.num_timesteps
 
-        return avg_spike_counts, count
+        print(f"This training had {count[0]} excitatory strengthenings and {count[1]} weakenings. While inhibitory connections had {count[2]} strenghtenings and {count[3]} weakenings.")
+
+        return avg_spike_counts
 
     def visualize_network(self, drw_edg = True, drw_netw = True):
         if drw_netw:
