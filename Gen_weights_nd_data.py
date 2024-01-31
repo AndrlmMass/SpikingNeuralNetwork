@@ -43,11 +43,9 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, alpha
                 break           
 
     # Calculate ratio of excitatory to inhibitory connections
-    print(f"This is the current ratio of positive edges to all edges: {np.sum(weight_array[:,:,0] > 0)/np.sum(weight_array[:,:,0] != 0)}")
-    print(np.where(np.all(weight_array[:,:,0] == 0, axis=1)))
-    print(weight_array[:,:,0])
+    print(f"This is the current ratio of positive edges to all edges: {round(np.sum(weight_array[:,:,0] > 0)/np.sum(weight_array[:,:,0] != 0),2)}")
 
-    return weight_array
+    return weight_array, input_indices
 
 
 def encode_input_poisson(input, num_timesteps, num_neurons, num_items, dt, input_scaler):
@@ -67,8 +65,6 @@ def encode_input_poisson(input, num_timesteps, num_neurons, num_items, dt, input
             for t in range(num_timesteps):
                 spike_count = np.random.poisson(lambda_poisson)
                 poisson_input[t, j, i] = 1 if spike_count > 0 else 0
-
-    print(poisson_input[:,])
 
     return poisson_input, labels
 

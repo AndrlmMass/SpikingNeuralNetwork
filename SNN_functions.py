@@ -15,8 +15,8 @@ import Gen_weights_nd_data as gwd
 # Initialize class variable
 class SNN_STDP:
     # Initialize neuron parameters
-    def __init__(self, V_th=0.5, V_reset=-0.2, C=10, R=1, A_minus=-0.1, tau_m=0.002, num_items=100, num_input_neurons=4,
-                 tau_stdp=0.02, A_plus=0.1, dt=0.001, T=1, V_rest=0, num_neurons=20, excit_inhib_ratio = 0.8, 
+    def __init__(self, V_th=0.7, V_reset=-0.2, C=10, R=1, A_minus=-0.1, tau_m=0.002, num_items=100, num_input_neurons=4,
+                 tau_stdp=0.1, A_plus=0.1, dt=0.001, T=1, V_rest=0, num_neurons=20, excit_inhib_ratio = 0.8, 
                  alpha=1, max_weight=1, min_weight=-1, input_scaler=100, num_epochs=10):
         self.V_th = V_th
         self.V_reset = V_reset
@@ -41,10 +41,11 @@ class SNN_STDP:
         self.input_scaler = input_scaler
         self.num_input_neurons = num_input_neurons
         self.num_epochs = num_epochs
+        self.max_spike_diff = int(self.num_timesteps*0.05)
 
     def initialize_network(self):
         # Generate weights 
-        self.weights = gwd.generate_small_world_network_power_law(num_neurons=self.num_neurons, 
+        self.weights, self.input_neuron_idx = gwd.generate_small_world_network_power_law(num_neurons=self.num_neurons, 
                                                                   excit_inhib_ratio=self.excit_inhib_ratio, 
                                                                   alpha=self.alpha,
                                                                   num_input_neurons=self.num_input_neurons,
@@ -74,7 +75,7 @@ class SNN_STDP:
                         self.t_since_spike[t,input_indices[j],i] = 0
                     else:
                         self.t_since_spike[t,input_indices[j],i] = self.t_since_spike[t-1,input_indices[j],i] + 1
-        print(f"These are the time_since_spikes values: {self.t_since_spike[:,input_indices,0]}")
+
         count = [0,0,0,0]
         for l in tqdm(range(self.num_items), desc="Training network"):
             for t in range(1, self.num_timesteps):
@@ -99,6 +100,7 @@ class SNN_STDP:
                         if s != n and (self.t_since_spike[t,n,l] == 0 or self.t_since_spike[t,s,l] == 0):
                             # Calculate the spike diff for input and output neuron
                             spike_diff = self.t_since_spike[t,n,l] - self.t_since_spike[t,s,l]
+                            spike_diff = np.clip(spike_diff, -self.max_spike_diff, self.max_spike_diff)
                             # Check if excitatory or inhibitory 
                             if self.weights[n,s,l] > 0:
                                 if spike_diff > 0:
@@ -139,8 +141,9 @@ class SNN_STDP:
             pn.draw_edge_distribution(self.weights)
 
     def plot_training(self, num_neurons, num_items, num_weights):
-        pt.plot_spikes(num_neurons_to_plot=num_neurons, num_items_to_plot=num_items, t_since_spike=self.t_since_spike, weights=self.weights)
-        pt.plot_weights(self.weights, num_weights=num_weights)
+        pt.plot_spikes(num_neurons_to_plot=num_neurons, num_items_to_plot=num_items, t_since_spike=self.t_since_spike, 
+                       weights=self.weights, input_indices=self.input_neuron_idx)
+        pt.plot_weights(self.weights, num_weights=num_weights, input_indices=self.input_neuron_idx)
 
     
 

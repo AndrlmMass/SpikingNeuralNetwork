@@ -5,7 +5,7 @@ import numpy as np
 import imageio
 import matplotlib.pyplot as plt
 
-def plot_spikes(num_neurons_to_plot=None, num_items_to_plot=None, t_since_spike=None, weights=None):
+def plot_spikes(num_neurons_to_plot=None, num_items_to_plot=None, t_since_spike=None, weights=None, input_indices=None):
     num_items = t_since_spike.shape[2]
     num_neurons = t_since_spike.shape[1]
 
@@ -45,16 +45,7 @@ def plot_spikes(num_neurons_to_plot=None, num_items_to_plot=None, t_since_spike=
     ax.set_ylabel('Neuron')
     ax.set_title(f'Item {item+1} - Spike Raster Plot')
 
-    # Plot all the y_tick labels
-
-    # Convert input neurons to red y-ticks
-    y_tick_labels = ax.get_yticklabels()
-
-    # Get input neuron indices
-    indices = np.where(np.all(weights[:,:,0] == 0, axis=1))[0]
-    print(indices,ax.get_yticklabels())
-
-    for idx in indices:
+    for idx in input_indices:
         ax.get_yticklabels()[idx].set_color("red")
     plt.tight_layout()
     plt.show()
@@ -80,21 +71,23 @@ def plot_gif_evolution(avg_spike_counts, epochs, num_neurons, num_items):
 
     imageio.mimsave('neuron_activity.gif', images, fps=1)
 
-def plot_weights(weights, num_weights):
+def plot_weights(weights, num_weights, input_indices):
     # Flatten the first two dimensions
     flattened_weights = weights.reshape(-1, num_weights)
-    print(flattened_weights.shape)
+    
+    # Remove weight indices outside of num_weights
+    filt_idx = [item for item in input_indices if item <= num_weights-1]
 
     # Create a mask where each column is checked if it's not entirely zero
-    non_zero_mask = np.any(flattened_weights != 0, axis=0)
+    print(input_indices)
 
     # Apply the mask to remove columns that are entirely zero
-    filtered_weights = flattened_weights[:, non_zero_mask]
+    filtered_weights = flattened_weights[:, filt_idx]
     print(filtered_weights.shape)
 
     # Plotting
-    time_steps = range(filtered_weights)
-    for i in range(filtered_weights.shape[0]):
+    time_steps = range(filtered_weights.shape[0])
+    for i in range(filtered_weights.shape[1]):
         plt.plot(time_steps, filtered_weights[:,i], label=f'Weight {i+1}')
 
     plt.xlabel('Time')
