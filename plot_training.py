@@ -5,7 +5,7 @@ import numpy as np
 import imageio
 import matplotlib.pyplot as plt
 
-def plot_spikes(num_neurons_to_plot=None, num_items_to_plot=None, t_since_spike=None):
+def plot_spikes(num_neurons_to_plot=None, num_items_to_plot=None, t_since_spike=None, weights=None):
     num_items = t_since_spike.shape[2]
     num_neurons = t_since_spike.shape[1]
 
@@ -40,9 +40,22 @@ def plot_spikes(num_neurons_to_plot=None, num_items_to_plot=None, t_since_spike=
 
     # Spike Raster Plot
     ax.eventplot(spike_data, lineoffsets=lineoffsets, linelengths=linelengths, colors=colors)
+    ax.set_yticks(np.arange(num_neurons_to_plot))
     ax.set_xlabel('Time')
     ax.set_ylabel('Neuron')
     ax.set_title(f'Item {item+1} - Spike Raster Plot')
+
+    # Plot all the y_tick labels
+
+    # Convert input neurons to red y-ticks
+    y_tick_labels = ax.get_yticklabels()
+
+    # Get input neuron indices
+    indices = np.where(np.all(weights[:,:,0] == 0, axis=1))[0]
+    print(indices,ax.get_yticklabels())
+
+    for idx in indices:
+        ax.get_yticklabels()[idx].set_color("red")
     plt.tight_layout()
     plt.show()
 
@@ -70,14 +83,21 @@ def plot_gif_evolution(avg_spike_counts, epochs, num_neurons, num_items):
 def plot_weights(weights, num_weights):
     # Flatten the first two dimensions
     flattened_weights = weights.reshape(-1, num_weights)
+    print(flattened_weights.shape)
+
+    # Create a mask where each column is checked if it's not entirely zero
+    non_zero_mask = np.any(flattened_weights != 0, axis=0)
+
+    # Apply the mask to remove columns that are entirely zero
+    filtered_weights = flattened_weights[:, non_zero_mask]
+    print(filtered_weights.shape)
 
     # Plotting
-    time_steps = range(num_weights)
-    for i in range(flattened_weights.shape[0]):
-        plt.plot(time_steps, flattened_weights[i, :], label=f'Weight {i+1}')
+    time_steps = range(filtered_weights)
+    for i in range(filtered_weights.shape[0]):
+        plt.plot(time_steps, filtered_weights[:,i], label=f'Weight {i+1}')
 
     plt.xlabel('Time')
     plt.ylabel('Weight Value')
     plt.title('Weight Changes Over Time')
-    plt.legend()
     plt.show()

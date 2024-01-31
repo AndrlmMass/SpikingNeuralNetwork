@@ -8,11 +8,9 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, alpha
 
     # Initialize the arrays for weights and signs
     weight_array = np.ones((n_rows, n_cols, num_items))
-    print(weight_array[:,:,0])
     # Fill diagonal for 3d array
     for j in range(num_items):
         np.fill_diagonal(weight_array[:,:,j],0)
-    print(weight_array[:,:,0])
 
     # Add weights to input neurons
     input_indices = np.random.choice(np.arange(num_neurons),num_input_neurons)
@@ -25,11 +23,11 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, alpha
                 if connection_probabilities[i * n_cols + j] > np.random.rand():
                     # Assign weights
                     const = 1 if np.random.rand() < excit_inhib_ratio else -1
-                    weight_array[i, j, 0] = round(np.random.rand() * const,4)
-                    weight_array[j, i, 0] = 0
+                    weight_array[i, j, :] = round(np.random.rand() * const,4)
+                    weight_array[j, i, :] = 0
 
                 else:
-                    weight_array[i, j, 0] = 0
+                    weight_array[i, j, :] = 0
 
     # Add connections to neurons without post-synaptic connections
     if np.any(np.all(weight_array[:,:,0] == 0, axis=0)):
@@ -69,6 +67,8 @@ def encode_input_poisson(input, num_timesteps, num_neurons, num_items, dt, input
             for t in range(num_timesteps):
                 spike_count = np.random.poisson(lambda_poisson)
                 poisson_input[t, j, i] = 1 if spike_count > 0 else 0
+
+    print(poisson_input[:,])
 
     return poisson_input, labels
 
