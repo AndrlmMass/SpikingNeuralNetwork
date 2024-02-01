@@ -45,8 +45,10 @@ def plot_spikes(num_neurons_to_plot=None, num_items_to_plot=None, t_since_spike=
     ax.set_ylabel('Neuron')
     ax.set_title(f'Item {item+1} - Spike Raster Plot')
 
+    # Convert the y ticks to red if they are the input neurons
     for idx in input_indices:
         ax.get_yticklabels()[idx].set_color("red")
+
     plt.tight_layout()
     plt.show()
 

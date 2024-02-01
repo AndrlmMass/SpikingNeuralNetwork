@@ -5,8 +5,8 @@ import os
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
-#os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
+#os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
+os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
 
 import plot_training as pt
 import plot_network as pn
@@ -17,7 +17,7 @@ class SNN_STDP:
     # Initialize neuron parameters
     def __init__(self, V_th=0.7, V_reset=-0.2, C=10, R=1, A_minus_ex=-0.01, A_minus_in=-0.1, tau_m=0.002, num_items=100, num_input_neurons=4,
                  tau_stdp=0.1, A_plus_ex=0.1, A_plus_in = 0.01, dt=0.001, T=1, V_rest=0, num_neurons=20, excit_inhib_ratio = 0.8, 
-                 alpha=1, max_weight=1, min_weight=-1, input_scaler=100, num_epochs=10):
+                 alpha=1, max_weight=1, min_weight=-1, input_scaler=100, num_epochs=10, ex_interval=0.1, in_interval=0.01):
         self.V_th = V_th
         self.V_reset = V_reset
         self.C = C
@@ -38,6 +38,8 @@ class SNN_STDP:
         self.num_classes = num_input_neurons
         self.excit_inhib_ratio = excit_inhib_ratio
         self.alpha = alpha
+        self.ex_interval = ex_interval
+        self.in_interval = in_interval
         self.max_weight = max_weight
         self.min_weight = min_weight
         self.input_scaler = input_scaler
@@ -102,9 +104,8 @@ class SNN_STDP:
                         if s != n and (self.t_since_spike[t,n,l] == 0 or self.t_since_spike[t,s,l] == 0):
                             # Calculate the spike diff for input and output neuron
                             spike_diff = self.t_since_spike[t,n,l] - self.t_since_spike[t,s,l]
-                            spike_diff = np.clip(spike_diff, -self.max_spike_diff, self.max_spike_diff)
                             # Check if excitatory or inhibitory 
-                            if self.weights[n,s,l] > 0:
+                            if self.weights[n,s,l] > 0 and spike_diff/self.num_timesteps < self.ex_interval:
                                 if spike_diff > 0:
                                     count[0] += 1
                                     self.weights[n,s,l] += round(self.A_plus_ex * np.exp(abs(spike_diff) / self.tau_stdp),4)
@@ -112,8 +113,8 @@ class SNN_STDP:
                                     count[1] += 1
                                     self.weights[n,s,l] += round(self.A_minus_ex * np.exp(abs(spike_diff) / self.tau_stdp),4)
                                 if self.weights[n,s,l] <= 0:
-                                    self.weights[n,s,l] = 0.1
-                            elif self.weights[n,s,l-1] < 0:
+                                    self.weights[n,s,l] = 0.01
+                            elif self.weights[n,s,l-1] < 0 and spike_diff/self.num_timesteps < self.in_interval:
                                 if spike_diff < 0:
                                     count[2] += 1
                                     self.weights[n,s,l] -= round(self.A_plus_in * np.exp(abs(spike_diff) / self.tau_stdp),4)
@@ -121,7 +122,7 @@ class SNN_STDP:
                                     count[3] += 1
                                     self.weights[n,s,l] -= round(self.A_minus_in * np.exp(abs(spike_diff) / self.tau_stdp),4)
                                 if self.weights[n,s,l] >= 0:
-                                    self.weights[n,s,l] = -0.1
+                                    self.weights[n,s,l] = -0.01
             # Clip weights to avoid exploding or diminishing gradients
             self.weights[:,:,l] = np.clip(self.weights[:,:,l], a_max=self.max_weight, a_min=self.min_weight)
 
