@@ -73,26 +73,27 @@ def plot_gif_evolution(avg_spike_counts, epochs, num_neurons, num_items):
 
     imageio.mimsave('neuron_activity.gif', images, fps=1)
 
-def plot_weights(weights, num_weights, input_indices):
-    # Flatten the first two dimensions
-    flattened_weights = weights.reshape(-1, num_weights)
+import numpy as np
+import matplotlib.pyplot as plt
+
+def plot_weights(weights, dt_items):
+    # Assuming `weights` is a 3D numpy array of shape (n, m, time_steps)
+    # where n is the number of neurons, m is the number of connections per neuron, and
+    # time_steps is the number of time steps recorded.
     
-    # Remove weight indices outside of num_weights
-    filt_idx = [item for item in input_indices if item <= num_weights-1]
+    time_steps = np.arange(dt_items)  # Create an array of time steps
 
-    # Create a mask where each column is checked if it's not entirely zero
-    print(input_indices)
-
-    # Apply the mask to remove columns that are entirely zero
-    filtered_weights = flattened_weights[:, filt_idx]
-    print(filtered_weights.shape)
-
-    # Plotting
-    time_steps = range(filtered_weights.shape[0])
-    for i in range(filtered_weights.shape[1]):
-        plt.plot(time_steps, filtered_weights[:,i], label=f'Weight {i+1}')
+    for i in range(weights.shape[0]):
+        for j in range(weights.shape[1]):
+            # Check if the weight is non-zero at any time step in the range of interest
+            if np.any(weights[i, j, :dt_items] != 0):
+                plt.plot(time_steps, weights[i, j, :dt_items], label=f'Weight {i+1},{j+1}')
 
     plt.xlabel('Time')
     plt.ylabel('Weight Value')
     plt.title('Weight Changes Over Time')
+
+    # Optional: Comment out the legend if there are too many lines to make it readable
+    # plt.legend()
+
     plt.show()

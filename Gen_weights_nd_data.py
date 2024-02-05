@@ -7,7 +7,8 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, alpha
     connection_probabilities = np.random.power(alpha, size=n_rows * n_cols)
 
     # Initialize the arrays for weights and signs
-    weight_array = np.ones((n_rows, n_cols, num_items))
+    weight_array = np.zeros((n_rows, n_cols, num_items))
+    weight_array[:,:,0] = np.ones((n_rows, n_cols))
     # Fill diagonal for 3d array
     for j in range(num_items):
         np.fill_diagonal(weight_array[:,:,j],0)
@@ -23,11 +24,11 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, alpha
                 if connection_probabilities[i * n_cols + j] > np.random.rand():
                     # Assign weights
                     const = 1 if np.random.rand() < excit_inhib_ratio else -1
-                    weight_array[i, j, :] = round(np.random.rand() * const,4)
-                    weight_array[j, i, :] = 0
+                    weight_array[i, j, 0] = round(np.random.rand() * const,4)
+                    weight_array[j, i, 0] = 0
 
                 else:
-                    weight_array[i, j, :] = 0
+                    weight_array[i, j, 0] = 0
 
     # Add connections to neurons without post-synaptic connections
     if np.any(np.all(weight_array[:,:,0] == 0, axis=0)):
@@ -44,7 +45,6 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, alpha
 
     # Calculate ratio of excitatory to inhibitory connections
     print(f"This is the current ratio of positive edges to all edges: {round(np.sum(weight_array[:,:,0] > 0)/np.sum(weight_array[:,:,0] != 0),2)}")
-
     return weight_array, input_indices
 
 

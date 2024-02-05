@@ -5,8 +5,8 @@ import os
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-#os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
-os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
+os.chdir('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork')
+#os.chdir('C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork')
 
 import plot_training as pt
 import plot_network as pn
@@ -17,7 +17,7 @@ class SNN_STDP:
     # Initialize neuron parameters
     def __init__(self, V_th=0.7, V_reset=-0.2, C=10, R=1, A_minus_ex=-0.01, A_minus_in=-0.1, tau_m=0.002, num_items=100, num_input_neurons=4,
                  tau_stdp=0.1, A_plus_ex=0.1, A_plus_in = 0.01, dt=0.001, T=1, V_rest=0, num_neurons=20, excit_inhib_ratio = 0.8, 
-                 alpha=1, max_weight=1, min_weight=-1, input_scaler=100, num_epochs=10, ex_interval=0.1, in_interval=0.01):
+                 alpha=1, max_weight=1, min_weight=-1, input_scaler=100, num_epochs=10, ex_interval=0.1, in_interval=0.01, init_cals=700):
         self.V_th = V_th
         self.V_reset = V_reset
         self.C = C
@@ -38,6 +38,7 @@ class SNN_STDP:
         self.num_classes = num_input_neurons
         self.excit_inhib_ratio = excit_inhib_ratio
         self.alpha = alpha
+        self.init_cals = init_cals
         self.ex_interval = ex_interval
         self.in_interval = in_interval
         self.max_weight = max_weight
@@ -55,9 +56,10 @@ class SNN_STDP:
                                                                   num_input_neurons=self.num_input_neurons,
                                                                   num_items=self.num_items, num_timesteps=self.num_timesteps)
         # Generate membrane potential and spikes array
-        self.MemPot = np.zeros(shape=(self.num_timesteps, self.num_neurons, self.num_items))
+        self.MemPot = np.zeros((self.num_timesteps, self.num_neurons, self.num_items))
         self.MemPot[0,:,:] = self.V_rest
-        self.t_since_spike = np.ones(shape=(self.num_timesteps, self.num_neurons, self.num_items))
+        self.t_since_spike = np.ones((self.num_timesteps, self.num_neurons, self.num_items))
+        print(f"Sim between 1 and 2: {np.mean(self.weights[:,:,0]==self.weights[:,:,1])}")
         return self.MemPot, self.t_since_spike, self.weights
 
     def prepping_data(self, base_mean, mean_increment, variance, ):
@@ -66,7 +68,14 @@ class SNN_STDP:
                                         mean_increment, variance, self.num_items, self.num_input_neurons,
                                         self.num_timesteps, self.num_items, self.dt, self.input_scaler)
         return self.data, self.classes
-    
+
+    def find_prev_spike(self,t,s,l):
+        for j in range(t,0,-1):
+            if self.t_since_spike[j,s,l] == 0:
+                return j
+        return 0
+
+
     def neuronal_activity(self):
         spike_counts = np.zeros((self.num_neurons, self.num_items))
 
@@ -79,7 +88,7 @@ class SNN_STDP:
                         self.t_since_spike[t,input_indices[j],i] = 0
                     else:
                         self.t_since_spike[t,input_indices[j],i] = self.t_since_spike[t-1,input_indices[j],i] + 1
-
+        cal_consum = 0
         count = [0,0,0,0]
         for l in tqdm(range(self.num_items), desc="Training network"):
             for t in range(1, self.num_timesteps):
@@ -94,6 +103,7 @@ class SNN_STDP:
 
                         # Update spikes
                         if self.MemPot[t,n,l] > self.V_th:
+                            cal_consum += 0.1
                             self.t_since_spike[t,n,l] = 0
                             self.MemPot[t,n,l] = self.V_reset
                             spike_counts[n,l] += 1
@@ -109,34 +119,38 @@ class SNN_STDP:
                                 if spike_diff > 0:
                                     count[0] += 1
                                     self.weights[n,s,l] += round(self.A_plus_ex * np.exp(abs(spike_diff) / self.tau_stdp),4)
-                                else:
+                                elif self.find_prev_spike(t,s=n, l=l) > self.find_prev_spike(t=t,s=s,l=l):
                                     count[1] += 1
                                     self.weights[n,s,l] += round(self.A_minus_ex * np.exp(abs(spike_diff) / self.tau_stdp),4)
                                 if self.weights[n,s,l] <= 0:
                                     self.weights[n,s,l] = 0.01
                             elif self.weights[n,s,l-1] < 0 and spike_diff/self.num_timesteps < self.in_interval:
-                                if spike_diff < 0:
+                                # Pre fires after post synapse
+                                if spike_diff > 0:
                                     count[2] += 1
-                                    self.weights[n,s,l] -= round(self.A_plus_in * np.exp(abs(spike_diff) / self.tau_stdp),4)
-                                else:
-                                    count[3] += 1
                                     self.weights[n,s,l] -= round(self.A_minus_in * np.exp(abs(spike_diff) / self.tau_stdp),4)
+                                # Post neuron fires after pre-synaptic
+                                elif self.find_prev_spike(t,s=n, l=l) > self.find_prev_spike(t=t,s=s,l=l):
+                                    count[3] += 1
+                                    self.weights[n,s,l] -= round(self.A_plus_in * np.exp(abs(spike_diff) / self.tau_stdp),4)
                                 if self.weights[n,s,l] >= 0:
                                     self.weights[n,s,l] = -0.01
-            # Clip weights to avoid exploding or diminishing gradients
-            self.weights[:,:,l] = np.clip(self.weights[:,:,l], a_max=self.max_weight, a_min=self.min_weight)
+                    
+                    # Implement sleeping phase if cal_consum > cal_init
+                    #if cal_consum > self.cal_init:
+                        # 
 
             # Update self.MemPot to include the membrane potential from the previous step
             # as the beginning of the next step. 
             if l < self.num_items-1:
+                self.t_since_spike[0,:,l+1] = self.t_since_spike[t,:,l]
                 self.MemPot[0,:,l+1] = self.MemPot[t,:,l]
                 self.weights[:,:,l+1] = self.weights[:,:,l]
 
         # Calculate average spike count for each neuron per item
         avg_spike_counts = spike_counts / self.num_timesteps
 
-        print(f"This training had {count[0]} excitatory strengthenings and {count[1]} weakenings. While inhibitory connections had {count[2]} strenghtenings and {count[3]} weakenings.")
-
+        print(f"This training had {count[0]} excitatory strengthenings and {count[1]} weakenings. While inhibitory connections had {count[3]} strenghtenings and {count[2]} weakenings.")
         return avg_spike_counts
 
     def visualize_network(self, drw_edg = True, drw_netw = True):
@@ -148,7 +162,7 @@ class SNN_STDP:
     def plot_training(self, num_neurons, num_items, num_weights):
         pt.plot_spikes(num_neurons_to_plot=num_neurons, num_items_to_plot=num_items, t_since_spike=self.t_since_spike, 
                        weights=self.weights, input_indices=self.input_neuron_idx)
-        pt.plot_weights(self.weights, num_weights=num_weights, input_indices=self.input_neuron_idx)
+        pt.plot_weights(self.weights, dt_items=num_items)
 
     
 
