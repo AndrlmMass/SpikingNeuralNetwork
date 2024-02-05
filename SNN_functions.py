@@ -66,7 +66,8 @@ class SNN_STDP:
         # Simulate data
         self.data, self.classes = gwd.generate_multidimensional_data(self.num_classes, base_mean, 
                                         mean_increment, variance, self.num_items, self.num_input_neurons,
-                                        self.num_timesteps, self.num_items, self.dt, self.input_scaler)
+                                        self.num_timesteps, self.dt, self.input_scaler)
+        print(self.data.shape,self.classes.shape)
         return self.data, self.classes
 
     def find_prev_spike(self,t,s,l):
@@ -135,10 +136,6 @@ class SNN_STDP:
                                     self.weights[n,s,l] -= round(self.A_plus_in * np.exp(abs(spike_diff) / self.tau_stdp),4)
                                 if self.weights[n,s,l] >= 0:
                                     self.weights[n,s,l] = -0.01
-                    
-                    # Implement sleeping phase if cal_consum > cal_init
-                    #if cal_consum > self.cal_init:
-                        # 
 
             # Update self.MemPot to include the membrane potential from the previous step
             # as the beginning of the next step. 
@@ -147,11 +144,11 @@ class SNN_STDP:
                 self.MemPot[0,:,l+1] = self.MemPot[t,:,l]
                 self.weights[:,:,l+1] = self.weights[:,:,l]
 
-        # Calculate average spike count for each neuron per item
-        avg_spike_counts = spike_counts / self.num_timesteps
+        # Convert t_since_spike to spike_array for visualization purposes
+        self.spike_array = np.where(self.t_since_spike == 0, 1, 0)
 
+        # Summarize the training
         print(f"This training had {count[0]} excitatory strengthenings and {count[1]} weakenings. While inhibitory connections had {count[3]} strenghtenings and {count[2]} weakenings.")
-        return avg_spike_counts
 
     def visualize_network(self, drw_edg = True, drw_netw = True):
         if drw_netw:
@@ -163,6 +160,7 @@ class SNN_STDP:
         pt.plot_spikes(num_neurons_to_plot=num_neurons, num_items_to_plot=num_items, t_since_spike=self.t_since_spike, 
                        weights=self.weights, input_indices=self.input_neuron_idx)
         pt.plot_weights(self.weights, dt_items=num_items)
+        pt.plot_activity_heatmap(spikes=self.spike_array,classes=self.classes)
 
     
 

@@ -48,16 +48,18 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, alpha
     return weight_array, input_indices
 
 
-def encode_input_poisson(input, num_timesteps, num_neurons, num_items, dt, input_scaler):
-    # Extract labels and input features
-    labels = input[:,-1]
-    input_features = input[:,0:num_neurons]
+import numpy as np
 
-    # 3D-array: timesteps x neurons x items
+def encode_input_poisson(input_data, num_timesteps, num_neurons, num_items, dt, input_scaler):
+    # Extract labels and input features
+    labels = input_data[:,-1]
+    input_features = input_data[:,0:num_neurons]
+
+    # Correct the dimensions for the 3D-array: timesteps x neurons x items
     poisson_input = np.zeros((num_timesteps, num_neurons, num_items))
 
-    for i in range(num_items):
-        for j in range(num_neurons):
+    for i in range(num_items):  # Iterating over items
+        for j in range(num_neurons):  # Iterating over neurons
             # Calculate the mean spike count for the Poisson distribution
             lambda_poisson = input_features[i, j] * dt * input_scaler
 
@@ -69,18 +71,8 @@ def encode_input_poisson(input, num_timesteps, num_neurons, num_items, dt, input
     return poisson_input, labels
 
 def generate_multidimensional_data(num_classes, base_mean, mean_increment, variance, num_samples_per_class,
-                                   features, num_timesteps, num_items, dt, input_scaler):
-    """
-    Generate x-dimensional data with specified number of classes from multivariate normal distributions.
+                                   features, num_timesteps, dt, input_scaler):
 
-    :param num_classes: Number of classes.
-    :param base_mean: Base mean for the first distribution.
-    :param mean_increment: Increment to be added to the mean for each subsequent class.
-    :param variance: Variance for the distributions.
-    :param num_samples_per_class: Number of samples to generate per class.
-    :param x: Number of dimensions for the data.
-    :return: A numpy array of the combined data and labels.
-    """
     combined_pts = []
     combined_labels = []
 
@@ -102,7 +94,10 @@ def generate_multidimensional_data(num_classes, base_mean, mean_increment, varia
     combined_data = np.column_stack((combined_pts, combined_labels))
     np.random.shuffle(combined_data)
 
+    # Adjust num_items to match the total number of samples
+    num_items = num_classes * num_samples_per_class
     # Convert float-based array to spike-based
     data, classes = encode_input_poisson(combined_data, num_timesteps, features, num_items, dt, input_scaler)
     
     return data, classes
+

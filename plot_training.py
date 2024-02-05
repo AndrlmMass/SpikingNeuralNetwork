@@ -97,3 +97,30 @@ def plot_weights(weights, dt_items):
     # plt.legend()
 
     plt.show()
+
+import seaborn as sns
+
+def plot_activity_heatmap(spikes,classes):
+    print(spikes.shape,classes.shape)
+    # Get the indices for each class
+    mean_act_class = []
+    for t in range(len(np.unique(classes))):
+        print(t)
+        idx = np.where(classes == t)[0]
+        # Calculate the mean activity for each neuron for each class
+        mean_act_class.append(np.mean(spikes[idx,:,:], axis=0))
+    
+    # Compute the difference in activity between the two classes
+    activity_difference = mean_act_class[0] - mean_act_class[1]
+    
+    # Reshape the difference to a 2D array if necessary, or adjust depending on your data structure
+    activity_difference = activity_difference.reshape((spikes.shape[1], -1))  # Example reshape, adjust as needed
+    
+    # Plotting the heatmap
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(activity_difference, cmap="coolwarm", annot=True)
+    plt.title('Difference in Neuronal Activity Between Two Classes')
+    plt.xlabel('Feature Index')
+    plt.ylabel('Neuron Index')
+    plt.show()
+
