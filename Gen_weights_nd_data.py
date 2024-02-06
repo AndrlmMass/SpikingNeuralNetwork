@@ -1,6 +1,9 @@
 import numpy as np
 
-def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, alpha, num_input_neurons, num_timesteps, num_items):
+
+def generate_small_world_network_power_law(
+    num_neurons, excit_inhib_ratio, alpha, num_input_neurons, num_timesteps, num_items
+):
     n_rows, n_cols = num_neurons, num_neurons
 
     # Generate power-law distribution for the probability of connections
@@ -8,52 +11,58 @@ def generate_small_world_network_power_law(num_neurons, excit_inhib_ratio, alpha
 
     # Initialize the arrays for weights and signs
     weight_array = np.zeros((n_rows, n_cols, num_items))
-    weight_array[:,:,0] = np.ones((n_rows, n_cols))
+    weight_array[:, :, 0] = np.ones((n_rows, n_cols))
     # Fill diagonal for 3d array
     for j in range(num_items):
-        np.fill_diagonal(weight_array[:,:,j],0)
+        np.fill_diagonal(weight_array[:, :, j], 0)
 
     # Add weights to input neurons
-    input_indices = np.random.choice(np.arange(num_neurons),num_input_neurons)
-    weight_array[input_indices,:,0] = np.zeros(shape=num_neurons)
+    input_indices = np.random.choice(np.arange(num_neurons), num_input_neurons)
+    weight_array[input_indices, :, 0] = np.zeros(shape=num_neurons)
 
     # Assign weights and signs based on connection probability
     for i in range(n_rows):
-        for j in range(n_cols):  
+        for j in range(n_cols):
             if weight_array[i, j, 0] != 0:
                 if connection_probabilities[i * n_cols + j] > np.random.rand():
                     # Assign weights
                     const = 1 if np.random.rand() < excit_inhib_ratio else -1
-                    weight_array[i, j, 0] = round(np.random.rand() * const,4)
+                    weight_array[i, j, 0] = round(np.random.rand() * const, 4)
                     weight_array[j, i, 0] = 0
 
                 else:
                     weight_array[i, j, 0] = 0
 
     # Add connections to neurons without post-synaptic connections
-    if np.any(np.all(weight_array[:,:,0] == 0, axis=0)):
+    if np.any(np.all(weight_array[:, :, 0] == 0, axis=0)):
         for j in range(num_neurons):
-            if np.all(weight_array[:,j,0] == 0):
+            if np.all(weight_array[:, j, 0] == 0):
                 idx = np.random.choice(num_neurons)
                 if idx == j:
                     idx = np.random.choice(num_neurons)
                 else:
                     const = 1 if np.random.rand() < excit_inhib_ratio else -1
-                    weight_array[idx,j,0] = round(np.random.rand() * const,4)
-            if np.any(np.all(weight_array[:,:,0] == 0, axis=0)) == False:
-                break           
+                    weight_array[idx, j, 0] = round(np.random.rand() * const, 4)
+            if np.any(np.all(weight_array[:, :, 0] == 0, axis=0)) == False:
+                break
 
     # Calculate ratio of excitatory to inhibitory connections
-    print(f"This is the current ratio of positive edges to all edges: {round(np.sum(weight_array[:,:,0] > 0)/np.sum(weight_array[:,:,0] != 0),2)}")
+    var2 = round(
+        np.sum(weight_array[:, :, 0] > 0) / np.sum(weight_array[:, :, 0] != 0), 2
+    )
+    print(f"This is the current ratio of positive edges to all edges: {var2}")
     return weight_array, input_indices
 
 
 import numpy as np
 
-def encode_input_poisson(input_data, num_timesteps, num_neurons, num_items, dt, input_scaler):
+
+def encode_input_poisson(
+    input_data, num_timesteps, num_neurons, num_items, dt, input_scaler
+):
     # Extract labels and input features
-    labels = input_data[:,-1]
-    input_features = input_data[:,0:num_neurons]
+    labels = input_data[:, -1]
+    input_features = input_data[:, 0:num_neurons]
 
     # Correct the dimensions for the 3D-array: timesteps x neurons x items
     poisson_input = np.zeros((num_timesteps, num_neurons, num_items))
@@ -70,9 +79,19 @@ def encode_input_poisson(input_data, num_timesteps, num_neurons, num_items, dt, 
 
     return poisson_input, labels
 
-def generate_multidimensional_data(num_classes, base_mean, mean_increment, variance, num_samples_per_class,
-                                   features, num_timesteps, dt, input_scaler):
 
+def generate_multidimensional_data(
+    num_classes,
+    base_mean,
+    mean_increment,
+    variance,
+    num_samples_per_class,
+    features,
+    num_timesteps,
+    dt,
+    input_scaler,
+):
+    print(num_samples_per_class)
     combined_pts = []
     combined_labels = []
 
@@ -97,7 +116,8 @@ def generate_multidimensional_data(num_classes, base_mean, mean_increment, varia
     # Adjust num_items to match the total number of samples
     num_items = num_classes * num_samples_per_class
     # Convert float-based array to spike-based
-    data, classes = encode_input_poisson(combined_data, num_timesteps, features, num_items, dt, input_scaler)
-    
-    return data, classes
+    data, classes = encode_input_poisson(
+        combined_data, num_timesteps, features, num_items, dt, input_scaler
+    )
 
+    return data, classes
