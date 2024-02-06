@@ -44,10 +44,15 @@ prep_data = snn.prepping_data(base_mean=10, mean_increment=3, variance=1)
 
 # Initialize & visualize pre-trained network
 MemPot, t_since_spik, weights = snn.initialize_network()
-snn.visualize_network(drw_edg=False)
+snn.visualize_network()
 
 # Train network
 avg_spike_counts = snn.neuronal_activity()
 
-# Visualize training
-snn.plot_training(num_neurons=20, num_items=100)
+# Evaluate performance
+
+# Test network on unseen data and estimate performance
+
+
+# Visualize training and testing results
+snn.plot_training()

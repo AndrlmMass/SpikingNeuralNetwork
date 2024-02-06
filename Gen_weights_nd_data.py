@@ -120,4 +120,4 @@ def generate_multidimensional_data(
         combined_data, num_timesteps, features, num_items, dt, input_scaler
     )
 
-    return data, classes
+    return data, classes.astype(int)

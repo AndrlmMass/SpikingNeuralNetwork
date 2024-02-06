@@ -67,7 +67,7 @@ class SNN_STDP:
         self.num_neurons = num_neurons
         self.num_classes = num_input_neurons
         self.excit_inhib_ratio = excit_inhib_ratio
-        self.alpha = alpha
+        self.alpha = alpha / (self.num_neurons * 0.1)
         self.init_cals = init_cals
         self.ex_interval = ex_interval
         self.in_interval = in_interval
@@ -250,15 +250,19 @@ class SNN_STDP:
         if drw_edg:
             pn.draw_edge_distribution(self.weights)
 
-    def plot_training(self, num_neurons, num_items):
+    def plot_training(self, num_neurons=None, num_items=None):
+        if num_neurons == None:
+            num_neurons = self.num_neurons
+        if num_items == None:
+            num_items = self.num_items
         pt.plot_spikes(
             num_neurons_to_plot=num_neurons,
             num_items_to_plot=num_items,
             t_since_spike=self.t_since_spike,
-            weights=self.weights,
             input_indices=self.input_neuron_idx,
         )
         pt.plot_weights(self.weights, dt_items=num_items)
         pt.plot_activity_scatter(
             spikes=self.spike_array, classes=self.classes, num_classes=self.num_classes
         )
+        pt.plot_relative_activity(spikes=self.spike_array, classes=self.classes)

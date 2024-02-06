@@ -10,7 +10,6 @@ def plot_spikes(
     num_neurons_to_plot=None,
     num_items_to_plot=None,
     t_since_spike=None,
-    weights=None,
     input_indices=None,
 ):
     num_items = t_since_spike.shape[2]
@@ -57,8 +56,10 @@ def plot_spikes(
     ax.set_title(f"Item {item+1} - Spike Raster Plot")
 
     # Convert the y ticks to red if they are the input neurons
+    print(input_indices)
     for idx in input_indices:
-        ax.get_yticklabels()[idx].set_color("red")
+        if idx in np.arange(num_neurons_to_plot):
+            ax.get_yticklabels()[idx].set_color("red")
 
     plt.tight_layout()
     plt.show()
@@ -150,4 +151,65 @@ def plot_activity_scatter(spikes, classes, num_classes):
     plt.title("Sorted Neuronal Activity by Class Difference")
     plt.xlabel("Sorted Neuron Index")
     plt.ylabel("Average Activity")
+    plt.show()
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+def plot_relative_activity(spikes, classes):
+    # Compute the mean activity across all timesteps for each neuron, for each item
+    mean_activity = np.mean(spikes, axis=0)  # Resulting shape: (neurons, items)
+
+    # Colors for different classes
+    colors = ["blue", "red"]  # Assuming class 0 is blue, class 1 is red
+
+    # Prepare to plot
+    plt.figure(figsize=(14, 10))
+
+    # Iterate over each neuron
+    for neuron_idx in range(mean_activity.shape[0]):
+        # Handle each class separately
+        for class_val in np.unique(classes):
+            x_positions = []
+            y_positions = []
+
+            # Filter items by class
+            class_items = np.where(classes == class_val)[0]
+
+            # Iterate over items of the current class for this neuron
+            for item_idx in class_items:
+                # Compute x position with slight offset for each neuron to avoid overlap
+                x_pos = (
+                    item_idx + (neuron_idx * 0.01) - (mean_activity.shape[0] / 2 * 0.01)
+                )
+                x_positions.append(x_pos)
+                y_positions.append(mean_activity[neuron_idx, item_idx])
+
+                # Plot point
+                plt.scatter(
+                    x_pos,
+                    mean_activity[neuron_idx, item_idx],
+                    color=colors[class_val],
+                    alpha=0.6,
+                    edgecolor="none",
+                    s=30,
+                )
+
+            # Draw lines connecting points for this neuron within the same class
+            if len(x_positions) > 1:  # Only draw lines if there are at least two points
+                plt.plot(
+                    x_positions,
+                    y_positions,
+                    color=colors[class_val],
+                    alpha=0.5,
+                    linestyle="-",
+                    linewidth=1,
+                )
+
+    plt.title("Change in Activity of Each Neuron Over Items by Class")
+    plt.xlabel("Item Index (with slight offset for each neuron)")
+    plt.ylabel("Mean Activity")
+    plt.grid(True)
     plt.show()
