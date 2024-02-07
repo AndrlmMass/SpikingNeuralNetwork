@@ -211,5 +211,6 @@ def plot_relative_activity(spikes, classes):
     plt.title("Change in Activity of Each Neuron Over Items by Class")
     plt.xlabel("Item Index (with slight offset for each neuron)")
     plt.ylabel("Mean Activity")
+    plt.ylim((0, 0.1))
     plt.grid(True)
     plt.show()
