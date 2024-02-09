@@ -6,10 +6,10 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-# os.chdir("C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork")
-os.chdir(
-    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork"
-)
+os.chdir("C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork")
+#os.chdir(
+#    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork"
+#)
 
 import plot_training as pt
 import plot_network as pn
@@ -26,12 +26,12 @@ class SNN_STDP:
         C=10,
         R=1,
         A_minus_ex=-0.01,
-        A_minus_in=-0.1,
+        A_minus_in=-1,
         tau_m=0.002,
         num_items=100,
         num_input_neurons=4,
         tau_stdp=0.1,
-        A_plus_ex=0.1,
+        A_plus_ex=1,
         A_plus_in=0.01,
         dt=0.001,
         T=1,
@@ -43,8 +43,6 @@ class SNN_STDP:
         min_weight=-1,
         input_scaler=100,
         num_epochs=10,
-        ex_interval=0.1,
-        in_interval=0.01,
         init_cals=700,
         num_classes=2,
     ):
@@ -69,8 +67,6 @@ class SNN_STDP:
         self.excit_inhib_ratio = excit_inhib_ratio
         self.alpha = alpha / (self.num_neurons * 0.1)
         self.init_cals = init_cals
-        self.ex_interval = ex_interval
-        self.in_interval = in_interval
         self.max_weight = max_weight
         self.min_weight = min_weight
         self.input_scaler = input_scaler
@@ -78,6 +74,9 @@ class SNN_STDP:
         self.num_epochs = num_epochs
         self.max_spike_diff = int(self.num_timesteps * 0.1)
         self.num_classes = num_classes
+        self.pre_synaptic_trace = np.zeros((self.num_neurons, self.num_items))
+        self.post_synaptic_trace = np.zeros((self.num_neurons, self.num_items))
+
 
     def initialize_network(self):
         # Generate weights
@@ -131,25 +130,28 @@ class SNN_STDP:
 
     def neuronal_activity(self):
         spike_counts = np.zeros((self.num_neurons, self.num_items))
-
         # Add input data before training
-        input_indices = np.where(np.all(self.weights[:, :, 0] == 0, axis=1))[0]
-        for j in range(len(input_indices)):
-            for t in range(self.num_timesteps):
+        for j in range(len(self.input_neuron_idx)):
+            for t in range(1,self.num_timesteps):
                 for i in range(self.num_items):
                     if self.data[t, j, i] == 1:
-                        self.t_since_spike[t, input_indices[j], i] = 0
+                        self.t_since_spike[t, self.input_neuron_idx[j], i] = 0
                     else:
-                        self.t_since_spike[t, input_indices[j], i] = (
-                            self.t_since_spike[t - 1, input_indices[j], i] + 1
+                        self.t_since_spike[t, self.input_neuron_idx[j], i] = (
+                            self.t_since_spike[t - 1, self.input_neuron_idx[j], i] + 1
                         )
+
+
         cal_consum = 0
         count = [0, 0, 0, 0]
         for l in tqdm(range(self.num_items), desc="Training network"):
             for t in range(1, self.num_timesteps):
+                # Decay traces
+                self.pre_synaptic_trace *= np.exp(-self.dt / self.tau_m)
+                self.post_synaptic_trace *= np.exp(-self.dt / self.tau_m)
                 for n in range(self.num_neurons):
                     # Check if neuron is an input neuron
-                    if (self.weights[n, :, l] != 0).any():
+                    if n not in self.input_neuron_idx:
                         spikes = (self.t_since_spike[t - 1, :, l] == 0).astype(int)
                         I_in = np.dot(self.weights[n, :, l], spikes.T)
 
@@ -162,6 +164,8 @@ class SNN_STDP:
 
                         # Update spikes
                         if self.MemPot[t, n, l] > self.V_th:
+                            self.pre_synaptic_trace[n, l] += 1
+                            self.post_synaptic_trace[n, l] += 1
                             cal_consum += 0.1
                             self.t_since_spike[t, n, l] = 0
                             self.MemPot[t, n, l] = self.V_reset
@@ -170,64 +174,25 @@ class SNN_STDP:
                             self.t_since_spike[t, n, l] = (
                                 self.t_since_spike[t - 1, n, l] + 1
                             )
-                    # Perform STDP for hidden neurons
-                    for s in range(0, self.num_neurons):
-                        if s != n and (
-                            self.t_since_spike[t, n, l] == 0
-                            or self.t_since_spike[t, s, l] == 0
-                        ):
-                            # Calculate the spike diff for input and output neuron
-                            spike_diff = (
-                                self.t_since_spike[t, n, l]
-                                - self.t_since_spike[t, s, l]
-                            )
-                            # Check if excitatory or inhibitory
-                            if (
-                                self.weights[n, s, l] > 0
-                                and spike_diff / self.num_timesteps < self.ex_interval
-                            ):
-                                if spike_diff > 0:
-                                    count[0] += 1
-                                    self.weights[n, s, l] += round(
-                                        self.A_plus_ex
-                                        * np.exp(abs(spike_diff) / self.tau_stdp),
-                                        4,
-                                    )
-                                elif self.find_prev_spike(
-                                    t, s=n, l=l
-                                ) > self.find_prev_spike(t=t, s=s, l=l):
-                                    count[1] += 1
-                                    self.weights[n, s, l] += round(
-                                        self.A_minus_ex
-                                        * np.exp(abs(spike_diff) / self.tau_stdp),
-                                        4,
-                                    )
-                                if self.weights[n, s, l] <= 0:
-                                    self.weights[n, s, l] = 0.01
-                            elif (
-                                self.weights[n, s, l - 1] < 0
-                                and spike_diff / self.num_timesteps < self.in_interval
-                            ):
-                                # Pre fires after post synapse
-                                if spike_diff > 0:
-                                    count[2] += 1
-                                    self.weights[n, s, l] -= round(
-                                        self.A_minus_in
-                                        * np.exp(abs(spike_diff) / self.tau_stdp),
-                                        4,
-                                    )
-                                # Post neuron fires after pre-synaptic
-                                elif self.find_prev_spike(
-                                    t, s=n, l=l
-                                ) > self.find_prev_spike(t=t, s=s, l=l):
-                                    count[3] += 1
-                                    self.weights[n, s, l] -= round(
-                                        self.A_plus_in
-                                        * np.exp(abs(spike_diff) / self.tau_stdp),
-                                        4,
-                                    )
-                                if self.weights[n, s, l] >= 0:
-                                    self.weights[n, s, l] = -0.01
+
+                    # Perform trace-based STDP for hidden neurons
+                    for s in range(self.num_neurons):
+                        if s != n and self.weights[n,s,l] != 0:
+                            
+                            # Use the current trace values for STDP calculation
+                            pre_trace = self.pre_synaptic_trace[s, l]
+                            post_trace = self.post_synaptic_trace[n, l]
+
+                            # Calculate weight change based on traces
+                            if self.weights[n, s, l] > 0:  # Excitatory synapse
+                                weight_change = self.A_plus_ex * pre_trace * post_trace
+                                self.weights[n, s, l] += round(weight_change, 4)
+                            elif self.weights[n, s, l] < 0:  # Inhibitory synapse
+                                weight_change = self.A_minus_in * pre_trace * post_trace
+                                self.weights[n, s, l] -= round(weight_change, 4)
+
+                            # Enforce minimum and maximum synaptic weight
+                            self.weights[n, s, l] = np.clip(self.weights[n, s, l], self.min_weight, self.max_weight)
 
             # Update self.MemPot to include the membrane potential from the previous step
             # as the beginning of the next step.
@@ -250,11 +215,14 @@ class SNN_STDP:
         if drw_edg:
             pn.draw_edge_distribution(self.weights)
 
-    def plot_training(self, num_neurons=None, num_items=None):
+    def plot_training(self, num_neurons=None, num_items=None, neuro_id=None, num_items_sec=None):
         if num_neurons == None:
             num_neurons = self.num_neurons
         if num_items == None:
             num_items = self.num_items
+
+        #pt.plot_membrane_activity(MemPot=self.MemPot, neuron_ids=neuro_id, num_items=num_items_sec)
+
         pt.plot_spikes(
             num_neurons_to_plot=num_neurons,
             num_items_to_plot=num_items,
@@ -265,4 +233,5 @@ class SNN_STDP:
         pt.plot_activity_scatter(
             spikes=self.spike_array, classes=self.classes, num_classes=self.num_classes
         )
-        pt.plot_relative_activity(spikes=self.spike_array, classes=self.classes)
+        pt.plot_relative_activity(spikes=self.spike_array, classes=self.classes, input_idx=self.input_neuron_idx, num_neurons=self.num_neurons)
+

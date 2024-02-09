@@ -1,4 +1,18 @@
 import numpy as np
+ 
+def replace_duplicates_with_unique(input_indices, num_neurons):
+    unique, counts = np.unique(input_indices, return_counts=True)
+    duplicates = unique[counts > 1]
+    
+    for dup in duplicates:
+        dup_indices = np.where(input_indices == dup)[0]  # Indices of duplicates in input_indices
+        for d_idx in dup_indices[1:]:  # Skip the first occurrence, replace the rest
+            new_val = np.random.choice([i for i in range(num_neurons) if i not in input_indices])
+            input_indices[d_idx] = new_val
+            
+    # Ensuring all elements are unique now
+    assert len(np.unique(input_indices)) == len(input_indices), "Duplicates remain!"
+    return input_indices
 
 
 def generate_small_world_network_power_law(
@@ -18,6 +32,7 @@ def generate_small_world_network_power_law(
 
     # Add weights to input neurons
     input_indices = np.random.choice(np.arange(num_neurons), num_input_neurons)
+    input_indices = replace_duplicates_with_unique(input_indices, num_neurons)  
     weight_array[input_indices, :, 0] = np.zeros(shape=num_neurons)
 
     # Assign weights and signs based on connection probability

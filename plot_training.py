@@ -120,6 +120,20 @@ def plot_weights(weights, dt_items):
 
     plt.show()
 
+# def plot_membrane_activity(MemPot, neuron_ids, num_items):
+#     if type(neuron_ids) == int:
+#         print(MemPot[:,neuron_ids,:num_items])
+#         y = MemPot[:,neuron_ids,:num_items]
+#         x = np.arange(len(y))
+#         plt.plot((x,y))
+#     else:
+#         for n in range(len(neuron_ids)):
+#             y = MemPot[:,neuron_ids[n],:num_items]
+#             x = np.arange(len(y))
+#             plt.plot((x,y))
+#     plt.xlabel("Time")
+#     plt.ylabel("mV Value")
+#     plt.title("Membrane potential Changes Over Time")
 
 def plot_activity_scatter(spikes, classes, num_classes):
     print(spikes.shape, classes.shape)
@@ -158,7 +172,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def plot_relative_activity(spikes, classes):
+def plot_relative_activity(spikes, classes, input_idx, num_neurons):
     # Compute the mean activity across all timesteps for each neuron, for each item
     mean_activity = np.mean(spikes, axis=0)  # Resulting shape: (neurons, items)
 
@@ -168,8 +182,11 @@ def plot_relative_activity(spikes, classes):
     # Prepare to plot
     plt.figure(figsize=(14, 10))
 
+    neurons = np.arange(num_neurons)
+    for j in input_idx:
+        neurons = np.delete(neurons,j)
     # Iterate over each neuron
-    for neuron_idx in range(mean_activity.shape[0]):
+    for neuron_idx in neurons:
         # Handle each class separately
         for class_val in np.unique(classes):
             x_positions = []
