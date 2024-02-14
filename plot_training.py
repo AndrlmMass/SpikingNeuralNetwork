@@ -92,14 +92,7 @@ def plot_gif_evolution(avg_spike_counts, epochs, num_neurons, num_items):
     imageio.mimsave("neuron_activity.gif", images, fps=1)
 
 
-import numpy as np
-import matplotlib.pyplot as plt
-
-
 def plot_weights(weights, dt_items):
-    # Assuming `weights` is a 3D numpy array of shape (n, m, time_steps)
-    # where n is the number of neurons, m is the number of connections per neuron, and
-    # time_steps is the number of time steps recorded.
 
     time_steps = np.arange(dt_items)  # Create an array of time steps
 
@@ -121,17 +114,27 @@ def plot_weights(weights, dt_items):
     plt.show()
 
 
-def plot_membrane_activity(MemPot, num_neurons, num_items):
+def plot_membrane_activity(MemPot, num_neurons, num_items, input_idx, timesteps):
+    # Reshape array to plot items continuously
+    MemPot = MemPot.reshape(MemPot.shape[0] * MemPot.shape[2], MemPot.shape[1])
     fig, ax = plt.subplots()  # Corrected here
-    for j in range(num_neurons):  # Assume num_neurons is an int and use range()
-        for i in range(num_items):
-            y = MemPot[:, j, i]  # Assuming MemPot is a 3D array; check this matches your data structure
-            x = np.arange(len(y))
-            ax.plot(x, y, label=f'Neuron {j}')  # Plot on the same axis, added label for clarity
+    neurons = np.arange(num_neurons)
+    for j in input_idx:
+        if j < num_neurons:
+            neurons = np.delete(neurons, j)
+
+    for j in range(len(neurons)):
+        y = MemPot[:, neurons[j]]
+        x = np.arange(len(y))
+        ax.plot(x, y, label=f"Neuron {neurons[j]}")
+
+    for item in range(1, num_items):
+        ax.axvline(x=item * timesteps, color="r", linestyle=":", linewidth=1)
+
     plt.xlabel("Time")
     plt.ylabel("mV Value")
     plt.title("Membrane Potential Changes Over Time")
-    plt.legend()  # Optional, to show legend if labels are added
+    plt.legend()
     plt.show()
 
 
@@ -168,10 +171,6 @@ def plot_activity_scatter(spikes, classes, num_classes):
     plt.show()
 
 
-import numpy as np
-import matplotlib.pyplot as plt
-
-
 def plot_relative_activity(spikes, classes, input_idx, num_neurons):
     # Compute the mean activity across all timesteps for each neuron, for each item
     mean_activity = np.mean(spikes, axis=0)  # Resulting shape: (neurons, items)
@@ -184,7 +183,8 @@ def plot_relative_activity(spikes, classes, input_idx, num_neurons):
 
     neurons = np.arange(num_neurons)
     for j in input_idx:
-        neurons = np.delete(neurons, j)
+        if j < num_neurons:
+            neurons = np.delete(neurons, j)
     # Iterate over each neuron
     for neuron_idx in neurons:
         # Handle each class separately
@@ -228,6 +228,5 @@ def plot_relative_activity(spikes, classes, input_idx, num_neurons):
     plt.title("Change in Activity of Each Neuron Over Items by Class")
     plt.xlabel("Item Index (with slight offset for each neuron)")
     plt.ylabel("Mean Activity")
-    plt.ylim((0, 0.1))
     plt.grid(True)
     plt.show()

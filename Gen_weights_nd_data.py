@@ -1,15 +1,20 @@
 import numpy as np
- 
+
+
 def replace_duplicates_with_unique(input_indices, num_neurons):
     unique, counts = np.unique(input_indices, return_counts=True)
     duplicates = unique[counts > 1]
-    
+
     for dup in duplicates:
-        dup_indices = np.where(input_indices == dup)[0]  # Indices of duplicates in input_indices
+        dup_indices = np.where(input_indices == dup)[
+            0
+        ]  # Indices of duplicates in input_indices
         for d_idx in dup_indices[1:]:  # Skip the first occurrence, replace the rest
-            new_val = np.random.choice([i for i in range(num_neurons) if i not in input_indices])
+            new_val = np.random.choice(
+                [i for i in range(num_neurons) if i not in input_indices]
+            )
             input_indices[d_idx] = new_val
-            
+
     # Ensuring all elements are unique now
     assert len(np.unique(input_indices)) == len(input_indices), "Duplicates remain!"
     return input_indices
@@ -32,7 +37,7 @@ def generate_small_world_network_power_law(
 
     # Add weights to input neurons
     input_indices = np.random.choice(np.arange(num_neurons), num_input_neurons)
-    input_indices = replace_duplicates_with_unique(input_indices, num_neurons)  
+    input_indices = replace_duplicates_with_unique(input_indices, num_neurons)
     weight_array[input_indices, :, 0] = np.zeros(shape=num_neurons)
 
     # Assign weights and signs based on connection probability
@@ -42,7 +47,7 @@ def generate_small_world_network_power_law(
                 if connection_probabilities[i * n_cols + j] > np.random.rand():
                     # Assign weights
                     const = 1 if np.random.rand() < excit_inhib_ratio else -1
-                    weight_array[i, j, 0] = round(np.random.rand() * const, 4)
+                    weight_array[i, j, 0] = round(np.random.rand() / 10 * const, 4)
                     weight_array[j, i, 0] = 0
 
                 else:
@@ -57,7 +62,7 @@ def generate_small_world_network_power_law(
                     idx = np.random.choice(num_neurons)
                 else:
                     const = 1 if np.random.rand() < excit_inhib_ratio else -1
-                    weight_array[idx, j, 0] = round(np.random.rand() * const, 4)
+                    weight_array[idx, j, 0] = round(np.random.rand() / 10 * const, 4)
             if np.any(np.all(weight_array[:, :, 0] == 0, axis=0)) == False:
                 break
 

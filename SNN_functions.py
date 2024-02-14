@@ -24,14 +24,12 @@ class SNN_STDP:
         V_reset=-0.2,
         C=10,
         R=1,
-        A_minus_ex=-0.01,
-        A_minus_in=-1,
+        A_minus=-0.01,
         tau_m=0.002,
         num_items=100,
         num_input_neurons=4,
         tau_stdp=0.1,
-        A_plus_ex=1,
-        A_plus_in=0.01,
+        A_plus=1,
         dt=0.001,
         T=1,
         V_rest=0,
@@ -55,10 +53,8 @@ class SNN_STDP:
         self.T = T
         self.num_timesteps = int(T / dt)
         self.V_rest = V_rest
-        self.A_minus_ex = A_minus_ex
-        self.A_plus_ex = A_plus_ex
-        self.A_minus_in = A_minus_in
-        self.A_plus_in = A_plus_in
+        self.A_minus = A_minus
+        self.A_plus = A_plus
         self.leakage_rate = 1 / self.R
         self.num_items = num_items
         self.num_neurons = num_neurons
@@ -136,19 +132,22 @@ class SNN_STDP:
                             self.t_since_spike[t - 1, self.input_neuron_idx[j], i] + 1
                         )
 
-        cal_consum = 0
+        weight_change_ls = []
         count = 0
+        avg_IN = []
         for l in tqdm(range(self.num_items), desc="Training network"):
+            In = []
             for t in range(1, self.num_timesteps):
                 # Decay traces
                 self.pre_synaptic_trace *= np.exp(-self.dt / self.tau_m)
                 self.post_synaptic_trace *= np.exp(-self.dt / self.tau_m)
                 for n in range(self.num_neurons):
+
                     # Check if neuron is an input neuron
                     if n not in self.input_neuron_idx:
                         spikes = (self.t_since_spike[t - 1, :, l] == 0).astype(int)
                         I_in = np.dot(self.weights[n, :, l], spikes.T)
-
+                        In.append(I_in)
                         # Update equation
                         self.MemPot[t, n, l] = (
                             self.MemPot[t - 1, n, l]
@@ -160,7 +159,6 @@ class SNN_STDP:
                         if self.MemPot[t, n, l] > self.V_th:
                             self.pre_synaptic_trace[n, l] += 1
                             self.post_synaptic_trace[n, l] += 1
-                            cal_consum += 0.1
                             self.t_since_spike[t, n, l] = 0
                             self.MemPot[t, n, l] = self.V_reset
                             spike_counts[n, l] += 1
@@ -181,14 +179,16 @@ class SNN_STDP:
                                 if self.weights[n, s, l] > 0:  # Excitatory synapse
                                     count += 1
                                     weight_change = (
-                                        self.A_plus_ex * pre_trace * post_trace
+                                        self.A_plus * pre_trace * post_trace
                                     )
                                     self.weights[n, s, l] += round(weight_change, 4)
+
                                 elif self.weights[n, s, l] < 0:  # Inhibitory synapse
                                     count += 1
                                     weight_change = (
-                                        self.A_minus_in * pre_trace * post_trace
+                                        self.A_minus * pre_trace * post_trace
                                     )
+
                                     self.weights[n, s, l] -= round(weight_change, 4)
 
                                 # Enforce minimum and maximum synaptic weight
@@ -210,12 +210,14 @@ class SNN_STDP:
                 self.MemPot[0, :, l + 1] = self.MemPot[t, :, l]
                 self.weights[:, :, l + 1] = self.weights[:, :, l]
 
+            avg_IN.append(np.average(In))
+
         # Convert t_since_spike to spike_array for visualization purposes
         self.spike_array = np.where(self.t_since_spike == 0, 1, 0)
 
         # Summarize the training
         print(
-            f"This training had {count} excitatory and inhibitory changes in weights."
+            f"This training had {count} excitatory and inhibitory changes in weights. On average, each item had the following I_in values: {avg_IN}"
         )
 
     def visualize_network(self, drw_edg=True, drw_netw=True):
@@ -224,17 +226,19 @@ class SNN_STDP:
         if drw_edg:
             pn.draw_edge_distribution(self.weights)
 
-    def plot_training(
-        self, num_neurons=None, num_items=None
-    ):
+    def plot_training(self, num_neurons=None, num_items=None, plt_mV=True):
         if num_neurons == None:
             num_neurons = self.num_neurons
         if num_items == None:
             num_items = self.num_items
-
-        pt.plot_membrane_activity(
-            MemPot=self.MemPot, num_neurons=num_neurons, num_items=num_items
-        )
+        if plt_mV:
+            pt.plot_membrane_activity(
+                MemPot=self.MemPot,
+                num_neurons=num_neurons,
+                num_items=num_items,
+                input_idx=self.input_neuron_idx,
+                timesteps=self.num_timesteps,
+            )
 
         pt.plot_spikes(
             num_neurons_to_plot=num_neurons,
@@ -243,9 +247,11 @@ class SNN_STDP:
             input_indices=self.input_neuron_idx,
         )
         pt.plot_weights(self.weights, dt_items=num_items)
+
         pt.plot_activity_scatter(
             spikes=self.spike_array, classes=self.classes, num_classes=self.num_classes
         )
+
         pt.plot_relative_activity(
             spikes=self.spike_array,
             classes=self.classes,
