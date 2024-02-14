@@ -120,20 +120,20 @@ def plot_weights(weights, dt_items):
 
     plt.show()
 
-# def plot_membrane_activity(MemPot, neuron_ids, num_items):
-#     if type(neuron_ids) == int:
-#         print(MemPot[:,neuron_ids,:num_items])
-#         y = MemPot[:,neuron_ids,:num_items]
-#         x = np.arange(len(y))
-#         plt.plot((x,y))
-#     else:
-#         for n in range(len(neuron_ids)):
-#             y = MemPot[:,neuron_ids[n],:num_items]
-#             x = np.arange(len(y))
-#             plt.plot((x,y))
-#     plt.xlabel("Time")
-#     plt.ylabel("mV Value")
-#     plt.title("Membrane potential Changes Over Time")
+
+def plot_membrane_activity(MemPot, num_neurons, num_items):
+    fig, ax = plt.subplots()  # Corrected here
+    for j in range(num_neurons):  # Assume num_neurons is an int and use range()
+        for i in range(num_items):
+            y = MemPot[:, j, i]  # Assuming MemPot is a 3D array; check this matches your data structure
+            x = np.arange(len(y))
+            ax.plot(x, y, label=f'Neuron {j}')  # Plot on the same axis, added label for clarity
+    plt.xlabel("Time")
+    plt.ylabel("mV Value")
+    plt.title("Membrane Potential Changes Over Time")
+    plt.legend()  # Optional, to show legend if labels are added
+    plt.show()
+
 
 def plot_activity_scatter(spikes, classes, num_classes):
     print(spikes.shape, classes.shape)
@@ -184,7 +184,7 @@ def plot_relative_activity(spikes, classes, input_idx, num_neurons):
 
     neurons = np.arange(num_neurons)
     for j in input_idx:
-        neurons = np.delete(neurons,j)
+        neurons = np.delete(neurons, j)
     # Iterate over each neuron
     for neuron_idx in neurons:
         # Handle each class separately
