@@ -2,6 +2,7 @@
 
 # Import libraries
 import os
+import math
 import numpy as np
 from tqdm import tqdm
 
@@ -132,7 +133,6 @@ class SNN_STDP:
                             self.t_since_spike[t - 1, self.input_neuron_idx[j], i] + 1
                         )
 
-        weight_change_ls = []
         count = 0
         avg_IN = []
         for l in tqdm(range(self.num_items), desc="Training network"):
@@ -148,6 +148,7 @@ class SNN_STDP:
                         spikes = (self.t_since_spike[t - 1, :, l] == 0).astype(int)
                         I_in = np.dot(self.weights[n, :, l], spikes.T)
                         In.append(I_in)
+                        
                         # Update equation
                         self.MemPot[t, n, l] = (
                             self.MemPot[t - 1, n, l]
@@ -178,9 +179,7 @@ class SNN_STDP:
                                 # Calculate weight change based on traces
                                 if self.weights[n, s, l] > 0:  # Excitatory synapse
                                     count += 1
-                                    weight_change = (
-                                        self.A_plus * pre_trace * post_trace
-                                    )
+                                    weight_change = self.A_plus * pre_trace * post_trace
                                     self.weights[n, s, l] += round(weight_change, 4)
 
                                 elif self.weights[n, s, l] < 0:  # Inhibitory synapse
@@ -199,9 +198,11 @@ class SNN_STDP:
                                 )
 
                         # Add weight normalization
-                        self.weights[n, :, l] = self.weights[n, :, l] / np.sqrt(
-                            np.dot(self.weights[n, :, l].T, self.weights[n, :, l])
-                        )
+                        norm = np.dot(self.weights[n, :, l].T, self.weights[n, :, l])
+                        if norm != 0:
+                            self.weights[n, :, l] = np.round(
+                                self.weights[n, :, l] / math.sqrt(norm), 4
+                            )
 
             # Update self.MemPot to include the membrane potential from the previous step
             # as the beginning of the next step.

@@ -47,7 +47,7 @@ def generate_small_world_network_power_law(
                 if connection_probabilities[i * n_cols + j] > np.random.rand():
                     # Assign weights
                     const = 1 if np.random.rand() < excit_inhib_ratio else -1
-                    weight_array[i, j, 0] = round(np.random.rand() / 10 * const, 4)
+                    weight_array[i, j, 0] = round(np.random.rand() * const, 4)
                     weight_array[j, i, 0] = 0
 
                 else:
@@ -58,11 +58,12 @@ def generate_small_world_network_power_law(
         for j in range(num_neurons):
             if np.all(weight_array[:, j, 0] == 0):
                 idx = np.random.choice(num_neurons)
-                if idx == j:
+                while idx == j:
                     idx = np.random.choice(num_neurons)
-                else:
-                    const = 1 if np.random.rand() < excit_inhib_ratio else -1
-                    weight_array[idx, j, 0] = round(np.random.rand() / 10 * const, 4)
+                    if idx != j:
+                        break
+                const = 1 if np.random.rand() < excit_inhib_ratio else -1
+                weight_array[idx, j, 0] = round(np.random.rand() * const, 4)
             if np.any(np.all(weight_array[:, :, 0] == 0, axis=0)) == False:
                 break
 

@@ -182,48 +182,47 @@ def plot_relative_activity(spikes, classes, input_idx, num_neurons):
     plt.figure(figsize=(14, 10))
 
     neurons = np.arange(num_neurons)
-    for j in input_idx:
-        if j < num_neurons:
-            neurons = np.delete(neurons, j)
+
     # Iterate over each neuron
     for neuron_idx in neurons:
-        # Handle each class separately
-        for class_val in np.unique(classes):
-            x_positions = []
-            y_positions = []
+        if neuron_idx not in input_idx:
+            # Handle each class separately
+            for class_val in np.unique(classes):
+                x_positions = []
+                y_positions = []
 
-            # Filter items by class
-            class_items = np.where(classes == class_val)[0]
+                # Filter items by class
+                class_items = np.where(classes == class_val)[0]
 
-            # Iterate over items of the current class for this neuron
-            for item_idx in class_items:
-                # Compute x position with slight offset for each neuron to avoid overlap
-                x_pos = (
-                    item_idx + (neuron_idx * 0.01) - (mean_activity.shape[0] / 2 * 0.01)
-                )
-                x_positions.append(x_pos)
-                y_positions.append(mean_activity[neuron_idx, item_idx])
+                # Iterate over items of the current class for this neuron
+                for item_idx in class_items:
+                    # Compute x position with slight offset for each neuron to avoid overlap
+                    x_pos = (
+                        item_idx + (neuron_idx * 0.01) - (mean_activity.shape[0] / 2 * 0.01)
+                    )
+                    x_positions.append(x_pos)
+                    y_positions.append(mean_activity[neuron_idx, item_idx])
 
-                # Plot point
-                plt.scatter(
-                    x_pos,
-                    mean_activity[neuron_idx, item_idx],
-                    color=colors[class_val],
-                    alpha=0.6,
-                    edgecolor="none",
-                    s=30,
-                )
+                    # Plot point
+                    plt.scatter(
+                        x_pos,
+                        mean_activity[neuron_idx, item_idx],
+                        color=colors[class_val],
+                        alpha=0.6,
+                        edgecolor="none",
+                        s=30,
+                    )
 
-            # Draw lines connecting points for this neuron within the same class
-            if len(x_positions) > 1:  # Only draw lines if there are at least two points
-                plt.plot(
-                    x_positions,
-                    y_positions,
-                    color=colors[class_val],
-                    alpha=0.5,
-                    linestyle="-",
-                    linewidth=1,
-                )
+                # Draw lines connecting points for this neuron within the same class
+                if len(x_positions) > 1:  # Only draw lines if there are at least two points
+                    plt.plot(
+                        x_positions,
+                        y_positions,
+                        color=colors[class_val],
+                        alpha=0.5,
+                        linestyle="-",
+                        linewidth=1,
+                    )
 
     plt.title("Change in Activity of Each Neuron Over Items by Class")
     plt.xlabel("Item Index (with slight offset for each neuron)")
