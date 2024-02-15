@@ -6,10 +6,10 @@ import math
 import numpy as np
 from tqdm import tqdm
 
-# os.chdir("C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork")
-os.chdir(
-    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork"
-)
+os.chdir("C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork")
+#os.chdir(
+#    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork"
+#)
 
 import plot_training as pt
 import plot_network as pn
@@ -39,10 +39,11 @@ class SNN_STDP:
         alpha=1,
         max_weight=1,
         min_weight=-1,
-        input_scaler=100,
+        input_scaler=0.25,
         num_epochs=10,
         init_cals=700,
         num_classes=2,
+        target_value=3
     ):
         self.V_th = V_th
         self.V_reset = V_reset
@@ -52,6 +53,7 @@ class SNN_STDP:
         self.tau_stdp = tau_stdp
         self.dt = dt
         self.T = T
+        self.target_value = target_value
         self.num_timesteps = int(T / dt)
         self.V_rest = V_rest
         self.A_minus = A_minus
@@ -167,35 +169,35 @@ class SNN_STDP:
                             self.t_since_spike[t, n, l] = (
                                 self.t_since_spike[t - 1, n, l] + 1
                             )
+                    cont = 0
+                    # Perform trace-based STDP for hidden neurons
+                    for s in range(self.num_neurons):
+                        if s != n and self.weights[n,s,l] != 0:
+                            cont += 1
+                            # Use the current trace values for STDP calculation
+                            pre_trace = self.pre_synaptic_trace[s, l]
+                            post_trace = self.post_synaptic_trace[n, l]
+                            
+                            # Calculate weight change based on traces
+                            if self.weights[n, s, l] > 0:  # Excitatory synapse
+                                count += 1
+                                weight_change = self.A_plus * pre_trace * post_trace
+                                self.weights[n, s, l] += round(weight_change, 4)
 
-                        # Perform trace-based STDP for hidden neurons
-                        for s in range(self.num_neurons):
-                            if s != n and self.weights[n, s, l] != 0:
-
-                                # Use the current trace values for STDP calculation
-                                pre_trace = self.pre_synaptic_trace[s, l]
-                                post_trace = self.post_synaptic_trace[n, l]
-
-                                # Calculate weight change based on traces
-                                if self.weights[n, s, l] > 0:  # Excitatory synapse
-                                    count += 1
-                                    weight_change = self.A_plus * pre_trace * post_trace
-                                    self.weights[n, s, l] += round(weight_change, 4)
-
-                                elif self.weights[n, s, l] < 0:  # Inhibitory synapse
-                                    count += 1
-                                    weight_change = (
-                                        self.A_minus * pre_trace * post_trace
-                                    )
-
-                                    self.weights[n, s, l] -= round(weight_change, 4)
-
-                                # Enforce minimum and maximum synaptic weight
-                                self.weights[n, s, l] = np.clip(
-                                    self.weights[n, s, l],
-                                    self.min_weight,
-                                    self.max_weight,
+                            elif self.weights[n, s, l] < 0:  # Inhibitory synapse
+                                count += 1
+                                weight_change = (
+                                    self.A_minus * pre_trace * post_trace
                                 )
+
+                                self.weights[n, s, l] -= round(weight_change, 4)
+
+                        # Enforce minimum and maximum synaptic weight
+                        self.weights[n, s, l] = np.clip(
+                            self.weights[n, s, l],
+                            self.min_weight,
+                            self.max_weight,
+                        )
 
                         # Add weight normalization
                         norm = np.dot(self.weights[n, :, l].T, self.weights[n, :, l])

@@ -3,10 +3,10 @@
 # Set cw
 import os
 
-# os.chdir("C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork")
-os.chdir(
-    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork"
-)
+os.chdir("C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork")
+#os.chdir(
+#    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork"
+#)
 
 # Import libraries
 from SNN_functions import *
@@ -16,7 +16,7 @@ snn = SNN_STDP(
     V_th=0,
     V_reset=-80,
     R=0.01,
-    tau_m=0.45,
+    tau_m=0.7,
     num_items=100,
     tau_stdp=0.001,
     A_minus=-0.01,
