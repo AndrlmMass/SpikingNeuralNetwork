@@ -6,10 +6,10 @@ import math
 import numpy as np
 from tqdm import tqdm
 
-os.chdir("C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork")
-#os.chdir(
-#    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork"
-#)
+# os.chdir("C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork")
+os.chdir(
+    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork"
+)
 
 import plot_training as pt
 import plot_network as pn
@@ -43,7 +43,7 @@ class SNN_STDP:
         num_epochs=10,
         init_cals=700,
         num_classes=2,
-        target_value=3
+        target_value=3,
     ):
         self.V_th = V_th
         self.V_reset = V_reset
@@ -128,6 +128,7 @@ class SNN_STDP:
         for j in range(len(self.input_neuron_idx)):
             for t in range(1, self.num_timesteps):
                 for i in range(self.num_items):
+                    # Check if there is a spike
                     if self.data[t, j, i] == 1:
                         self.t_since_spike[t, self.input_neuron_idx[j], i] = 0
                     else:
@@ -150,7 +151,7 @@ class SNN_STDP:
                         spikes = (self.t_since_spike[t - 1, :, l] == 0).astype(int)
                         I_in = np.dot(self.weights[n, :, l], spikes.T)
                         In.append(I_in)
-                        
+
                         # Update equation
                         self.MemPot[t, n, l] = (
                             self.MemPot[t - 1, n, l]
@@ -169,28 +170,23 @@ class SNN_STDP:
                             self.t_since_spike[t, n, l] = (
                                 self.t_since_spike[t - 1, n, l] + 1
                             )
-                    cont = 0
                     # Perform trace-based STDP for hidden neurons
                     for s in range(self.num_neurons):
-                        if s != n and self.weights[n,s,l] != 0:
-                            cont += 1
+                        if s != n and self.weights[n, s, l] != 0:
+
                             # Use the current trace values for STDP calculation
                             pre_trace = self.pre_synaptic_trace[s, l]
                             post_trace = self.post_synaptic_trace[n, l]
-                            
+
                             # Calculate weight change based on traces
                             if self.weights[n, s, l] > 0:  # Excitatory synapse
-                                count += 1
                                 weight_change = self.A_plus * pre_trace * post_trace
                                 self.weights[n, s, l] += round(weight_change, 4)
 
                             elif self.weights[n, s, l] < 0:  # Inhibitory synapse
-                                count += 1
-                                weight_change = (
-                                    self.A_minus * pre_trace * post_trace
-                                )
+                                weight_change = self.A_minus * pre_trace * post_trace
 
-                                self.weights[n, s, l] -= round(weight_change, 4)
+                                self.weights[n, s, l] += round(weight_change, 4)
 
                         # Enforce minimum and maximum synaptic weight
                         self.weights[n, s, l] = np.clip(
