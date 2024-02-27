@@ -5,15 +5,6 @@ import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
 
-def init_network(N_input_neurons, N_excit_neurons, N_inhib_neurons):
-
-    # N_input_neurons must be equal to N_excit_neurons
-    if N_input_neurons != N_excit_neurons:
-        raise ValueError("you messed up fool")
-
-
-
-
 class gen_weights:
     def gen_StimE(self, radius, N_input_neurons, N_excit_neurons):
         input_shape = int(np.sqrt(N_input_neurons))
@@ -56,34 +47,27 @@ class gen_weights:
         IE_weights = np.random.rand(N_inhib_neurons, N_excit_neurons)
 
         # Excitatory to excitatory connections
-        EE_weights = np.random.rand(N_input_neurons, N_input_neurons)
+        EE_weights = np.random.rand(N_excit_neurons, N_excit_neurons)
 
         return EI_weights, IE_weights, EE_weights
 
     def draw_heatmap(self, EE_weights, N_input_neurons):
-            # Aggregate weights for each input neuron
-            input_weights_sum = np.sum(EE_weights, axis=1)
-            
-            # Reshape to 2D input space
-            input_shape = int(np.sqrt(N_input_neurons))
-            weights_matrix = input_weights_sum.reshape(input_shape, input_shape)
-            
-            # Plot heatmap
-            plt.figure(figsize=(10, 8))
-            plt.imshow(weights_matrix, cmap='Reds', interpolation='nearest')
-            plt.colorbar(label='Input Intensity')
-            plt.title('Heatmap of Input Space')
-            plt.xlabel('Input Neuron X Coordinate')
-            plt.ylabel('Input Neuron Y Coordinate')
-            plt.show()
+        # Aggregate weights for each input neuron
+        input_weights_sum = np.sum(EE_weights, axis=1)
+        
+        # Reshape to 2D input space
+        input_shape = int(np.sqrt(N_input_neurons))
+        weights_matrix = input_weights_sum.reshape(input_shape, input_shape)
+        
+        # Plot heatmap
+        plt.figure(figsize=(10, 8))
+        plt.imshow(weights_matrix, cmap='Reds', interpolation='nearest')
+        plt.colorbar(label='Input Intensity')
+        plt.title('Heatmap of Input Space')
+        plt.xlabel('Input Neuron X Coordinate')
+        plt.ylabel('Input Neuron Y Coordinate')
+        plt.show()
 
-# Example usage:
-N_input_neurons = 100  # 10x10 input space
-N_excit_neurons = 100
-radius = 2
 
-gen = gen_weights()
-EE_weights = gen.gen_StimE(radius, N_input_neurons, N_excit_neurons)
-gen.draw_heatmap(EE_weights, N_input_neurons)
 
 
