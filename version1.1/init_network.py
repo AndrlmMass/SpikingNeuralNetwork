@@ -2,7 +2,8 @@
 
 # Import relevant libraries
 import numpy as np
-
+import networkx as nx
+import matplotlib.pyplot as plt
 
 def init_network(N_input_neurons, N_excit_neurons, N_inhib_neurons):
 
@@ -18,7 +19,7 @@ class gen_weights:
         input_shape = int(np.sqrt(N_input_neurons))
         circle_pos = np.arange(N_input_neurons).reshape(input_shape, input_shape)
         circle_pos_valid = circle_pos[
-            radius + 1 : -radius - 1, radius + 1 : -radius - 1
+            radius : -radius, radius: -radius
         ]
 
         if circle_pos_valid.size == 0:
@@ -36,24 +37,46 @@ class gen_weights:
             # Calculate the bounds for slicing around the center with the given radius
             # Ensure bounds are within the array limits
             row_start = max(0, center_idx[0] - radius)
-            row_end = min(input_shape, center_idx[0] + radius)
+            row_end = min(input_shape, center_idx[0] + radius+1)
             col_start = max(0, center_idx[1] - radius)
-            col_end = min(input_shape, center_idx[1] + radius)
+            col_end = min(input_shape, center_idx[1] + radius+1)
+            print(f"row start: {row_start}, row end: {row_end}, col start: {col_start}, and col end: {col_end}")
 
             # Example operation: for each selected position, set a weight in EE_weights
-            # This is a placeholder for whatever operation you need
             for row in range(row_start, row_end):
                 for col in range(col_start, col_end):
+                    print(circle_pos[row,col])
                     EE_weights[circle_pos[row, col], j] = np.random.uniform(
                         low=0, high=1
-                    )  # Example assignment
+                    )  
 
         return EE_weights
 
+    def draw_heatmap(self, EE_weights, N_input_neurons):
+            # Aggregate weights for each input neuron
+            input_weights_sum = np.sum(EE_weights, axis=1)
+            
+            # Reshape to 2D input space
+            input_shape = int(np.sqrt(N_input_neurons))
+            weights_matrix = input_weights_sum.reshape(input_shape, input_shape)
+            
+            # Plot heatmap
+            plt.figure(figsize=(10, 8))
+            plt.imshow(weights_matrix, cmap='Reds', interpolation='nearest')
+            plt.colorbar(label='Input Intensity')
+            plt.title('Heatmap of Input Space')
+            plt.xlabel('Input Neuron X Coordinate')
+            plt.ylabel('Input Neuron Y Coordinate')
+            plt.show()
 
-import numpy as np
-import networkx as nx
-import matplotlib.pyplot as plt
+# Example usage:
+N_input_neurons = 100  # 10x10 input space
+N_excit_neurons = 50
+radius = 2
+
+gen = gen_weights()
+EE_weights = gen.gen_EE(radius, N_input_neurons, N_excit_neurons)
+gen.draw_heatmap(EE_weights, N_input_neurons)
 
 # Placeholder: Generate a simple weight matrix for demonstration
 N_input_neurons = 49
