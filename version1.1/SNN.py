@@ -54,6 +54,7 @@ class SNN_STDP:
         self.T = T
 
     def init_network(self, radius, N_input_neurons, N_excit_neurons, N_inhib_neurons):
+        self.N_neurons = N_input_neurons + N_inhib_neurons + N_excit_neurons
         # Generate weights from init_network script
         gw = gen_weights()
         self.StimE_Ws = gw.gen_StimE(radius, N_input_neurons, N_excit_neurons)
@@ -62,13 +63,13 @@ class SNN_STDP:
         )
 
         # Set g_neurotransmitter arrays
-        g_ampa = np.zeros(self.time.shape)  # Conductance for AMPA
-        g_nmda = np.zeros(self.time.shape)  # Conductance for NMDA
-        g_gaba = np.zeros(self.time.shape)  # Conductance for GABA
+        g_ampa = np.zeros((self.N_neurons, self.time.shape))  # Conductance for AMPA
+        g_nmda = np.zeros((self.N_neurons, self.time.shape))  # Conductance for NMDA
+        g_gaba = np.zeros((self.N_neurons, self.time.shape))  # Conductance for GABA
 
         # Generate membrane potential (mV) and spikes array
-        self.mV = np.full(self.time.shape, self.V_rest)
-        self.spikes = np.zeros(self.time)
+        self.mV = np.full((self.N_neurons, self.time.shape), self.V_rest)
+        self.spikes = np.zeros((self.N_neurons, self.time.shape))
 
     def training(self):
         training_network(
