@@ -1,7 +1,5 @@
 # Main script
 
-# Main SNN execution file
-
 # Set cw
 import os
 
@@ -11,22 +9,20 @@ os.chdir(
 )
 
 # Import libraries
-from SNN_functions import *
+from SNN import snn
 
 # Initialize SNN object
-snn = SNN_STDP(
-
-)
+SNN = snn()
 
 # Prepare data
 
-# Initialize & visualize pre-trained network
+# Initialize network
 
 # Train network
 
-# Evaluate performance
+# Test network 
 
-# Test network on unseen data and estimate performance
+# Estimate performance
 
-# Visualize training and testing results
+# Plot performance
 

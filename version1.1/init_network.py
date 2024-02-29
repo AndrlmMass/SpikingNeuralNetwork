@@ -40,33 +40,25 @@ class gen_weights:
         return StimE_weights
 
     def gen_EI_IE_EE_weights(self, N_excit_neurons, N_inhib_neurons):    
-        # I assume N_excit_neurons is equal to N_inhib_neurons
+        # Excitatory to inhibitory synapses
         EI_weights = np.random.rand(N_excit_neurons)
 
-        # Inhibitory to excitatory array to increase signal to noise ratio
+        # Inhibitory to excitatory synapses
         IE_weights = np.random.rand(N_inhib_neurons, N_excit_neurons)
 
-        # Excitatory to excitatory connections
+        # Excitatory to excitatory synapses
         EE_weights = np.random.rand(N_excit_neurons, N_excit_neurons)
 
-        return EI_weights, IE_weights, EE_weights
+        # Inhibitory to inhibitory synapses
+        II_weights = np.random.rand(N_inhib_neurons, N_inhib_neurons)
 
-    def draw_heatmap(self, EE_weights, N_input_neurons):
-        # Aggregate weights for each input neuron
-        input_weights_sum = np.sum(EE_weights, axis=1)
-        
-        # Reshape to 2D input space
-        input_shape = int(np.sqrt(N_input_neurons))
-        weights_matrix = input_weights_sum.reshape(input_shape, input_shape)
-        
-        # Plot heatmap
-        plt.figure(figsize=(10, 8))
-        plt.imshow(weights_matrix, cmap='Reds', interpolation='nearest')
-        plt.colorbar(label='Input Intensity')
-        plt.title('Heatmap of Input Space')
-        plt.xlabel('Input Neuron X Coordinate')
-        plt.ylabel('Input Neuron Y Coordinate')
-        plt.show()
+        return EI_weights, IE_weights, II_weights, EE_weights
+    
+
+class Gen_trackers():
+    def gen_membrane_potential(self, dt, timesteps, T, Total_neurons)
+
+
 
 
 
