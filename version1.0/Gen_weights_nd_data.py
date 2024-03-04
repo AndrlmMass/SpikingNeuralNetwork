@@ -2,142 +2,83 @@ import numpy as np
 
 
 class gen_weights:
-    def gen_StimE(self, radius, N_input_neurons, N_excit_neurons):
+    def gen_SE(radius, N_input_neurons, N_excit_neurons, time):
+        # Ensure the input neurons form a square grid
         input_shape = int(np.sqrt(N_input_neurons))
-        circle_pos = np.arange(N_input_neurons).reshape(input_shape, input_shape)
-        circle_pos_valid = circle_pos
 
-        if circle_pos_valid.size == 0:
-            raise ValueError("circle_pos_valid has invalid shape")
+        # Initialize the weights matrix with zeros
+        W_se = np.zeros((N_input_neurons, N_excit_neurons, time))
 
-        circle_pos_flat = circle_pos_valid.flatten()
-        circle_draws = np.random.choice(a=circle_pos_flat, size=N_excit_neurons)
-        StimE_weights = np.zeros((N_input_neurons, N_excit_neurons))
+        # Calculate the 2D positions for each excitatory neuron assuming a linear indexing
+        excitatory_positions = [
+            (mu % input_shape, mu // input_shape) for mu in range(N_excit_neurons)
+        ]
 
-        for j in range(N_excit_neurons):
-            center_idx = np.argwhere(circle_pos == circle_draws[j])[
-                0
-            ]  # Find the 2D index of the center
+        # Iterate over each excitatory neuron to define and assign its receptive field
+        for mu, (ex_col, ex_row) in enumerate(excitatory_positions):
+            # Define the bounds of the receptive field in the 2D space
+            for row in range(
+                max(0, ex_row - radius), min(input_shape, ex_row + radius + 1)
+            ):
+                for col in range(
+                    max(0, ex_col - radius), min(input_shape, ex_col + radius + 1)
+                ):
+                    # Calculate the 1D index for the current position in the input space
+                    pos = row * input_shape + col
+                    # Assign a random weight to the position within the receptive field
+                    W_se[pos, mu, 0] = np.random.random()
 
-            # Calculate the bounds for slicing around the center with the given radius
-            # Ensure bounds are within the array limits
-            row_start = max(0, center_idx[0] - radius)
-            row_end = min(input_shape, center_idx[0] + radius + 1)
-            col_start = max(0, center_idx[1] - radius)
-            col_end = min(input_shape, center_idx[1] + radius + 1)
+        return W_se
 
-            # Example operation: for each selected position, set a weight in EE_weights
-            for row in range(row_start, row_end):
-                for col in range(col_start, col_end):
-                    StimE_weights[circle_pos[row, col], j] = np.random.uniform(
-                        low=0, high=1
-                    )
+    def gen_EE(N_excit_neurons, prob, time):
+        # Initialize the arrays for weights
+        W_ee = np.zeros((N_excit_neurons, N_excit_neurons, time))
 
-        return StimE_weights
+        # Initial weights at time 0 set to random for prob portion
+        W_ee[:, :, 0] = np.random.rand(N_excit_neurons, N_excit_neurons)
+        W_ee[:, :, 0] *= np.random.rand(N_excit_neurons, N_excit_neurons) < prob
 
-    def Gen_EE(N_excit_neurons, alpha, time):
-        # Define n_rows and n_cols
-        n_rows, n_cols = N_excit_neurons, N_excit_neurons
-
-        # Generate power-law distribution for the probability of connections
-        connection_probabilities = np.random.power(alpha, size=n_rows * n_cols)
-
-        # Initialize the arrays for weights and signs
-        EE_weights = np.zeros((n_rows, n_cols, time))
-        EE_weights[:, :, 0] = np.ones((n_rows, n_cols))
-
-        # Fill diagonal for 3d array with zeros
-        for j in range(time):
-            np.fill_diagonal(EE_weights[:, :, j], 0)
-
-        # Assign weights and signs based on connection probability
-        for i in range(n_rows):
-            for j in range(n_cols):
-                if EE_weights[i, j, 0] != 0:
-                    if connection_probabilities[i * n_cols + j] > np.random.rand():
-                        # Assign weight
-                        EE_weights[i, j, 0] = round(np.random.rand(), 4)
-
-                        # Set inverse weight to zero
-                        EE_weights[j, i, 0] = 0
-
-                    else:
-                        EE_weights[i, j, 0] = 0
+        # Ensure no self-connections at the initial time
+        np.fill_diagonal(W_ee[:, :, 0], 0)
 
         return W_ee
 
-    def gen_EI(self, N_excit_neurons, N_inhib_neurons, excit_to_inhib, excit_inhib_std):
+    def gen_EI(self, N_excit_neurons, N_inhib_neurons, time):
+        # Calculate probability of connection
+        prob = N_excit_neurons / (N_excit_neurons + N_inhib_neurons)
+
         # Create weight array for EI
-        W_ei = np.zeros((N_excit_neurons, N_inhib_neurons))
+        W_ei = np.zeros((N_excit_neurons, N_inhib_neurons, time))
 
-        # Determine the receptor field size
-        recept_fields = np.random.normal(
-            loc=excit_to_inhib, scale=excit_inhib_std, size=N_inhib_neurons
-        )
-
-        # Check if any of the recept fields are outside of the limits
-        if np.any(recept_fields < 0 or recept_fields > int(excit_to_inhib * 2)):
-
-            # Get index of the values outside the range
-            idx = np.where(
-                recept_fields < 1 or recept_fields > int(excit_to_inhib * 2)
-            )[0]
-
-            # Assign these indexes with new values inside the range
-            recept_fields[idx] = np.clip(recept_fields[idx], 1, int(excit_to_inhib * 2))
-
-        # Fill the weight array W_ei with the determined receptor field sizes
-        for base in range(N_inhib_neurons):
-
-            # Get first weight
-            dist = recept_fields[base] // 2
-
-            # Check if recept_fields is an even number
-            if recept_fields[base] % 2 == 0:
-                correction = 1
-            else:
-                correction = 0
-
-            # Check if dist is outside of weight array
-            if base - dist - correction < 0:
-
-                # Define interval of excit neurons to receive weights
-                start_row = 0
-                end_row = recept_fields[base] - 1
-
-                # Set weights for interval
-                W_ei[start_row:end_row, base] = np.random.random(size=recept_fields)
-
-            # Check if the total distance exceeds the weight array
-            elif base + dist > N_excit_neurons or base + dist + 1 > N_excit_neurons:
-
-                # Define interval of excit neurons to receive weights
-                start_row = N_excit_neurons - recept_fields[base]
-                end_row = N_excit_neurons
-
-                # Set weights for interval
-                W_ei[start_row:end_row, base] = np.random.random(size=recept_fields)
-
-            # If the receptor field does not exceed the array dims, do this
-            else:
-
-                # Define interval of excit neurons to receive weights
-                start_row = base - dist - 1
-                end_row = base + dist
-
-                # Set weights for interval
-                W_ei[start_row:end_row, base] = np.random.random(size=recept_fields)
+        # Assign random weights to N inhibitory neurons
+        W_ei[:, :, 0] = np.random.rand(N_excit_neurons, N_inhib_neurons)
+        W_ei[:, :, 0] *= np.random.rand(N_excit_neurons, N_inhib_neurons) < prob
 
         return W_ei
 
-    def gen_IE_II_weights(self, N_excit_neurons, N_inhib_neurons):
-        # Inhibitory to excitatory synapses
-        IE_weights = np.random.rand(N_inhib_neurons, N_excit_neurons)
-
+    def gen_II(self, N_inhib_neurons):
         # Inhibitory to inhibitory synapses
-        II_weights = np.random.rand(N_inhib_neurons, N_inhib_neurons)
+        W_ii = np.random.rand(N_inhib_neurons, N_inhib_neurons)
 
-        return W_ie, W_ii
+        return W_ii
+
+    def gen_IE(W_ei):
+        # Create the inverse of EI
+        W_ie = np.transpose(W_ei)
+
+        """
+        Set all non-zero elements to zero
+        These are the excitatory neurons that previously projected to that excitatory neuron.
+        """
+        W_ie[W_ie > 0] = 0
+
+        # Create a mask where about 10% are True to create weight indexes
+        W_idx = np.random.random(W_ie.shape) > 0.9
+
+        # Assign random weight where W_idx is true
+        W_ie[W_idx] = np.random.random(np.sum(W_idx))
+
+        return W_ie
 
 
 def encode_input_poisson(

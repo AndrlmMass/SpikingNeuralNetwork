@@ -10,7 +10,6 @@ os.chdir(
 from init_network import *
 from training import *
 
-
 # Initialize class variable
 class SNN_STDP:
     # Initialize neuronal parameters
@@ -85,4 +84,4 @@ class SNN_STDP:
         )
 
     def testing(self):
-        dfdfs
+        

@@ -1,4 +1,4 @@
-# Loop over each neuron and update membrane potential, GABA, NMDA & AMPA, and weights
+# Script to perform training of SNN with ad
 
 
 def training_network(
@@ -35,9 +35,11 @@ def training_network(
         # EXCITATORY NEURONS
 
         # Update conductance
-        g_ampa[j] = g_ampa[j - 1] * dt / tau_ampa
-        g_nmda[j] = g_nmda[j - 1] * dt / tau_nmda
-        g_gaba[j] = g_gaba[j - 1] * dt / tau_gaba
+        g_ampa[j] = g_ampa[j - 1] * np.exp(dt / tau_ampa)
+        g_nmda[j] = g_nmda[j - 1] * np.exp(dt / tau_nmda)
+        g_gaba[j] = g_gaba[j - 1] * np.exp(dt / tau_gaba)
+
+        # Update
 
         # INHIBITORY NEURONS
 

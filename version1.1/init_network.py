@@ -5,6 +5,7 @@ import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
 
+
 class gen_weights:
     def gen_StimE(self, radius, N_input_neurons, N_excit_neurons):
         input_shape = int(np.sqrt(N_input_neurons))
@@ -26,20 +27,20 @@ class gen_weights:
             # Calculate the bounds for slicing around the center with the given radius
             # Ensure bounds are within the array limits
             row_start = max(0, center_idx[0] - radius)
-            row_end = min(input_shape, center_idx[0] + radius+1)
+            row_end = min(input_shape, center_idx[0] + radius + 1)
             col_start = max(0, center_idx[1] - radius)
-            col_end = min(input_shape, center_idx[1] + radius+1)
+            col_end = min(input_shape, center_idx[1] + radius + 1)
 
             # Example operation: for each selected position, set a weight in EE_weights
             for row in range(row_start, row_end):
                 for col in range(col_start, col_end):
                     StimE_weights[circle_pos[row, col], j] = np.random.uniform(
                         low=0, high=1
-                    )  
+                    )
 
         return StimE_weights
 
-    def gen_EI_IE_EE_weights(self, N_excit_neurons, N_inhib_neurons):    
+    def gen_EI_IE_EE_weights(self, N_excit_neurons, N_inhib_neurons):
         # Excitatory to inhibitory synapses
         EI_weights = np.random.rand(N_excit_neurons)
 
@@ -53,13 +54,3 @@ class gen_weights:
         II_weights = np.random.rand(N_inhib_neurons, N_inhib_neurons)
 
         return EI_weights, IE_weights, II_weights, EE_weights
-    
-
-class Gen_trackers():
-    def gen_membrane_potential(self, dt, timesteps, T, Total_neurons)
-
-
-
-
-
-
