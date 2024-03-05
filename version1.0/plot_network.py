@@ -5,6 +5,46 @@ import networkx as nx
 import numpy as np
 
 
+# Plot receptor field for weights between layers in the network
+def draw_receptive_field_single(weights, N_input_neurons):
+    input_shape = int(
+        np.sqrt(N_input_neurons)
+    )  # Calculate the size of one dimension of the square input grid
+
+    for ex in range(weights.shape[1]):
+        fig, ax = plt.subplots(
+            figsize=(5, 5)
+        )  # Create a plot for the current excitatory neuron
+        ax.set_xlim(-0.5, input_shape - 0.5)
+        ax.set_ylim(-0.5, input_shape - 0.5)
+        ax.set_xticks(np.arange(0, input_shape, 1))
+        ax.set_yticks(np.arange(0, input_shape, 1))
+        ax.set_title(f"Excitatory Neuron {ex + 1}")
+        plt.grid(True)
+
+        # Draw each input neuron as a grey dot
+        for i in range(input_shape):
+            for j in range(input_shape):
+                ax.plot(i, j, "o", color="lightgrey", markersize=10)
+
+        # Find positions where the excitatory neuron has an input synapse (non-zero weights)
+        active_synapses = np.where(weights[:, ex] > 0)[0]
+        for pos in active_synapses:
+            y, x = divmod(pos, input_shape)
+            # Draw red boxes around active synapses
+            rect = plt.Rectangle(
+                (x - 0.5, y - 0.5), 1, 1, fill=False, edgecolor="red", linewidth=2
+            )
+            ax.add_patch(rect)
+
+        plt.show()
+        inp = input("Press Enter to continue to the next neuron...")
+        if inp == "":
+            pass
+        else:
+            break
+
+
 # Draw the network and plot the distribution
 def draw_network(combined_array):
     n_rows, n_cols = combined_array.shape[0], combined_array.shape[1]

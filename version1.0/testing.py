@@ -1,36 +1,33 @@
 import numpy as np
 
 
+import numpy as np
+
+
 def gen_StimE(radius, N_input_neurons, N_excit_neurons):
-    # Ensure the input neurons form a square grid
     input_shape = int(np.sqrt(N_input_neurons))
-
-    # Initialize the weights matrix with zeros
     W_se = np.zeros((N_input_neurons, N_excit_neurons))
-
-    # Calculate the 2D positions for each excitatory neuron assuming a linear indexing
     excitatory_positions = [
         (mu % input_shape, mu // input_shape) for mu in range(N_excit_neurons)
     ]
 
-    # Iterate over each excitatory neuron to define and assign its receptive field
     for mu, (ex_col, ex_row) in enumerate(excitatory_positions):
-        # Define the bounds of the receptive field in the 2D space
         for row in range(
             max(0, ex_row - radius), min(input_shape, ex_row + radius + 1)
         ):
-            for col in range(
-                max(0, ex_col - radius), min(input_shape, ex_col + radius + 1)
-            ):
-                # Calculate the 1D index for the current position in the input space
-                pos = row * input_shape + col
-                # Assign a random weight to the position within the receptive field
-                W_se[pos, mu] = np.random.random()
+            distance_from_center_row = abs(row - ex_row)
+            max_column_distance = int(np.sqrt(radius**2 - distance_from_center_row**2))
+
+            start_col = max(0, ex_col - max_column_distance)
+            end_col = min(input_shape, ex_col + max_column_distance + 1)
+
+            for col in range(start_col, end_col):
+                p = row * input_shape + col
+                W_se[p, mu] = np.random.random()
 
     return W_se
 
 
-import numpy as np
 import matplotlib.pyplot as plt
 
 
@@ -66,7 +63,8 @@ def draw_receptive_field_single(weights, N_input_neurons):
             ax.add_patch(rect)
 
         plt.show()
-        input("Press Enter to continue to the next neuron...")
 
 
-draw_receptive_field_single(W_se, N_input_neurons)
+W_se = gen_StimE(radius=3, N_input_neurons=36, N_excit_neurons=36)
+
+draw_receptive_field_single(W_se, N_input_neurons=36)
