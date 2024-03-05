@@ -38,11 +38,6 @@ def draw_receptive_field_single(weights, N_input_neurons):
             ax.add_patch(rect)
 
         plt.show()
-        inp = input("Press Enter to continue to the next neuron...")
-        if inp == "":
-            pass
-        else:
-            break
 
 
 # Draw the network and plot the distribution

@@ -106,11 +106,9 @@ class SNN_STDP:
         )
 
         # Generate membrane potential and spikes array
-        self.MemPot = np.zeros((self.num_timesteps, self.num_neurons, self.num_items))
+        self.MemPot = np.zeros((self.time, self.num_neurons))
         self.MemPot[0, :, :] = self.V_rest
-        self.t_since_spike = np.ones(
-            (self.num_timesteps, self.num_neurons, self.num_items)
-        )
+        self.t_since_spike = np.ones((self.time, self.num_neurons))
 
         return (
             self.MemPot,

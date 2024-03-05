@@ -39,8 +39,8 @@ snn = SNN_STDP(
 prep_data = snn.prepping_data(base_mean=10, mean_increment=3, variance=1)
 
 # Initialize & visualize pre-trained network
-MemPot, t_since_spik, weights = snn.initialize_network()
-print(np.count_nonzero(weights))
+MemPot, t_since_spik, W_se, W_ee, W_ei, W_ie = snn.initialize_network()
+
 snn.visualize_network(drw_edg=False)
 
 # Train network

@@ -2,7 +2,7 @@ import numpy as np
 
 
 class gen_weights:
-    def gen_StimE(radius, N_input_neurons, N_excit_neurons):
+    def gen_SE(radius, N_input_neurons, N_excit_neurons):
         # Calculate the side length of the square grid of input neurons
         input_shape = int(np.sqrt(N_input_neurons))
 
@@ -16,6 +16,7 @@ class gen_weights:
 
         # Iterate over each excitatory neuron to define and assign its receptive field
         for mu, (ex_col, ex_row) in enumerate(excitatory_positions):
+
             # Iterate through rows within the receptive field radius
             for row in range(
                 max(0, ex_row - radius), min(input_shape, ex_row + radius + 1)
@@ -37,6 +38,7 @@ class gen_weights:
                 for col in range(start_col, end_col):
                     # Calculate the linear index for the input neuron at the current row and column
                     p = row * input_shape + col
+
                     # Assign a random weight to the connection
                     W_se[p, mu] = np.random.random()
 
@@ -55,7 +57,7 @@ class gen_weights:
 
         return W_ee
 
-    def gen_EI(self, N_excit_neurons, N_inhib_neurons, time):
+    def gen_EI(N_excit_neurons, N_inhib_neurons, time):
         # Calculate probability of connection
         prob = N_excit_neurons / (N_excit_neurons + N_inhib_neurons)
 
@@ -68,21 +70,28 @@ class gen_weights:
 
         return W_ei
 
-    def gen_IE(W_ei):
-        # Create the inverse of EI
-        W_ie = np.transpose(W_ei)
+    def gen_IE(N_inhib_neurons, N_excit_neurons, W_ei, prob, time):
+        # Initialize the weight array for IE connections
+        W_ie = np.zeros((N_inhib_neurons, N_excit_neurons, time))
 
-        """
-        Set all non-zero elements to zero
-        These are the excitatory neurons that previously projected to that excitatory neuron.
-        """
-        W_ie[W_ie > 0] = 0
+        # Set initial weights by transposing the EI weights for the initial time step
+        W_ie[:, :, 0] = W_ei[:, :, 0].T
 
-        # Create a mask where about 10% are True to create weight indexes
-        W_idx = np.random.random(W_ie.shape) > 0.9
+        # Identify positions in the transposed matrix (IE) that correspond to non-zero weights in EI
+        non_zero_positions = W_ie[:, :, 0] != 0
 
-        # Assign random weight where W_idx is true
-        W_ie[W_idx] = np.random.random(np.sum(W_idx))
+        # Generate a mask for potential connections based on the specified probability
+        W_idx = np.random.rand(N_inhib_neurons, N_excit_neurons) < prob
+
+        # Ensure that new connections (where W_idx is true) do not override existing non-zero connections from EI
+        # This step respects the established connections by not allowing feedback loops
+        valid_new_connections = np.logical_and(W_idx, ~non_zero_positions)
+
+        # Assign random weights only to valid new connection positions
+        initial_random_weights = np.random.rand(N_inhib_neurons, N_excit_neurons)
+        W_ie[:, :, 0] = np.where(
+            valid_new_connections, initial_random_weights, W_ie[:, :, 0]
+        )
 
         return W_ie
 
