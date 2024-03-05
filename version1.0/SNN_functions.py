@@ -11,9 +11,9 @@ os.chdir(
     "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork"
 )
 
-import plot_training as pt
-import plot_network as pn
-import Gen_weights_nd_data as gwd
+from plot_training import *
+from plot_network import *
+from gen_weights import *
 
 
 # Initialize class variable
@@ -55,6 +55,7 @@ class SNN_STDP:
         self.T = T
         self.target_value = target_value
         self.num_timesteps = int(T / dt)
+        self.time = self.num_timesteps * self.num_items
         self.V_rest = V_rest
         self.A_minus = A_minus
         self.A_plus = A_plus
@@ -68,32 +69,57 @@ class SNN_STDP:
         self.max_weight = max_weight
         self.min_weight = min_weight
         self.input_scaler = input_scaler
-        self.num_input_neurons = num_input_neurons
         self.num_epochs = num_epochs
         self.max_spike_diff = int(self.num_timesteps * 0.1)
-        self.num_classes = num_classes
         self.pre_synaptic_trace = np.zeros((self.num_neurons, self.num_items))
         self.post_synaptic_trace = np.zeros((self.num_neurons, self.num_items))
 
-    def initialize_network(self):
+    def initialize_network(
+        self, N_input_neurons, N_excit_neurons, N_inhib_neurons, radius, prob
+    ):
+        self.N_input_neurons = N_input_neurons
+        self.N_excit_neurons = N_excit_neurons
+        self.N_inhib_neurons = N_inhib_neurons
+
         # Generate weights
-        self.weights, self.input_neuron_idx = (
-            gwd.generate_small_world_network_power_law(
-                num_neurons=self.num_neurons,
-                excit_inhib_ratio=self.excit_inhib_ratio,
-                alpha=self.alpha,
-                num_input_neurons=self.num_input_neurons,
-                num_items=self.num_items,
-                num_timesteps=self.num_timesteps,
-            )
+        gws = gen_weights()
+
+        self.W_se = gws.gen_SE(
+            radius=radius,
+            N_input_neurons=self.N_input_neurons,
+            N_excit_neurons=self.N_excit_neurons,
         )
+        self.W_ee = gws.gen_EE(
+            N_excit_neurons=self.N_excit_neurons, prob=prob, time=self.time
+        )
+        self.W_ei = gws.gen_EI(
+            N_excit_neurons=self.N_excit_neurons,
+            N_inhib_neurons=self.N_inhib_neurons,
+            time=self.time,
+        )
+        self.W_ie = gws.gen_IE(
+            N_inhib_neurons=self.N_inhib_neurons,
+            N_excit_neurons=self.N_excit_neurons,
+            W_ei=self.W_ei,
+            prob=prob,
+            time=self.time,
+        )
+
         # Generate membrane potential and spikes array
         self.MemPot = np.zeros((self.num_timesteps, self.num_neurons, self.num_items))
         self.MemPot[0, :, :] = self.V_rest
         self.t_since_spike = np.ones(
             (self.num_timesteps, self.num_neurons, self.num_items)
         )
-        return self.MemPot, self.t_since_spike, self.weights
+
+        return (
+            self.MemPot,
+            self.t_since_spike,
+            self.W_se,
+            self.W_ee,
+            self.W_ei,
+            self.W_ie,
+        )
 
     def prepping_data(
         self,
