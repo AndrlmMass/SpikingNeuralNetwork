@@ -1,70 +1,155 @@
 import numpy as np
-
-
-import numpy as np
-
-
-def gen_StimE(radius, N_input_neurons, N_excit_neurons):
-    input_shape = int(np.sqrt(N_input_neurons))
-    W_se = np.zeros((N_input_neurons, N_excit_neurons))
-    excitatory_positions = [
-        (mu % input_shape, mu // input_shape) for mu in range(N_excit_neurons)
-    ]
-
-    for mu, (ex_col, ex_row) in enumerate(excitatory_positions):
-        for row in range(
-            max(0, ex_row - radius), min(input_shape, ex_row + radius + 1)
-        ):
-            distance_from_center_row = abs(row - ex_row)
-            max_column_distance = int(np.sqrt(radius**2 - distance_from_center_row**2))
-
-            start_col = max(0, ex_col - max_column_distance)
-            end_col = min(input_shape, ex_col + max_column_distance + 1)
-
-            for col in range(start_col, end_col):
-                p = row * input_shape + col
-                W_se[p, mu] = np.random.random()
-
-    return W_se
-
-
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from skimage.draw import polygon
 
 
-def draw_receptive_field_single(weights, N_input_neurons):
-    input_shape = int(
-        np.sqrt(N_input_neurons)
-    )  # Calculate the size of one dimension of the square input grid
+def gen_triangle(input_dims, triangle_size, receptor_size, triangle_thickness):
+    if input_dims % 2 == 0:
+        raise UserWarning("Invalid input dimensions. Must be an odd value.")
+    if not (0 <= triangle_size <= 1):
+        raise ValueError("Triangle size must be between 0 and 1.")
+    if triangle_thickness <= 0:
+        raise ValueError("Triangle thickness must be greater than 0.")
 
-    for ex in range(weights.shape[1]):
-        fig, ax = plt.subplots(
-            figsize=(5, 5)
-        )  # Create a plot for the current excitatory neuron
-        ax.set_xlim(-0.5, input_shape - 0.5)
-        ax.set_ylim(-0.5, input_shape - 0.5)
-        ax.set_xticks(np.arange(0, input_shape, 1))
-        ax.set_yticks(np.arange(0, input_shape, 1))
-        ax.set_title(f"Excitatory Neuron {ex + 1}")
-        plt.grid(True)
+    # Adjust plotting range to accommodate the outermost receptive fields
+    plot_dims = input_dims + 1
 
-        # Draw each input neuron as a grey dot
-        for i in range(input_shape):
-            for j in range(input_shape):
-                ax.plot(i, j, "o", color="lightgrey", markersize=10)
+    # Create a plot to display the triangle and receptive fields
+    fig, ax = plt.subplots()
+    plt.xlim(0, plot_dims)
+    plt.ylim(0, plot_dims)
 
-        # Find positions where the excitatory neuron has an input synapse (non-zero weights)
-        active_synapses = np.where(weights[:, ex] > 0)[0]
-        for pos in active_synapses:
-            y, x = divmod(pos, input_shape)
-            # Draw red boxes around active synapses
-            rect = plt.Rectangle(
-                (x - 0.5, y - 0.5), 1, 1, fill=False, edgecolor="red", linewidth=2
+    # Plot squares representing receptive fields for each neuron
+    for x in range(1, plot_dims):
+        for y in range(1, plot_dims):
+            bottom_left_x = x - receptor_size / 2
+            bottom_left_y = y - receptor_size / 2
+            square = patches.Rectangle(
+                (bottom_left_x, bottom_left_y),
+                receptor_size,
+                receptor_size,
+                linewidth=1,
+                edgecolor="b",
+                facecolor="none",
             )
-            ax.add_patch(rect)
+            ax.add_patch(square)
 
-        plt.show()
+    # Adjust triangle vertices for correct centering and sizing
+    center = plot_dims / 2
+    half_base_length = (
+        input_dims * triangle_size / 2
+    )  # Ensure triangle size scales to input_dims
+
+    # Define triangle vertices with corrected centering and size
+    top_point = (center, center + half_base_length)
+    low_left = (center - half_base_length, center - half_base_length)
+    low_right = (center + half_base_length, center - half_base_length)
+
+    # Draw the triangle with specified thickness
+    triangle = plt.Polygon(
+        [low_left, top_point, low_right],
+        closed=True,
+        fill=None,
+        edgecolor="r",
+        linewidth=triangle_thickness,
+    )
+    ax.add_patch(triangle)
+
+    plt.grid(True, which="both", linestyle="--", linewidth=0.5, color="gray")
+    plt.xticks(np.arange(1, plot_dims))
+    plt.yticks(np.arange(1, plot_dims))
+    plt.show()
+
+    # Calculate the center and the size of the triangle
+    center = input_dims // 2
+    half_base = input_dims * triangle_size / 2
+    height = half_base * np.sqrt(3)  # For an equilateral triangle
+
+    # Vertices of the triangle
+    vertices = np.array(
+        [
+            [center, center + height / 2],  # Top vertex
+            [center - half_base, center - height / 2],  # Bottom left vertex
+            [center + half_base, center - height / 2],  # Bottom right vertex
+        ]
+    )
+
+    # Initialize the input space with zeros
+    input_space = np.zeros((input_dims, input_dims))
+
+    from skimage.draw import line
+
+    # High-resolution grid for more accurate edge drawing
+    subgrid_resolution = 100  # Number of pixels per square side
+    subgrid_size = subgrid_resolution**2
+
+    # Initialize the high-resolution binary mask for the hollow triangle
+    high_res_triangle = np.zeros(
+        (input_dims * subgrid_resolution, input_dims * subgrid_resolution)
+    )
+
+    # Function to draw a line on the high-resolution grid
+    def draw_line_high_res(v0, v1):
+        rr, cc = line(
+            int(v0[1] * subgrid_resolution),
+            int(v0[0] * subgrid_resolution),
+            int(v1[1] * subgrid_resolution),
+            int(v1[0] * subgrid_resolution),
+        )
+        high_res_triangle[rr, cc] = 1
+
+    # Draw the triangle's edges on the high-resolution grid
+    draw_line_high_res(vertices[0], vertices[1])  # Edge from top vertex to bottom left
+    draw_line_high_res(
+        vertices[1], vertices[2]
+    )  # Edge from bottom left to bottom right
+    draw_line_high_res(vertices[2], vertices[0])  # Edge from bottom right to top vertex
+
+    # Estimate the overlap for each square in the grid, focusing on edges
+    for i in range(input_dims):
+        for j in range(input_dims):
+            top = i * subgrid_resolution
+            left = j * subgrid_resolution
+            bottom = (i + 1) * subgrid_resolution
+            right = (j + 1) * subgrid_resolution
+
+            # Extract the subgrid for the current square
+            subgrid = high_res_triangle[top:bottom, left:right]
+
+            # Calculate coverage based on edge presence
+            coverage = np.sum(subgrid) / subgrid_size
+            input_space[i, j] = coverage if np.sum(subgrid) > 0 else 0
+
+    # Step 1: Find the maximum value in input_space
+    max_value = np.max(input_space)
+
+    # Step 2: Normalize values in input_space
+    input_space_normalized = input_space / max_value if max_value > 0 else input_space
+
+    return input_space_normalized
 
 
-W_se = gen_StimE(radius=3, N_input_neurons=36, N_excit_neurons=36)
+def plot_input_space(input_space, input_dims):
+    # Create a heatmap to visualize the input_space coverage values
+    plt.figure(figsize=(8, 8))  # Set figure size
+    plt.imshow(input_space, cmap="viridis", origin="lower", interpolation="nearest")
+    plt.colorbar(label="Degree of Coverage")
+    plt.title("Input Space Coverage Visualization")
+    plt.xlabel("X Dimension")
+    plt.ylabel("Y Dimension")
+    # Configure ticks to align with each square if needed
+    tick_marks = np.arange(len(input_space - 1))
+    plt.xticks(tick_marks, [str(i) for i in tick_marks])
+    plt.yticks(tick_marks, [str(i) for i in tick_marks])
+    plt.xlim(0, input_dims)  # Assuming input_dims is the max value you want to show
+    plt.ylim(0, input_dims)
+    plt.grid(False)  # Optionally disable the grid for clarity
+    plt.show()
 
-draw_receptive_field_single(W_se, N_input_neurons=36)
+
+input_space = gen_triangle(
+    11, 0.5, 1, 20
+)  # input_dims, triangle_size, receptor_size, triangle_thickness
+plot_input_space(input_space, 9)
+print(input_space)
