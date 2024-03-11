@@ -1,65 +1,89 @@
 # Gen data according to y number of classes
+import os
+from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 
+os.chdir(
+    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
+)
 
-def gen_data(N_classes, N_input_neurons):
+from gen_symbol import *
+
+
+import numpy as np
+from functools import partial
+
+# Assuming your import statement for gen_symbol functions is here
+
+
+def gen_data_(N_classes, N_input_neurons, items, draw_bin=False):
     # Define input shape
     input_dims = int(np.sqrt(N_input_neurons))
 
+    if input_dims**2 != N_input_neurons:
+        raise ValueError("N_input_neurons must be a perfect square")
+
     # Assert input space based on input_dims variable
-    input_shape = np.zeros((input_dims, input_dims))
+    input_space = np.zeros((items, input_dims, input_dims))
 
-    # Define rules for input classes
-    rules = []
+    # List of lambda functions wrapping the original functions with necessary arguments
+    functions = [
+        lambda: gen_triangle(
+            input_dims=input_dims,
+            triangle_size=0.6,
+            triangle_thickness=20,
+            draw_bin=draw_bin,
+        ),
+        lambda: gen_circle(
+            input_dims=input_dims,
+            circle_size=0.6,
+            receptor_size=1,
+            circle_thickness=20,
+            draw_bin=draw_bin,
+        ),
+        lambda: gen_square(
+            input_dims=input_dims,
+            square_size=0.6,
+            square_thickness=20,
+            draw_bin=draw_bin,
+        ),
+        lambda: gen_x_symbol(
+            input_dims=input_dims,
+            x_size=0.6,
+            receptor_size=1,
+            x_thickness=20,
+            draw_bin=draw_bin,
+        ),
+    ]
 
-    # Loop over num_classes to generate rules
-    for clas in N_classes:
+    # Ensure we have enough functions for the requested classes
+    if N_classes > len(functions):
+        raise ValueError(
+            "Not enough functions to generate symbols for the requested number of classes"
+        )
 
-        # Assert rules
-        d = 1
+    # Loop over items to generate symbols
+    for item in tqdm(range(items), ncols=100):
+        class_index = item % N_classes
+        # Execute the lambda function for the current class_index and assign its output
+        input_space[item] = functions[class_index]()
 
-
-def gen_triangle(input_dims, receptor_size, triangle_thickness):
-    if input_dims % 2 == 0:
-        raise UserWarning("Invalid input dimensions. Must be an odd value.")
-    if not (0 <= triangle_size <= 1):
-        raise ValueError("Triangle size must be between 0 and 1.")
-    if triangle_thickness <= 0:
-        raise ValueError("Triangle thickness must be greater than 0.")
-
-    # Define input space
-    input_space = np.zeros((input_dims, input_dims))
-
-    # Define edges of triangle
-    basic_unit = input_dims // 2 + 1
-    radius = input_dims // 4
-    centre = (basic_unit, basic_unit)
-    top = (basic_unit - radius, basic_unit)
-    bottom_left = (basic_unit + radius, basic_unit - radius)
-    bottom_right = (basic_unit + radius, basic_unit + radius)
-
-    # Return rules and starting positions
+    return input_space
 
 
-def plot_input_space(input_space):
-    # Create a heatmap to visualize the input_space coverage values
-    plt.figure(figsize=(8, 8))  # Set figure size
-    plt.imshow(input_space, cmap="viridis", origin="lower", interpolation="nearest")
-    plt.colorbar(label="Degree of Coverage")
-    plt.title("Input Space Coverage Visualization")
-    plt.xlabel("X Dimension")
-    plt.ylabel("Y Dimension")
-    # Configure ticks to align with each square if needed
-    tick_marks = np.arange(len(input_space))
-    plt.xticks(tick_marks, [str(i) for i in tick_marks])
-    plt.yticks(tick_marks, [str(i) for i in tick_marks])
-    plt.grid(False)  # Optionally disable the grid for clarity
+input_space = gen_data_(N_classes=4, N_input_neurons=4096, items=100, draw_bin=False)
+
+print(input_space.shape)
+for j in range(input_space.shape[0]):
+    plt.figure(figsize=(8, 8))  # You can adjust the figure size as needed
+    plt.imshow(input_space[j, :, :], cmap="gray", vmin=0, vmax=1)
+    plt.axis("off")  # To not display axis
+    plt.title(f"Item {j + 1}")
     plt.show()
 
-
-# Example usage: Adjust 'input_dims', 'triangle_size', 'receptor_size', and 'triangle_thickness' as needed
-input_space = gen_triangle(
-    15, 0.6, 1, 20
-)  # For example: input_dims=3, triangle_size=1, receptor_size=1, triangle_thickness=2
-plot_input_space(input_space)
+    inp = input("Do you want to continue?")
+    if inp == "":
+        continue
+    else:
+        break

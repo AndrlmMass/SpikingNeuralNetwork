@@ -14,6 +14,7 @@ os.chdir(
 from plot_training import *
 from plot_network import *
 from gen_weights import *
+from gen_data import *
 
 
 # Initialize class variable
@@ -125,6 +126,7 @@ class SNN_STDP:
         mean_increment,
         variance,
     ):
+        gd = gen_data()
         # Simulate data
         self.data, self.classes = gwd.generate_multidimensional_data(
             self.num_classes,

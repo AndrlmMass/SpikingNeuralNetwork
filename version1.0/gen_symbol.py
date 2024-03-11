@@ -5,9 +5,9 @@ from skimage.draw import line
 from skimage.draw import circle_perimeter
 
 
-def gen_triangle(input_dims, triangle_size, receptor_size, triangle_thickness):
-    if input_dims % 2 == 0:
-        raise ValueError("Invalid input size. Should be odd value")
+def gen_triangle(input_dims, triangle_size, triangle_thickness, draw_bin):
+    # if input_dims % 2 == 0:
+    #    raise ValueError("Invalid input size. Should be odd value")
     if not (0 <= triangle_size <= 1):
         raise ValueError("Triangle size must be between 0 and 1.")
     if triangle_thickness <= 0:
@@ -49,9 +49,10 @@ def gen_triangle(input_dims, triangle_size, receptor_size, triangle_thickness):
 
     # Draw the triangle's edges on the high-resolution grid using new vertices
     vertices = np.array([top_vertex, bottom_left_vertex, bottom_right_vertex])
-    draw_line_high_res(vertices[0], vertices[1])
-    draw_line_high_res(vertices[1], vertices[2])
-    draw_line_high_res(vertices[2], vertices[0])
+    if draw_bin:
+        draw_line_high_res(vertices[0], vertices[1])
+        draw_line_high_res(vertices[1], vertices[2])
+        draw_line_high_res(vertices[2], vertices[0])
 
     # Estimate the overlap for each square in the grid, focusing on edges
     for i in range(input_dims):
@@ -76,9 +77,9 @@ def gen_triangle(input_dims, triangle_size, receptor_size, triangle_thickness):
     return input_space_flipped
 
 
-def gen_square(input_dims, square_size, receptor_size, square_thickness):
-    if input_dims % 2 == 0:
-        raise UserWarning("Invalid input dimensions. Must be an odd value.")
+def gen_square(input_dims, square_size, square_thickness, draw_bin=False):
+    # if input_dims % 2 == 0:
+    #    raise UserWarning("Invalid input dimensions. Must be an odd value.")
     if not (0 <= square_size <= 1):
         raise ValueError("Square size must be between 0 and 1.")
     if square_thickness <= 0:
@@ -120,10 +121,11 @@ def gen_square(input_dims, square_size, receptor_size, square_thickness):
         high_res_square[rr, cc] = 1
 
     # Draw the square's edges on the high-resolution grid
-    for i in range(len(vertices)):
-        draw_line_high_res(
-            vertices[i], vertices[(i + 1) % len(vertices)]
-        )  # Connect vertices in order
+    if draw_bin:
+        for i in range(len(vertices)):
+            draw_line_high_res(
+                vertices[i], vertices[(i + 1) % len(vertices)]
+            )  # Connect vertices in order
 
     # Estimate the overlap for each square in the grid, focusing on edges
     for i in range(input_dims):
@@ -147,9 +149,9 @@ def gen_square(input_dims, square_size, receptor_size, square_thickness):
     return input_space_normalized
 
 
-def gen_x_symbol(input_dims, x_size, receptor_size, x_thickness):
-    if input_dims % 2 == 0:
-        raise UserWarning("Invalid input dimensions. Must be an odd value.")
+def gen_x_symbol(input_dims, x_size, receptor_size, x_thickness, draw_bin):
+    # if input_dims % 2 == 0:
+    #    raise UserWarning("Invalid input dimensions. Must be an odd value.")
     if not (0 <= x_size <= 1):
         raise ValueError("X size must be between 0 and 1.")
     if x_thickness <= 0:
@@ -189,23 +191,24 @@ def gen_x_symbol(input_dims, x_size, receptor_size, x_thickness):
     line2_end = (center - half_diagonal, center - half_diagonal)
 
     # Draw the X symbol with specified thickness
-    ax.plot(
-        [line1_start[0], line1_end[0]],
-        [line1_start[1], line1_end[1]],
-        color="r",
-        linewidth=x_thickness,
-    )
-    ax.plot(
-        [line2_start[0], line2_end[0]],
-        [line2_start[1], line2_end[1]],
-        color="r",
-        linewidth=x_thickness,
-    )
+    if draw_bin:
+        ax.plot(
+            [line1_start[0], line1_end[0]],
+            [line1_start[1], line1_end[1]],
+            color="r",
+            linewidth=x_thickness,
+        )
+        ax.plot(
+            [line2_start[0], line2_end[0]],
+            [line2_start[1], line2_end[1]],
+            color="r",
+            linewidth=x_thickness,
+        )
 
-    plt.grid(True, which="both", linestyle="--", linewidth=0.5, color="gray")
-    plt.xticks(np.arange(1, plot_dims))
-    plt.yticks(np.arange(1, plot_dims))
-    plt.show()
+        plt.grid(True, which="both", linestyle="--", linewidth=0.5, color="gray")
+        plt.xticks(np.arange(1, plot_dims))
+        plt.yticks(np.arange(1, plot_dims))
+        plt.show()
 
     # Initialize the input space with zeros
     input_space = np.zeros((input_dims, input_dims))
@@ -255,9 +258,9 @@ def gen_x_symbol(input_dims, x_size, receptor_size, x_thickness):
     return input_space_normalized
 
 
-def gen_circle(input_dims, circle_size, receptor_size, circle_thickness):
-    if input_dims % 2 == 0:
-        raise UserWarning("Invalid input dimensions. Must be an odd value.")
+def gen_circle(input_dims, circle_size, receptor_size, circle_thickness, draw_bin):
+    # if input_dims % 2 == 0:
+    #    raise UserWarning("Invalid input dimensions. Must be an odd value.")
     if not (0 <= circle_size <= 1):
         raise ValueError("Circle size must be between 0 and 1.")
     if circle_thickness <= 0:
@@ -300,10 +303,11 @@ def gen_circle(input_dims, circle_size, receptor_size, circle_thickness):
     )
     ax.add_patch(circle)
 
-    plt.grid(True, which="both", linestyle="--", linewidth=0.5, color="gray")
-    plt.xticks(np.arange(1, plot_dims))
-    plt.yticks(np.arange(1, plot_dims))
-    plt.show()
+    if draw_bin:
+        plt.grid(True, which="both", linestyle="--", linewidth=0.5, color="gray")
+        plt.xticks(np.arange(1, plot_dims))
+        plt.yticks(np.arange(1, plot_dims))
+        plt.show()
 
     # Initialize the input space with zeros
     input_space = np.zeros((input_dims, input_dims))
@@ -363,21 +367,3 @@ def plot_input_space(input_space, input_dims):
     plt.ylim(0, input_dims)
     plt.grid(False)  # Optionally disable the grid for clarity
     plt.show()
-
-
-input_space = gen_triangle(11, 0.6, 1, 20)  # Needs to be centered
-# input_dims, triangle_size, receptor_size, triangle_thickness
-plot_input_space(input_space, 11)
-print(np.round(input_space, 2))
-
-input_space_2 = gen_square(11, 0.6, 1, 20)  # This one is perfectly centered
-plot_input_space(input_space_2, 11)
-print(np.round(input_space_2, 2))
-
-input_space_3 = gen_x_symbol(11, 0.5, 1, 20)  # This one is perfectly centered
-plot_input_space(input_space_3, 11)
-print(np.round(input_space_3, 2))
-
-input_space_4 = gen_circle(11, 0.5, 1, 20)  # Needs to be centered
-plot_input_space(input_space_4, 11)
-print(np.round(input_space_4, 2))
