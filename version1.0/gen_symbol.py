@@ -6,8 +6,6 @@ from skimage.draw import circle_perimeter
 
 
 def gen_triangle(input_dims, triangle_size, triangle_thickness, draw_bin):
-    # if input_dims % 2 == 0:
-    #    raise ValueError("Invalid input size. Should be odd value")
     if not (0 <= triangle_size <= 1):
         raise ValueError("Triangle size must be between 0 and 1.")
     if triangle_thickness <= 0:
@@ -49,10 +47,9 @@ def gen_triangle(input_dims, triangle_size, triangle_thickness, draw_bin):
 
     # Draw the triangle's edges on the high-resolution grid using new vertices
     vertices = np.array([top_vertex, bottom_left_vertex, bottom_right_vertex])
-    if draw_bin:
-        draw_line_high_res(vertices[0], vertices[1])
-        draw_line_high_res(vertices[1], vertices[2])
-        draw_line_high_res(vertices[2], vertices[0])
+    draw_line_high_res(vertices[0], vertices[1])
+    draw_line_high_res(vertices[1], vertices[2])
+    draw_line_high_res(vertices[2], vertices[0])
 
     # Estimate the overlap for each square in the grid, focusing on edges
     for i in range(input_dims):
@@ -78,8 +75,6 @@ def gen_triangle(input_dims, triangle_size, triangle_thickness, draw_bin):
 
 
 def gen_square(input_dims, square_size, square_thickness, draw_bin=False):
-    # if input_dims % 2 == 0:
-    #    raise UserWarning("Invalid input dimensions. Must be an odd value.")
     if not (0 <= square_size <= 1):
         raise ValueError("Square size must be between 0 and 1.")
     if square_thickness <= 0:
@@ -88,44 +83,43 @@ def gen_square(input_dims, square_size, square_thickness, draw_bin=False):
     # Initialize the input space with zeros
     input_space = np.zeros((input_dims, input_dims))
 
+    # Calculate the side length of the square in pixels
+    square_side_length = int(square_size * input_dims)
+
+    # Calculate padding to ensure equal distance from the square to the input space border
+    padding = (input_dims - square_side_length) // 2
+
+    # Adjusted vertices based on calculated padding
+    top_left = (padding, padding)
+    top_right = (input_dims - padding, padding)
+    bottom_left = (padding, input_dims - padding)
+    bottom_right = (input_dims - padding, input_dims - padding)
+
     # High-resolution grid for more accurate edge drawing
-    subgrid_resolution = 100  # Number of pixels per square side
+    subgrid_resolution = 100
     subgrid_size = subgrid_resolution**2
-
-    # Calculate center of the input space
-    center = input_dims // 2
-
-    # Calculate the size of the square in terms of input dimensions
-    square_half_length = int(square_size * input_dims / 2)
 
     # Initialize the high-resolution binary mask for the hollow square
     high_res_square = np.zeros(
         (input_dims * subgrid_resolution, input_dims * subgrid_resolution)
     )
 
-    # Define square vertices centered within the high-resolution grid
-    top_left = (center - square_half_length, center + square_half_length)
-    top_right = (center + square_half_length, center + square_half_length)
-    bottom_left = (center - square_half_length, center - square_half_length)
-    bottom_right = (center + square_half_length, center - square_half_length)
-    vertices = [top_left, top_right, bottom_right, bottom_left]
-
     # Function to draw lines on the high-resolution grid for square edges
     def draw_line_high_res(v0, v1):
         rr, cc = line(
-            int(v0[1] * subgrid_resolution),
             int(v0[0] * subgrid_resolution),
-            int(v1[1] * subgrid_resolution),
+            int(v0[1] * subgrid_resolution),
             int(v1[0] * subgrid_resolution),
+            int(v1[1] * subgrid_resolution),
         )
         high_res_square[rr, cc] = 1
 
-    # Draw the square's edges on the high-resolution grid
-    if draw_bin:
-        for i in range(len(vertices)):
-            draw_line_high_res(
-                vertices[i], vertices[(i + 1) % len(vertices)]
-            )  # Connect vertices in order
+    # Define square vertices centered within the high-resolution grid
+    vertices = [top_left, top_right, bottom_right, bottom_left]
+
+    # Connect vertices in order to draw the square's edges on the high-resolution grid
+    for i in range(len(vertices)):
+        draw_line_high_res(vertices[i], vertices[(i + 1) % len(vertices)])
 
     # Estimate the overlap for each square in the grid, focusing on edges
     for i in range(input_dims):
@@ -145,6 +139,13 @@ def gen_square(input_dims, square_size, square_thickness, draw_bin=False):
     # Normalize values in input_space
     max_value = np.max(input_space)
     input_space_normalized = input_space / max_value if max_value > 0 else input_space
+
+    # Conditional plotting based on draw_bin
+    if draw_bin:
+        fig, ax = plt.subplots()
+        ax.imshow(input_space_normalized, cmap="gray", interpolation="nearest")
+        plt.axis("off")
+        plt.show()
 
     return input_space_normalized
 
@@ -259,61 +260,20 @@ def gen_x_symbol(input_dims, x_size, receptor_size, x_thickness, draw_bin):
 
 
 def gen_circle(input_dims, circle_size, receptor_size, circle_thickness, draw_bin):
-    # if input_dims % 2 == 0:
-    #    raise UserWarning("Invalid input dimensions. Must be an odd value.")
     if not (0 <= circle_size <= 1):
         raise ValueError("Circle size must be between 0 and 1.")
     if circle_thickness <= 0:
         raise ValueError("Circle thickness must be greater than 0.")
 
-    # Adjust plotting range to accommodate the outermost receptive fields
-    plot_dims = input_dims + 1
-
-    # Create a plot to display the circle and receptive fields
-    fig, ax = plt.subplots()
-    plt.xlim(0, plot_dims)
-    plt.ylim(0, plot_dims)
-
-    # Plot squares representing receptive fields for each neuron
-    for x in range(1, plot_dims):
-        for y in range(1, plot_dims):
-            bottom_left_x = x - receptor_size / 2
-            bottom_left_y = y - receptor_size / 2
-            receptive_field_square = patches.Rectangle(
-                (bottom_left_x, bottom_left_y),
-                receptor_size,
-                receptor_size,
-                linewidth=1,
-                edgecolor="b",
-                facecolor="none",
-            )
-            ax.add_patch(receptive_field_square)
-
-    # Define circle center and radius for correct centering and sizing
-    center = plot_dims / 2
-    radius = input_dims * circle_size / 2
-
-    # Draw the circle with specified thickness
-    circle = patches.Circle(
-        (center, center),
-        radius,
-        fill=None,
-        edgecolor="r",
-        linewidth=circle_thickness,
-    )
-    ax.add_patch(circle)
-
-    if draw_bin:
-        plt.grid(True, which="both", linestyle="--", linewidth=0.5, color="gray")
-        plt.xticks(np.arange(1, plot_dims))
-        plt.yticks(np.arange(1, plot_dims))
-        plt.show()
-
     # Initialize the input space with zeros
     input_space = np.zeros((input_dims, input_dims))
 
+    # Define circle center and radius for correct centering and sizing within the input space
+    center = input_dims // 2
+    radius = int(circle_size * input_dims / 2)
+
     # High-resolution grid for more accurate edge drawing
-    subgrid_resolution = 100  # Number of pixels per square side
+    subgrid_resolution = 100
     subgrid_size = subgrid_resolution**2
 
     # Initialize the high-resolution binary mask for the hollow circle
@@ -323,9 +283,9 @@ def gen_circle(input_dims, circle_size, receptor_size, circle_thickness, draw_bi
 
     # Draw the circle's edge on the high-resolution grid
     rr, cc = circle_perimeter(
-        int(center * subgrid_resolution),
-        int(center * subgrid_resolution),
-        int(radius * subgrid_resolution),
+        center * subgrid_resolution,
+        center * subgrid_resolution,
+        radius * subgrid_resolution,
     )
     high_res_circle[rr, cc] = 1
 
@@ -348,22 +308,11 @@ def gen_circle(input_dims, circle_size, receptor_size, circle_thickness, draw_bi
     max_value = np.max(input_space)
     input_space_normalized = input_space / max_value if max_value > 0 else input_space
 
+    # Conditional plotting based on draw_bin
+    if draw_bin:
+        fig, ax = plt.subplots()
+        ax.imshow(input_space_normalized, cmap="gray", interpolation="nearest")
+        plt.axis("off")
+        plt.show()
+
     return input_space_normalized
-
-
-def plot_input_space(input_space, input_dims):
-    # Create a heatmap to visualize the input_space coverage values
-    plt.figure(figsize=(8, 8))  # Set figure size
-    plt.imshow(input_space, cmap="viridis", origin="lower", interpolation="nearest")
-    plt.colorbar(label="Degree of Coverage")
-    plt.title("Input Space Coverage Visualization")
-    plt.xlabel("X Dimension")
-    plt.ylabel("Y Dimension")
-    # Configure ticks to align with each square if needed
-    tick_marks = np.arange(len(input_space - 1))
-    plt.xticks(tick_marks, [str(i) for i in tick_marks])
-    plt.yticks(tick_marks, [str(i) for i in tick_marks])
-    plt.xlim(0, input_dims)  # Assuming input_dims is the max value you want to show
-    plt.ylim(0, input_dims)
-    plt.grid(False)  # Optionally disable the grid for clarity
-    plt.show()

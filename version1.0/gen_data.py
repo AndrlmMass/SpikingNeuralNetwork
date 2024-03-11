@@ -11,13 +11,13 @@ os.chdir(
 from gen_symbol import *
 
 
-import numpy as np
-from functools import partial
-
-# Assuming your import statement for gen_symbol functions is here
-
-
 def gen_data_(N_classes, N_input_neurons, items, draw_bin=False):
+    # Check if n_classes and items are compatible
+    if items % N_classes != 0:
+        raise UserWarning(
+            "Invalid items or classes value initiated. must be divisible by each other"
+        )
+
     # Define input shape
     input_dims = int(np.sqrt(N_input_neurons))
 
@@ -44,7 +44,7 @@ def gen_data_(N_classes, N_input_neurons, items, draw_bin=False):
         ),
         lambda: gen_square(
             input_dims=input_dims,
-            square_size=0.6,
+            square_size=0.5,
             square_thickness=20,
             draw_bin=draw_bin,
         ),
@@ -72,18 +72,11 @@ def gen_data_(N_classes, N_input_neurons, items, draw_bin=False):
     return input_space
 
 
-input_space = gen_data_(N_classes=4, N_input_neurons=4096, items=100, draw_bin=False)
+input_space = gen_data_(N_classes=4, N_input_neurons=100, items=20, draw_bin=False)
+name = ["triangle", "circle", "square", "X"]
 
-print(input_space.shape)
-for j in range(input_space.shape[0]):
-    plt.figure(figsize=(8, 8))  # You can adjust the figure size as needed
-    plt.imshow(input_space[j, :, :], cmap="gray", vmin=0, vmax=1)
-    plt.axis("off")  # To not display axis
-    plt.title(f"Item {j + 1}")
+for i in range(20):
+    plt.imshow(input_space[i, :, :], cmap="gray", vmin=0, vmax=1)
+    title = i % 4
+    plt.title(name[title])
     plt.show()
-
-    inp = input("Do you want to continue?")
-    if inp == "":
-        continue
-    else:
-        break

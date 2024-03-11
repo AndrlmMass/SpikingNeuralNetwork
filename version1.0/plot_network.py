@@ -40,6 +40,22 @@ def draw_receptive_field_single(weights, N_input_neurons):
         plt.show()
 
 
+def plot_input_space(input_space):
+    # Create a heatmap to visualize the input_space coverage values
+    plt.figure(figsize=(8, 8))  # Set figure size
+    plt.imshow(input_space, cmap="viridis", origin="lower", interpolation="nearest")
+    plt.colorbar(label="Degree of Coverage")
+    plt.title("Input Space Coverage Visualization")
+    plt.xlabel("X Dimension")
+    plt.ylabel("Y Dimension")
+    # Configure ticks to align with each square if needed
+    tick_marks = np.arange(len(input_space))
+    plt.xticks(tick_marks, [str(i) for i in tick_marks])
+    plt.yticks(tick_marks, [str(i) for i in tick_marks])
+    plt.grid(False)  # Optionally disable the grid for clarity
+    plt.show()
+
+
 # Draw the network and plot the distribution
 def draw_network(combined_array):
     n_rows, n_cols = combined_array.shape[0], combined_array.shape[1]
