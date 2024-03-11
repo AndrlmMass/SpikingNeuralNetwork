@@ -80,29 +80,35 @@ def gen_square(input_dims, square_size, square_thickness, draw_bin=False):
     if square_thickness <= 0:
         raise ValueError("Square thickness must be greater than 0.")
 
-    # Initialize the input space with zeros
-    input_space = np.zeros((input_dims, input_dims))
-
     # Calculate the side length of the square in pixels
     square_side_length = int(square_size * input_dims)
 
     # Calculate padding to ensure equal distance from the square to the input space border
-    padding = (input_dims - square_side_length) // 2
+    padding_top_bottom = (input_dims - square_side_length) // 2
+    padding_left_right = (input_dims - square_side_length) // 2
 
-    # Adjusted vertices based on calculated padding
-    top_left = (padding, padding)
-    top_right = (input_dims - padding, padding)
-    bottom_left = (padding, input_dims - padding)
-    bottom_right = (input_dims - padding, input_dims - padding)
+    # Adjust for any rounding issues to ensure the square is centered
+    if (input_dims - square_side_length) % 2 != 0:
+        padding_left_right += 1
+
+    # Initialize the input space with zeros
+    input_space = np.zeros((input_dims, input_dims))
 
     # High-resolution grid for more accurate edge drawing
-    subgrid_resolution = 100
+    subgrid_resolution = 100  # Number of pixels per square side
     subgrid_size = subgrid_resolution**2
 
     # Initialize the high-resolution binary mask for the hollow square
     high_res_square = np.zeros(
         (input_dims * subgrid_resolution, input_dims * subgrid_resolution)
     )
+
+    # Define square vertices centered within the high-resolution grid
+    top_left = (padding_left_right, padding_top_bottom)
+    top_right = (input_dims - padding_left_right, padding_top_bottom)
+    bottom_left = (padding_left_right, input_dims - padding_top_bottom)
+    bottom_right = (input_dims - padding_left_right, input_dims - padding_top_bottom)
+    vertices = [top_left, top_right, bottom_right, bottom_left]
 
     # Function to draw lines on the high-resolution grid for square edges
     def draw_line_high_res(v0, v1):
@@ -114,12 +120,11 @@ def gen_square(input_dims, square_size, square_thickness, draw_bin=False):
         )
         high_res_square[rr, cc] = 1
 
-    # Define square vertices centered within the high-resolution grid
-    vertices = [top_left, top_right, bottom_right, bottom_left]
-
     # Connect vertices in order to draw the square's edges on the high-resolution grid
     for i in range(len(vertices)):
-        draw_line_high_res(vertices[i], vertices[(i + 1) % len(vertices)])
+        v0 = vertices[i]
+        v1 = vertices[(i + 1) % len(vertices)]
+        draw_line_high_res(v0, v1)
 
     # Estimate the overlap for each square in the grid, focusing on edges
     for i in range(input_dims):
@@ -139,13 +144,6 @@ def gen_square(input_dims, square_size, square_thickness, draw_bin=False):
     # Normalize values in input_space
     max_value = np.max(input_space)
     input_space_normalized = input_space / max_value if max_value > 0 else input_space
-
-    # Conditional plotting based on draw_bin
-    if draw_bin:
-        fig, ax = plt.subplots()
-        ax.imshow(input_space_normalized, cmap="gray", interpolation="nearest")
-        plt.axis("off")
-        plt.show()
 
     return input_space_normalized
 
