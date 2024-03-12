@@ -14,7 +14,6 @@ os.chdir(
 from plot_training import *
 from plot_network import *
 from gen_weights import *
-from gen_data import *
 
 
 # Initialize class variable
@@ -120,26 +119,12 @@ class SNN_STDP:
             self.W_ie,
         )
 
-    def prepping_data(
-        self,
-        base_mean,
-        mean_increment,
-        variance,
-    ):
-        gd = gen_data()
-        # Simulate data
-        self.data, self.classes = gwd.generate_multidimensional_data(
-            self.num_classes,
-            base_mean,
-            mean_increment,
-            variance,
-            int(self.num_items / self.num_classes),
-            self.num_input_neurons,
-            self.num_timesteps,
-            self.dt,
-            self.input_scaler,
+    def prepping_data(self):
+        # Retrieve symbol training and test data
+
+        self.data, self.labels = gen_data_(
+            N_classes=4, N_input_neurons=2048, items=20, draw_bin=False
         )
-        print(self.data.shape, self.classes.shape)
         return self.data, self.classes
 
     def find_prev_spike(self, t, s, l):

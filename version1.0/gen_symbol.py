@@ -35,21 +35,33 @@ def gen_triangle(input_dims, triangle_size, triangle_thickness, draw_bin):
         (input_dims * subgrid_resolution, input_dims * subgrid_resolution)
     )
 
-    # Function to draw a line on the high-resolution grid
-    def draw_line_high_res(v0, v1):
-        rr, cc = line(
-            int(v0[1] * subgrid_resolution),
-            int(v0[0] * subgrid_resolution),
-            int(v1[1] * subgrid_resolution),
-            int(v1[0] * subgrid_resolution),
-        )
-        high_res_triangle[rr, cc] = 1
+    # Adjust the line drawing function to include thickness
+    def draw_line_high_res(v0, v1, thickness):
+        # Calculate the normal vector to the line
+        dx = v1[0] - v0[0]
+        dy = v1[1] - v0[1]
+        normal = np.array([-dy, dx])
+        normal_unit = normal / np.linalg.norm(normal)
 
-    # Draw the triangle's edges on the high-resolution grid using new vertices
+        # Draw lines parallel to the original line to achieve thickness
+        for offset in np.linspace(
+            -thickness / 2, thickness / 2, num=thickness * subgrid_resolution
+        ):
+            offset_vector = offset * normal_unit
+            v0_offset = v0 + offset_vector / subgrid_resolution
+            v1_offset = v1 + offset_vector / subgrid_resolution
+            rr, cc = line(
+                int(v0_offset[1] * subgrid_resolution),
+                int(v0_offset[0] * subgrid_resolution),
+                int(v1_offset[1] * subgrid_resolution),
+                int(v1_offset[0] * subgrid_resolution),
+            )
+            high_res_triangle[rr, cc] = 1
+
+    # Draw the triangle's edges with thickness on the high-resolution grid using new vertices
     vertices = np.array([top_vertex, bottom_left_vertex, bottom_right_vertex])
-    draw_line_high_res(vertices[0], vertices[1])
-    draw_line_high_res(vertices[1], vertices[2])
-    draw_line_high_res(vertices[2], vertices[0])
+    for i in range(3):
+        draw_line_high_res(vertices[i], vertices[(i + 1) % 3], triangle_thickness)
 
     # Estimate the overlap for each square in the grid, focusing on edges
     for i in range(input_dims):
@@ -67,7 +79,7 @@ def gen_triangle(input_dims, triangle_size, triangle_thickness, draw_bin):
             input_space[i, j] = coverage if np.sum(subgrid) > 0 else 0
 
     # Normalize and flip the input space vertically
-    max_value = np.max(input_space)
+    max_value = np.mean(input_space)
     input_space_normalized = input_space / max_value if max_value > 0 else input_space
     input_space_flipped = np.flipud(input_space_normalized)
 
@@ -80,72 +92,30 @@ def gen_square(input_dims, square_size, square_thickness, draw_bin=False):
     if square_thickness <= 0:
         raise ValueError("Square thickness must be greater than 0.")
 
-    # Calculate the side length of the square in pixels
-    square_side_length = int(square_size * input_dims)
-
-    # Calculate padding to ensure equal distance from the square to the input space border
-    padding_top_bottom = (input_dims - square_side_length) // 2
-    padding_left_right = (input_dims - square_side_length) // 2
-
-    # Adjust for any rounding issues to ensure the square is centered
-    if (input_dims - square_side_length) % 2 != 0:
-        padding_left_right += 1
-
-    # Initialize the input space with zeros
+    # Define the input_space
     input_space = np.zeros((input_dims, input_dims))
 
-    # High-resolution grid for more accurate edge drawing
-    subgrid_resolution = 100  # Number of pixels per square side
-    subgrid_size = subgrid_resolution**2
+    # Calculate the size of the square in terms of pixels
+    square_length = int(square_size * input_dims)
 
-    # Initialize the high-resolution binary mask for the hollow square
-    high_res_square = np.zeros(
-        (input_dims * subgrid_resolution, input_dims * subgrid_resolution)
-    )
+    # Define the thickness of the lines
+    thickness = int(square_thickness)  # This example uses a fixed thickness value
 
-    # Define square vertices centered within the high-resolution grid
-    top_left = (padding_left_right, padding_top_bottom)
-    top_right = (input_dims - padding_left_right, padding_top_bottom)
-    bottom_left = (padding_left_right, input_dims - padding_top_bottom)
-    bottom_right = (input_dims - padding_left_right, input_dims - padding_top_bottom)
-    vertices = [top_left, top_right, bottom_right, bottom_left]
+    # Calculate the starting and ending indices of the square
+    start_idx = (input_dims - square_length) // 2
+    end_idx = start_idx + square_length
 
-    # Function to draw lines on the high-resolution grid for square edges
-    def draw_line_high_res(v0, v1):
-        rr, cc = line(
-            int(v0[0] * subgrid_resolution),
-            int(v0[1] * subgrid_resolution),
-            int(v1[0] * subgrid_resolution),
-            int(v1[1] * subgrid_resolution),
-        )
-        high_res_square[rr, cc] = 1
+    # Draw horizontal lines
+    for i in range(thickness):
+        input_space[start_idx + i, start_idx:end_idx] = 1
+        input_space[end_idx - 1 - i, start_idx:end_idx] = 1
 
-    # Connect vertices in order to draw the square's edges on the high-resolution grid
-    for i in range(len(vertices)):
-        v0 = vertices[i]
-        v1 = vertices[(i + 1) % len(vertices)]
-        draw_line_high_res(v0, v1)
+    # Draw vertical lines with
+    for i in range(thickness):
+        input_space[start_idx:end_idx, start_idx + i] = 1
+        input_space[start_idx:end_idx, end_idx - 1 - i] = 1
 
-    # Estimate the overlap for each square in the grid, focusing on edges
-    for i in range(input_dims):
-        for j in range(input_dims):
-            top = i * subgrid_resolution
-            left = j * subgrid_resolution
-            bottom = (i + 1) * subgrid_resolution
-            right = (j + 1) * subgrid_resolution
-
-            # Extract the subgrid for the current square
-            subgrid = high_res_square[top:bottom, left:right]
-
-            # Calculate coverage based on edge presence
-            coverage = np.sum(subgrid) / subgrid_size
-            input_space[i, j] = coverage if np.sum(subgrid) > 0 else 0
-
-    # Normalize values in input_space
-    max_value = np.max(input_space)
-    input_space_normalized = input_space / max_value if max_value > 0 else input_space
-
-    return input_space_normalized
+    return input_space
 
 
 def gen_x_symbol(input_dims, x_size, receptor_size, x_thickness, draw_bin):
@@ -159,26 +129,6 @@ def gen_x_symbol(input_dims, x_size, receptor_size, x_thickness, draw_bin):
     # Adjust plotting range to accommodate the outermost receptive fields
     plot_dims = input_dims + 1
 
-    # Create a plot to display the X symbol and receptive fields
-    fig, ax = plt.subplots()
-    plt.xlim(0, plot_dims)
-    plt.ylim(0, plot_dims)
-
-    # Plot squares representing receptive fields for each neuron
-    for x in range(1, plot_dims):
-        for y in range(1, plot_dims):
-            bottom_left_x = x - receptor_size / 2
-            bottom_left_y = y - receptor_size / 2
-            receptive_field_square = patches.Rectangle(
-                (bottom_left_x, bottom_left_y),
-                receptor_size,
-                receptor_size,
-                linewidth=1,
-                edgecolor="b",
-                facecolor="none",
-            )
-            ax.add_patch(receptive_field_square)
-
     # Adjust X symbol dimensions for correct centering and sizing
     center = input_dims / 2
     half_diagonal = input_dims * x_size / 2
@@ -188,26 +138,6 @@ def gen_x_symbol(input_dims, x_size, receptor_size, x_thickness, draw_bin):
     line1_end = (center + half_diagonal, center - half_diagonal)
     line2_start = (center + half_diagonal, center + half_diagonal)
     line2_end = (center - half_diagonal, center - half_diagonal)
-
-    # Draw the X symbol with specified thickness
-    if draw_bin:
-        ax.plot(
-            [line1_start[0], line1_end[0]],
-            [line1_start[1], line1_end[1]],
-            color="r",
-            linewidth=x_thickness,
-        )
-        ax.plot(
-            [line2_start[0], line2_end[0]],
-            [line2_start[1], line2_end[1]],
-            color="r",
-            linewidth=x_thickness,
-        )
-
-        plt.grid(True, which="both", linestyle="--", linewidth=0.5, color="gray")
-        plt.xticks(np.arange(1, plot_dims))
-        plt.yticks(np.arange(1, plot_dims))
-        plt.show()
 
     # Initialize the input space with zeros
     input_space = np.zeros((input_dims, input_dims))
@@ -221,19 +151,32 @@ def gen_x_symbol(input_dims, x_size, receptor_size, x_thickness, draw_bin):
         (input_dims * subgrid_resolution, input_dims * subgrid_resolution)
     )
 
-    # Function to draw lines on the high-resolution grid for X edges
-    def draw_line_high_res(v0, v1):
-        rr, cc = line(
-            int(v0[1] * subgrid_resolution),
-            int(v0[0] * subgrid_resolution),
-            int(v1[1] * subgrid_resolution),
-            int(v1[0] * subgrid_resolution),
-        )
-        high_res_x[rr, cc] = 1
+    # Function to draw lines on the high-resolution grid for X edges, adjusted for thickness
+    def draw_line_high_res(v0, v1, thickness):
+        # Calculate the line's direction vector
+        dx = v1[0] - v0[0]
+        dy = v1[1] - v0[1]
+        normal = np.array([-dy, dx])
+        normal_unit = normal / np.linalg.norm(normal)
 
-    # Draw the X's edges on the high-resolution grid
-    draw_line_high_res(line1_start, line1_end)
-    draw_line_high_res(line2_start, line2_end)
+        # Draw lines parallel to the original line to create thickness
+        for offset in np.linspace(
+            -thickness / 2, thickness / 2, num=int(thickness * subgrid_resolution)
+        ):
+            offset_vector = offset * normal_unit / subgrid_resolution
+            v0_offset = v0 + offset_vector
+            v1_offset = v1 + offset_vector
+            rr, cc = line(
+                int(v0_offset[1] * subgrid_resolution),
+                int(v0_offset[0] * subgrid_resolution),
+                int(v1_offset[1] * subgrid_resolution),
+                int(v1_offset[0] * subgrid_resolution),
+            )
+            high_res_x[rr, cc] = 1
+
+    # Draw the X's edges with thickness on the high-resolution grid
+    draw_line_high_res(line1_start, line1_end, x_thickness)
+    draw_line_high_res(line2_start, line2_end, x_thickness)
 
     # Estimate the overlap for each square in the grid, focusing on edges
     for i in range(input_dims):
@@ -251,13 +194,13 @@ def gen_x_symbol(input_dims, x_size, receptor_size, x_thickness, draw_bin):
             input_space[i, j] = coverage if np.sum(subgrid) > 0 else 0
 
     # Normalize values in input_space
-    max_value = np.max(input_space)
+    max_value = np.mean(input_space)
     input_space_normalized = input_space / max_value if max_value > 0 else input_space
 
     return input_space_normalized
 
 
-def gen_circle(input_dims, circle_size, receptor_size, circle_thickness, draw_bin):
+def gen_circle(input_dims, circle_size, circle_thickness, draw_bin):
     if not (0 <= circle_size <= 1):
         raise ValueError("Circle size must be between 0 and 1.")
     if circle_thickness <= 0:
@@ -279,13 +222,24 @@ def gen_circle(input_dims, circle_size, receptor_size, circle_thickness, draw_bi
         (input_dims * subgrid_resolution, input_dims * subgrid_resolution)
     )
 
-    # Draw the circle's edge on the high-resolution grid
-    rr, cc = circle_perimeter(
-        center * subgrid_resolution,
-        center * subgrid_resolution,
-        radius * subgrid_resolution,
-    )
-    high_res_circle[rr, cc] = 1
+    def draw_circle_with_thickness(center, radius, thickness):
+        # Calculate the range of radii for the concentric circles
+        min_radius = radius - thickness // 2
+        max_radius = radius + thickness // 2
+
+        for r in range(min_radius, max_radius + 1):
+            rr, cc = circle_perimeter(
+                center * subgrid_resolution,
+                center * subgrid_resolution,
+                r * subgrid_resolution,
+            )
+            # Ensure that the indices are within the bounds of the array
+            rr = rr[(rr >= 0) & (rr < high_res_circle.shape[0])]
+            cc = cc[(cc >= 0) & (cc < high_res_circle.shape[1])]
+            high_res_circle[rr, cc] = 1
+
+    # Draw the circle's edge with specified thickness
+    draw_circle_with_thickness(center, radius, circle_thickness)
 
     # Estimate the overlap for each square in the grid, focusing on edges
     for i in range(input_dims):
@@ -303,7 +257,7 @@ def gen_circle(input_dims, circle_size, receptor_size, circle_thickness, draw_bi
             input_space[i, j] = coverage if np.sum(subgrid) > 0 else 0
 
     # Normalize values in input_space
-    max_value = np.max(input_space)
+    max_value = np.mean(input_space)
     input_space_normalized = input_space / max_value if max_value > 0 else input_space
 
     # Conditional plotting based on draw_bin
