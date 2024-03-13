@@ -3,6 +3,7 @@
 # Import libraries
 import os
 import math
+import pickle
 import numpy as np
 from tqdm import tqdm
 
@@ -119,12 +120,14 @@ class SNN_STDP:
             self.W_ie,
         )
 
-    def prepping_data(self):
-        # Retrieve symbol training and test data
-
-        self.data, self.labels = gen_data_(
-            N_classes=4, N_input_neurons=2048, items=20, draw_bin=False
-        )
+    def load_data(self):
+        # Load data
+        with open("myfile", "rb") as openfile:
+            while True:
+                try:
+                    objects.append(pickle.load(openfile))
+                except EOFError:
+                    break
         return self.data, self.classes
 
     def find_prev_spike(self, t, s, l):

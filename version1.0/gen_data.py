@@ -12,14 +12,12 @@ os.chdir(
 from gen_symbol import *
 
 
-def gen_data_(
+def gen_float_data_(
     N_classes,
     N_input_neurons,
     items,
     draw_bin=False,
-    train_2_test=0.8,
     retur=False,
-    save=False,
 ):
     # Check if n_classes and items are compatible
     if items % N_classes != 0:
@@ -79,11 +77,50 @@ def gen_data_(
         input_space[item] = functions[class_index]()
         labels[item, class_index] = 1
 
+    # Reshape input_dims x input_dims to get time x input_dims**2
+    input_space = np.reshape(input_space, (items, input_dims**2))
+
+    # return if true
+    if retur:
+        return input_space, labels
+
+
+def float_2_pos_spike(
+    data,
+    labels,
+    N_input_neurons,
+    timesteps,
+    dt,
+    input_scaler,
+    train_2_test,
+    save=False,
+    retur=False,
+):
+    # Assert number of items
+    items = data.shape[0]
+
+    # Set time variable
+    time = items * timesteps
+
+    # Correct the dimensions for the 2D-array: time x neurons
+    poisson_input = np.zeros((time, N_input_neurons))
+
+    for i in range(items):  # Iterating over time
+        for j in range(N_input_neurons):  # Iterating over neurons
+            # Calculate the mean spike count for the Poisson distribution
+            lambda_poisson = data[i, j] * dt * input_scaler
+
+            # Generate spikes using Poisson distribution
+            for t in range(timesteps):
+                spike_count = np.random.poisson(lambda_poisson)
+                index = i * timesteps + t
+                poisson_input[index, j] = 1 if spike_count > 0 else 0
+
     # Divide data and labels into training and testing
-    training_data = input_space[: int(items * train_2_test)]
-    testing_data = input_space[int(items * train_2_test) :]
-    labels_train = labels[: int(items * train_2_test)]
-    labels_test = labels[int(items * train_2_test) :]
+    training_data = poisson_input[: int(items * train_2_test) * timesteps]
+    testing_data = poisson_input[int(items * train_2_test) * timesteps :]
+    labels_train = labels[: int(items * train_2_test) * timesteps]
+    labels_test = labels[int(items * train_2_test) * timesteps :]
 
     # save data if true
     if save:
@@ -103,9 +140,22 @@ def gen_data_(
             pickle.dump(labels_test, file)
         print("labels test are saved in data folder")
 
-    # return if true
     if retur:
         return training_data, testing_data, labels_train, labels_test
 
 
-gen_data_(N_classes=4, N_input_neurons=2025, items=20, draw_bin=False, save=True)
+data, labels = gen_float_data_(
+    N_classes=4, N_input_neurons=2025, items=20, draw_bin=False, retur=True
+)
+
+float_2_pos_spike(
+    data=data,
+    labels=labels,
+    N_input_neurons=2025,
+    timesteps=100,
+    dt=0.001,
+    input_scaler=1,
+    train_2_test=0.8,
+    save=True,
+    retur=False,
+)
