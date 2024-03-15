@@ -6,8 +6,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 os.chdir(
-    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
+    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
 )
+# os.chdir(
+#    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
+# )
 
 from gen_symbol import *
 
@@ -51,8 +54,8 @@ def gen_float_data_(
         ),
         lambda: gen_square(
             input_dims=input_dims,
-            square_size=0.6,
-            square_thickness=5,
+            square_size=0.9,
+            square_thickness=10,
             draw_bin=draw_bin,
         ),
         lambda: gen_x_symbol(
@@ -105,7 +108,7 @@ def float_2_pos_spike(
     # Correct the dimensions for the 2D-array: time x neurons
     poisson_input = np.zeros((time, N_input_neurons))
 
-    for i in range(items):  # Iterating over time
+    for i in range(items):  # Iterating over items
         for j in range(N_input_neurons):  # Iterating over neurons
             # Calculate the mean spike count for the Poisson distribution
             lambda_poisson = data[i, j] * dt * input_scaler
@@ -143,19 +146,70 @@ def float_2_pos_spike(
     if retur:
         return training_data, testing_data, labels_train, labels_test
 
+# Plot input_data structure to ensure realistic creation
+def input_space_plotted_single(data):
+    # The function receives a 2D array of values
+
+    # Convert 1D array to 2D
+    data = np.reshape(data, (45, 45))
+    
+    # Create a plt subplot
+    fig, ax = plt.subplots()
+
+    # Create plot
+    ax.imshow(data, cmap="Greys", interpolation="nearest")
+
+    plt.grid(visible=True, which="both")
+    
+    plt.show()
+
+# define function to create a raster plot of the input data
+def raster_plot(data, labels):
+    labels_name = ["tri", "O", "sq", "X"]
+    indices = np.argmax(labels, axis=1)
+
+    # Create raster plot with dots
+    plt.figure(figsize=(10, 6))
+    for neuron_index in range(2025):
+        spike_times = np.where(data[:, neuron_index] == 1)[0]
+        plt.scatter(
+            spike_times, np.ones_like(spike_times) * neuron_index, color="black", s=10
+        )  
+    t = 0
+
+    for item_boundary in range(0, data.shape[0], 100 + 1):
+        # Get label name
+        plt.axvline(x=item_boundary, color="red", linestyle="--")
+        plt.text(
+            x=item_boundary+25,
+            y=1999,
+            s=labels_name[indices[t]],
+            size=20,
+        )
+        t += 1
+    ax = plt.gca()
+    ax.set_xlim([0,1600])
+    plt.xlabel("Time (ms)")
+    plt.ylabel("Neuron Index")
+    plt.show()
+
 
 data, labels = gen_float_data_(
     N_classes=4, N_input_neurons=2025, items=20, draw_bin=False, retur=True
 )
 
-float_2_pos_spike(
+training_data, testing_data, labels_train, labels_test = float_2_pos_spike(
     data=data,
     labels=labels,
     N_input_neurons=2025,
     timesteps=100,
     dt=0.001,
-    input_scaler=1,
+    input_scaler=0.5,
     train_2_test=0.8,
     save=True,
-    retur=False,
+    retur=True,
 )
+
+raster_plot(training_data, labels_train)
+
+input_space_plotted_single(data[2])
