@@ -37,8 +37,8 @@ def gen_float_data_(
         raise ValueError("N_input_neurons must be a perfect square")
 
     # Assert input space based on input_dims variable
-    input_space = np.zeros((int(items * 2), input_dims, input_dims))
-    labels = np.zeros((int(items * 2), N_classes + 1))
+    input_space = np.zeros((items, input_dims, input_dims))
+    labels = np.zeros((items, N_classes + 1))
 
     # List of lambda functions wrapping the original functions with necessary arguments
     functions = [
@@ -84,19 +84,24 @@ def gen_float_data_(
         )
 
     # Loop over items to generate symbols
-    for item in tqdm(range(items), ncols=100):
-        if item % 2 == 0:
-            input_space[item] = functions[4]()
-            labels[item, 4] = 1
-        else:
-            class_index = item % N_classes - 1
+    t = 0
+    for item in tqdm(range(0, items, 2), ncols=100):
 
-            # Execute the lambda function for the current class_index and assign its output
-            input_space[item] = functions[class_index]()
-            labels[item, class_index] = 1
+        # Execute the lambda function for the current class_index and assign its output
+        input_space[item] = functions[t]()
+        labels[item, t] = 1
+
+        # Assign blank part after symbol-input
+        input_space[item] = functions[4]()
+        labels[item, 4] = 1
+
+        if t == N_classes:
+            t = 0
+        else:
+            t += 1
 
     # Reshape input_dims x input_dims to get time x input_dims**2
-    input_space = np.reshape(input_space, (int(items * 2), input_dims**2))
+    input_space = np.reshape(input_space, (int(items), input_dims**2))
 
     # return if true
     if retur:
@@ -106,7 +111,6 @@ def gen_float_data_(
 def float_2_pos_spike(
     data: np.ndarray,
     labels: np.ndarray,
-    N_input_neurons: int,
     timesteps: int,
     dt: float,
     input_scaler: int | float,
@@ -115,8 +119,13 @@ def float_2_pos_spike(
     retur: bool,
     rand_lvl: float,
 ):
+    # Data has shape items x neurons
+
     # Assert number of items
     items = data.shape[0]
+    print(items)
+    N_input_neurons = data.shape[1]
+    print(N_input_neurons)
 
     # Set time variable
     time = items * timesteps
@@ -146,19 +155,19 @@ def float_2_pos_spike(
         print(
             f"Saving training and testing data with labels for random level {rand_lvl}"
         )
-        with open(f"data/training_data_{rand_lvl}.pkl", "wb") as file:
+        with open(f"data/training_data/training_data_{rand_lvl}.pkl", "wb") as file:
             pickle.dump(training_data, file)
         print("training data is saved in data folder")
 
-        with open(f"data/testing_data_{rand_lvl}.pkl", "wb") as file:
+        with open(f"data/testing_data/testing_data_{rand_lvl}.pkl", "wb") as file:
             pickle.dump(testing_data, file)
         print("testing data is saved in data folder")
 
-        with open(f"data/labels_train_{rand_lvl}.pkl", "wb") as file:
+        with open(f"data/labels_data/labels_train_{rand_lvl}.pkl", "wb") as file:
             pickle.dump(labels_train, file)
         print("labels train are saved in data folder")
 
-        with open(f"data/labels_test_{rand_lvl}.pkl", "wb") as file:
+        with open(f"data/labels_data/labels_test_{rand_lvl}.pkl", "wb") as file:
             pickle.dump(labels_test, file)
         print("labels test are saved in data folder")
 
@@ -203,9 +212,9 @@ def raster_plot(data, labels):
         plt.axvline(x=item_boundary, color="red", linestyle="--")
         plt.text(
             x=item_boundary + 25,
-            y=1999,
+            y=2200,
             s=labels_name[indices[t]],
-            size=18,
+            size=12,
         )
         t += 1
 
@@ -223,7 +232,7 @@ for rand_lvl in random_lvls:
     data, labels = gen_float_data_(
         N_classes=4,
         N_input_neurons=2025,
-        items=20,
+        items=40,
         noise_rand_lvl=rand_lvl,
         signal_rand=True,
         sign_rand_lvl=0.9,
@@ -233,7 +242,6 @@ for rand_lvl in random_lvls:
     training_data, testing_data, labels_train, labels_test = float_2_pos_spike(
         data=data,
         labels=labels,
-        N_input_neurons=2025,
         timesteps=100,
         dt=0.001,
         input_scaler=2,
@@ -242,7 +250,8 @@ for rand_lvl in random_lvls:
         retur=True,
         rand_lvl=rand_lvl,
     )
-
+    print(data.shape)
+    print(training_data.shape, testing_data.shape)
     raster_plot(training_data, labels_train)
 
     input_space_plotted_single(data[0])

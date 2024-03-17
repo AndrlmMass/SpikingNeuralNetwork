@@ -319,7 +319,7 @@ def gen_blank(input_dims: int):
 
     # Create uniform random values for uppen bound given by noise_rand_lvl
     input_space = np.reshape(
-        np.random.uniform(0, 0.25, input_dims * input_dims), (input_dims, input_dims)
+        np.random.uniform(0, 0.05, input_dims * input_dims), (input_dims, input_dims)
     )
 
     return input_space
