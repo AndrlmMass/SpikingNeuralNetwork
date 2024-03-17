@@ -16,11 +16,13 @@ from gen_symbol import *
 
 
 def gen_float_data_(
-    N_classes,
-    N_input_neurons,
-    items,
-    draw_bin=False,
-    retur=False,
+    N_classes: int,
+    N_input_neurons: int,
+    items: int,
+    noise_rand_lvl: float,
+    signal_rand: bool,
+    sign_rand_lvl: float,
+    retur: bool,
 ):
     # Check if n_classes and items are compatible
     if items % N_classes != 0:
@@ -35,8 +37,8 @@ def gen_float_data_(
         raise ValueError("N_input_neurons must be a perfect square")
 
     # Assert input space based on input_dims variable
-    input_space = np.zeros((items, input_dims, input_dims))
-    labels = np.zeros((items, N_classes))
+    input_space = np.zeros((int(items * 2), input_dims, input_dims))
+    labels = np.zeros((int(items * 2), N_classes + 1))
 
     # List of lambda functions wrapping the original functions with necessary arguments
     functions = [
@@ -44,27 +46,35 @@ def gen_float_data_(
             input_dims=input_dims,
             triangle_size=0.7,
             triangle_thickness=230,
-            draw_bin=draw_bin,
+            noise_rand_lvl=noise_rand_lvl,
+            signal_rand=signal_rand,
+            sign_rand_lvl=sign_rand_lvl,
         ),
         lambda: gen_circle(
             input_dims=input_dims,
             circle_size=0.6,
             circle_thickness=3,
-            draw_bin=draw_bin,
+            noise_rand_lvl=noise_rand_lvl,
+            signal_rand=signal_rand,
+            sign_rand_lvl=sign_rand_lvl,
         ),
         lambda: gen_square(
             input_dims=input_dims,
             square_size=0.9,
             square_thickness=10,
-            draw_bin=draw_bin,
+            noise_rand_lvl=noise_rand_lvl,
+            signal_rand=signal_rand,
+            sign_rand_lvl=sign_rand_lvl,
         ),
         lambda: gen_x_symbol(
             input_dims=input_dims,
             x_size=0.6,
-            receptor_size=1,
             x_thickness=200,
-            draw_bin=draw_bin,
+            noise_rand_lvl=noise_rand_lvl,
+            signal_rand=signal_rand,
+            sign_rand_lvl=sign_rand_lvl,
         ),
+        lambda: gen_blank(input_dims=input_dims),
     ]
 
     # Ensure we have enough functions for the requested classes
@@ -75,13 +85,18 @@ def gen_float_data_(
 
     # Loop over items to generate symbols
     for item in tqdm(range(items), ncols=100):
-        class_index = item % N_classes
-        # Execute the lambda function for the current class_index and assign its output
-        input_space[item] = functions[class_index]()
-        labels[item, class_index] = 1
+        if item % 2 == 0:
+            input_space[item] = functions[4]()
+            labels[item, 4] = 1
+        else:
+            class_index = item % N_classes - 1
+
+            # Execute the lambda function for the current class_index and assign its output
+            input_space[item] = functions[class_index]()
+            labels[item, class_index] = 1
 
     # Reshape input_dims x input_dims to get time x input_dims**2
-    input_space = np.reshape(input_space, (items, input_dims**2))
+    input_space = np.reshape(input_space, (int(items * 2), input_dims**2))
 
     # return if true
     if retur:
@@ -89,15 +104,16 @@ def gen_float_data_(
 
 
 def float_2_pos_spike(
-    data,
-    labels,
-    N_input_neurons,
-    timesteps,
-    dt,
-    input_scaler,
-    train_2_test,
-    save=False,
-    retur=False,
+    data: np.ndarray,
+    labels: np.ndarray,
+    N_input_neurons: int,
+    timesteps: int,
+    dt: float,
+    input_scaler: int | float,
+    train_2_test: float,
+    save: bool,
+    retur: bool,
+    rand_lvl: float,
 ):
     # Assert number of items
     items = data.shape[0]
@@ -127,24 +143,28 @@ def float_2_pos_spike(
 
     # save data if true
     if save:
-        with open("data/training_data.pkl", "wb") as file:
+        print(
+            f"Saving training and testing data with labels for random level {rand_lvl}"
+        )
+        with open(f"data/training_data_{rand_lvl}.pkl", "wb") as file:
             pickle.dump(training_data, file)
         print("training data is saved in data folder")
 
-        with open("data/testing_data.pkl", "wb") as file:
+        with open(f"data/testing_data_{rand_lvl}.pkl", "wb") as file:
             pickle.dump(testing_data, file)
         print("testing data is saved in data folder")
 
-        with open("data/labels_train.pkl", "wb") as file:
+        with open(f"data/labels_train_{rand_lvl}.pkl", "wb") as file:
             pickle.dump(labels_train, file)
         print("labels train are saved in data folder")
 
-        with open("data/labels_test.pkl", "wb") as file:
+        with open(f"data/labels_test_{rand_lvl}.pkl", "wb") as file:
             pickle.dump(labels_test, file)
         print("labels test are saved in data folder")
 
     if retur:
         return training_data, testing_data, labels_train, labels_test
+
 
 # Plot input_data structure to ensure realistic creation
 def input_space_plotted_single(data):
@@ -152,7 +172,7 @@ def input_space_plotted_single(data):
 
     # Convert 1D array to 2D
     data = np.reshape(data, (45, 45))
-    
+
     # Create a plt subplot
     fig, ax = plt.subplots()
 
@@ -160,56 +180,69 @@ def input_space_plotted_single(data):
     ax.imshow(data, cmap="Greys", interpolation="nearest")
 
     plt.grid(visible=True, which="both")
-    
+
     plt.show()
+
 
 # define function to create a raster plot of the input data
 def raster_plot(data, labels):
-    labels_name = ["tri", "O", "sq", "X"]
+    labels_name = ["tri", "O", "sq", "X", "ISI"]
     indices = np.argmax(labels, axis=1)
 
     # Create raster plot with dots
     plt.figure(figsize=(10, 6))
-    for neuron_index in range(2025):
+    for neuron_index in range(data.shape[1]):
         spike_times = np.where(data[:, neuron_index] == 1)[0]
         plt.scatter(
             spike_times, np.ones_like(spike_times) * neuron_index, color="black", s=10
-        )  
+        )
     t = 0
 
     for item_boundary in range(0, data.shape[0], 100 + 1):
         # Get label name
         plt.axvline(x=item_boundary, color="red", linestyle="--")
         plt.text(
-            x=item_boundary+25,
+            x=item_boundary + 25,
             y=1999,
             s=labels_name[indices[t]],
-            size=20,
+            size=18,
         )
         t += 1
+
     ax = plt.gca()
-    ax.set_xlim([0,1600])
+    # ax.set_xlim([0, 1600])
     plt.xlabel("Time (ms)")
     plt.ylabel("Neuron Index")
     plt.show()
 
 
-data, labels = gen_float_data_(
-    N_classes=4, N_input_neurons=2025, items=20, draw_bin=False, retur=True
-)
+# Define randomness levels for the training data in a list
+random_lvls = [0, 0.3, 0.5, 0.7]
 
-training_data, testing_data, labels_train, labels_test = float_2_pos_spike(
-    data=data,
-    labels=labels,
-    N_input_neurons=2025,
-    timesteps=100,
-    dt=0.001,
-    input_scaler=0.5,
-    train_2_test=0.8,
-    save=True,
-    retur=True,
-)
+for rand_lvl in random_lvls:
+    data, labels = gen_float_data_(
+        N_classes=4,
+        N_input_neurons=2025,
+        items=20,
+        noise_rand_lvl=rand_lvl,
+        signal_rand=True,
+        sign_rand_lvl=0.9,
+        retur=True,
+    )
 
-raster_plot(training_data, labels_train)
+    training_data, testing_data, labels_train, labels_test = float_2_pos_spike(
+        data=data,
+        labels=labels,
+        N_input_neurons=2025,
+        timesteps=100,
+        dt=0.001,
+        input_scaler=2,
+        train_2_test=0.8,
+        save=False,
+        retur=True,
+        rand_lvl=rand_lvl,
+    )
 
-input_space_plotted_single(data[2])
+    raster_plot(training_data, labels_train)
+
+    input_space_plotted_single(data[0])

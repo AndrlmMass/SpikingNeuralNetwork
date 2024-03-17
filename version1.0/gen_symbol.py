@@ -1,15 +1,16 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 from skimage.draw import line
 from skimage.draw import circle_perimeter
 
 
-def gen_triangle(input_dims, triangle_size, triangle_thickness, draw_bin):
-    if not (0 <= triangle_size <= 1):
-        raise ValueError("Triangle size must be between 0 and 1.")
-    if triangle_thickness <= 0:
-        raise ValueError("Triangle thickness must be greater than 0.")
+def gen_triangle(
+    input_dims: int,
+    triangle_size: float,
+    triangle_thickness: int,
+    noise_rand_lvl: float,
+    signal_rand: bool,
+    sign_rand_lvl: float,
+):
 
     # Initialize the input space with zeros
     input_space = np.zeros((input_dims, input_dims))
@@ -83,14 +84,26 @@ def gen_triangle(input_dims, triangle_size, triangle_thickness, draw_bin):
     input_space_normalized = input_space / max_value if max_value > 0 else input_space
     input_space_flipped = np.flipud(input_space_normalized)
 
+    # Add noise to input_space_flipped based on rand_lvl variable
+    for j in range(input_space_flipped.shape[0]):
+        for l in range(input_space_flipped.shape[1]):
+            val = input_space_flipped[j, l]
+            if val < 0.5:
+                input_space_flipped[j, l] = np.random.uniform(0, noise_rand_lvl)
+            elif signal_rand:
+                input_space_flipped[j, l] = np.random.uniform(sign_rand_lvl, 1)
+
     return input_space_flipped
 
 
-def gen_square(input_dims, square_size, square_thickness, draw_bin=False):
-    if not (0 <= square_size <= 1):
-        raise ValueError("Square size must be between 0 and 1.")
-    if square_thickness <= 0:
-        raise ValueError("Square thickness must be greater than 0.")
+def gen_square(
+    input_dims: int,
+    square_size: float,
+    square_thickness: int,
+    noise_rand_lvl: float,
+    signal_rand: bool,
+    sign_rand_lvl: float,
+):
 
     # Define the input_space
     input_space = np.zeros((input_dims, input_dims))
@@ -115,19 +128,33 @@ def gen_square(input_dims, square_size, square_thickness, draw_bin=False):
         input_space[start_idx:end_idx, start_idx + i] = 1
         input_space[start_idx:end_idx, end_idx - 1 - i] = 1
 
+    # Add noise to input_space_flipped based on rand_lvl variable
+    for j in range(input_space.shape[0]):
+        for l in range(input_space.shape[1]):
+            val = input_space[j, l]
+            if val < sign_rand_lvl:
+                input_space[j, l] = np.random.uniform(0, noise_rand_lvl)
+            elif signal_rand:
+                input_space[j, l] = np.random.uniform(sign_rand_lvl, 1)
+
     return input_space
 
 
-def gen_x_symbol(input_dims, x_size, receptor_size, x_thickness, draw_bin):
+def gen_x_symbol(
+    input_dims: int,
+    x_size: float,
+    x_thickness: float,
+    noise_rand_lvl: float,
+    signal_rand: bool,
+    sign_rand_lvl: float,
+):
+
     # if input_dims % 2 == 0:
     #    raise UserWarning("Invalid input dimensions. Must be an odd value.")
     if not (0 <= x_size <= 1):
         raise ValueError("X size must be between 0 and 1.")
     if x_thickness <= 0:
         raise ValueError("X thickness must be greater than 0.")
-
-    # Adjust plotting range to accommodate the outermost receptive fields
-    plot_dims = input_dims + 1
 
     # Adjust X symbol dimensions for correct centering and sizing
     center = input_dims / 2
@@ -197,10 +224,26 @@ def gen_x_symbol(input_dims, x_size, receptor_size, x_thickness, draw_bin):
     max_value = np.mean(input_space)
     input_space_normalized = input_space / max_value if max_value > 0 else input_space
 
+    # Add noise to input_space_flipped based on rand_lvl variable
+    for j in range(input_space_normalized.shape[0]):
+        for l in range(input_space_normalized.shape[1]):
+            val = input_space_normalized[j, l]
+            if val < sign_rand_lvl:
+                input_space_normalized[j, l] = np.random.uniform(0, noise_rand_lvl)
+            elif signal_rand:
+                input_space_normalized[j, l] = np.random.uniform(sign_rand_lvl, 1)
+
     return input_space_normalized
 
 
-def gen_circle(input_dims, circle_size, circle_thickness, draw_bin):
+def gen_circle(
+    input_dims: int,
+    circle_size: float,
+    circle_thickness: int,
+    noise_rand_lvl: float,
+    signal_rand: bool,
+    sign_rand_lvl: float,
+):
     if not (0 <= circle_size <= 1):
         raise ValueError("Circle size must be between 0 and 1.")
     if circle_thickness <= 0:
@@ -260,11 +303,23 @@ def gen_circle(input_dims, circle_size, circle_thickness, draw_bin):
     max_value = np.mean(input_space)
     input_space_normalized = input_space / max_value if max_value > 0 else input_space
 
-    # Conditional plotting based on draw_bin
-    if draw_bin:
-        fig, ax = plt.subplots()
-        ax.imshow(input_space_normalized, cmap="gray", interpolation="nearest")
-        plt.axis("off")
-        plt.show()
+    # Add noise to input_space_flipped based on rand_lvl variable
+    for j in range(input_space_normalized.shape[0]):
+        for l in range(input_space_normalized.shape[1]):
+            val = input_space_normalized[j, l]
+            if val < sign_rand_lvl:
+                input_space_normalized[j, l] = np.random.uniform(0, noise_rand_lvl)
+            elif signal_rand:
+                input_space_normalized[j, l] = np.random.uniform(sign_rand_lvl, 1)
 
     return input_space_normalized
+
+
+def gen_blank(input_dims: int):
+
+    # Create uniform random values for uppen bound given by noise_rand_lvl
+    input_space = np.reshape(
+        np.random.uniform(0, 0.25, input_dims * input_dims), (input_dims, input_dims)
+    )
+
+    return input_space
