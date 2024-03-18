@@ -2,15 +2,14 @@
 
 # Import libraries
 import os
-import math
 import pickle
 import numpy as np
 from tqdm import tqdm
 
-os.chdir("C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork")
-#os.chdir(
-#    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork"
-#)
+# os.chdir("C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork")
+os.chdir(
+    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork"
+)
 
 from plot_training import *
 from plot_network import *
@@ -72,8 +71,8 @@ class SNN_STDP:
         self.input_scaler = input_scaler
         self.num_epochs = num_epochs
         self.max_spike_diff = int(self.num_timesteps * 0.1)
-        self.pre_synaptic_trace = np.zeros((self.num_neurons, self.num_items))
-        self.post_synaptic_trace = np.zeros((self.num_neurons, self.num_items))
+        self.pre_synaptic_trace = np.zeros((self.num_neurons, self.time))
+        self.post_synaptic_trace = np.zeros((self.num_neurons, self.time))
 
     def initialize_network(
         self, N_input_neurons, N_excit_neurons, N_inhib_neurons, radius, prob
@@ -109,7 +108,7 @@ class SNN_STDP:
         # Generate membrane potential and spikes array
         self.MemPot = np.zeros((self.time, self.num_neurons))
         self.MemPot[0, :, :] = self.V_rest
-        self.t_since_spike = np.ones((self.time, self.num_neurons))
+        self.spikes = np.ones((self.time, self.num_neurons))
 
         return (
             self.MemPot,
@@ -120,118 +119,78 @@ class SNN_STDP:
             self.W_ie,
         )
 
-    def load_data(self):
-        # Load data
-        with open("myfile", "rb") as openfile:
-            while True:
-                try:
-                    objects.append(pickle.load(openfile))
-                except EOFError:
-                    break
-        return self.data, self.classes
+    def load_data(self, rand_lvl):
+        with open(
+            f"/data/training_data/training_data_{rand_lvl}.pkl", "rb"
+        ) as openfile:
+            self.training_data = pickle.load(openfile)
 
-    def find_prev_spike(self, t, s, l):
-        for j in range(t, 0, -1):
-            if self.t_since_spike[j, s, l] == 0:
-                return j
-        return 0
+        with open(f"/data/testing_data/testing_data_{rand_lvl}.pkl", "rb") as openfile:
+            self.testing_data = pickle.load(openfile)
 
-    def neuronal_activity(self):
-        spike_counts = np.zeros((self.num_neurons, self.num_items))
-        # Add input data before training
-        for j in range(len(self.input_neuron_idx)):
-            for t in range(1, self.num_timesteps):
-                for i in range(self.num_items):
-                    # Check if there is a spike
-                    if self.data[t, j, i] == 1:
-                        self.t_since_spike[t, self.input_neuron_idx[j], i] = 0
-                    else:
-                        self.t_since_spike[t, self.input_neuron_idx[j], i] = (
-                            self.t_since_spike[t - 1, self.input_neuron_idx[j], i] + 1
-                        )
+        with open(f"/data/labels_train/labels_train_{rand_lvl}.pkl", "rb") as openfile:
+            self.labels_train = pickle.load(openfile)
 
-        count = 0
-        avg_IN = []
-        for l in tqdm(range(self.num_items), desc="Training network"):
-            In = []
-            for t in range(1, self.num_timesteps):
-                # Decay traces
-                self.pre_synaptic_trace *= np.exp(-self.dt / self.tau_m)
-                self.post_synaptic_trace *= np.exp(-self.dt / self.tau_m)
-                for n in range(self.num_neurons):
+        with open(f"/data/labels_test/labels_test_{rand_lvl}.pkl", "rb") as openfile:
+            self.labels_test = pickle.load(openfile)
 
-                    # Check if neuron is an input neuron
-                    if n not in self.input_neuron_idx:
-                        spikes = (self.t_since_spike[t - 1, :, l] == 0).astype(int)
-                        I_in = np.dot(self.weights[n, :, l], spikes.T)
-                        In.append(I_in)
-
-                        # Update equation
-                        self.MemPot[t, n, l] = (
-                            self.MemPot[t - 1, n, l]
-                            + (-self.MemPot[t - 1, n, l] + self.V_rest + self.R * I_in)
-                            / self.tau_m
-                        )
-
-                        # Update spikes
-                        if self.MemPot[t, n, l] > self.V_th:
-                            self.pre_synaptic_trace[n, l] += 1
-                            self.post_synaptic_trace[n, l] += 1
-                            self.t_since_spike[t, n, l] = 0
-                            self.MemPot[t, n, l] = self.V_reset
-                            spike_counts[n, l] += 1
-                        else:
-                            self.t_since_spike[t, n, l] = (
-                                self.t_since_spike[t - 1, n, l] + 1
-                            )
-                    # Perform trace-based STDP for hidden neurons
-                    for s in range(self.num_neurons):
-                        if s != n and self.weights[n, s, l] != 0:
-
-                            # Use the current trace values for STDP calculation
-                            pre_trace = self.pre_synaptic_trace[s, l]
-                            post_trace = self.post_synaptic_trace[n, l]
-
-                            # Calculate weight change based on traces
-                            if self.weights[n, s, l] > 0:  # Excitatory synapse
-                                weight_change = self.A_plus * pre_trace * post_trace
-                                self.weights[n, s, l] += round(weight_change, 4)
-
-                            elif self.weights[n, s, l] < 0:  # Inhibitory synapse
-                                weight_change = self.A_minus * pre_trace * post_trace
-
-                                self.weights[n, s, l] += round(weight_change, 4)
-
-                        # Enforce minimum and maximum synaptic weight
-                        self.weights[n, s, l] = np.clip(
-                            self.weights[n, s, l],
-                            self.min_weight,
-                            self.max_weight,
-                        )
-
-                        # Add weight normalization
-                        norm = np.dot(self.weights[n, :, l].T, self.weights[n, :, l])
-                        if norm != 0:
-                            self.weights[n, :, l] = np.round(
-                                self.weights[n, :, l] / math.sqrt(norm), 4
-                            )
-
-            # Update self.MemPot to include the membrane potential from the previous step
-            # as the beginning of the next step.
-            if l < self.num_items - 1:
-                self.t_since_spike[0, :, l + 1] = self.t_since_spike[t, :, l]
-                self.MemPot[0, :, l + 1] = self.MemPot[t, :, l]
-                self.weights[:, :, l + 1] = self.weights[:, :, l]
-
-            avg_IN.append(np.average(In))
-
-        # Convert t_since_spike to spike_array for visualization purposes
-        self.spike_array = np.where(self.t_since_spike == 0, 1, 0)
-
-        # Summarize the training
-        print(
-            f"This training had {count} excitatory and inhibitory changes in weights. On average, each item had the following I_in values: {avg_IN}"
+        return (
+            self.training_data,
+            self.testing_data,
+            self.labels_train,
+            self.labels_test,
         )
+
+    def find_prev_spike(self, t, s, l):  # Not sure if this function is still valid
+        
+
+    def train_data(self):
+        self.spikes = np.zeros((self.time, self.num_neurons))
+
+        # Add input data before training for input neurons
+        self.spikes[:, : self.N_input_neurons] = self.training_data
+
+        # Loop through time and update membrane potential, spikes and weights
+        for t in tqdm(range(1, self.time), desc="Training network"):
+
+            # Decay traces
+            self.pre_synaptic_trace *= np.exp(-self.dt / self.tau_m)
+            self.post_synaptic_trace *= np.exp(-self.dt / self.tau_m)
+
+            # Update SE
+            for n in range(self.N_excit_neurons):
+
+                # Update incoming spikes as I_in
+                I_in = np.dot(self.W_se[:, n], self.spikes[t, : self.N_input_neurons])
+
+                # Update membrane potential based on I_in
+                self.MemPot[t, n] = (
+                    self.MemPot[t - 1, n]
+                    + (-self.MemPot[t - 1, n] + self.V_rest + self.R * I_in)
+                    / self.tau_m
+                )
+                # Update spikes
+                if self.MemPot[t, n] > self.V_th:
+                    self.spikes[t, n] = 1
+                    self.pre_synaptic_trace[n, t] += 1
+                    self.post_synaptic_trace[n, t] += 1
+                    self.MemPot[t, n] = self.V_reset
+                else:
+                    self.spikes[t, n] = 0
+
+                # Get all pre-synaptic indices
+                pre_syn_indices = np.nonzero(self.W_se[:,n])
+                
+                # Loop through each synapse to update strength
+                for s in range(pre_syn_indices):
+                    
+
+    
+            # Update EE
+
+            # Update EI
+
+            # Update
 
     def visualize_network(self, drw_edg=True, drw_netw=True):
         if drw_netw:
