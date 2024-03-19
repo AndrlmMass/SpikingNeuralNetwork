@@ -21,29 +21,29 @@ class SNN_STDP:
     # Initialize neuron parameters
     def __init__(
         self,
-        V_th=0.7,
-        V_reset=-0.2,
-        C=10,
-        R=1,
-        A_minus=-0.01,
-        tau_m=0.002,
-        num_items=100,
-        num_input_neurons=4,
-        tau_stdp=0.1,
-        A_plus=1,
-        dt=0.001,
-        T=1,
-        V_rest=0,
-        num_neurons=20,
-        excit_inhib_ratio=0.8,
-        alpha=1,
-        max_weight=1,
-        min_weight=-1,
-        input_scaler=0.25,
-        num_epochs=10,
-        init_cals=700,
-        num_classes=2,
-        target_value=3,
+        V_th: float,
+        V_reset: float,
+        C: int,
+        R: int,
+        tau_m: float,
+        num_items: float,
+        num_input_neurons: float,
+        tau_stdp: float,
+        dt: float,
+        T: int,
+        V_rest: int,
+        num_neurons: int,
+        excit_inhib_ratio: float,
+        alpha: float | int,
+        max_weight: float | int,
+        min_weight: float | int,
+        input_scaler: float | int,
+        num_epochs: int,
+        init_cals: int,
+        target_weight: float,
+        A: float | int,
+        B: float | int,
+        beta: float | int,
     ):
         self.V_th = V_th
         self.V_reset = V_reset
@@ -53,12 +53,13 @@ class SNN_STDP:
         self.tau_stdp = tau_stdp
         self.dt = dt
         self.T = T
-        self.target_value = target_value
+        self.A = A
+        self.B = B
+        self.beta = beta
+        self.target_weight = target_weight
         self.num_timesteps = int(T / dt)
         self.time = self.num_timesteps * self.num_items
         self.V_rest = V_rest
-        self.A_minus = A_minus
-        self.A_plus = A_plus
         self.leakage_rate = 1 / self.R
         self.num_items = num_items
         self.num_neurons = num_neurons
@@ -141,9 +142,6 @@ class SNN_STDP:
             self.labels_test,
         )
 
-    def find_prev_spike(self, t, s, l):  # Not sure if this function is still valid
-        
-
     def train_data(self):
         self.spikes = np.zeros((self.time, self.num_neurons))
 
@@ -161,7 +159,10 @@ class SNN_STDP:
             for n in range(self.N_excit_neurons):
 
                 # Update incoming spikes as I_in
-                I_in = np.dot(self.W_se[:, n], self.spikes[t, : self.N_input_neurons])
+                I_in = np.dot(
+                    self.W_se[:, n],
+                    self.spikes[t, : self.N_input_neurons + self.N_excit_neurons + 1],
+                )
 
                 # Update membrane potential based on I_in
                 self.MemPot[t, n] = (
@@ -179,13 +180,75 @@ class SNN_STDP:
                     self.spikes[t, n] = 0
 
                 # Get all pre-synaptic indices
-                pre_syn_indices = np.nonzero(self.W_se[:,n])
-                
+                pre_syn_indices = np.nonzero(self.W_se[:, n])
+
                 # Loop through each synapse to update strength
                 for s in range(pre_syn_indices):
-                    
 
-    
+                    # Use the current trace values for STDP calculation
+                    pre_trace = self.pre_synaptic_trace[s, t]
+                    post_trace = self.post_synaptic_trace[n, t]
+
+                    # Get learning components
+                    hebb = (
+                        self.A * pre_trace * post_trace**2
+                        - self.B * pre_trace * post_trace
+                    )
+                    hetero_syn = (
+                        -self.beta * (self.W_se[s, n] - self.ideal_w) * post_trace**4
+                    )
+                    dopamine_reg = self.delta * pre_trace
+
+                    # Assemble components to update weight
+                    self.W_se[s, n] = hebb + hetero_syn + dopamine_reg
+
+            # Update EE
+            for n in range(self.N_excit_neurons):
+
+                # Update incoming spikes as I_in
+                I_in = np.dot(
+                    self.W_ee[:, n],
+                    self.spikes[t, self.N_input_neurons + 1 : self.N_excit_neurons],
+                )
+
+                # Update membrane potential based on I_in
+                self.MemPot[t, n] = (
+                    self.MemPot[t - 1, n]
+                    + (-self.MemPot[t - 1, n] + self.V_rest + self.R * I_in)
+                    / self.tau_m
+                )
+                # Update spikes
+                if self.MemPot[t, n] > self.V_th:
+                    self.spikes[t, n] = 1
+                    self.pre_synaptic_trace[n, t] += 1
+                    self.post_synaptic_trace[n, t] += 1
+                    self.MemPot[t, n] = self.V_reset
+                else:
+                    self.spikes[t, n] = 0
+
+                # Get all pre-synaptic indices
+                pre_syn_indices = np.nonzero(self.W_se[:, n])
+
+                # Loop through each synapse to update strength
+                for s in range(pre_syn_indices):
+
+                    # Use the current trace values for STDP calculation
+                    pre_trace = self.pre_synaptic_trace[s, t]
+                    post_trace = self.post_synaptic_trace[n, t]
+
+                    # Get learning components
+                    hebb = (
+                        self.A * pre_trace * post_trace**2
+                        - self.B * pre_trace * post_trace
+                    )
+                    hetero_syn = (
+                        -self.beta * (self.W_se[s, n] - self.ideal_w) * post_trace**4
+                    )
+                    dopamine_reg = self.delta * pre_trace
+
+                    # Assemble components to update weight
+                    self.W_se[s, n] = hebb + hetero_syn + dopamine_reg
+
             # Update EE
 
             # Update EI
