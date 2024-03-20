@@ -167,6 +167,8 @@ class SNN_STDP:
             self.W_ie,
             self.pre_synaptic_trace,
             self.post_synaptic_trace,
+            self.num_neurons
+
         ) = train_data(
             A=self.A,
             B=self.B,
@@ -197,5 +199,7 @@ class SNN_STDP:
                 self.W_se,
                 self.W_ee,
                 self.W_ei,
-                self.W_ie,
+                self.W_ie
             )
+    def test_data(self):
+        # do something
