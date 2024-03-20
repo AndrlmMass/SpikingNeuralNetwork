@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 # os.chdir("C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork")
 os.chdir(
-    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork"
+    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork\\version1.0"
 )
 
 from plot_training import *
@@ -32,7 +32,6 @@ class SNN_STDP:
         dt: float,
         T: int,
         V_rest: int,
-        num_neurons: int,
         excit_inhib_ratio: float,
         alpha: float | int,
         max_weight: float | int,
@@ -62,7 +61,6 @@ class SNN_STDP:
         self.V_rest = V_rest
         self.leakage_rate = 1 / self.R
         self.num_items = num_items
-        self.num_neurons = num_neurons
         self.num_classes = num_input_neurons
         self.excit_inhib_ratio = excit_inhib_ratio
         self.alpha = alpha / (self.num_neurons * 0.1)
@@ -72,11 +70,15 @@ class SNN_STDP:
         self.input_scaler = input_scaler
         self.num_epochs = num_epochs
         self.max_spike_diff = int(self.num_timesteps * 0.1)
-        self.pre_synaptic_trace = np.zeros((self.num_neurons, self.time))
-        self.post_synaptic_trace = np.zeros((self.num_neurons, self.time))
 
     def initialize_network(
-        self, N_input_neurons, N_excit_neurons, N_inhib_neurons, radius, prob
+        self,
+        N_input_neurons: int,
+        N_excit_neurons: int,
+        N_inhib_neurons: int,
+        radius: int,
+        prob: float | int,
+        retur: bool,
     ):
         self.N_input_neurons = N_input_neurons
         self.N_excit_neurons = N_excit_neurons
@@ -107,20 +109,21 @@ class SNN_STDP:
         )
 
         # Generate membrane potential and spikes array
-        self.MemPot = np.zeros((self.time, self.num_neurons))
-        self.MemPot[0, :, :] = self.V_rest
+        self.MemPot = np.zeros((self.time, self.num_neurons - self.N_input_neurons))
+        self.MemPot[0, :] = self.V_rest
         self.spikes = np.ones((self.time, self.num_neurons))
 
-        return (
-            self.MemPot,
-            self.t_since_spike,
-            self.W_se,
-            self.W_ee,
-            self.W_ei,
-            self.W_ie,
-        )
+        if retur:
+            return (
+                self.MemPot,
+                self.t_since_spike,
+                self.W_se,
+                self.W_ee,
+                self.W_ei,
+                self.W_ie,
+            )
 
-    def load_data(self, rand_lvl):
+    def load_data(self, rand_lvl, retur):
         with open(
             f"/data/training_data/training_data_{rand_lvl}.pkl", "rb"
         ) as openfile:
@@ -135,15 +138,25 @@ class SNN_STDP:
         with open(f"/data/labels_test/labels_test_{rand_lvl}.pkl", "rb") as openfile:
             self.labels_test = pickle.load(openfile)
 
-        return (
-            self.training_data,
-            self.testing_data,
-            self.labels_train,
-            self.labels_test,
-        )
+        if retur:
+            return (
+                self.training_data,
+                self.testing_data,
+                self.labels_train,
+                self.labels_test,
+            )
 
     def train_data(self):
+        self.num_neurons = (
+            self.N_excit_neurons + self.N_inhib_neurons + self.N_input_neurons
+        )
         self.spikes = np.zeros((self.time, self.num_neurons))
+        self.pre_synaptic_trace = np.zeros(
+            (self.time, self.num_neurons - self.N_input_neurons)
+        )
+        self.post_synaptic_trace = np.zeros(
+            (self.time, self.num_neurons - self.N_input_neurons)
+        )
 
         # Add input data before training for input neurons
         self.spikes[:, : self.N_input_neurons] = self.training_data
@@ -155,13 +168,30 @@ class SNN_STDP:
             self.pre_synaptic_trace *= np.exp(-self.dt / self.tau_m)
             self.post_synaptic_trace *= np.exp(-self.dt / self.tau_m)
 
-            # Update SE
+            # Update stimulation-excitation, excitation-excitation and inhibitory-excitatory synapses
             for n in range(self.N_excit_neurons):
 
                 # Update incoming spikes as I_in
-                I_in = np.dot(
-                    self.W_se[:, n],
-                    self.spikes[t, : self.N_input_neurons + self.N_excit_neurons + 1],
+                I_in = (
+                    np.dot(
+                        self.W_se[:, n],
+                        self.spikes[t, : self.N_input_neurons],
+                    )
+                    + np.dot(
+                        self.W_ee[:, n],
+                        self.spikes[
+                            t,
+                            self.N_input_neurons
+                            + 1 : self.N_input_neurons
+                            + self.N_excit_neurons,
+                        ],
+                    )
+                    + np.dot(
+                        self.W_ie[:, n],
+                        self.spikes[
+                            t, n + self.N_input_neurons + self.N_excit_neurons + 1 :
+                        ],
+                    )
                 )
 
                 # Update membrane potential based on I_in
@@ -170,14 +200,15 @@ class SNN_STDP:
                     + (-self.MemPot[t - 1, n] + self.V_rest + self.R * I_in)
                     / self.tau_m
                 )
+
                 # Update spikes
                 if self.MemPot[t, n] > self.V_th:
-                    self.spikes[t, n] = 1
-                    self.pre_synaptic_trace[n, t] += 1
-                    self.post_synaptic_trace[n, t] += 1
+                    self.spikes[t, n + self.N_input_neurons + 1] = 1
+                    self.pre_synaptic_trace[t, n + self.N_input_neurons + 1] += 1
+                    self.post_synaptic_trace[t, n + self.N_input_neurons + 1] += 1
                     self.MemPot[t, n] = self.V_reset
                 else:
-                    self.spikes[t, n] = 0
+                    self.spikes[t, n + self.N_input_neurons + 1] = 0
 
                 # Get all pre-synaptic indices
                 pre_syn_indices = np.nonzero(self.W_se[:, n])
@@ -186,8 +217,10 @@ class SNN_STDP:
                 for s in range(pre_syn_indices):
 
                     # Use the current trace values for STDP calculation
-                    pre_trace = self.pre_synaptic_trace[s, t]
-                    post_trace = self.post_synaptic_trace[n, t]
+                    pre_trace = self.pre_synaptic_trace[t, s]
+                    post_trace = self.post_synaptic_trace[
+                        t, n + self.N_input_neurons + 1
+                    ]
 
                     # Get learning components
                     hebb = (
@@ -202,39 +235,19 @@ class SNN_STDP:
                     # Assemble components to update weight
                     self.W_se[s, n] = hebb + hetero_syn + dopamine_reg
 
-            # Update EE
-            for n in range(self.N_excit_neurons):
-
-                # Update incoming spikes as I_in
-                I_in = np.dot(
-                    self.W_ee[:, n],
-                    self.spikes[t, self.N_input_neurons + 1 : self.N_excit_neurons],
-                )
-
-                # Update membrane potential based on I_in
-                self.MemPot[t, n] = (
-                    self.MemPot[t - 1, n]
-                    + (-self.MemPot[t - 1, n] + self.V_rest + self.R * I_in)
-                    / self.tau_m
-                )
-                # Update spikes
-                if self.MemPot[t, n] > self.V_th:
-                    self.spikes[t, n] = 1
-                    self.pre_synaptic_trace[n, t] += 1
-                    self.post_synaptic_trace[n, t] += 1
-                    self.MemPot[t, n] = self.V_reset
-                else:
-                    self.spikes[t, n] = 0
-
                 # Get all pre-synaptic indices
-                pre_syn_indices = np.nonzero(self.W_se[:, n])
+                pre_syn_indices = np.nonzero(self.W_ee[:, n])
 
                 # Loop through each synapse to update strength
                 for s in range(pre_syn_indices):
+                    if s == n:
+                        raise UserWarning(
+                            "There are self-connections within the W_ee array"
+                        )
 
                     # Use the current trace values for STDP calculation
-                    pre_trace = self.pre_synaptic_trace[s, t]
-                    post_trace = self.post_synaptic_trace[n, t]
+                    pre_trace = self.pre_synaptic_trace[t, s + self.N_excit_neurons]
+                    post_trace = self.post_synaptic_trace[t, n + self.N_excit_neurons]
 
                     # Get learning components
                     hebb = (
@@ -242,54 +255,82 @@ class SNN_STDP:
                         - self.B * pre_trace * post_trace
                     )
                     hetero_syn = (
-                        -self.beta * (self.W_se[s, n] - self.ideal_w) * post_trace**4
+                        -self.beta * (self.W_ee[s, n] - self.ideal_w) * post_trace**4
                     )
                     dopamine_reg = self.delta * pre_trace
 
                     # Assemble components to update weight
-                    self.W_se[s, n] = hebb + hetero_syn + dopamine_reg
+                    self.W_ee[s, n] = hebb + hetero_syn + dopamine_reg
 
-            # Update EE
+            # Update excitatory-inhibitory weights
+            for n in range(self.N_excit_neurons):
 
-            # Update EI
+                # Update incoming spikes as I_in
+                I_in = np.dot(
+                    self.W_ie[:, n],
+                    self.spikes[
+                        t,
+                        self.N_input_neurons
+                        + 1 : self.N_input_neurons
+                        + self.N_excit_neurons,
+                    ],
+                )
+                # Update membrane potential based on I_in
+                self.MemPot[t, n + self.N_excit_neurons + 1] = (
+                    self.MemPot[t - 1, n + self.N_excit_neurons + 1]
+                    + (
+                        -self.MemPot[t - 1, n + self.N_excit_neurons + 1]
+                        + self.V_rest
+                        + self.R * I_in
+                    )
+                    / self.tau_m
+                )
 
-            # Update
+                # Update spikes
+                if self.MemPot[t, n + self.N_excit_neurons + 1] > self.V_th:
+                    self.spikes[
+                        t, n + self.N_input_neurons + self.N_excit_neurons + 1
+                    ] = 1
+                    self.pre_synaptic_trace[
+                        t, n + self.N_input_neurons + self.N_excit_neurons + 1
+                    ] += 1
+                    self.post_synaptic_trace[
+                        t, n + self.N_input_neurons + self.N_excit_neurons + 1
+                    ] += 1
+                    self.MemPot[t, n + self.N_excit_neurons + 1] = self.V_reset
+                else:
+                    self.spikes[
+                        t, n + self.N_input_neurons + self.N_excit_neurons + 1
+                    ] = 0
 
-    def visualize_network(self, drw_edg=True, drw_netw=True):
-        if drw_netw:
-            pn.draw_network(self.weights)
-        if drw_edg:
-            pn.draw_edge_distribution(self.weights)
+            # Update excitatory-inhibitory weights
+            for n in range(self.N_inhib_neurons):
 
-    def plot_training(self, num_neurons=None, num_items=None, plt_mV=True):
-        if num_neurons == None:
-            num_neurons = self.num_neurons
-        if num_items == None:
-            num_items = self.num_items
-        if plt_mV:
-            pt.plot_membrane_activity(
-                MemPot=self.MemPot,
-                num_neurons=num_neurons,
-                num_items=num_items,
-                input_idx=self.input_neuron_idx,
-                timesteps=self.num_timesteps,
-            )
+                # Update incoming spikes as I_in
+                I_in = np.dot(
+                    self.W_ei[:, n],
+                    self.spikes[t, self.N_input_neurons + self.N_excit_neurons + 1 :],
+                )
+                # Update membrane potential based on I_in
+                self.MemPot[t, n + self.N_excit_neurons] = (
+                    self.MemPot[t - 1, n + self.N_excit_neurons]
+                    + (
+                        -self.MemPot[t - 1, n + self.N_excit_neurons]
+                        + self.V_rest
+                        + self.R * I_in
+                    )
+                    / self.tau_m
+                )
 
-        pt.plot_spikes(
-            num_neurons_to_plot=num_neurons,
-            num_items_to_plot=num_items,
-            t_since_spike=self.t_since_spike,
-            input_indices=self.input_neuron_idx,
-        )
-        pt.plot_weights(self.weights, dt_items=num_items)
-
-        pt.plot_activity_scatter(
-            spikes=self.spike_array, classes=self.classes, num_classes=self.num_classes
-        )
-
-        pt.plot_relative_activity(
-            spikes=self.spike_array,
-            classes=self.classes,
-            input_idx=self.input_neuron_idx,
-            num_neurons=self.num_neurons,
-        )
+                # Update spikes
+                if self.MemPot[t, n] > self.V_th:
+                    self.spikes[t, n + self.N_input_neurons + self.N_excit_neurons] = 1
+                    self.pre_synaptic_trace[
+                        t, n + self.N_input_neurons + self.N_excit_neurons
+                    ] += 1
+                    self.post_synaptic_trace[
+                        t, n + self.N_input_neurons + self.N_excit_neurons
+                    ] += 1
+                    self.MemPot[t, n + self.N_excit_neurons] = self.V_reset
+                else:
+                    self.spikes[t, n + self.N_input_neurons + self.N_excit_neurons] = 0
