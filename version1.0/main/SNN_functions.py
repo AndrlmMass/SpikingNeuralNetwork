@@ -10,9 +10,9 @@ os.chdir(
     "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork\\version1.0"
 )
 
-from plot_training import *
-from plot_network import *
-from gen_weights import *
+from plot.plot_training import *
+from plot.plot_network import *
+from gen.gen_weights import *
 from train import *
 
 
@@ -91,9 +91,12 @@ class SNN_STDP:
             radius=radius,
             N_input_neurons=self.N_input_neurons,
             N_excit_neurons=self.N_excit_neurons,
+            time=self.time
         )
         self.W_ee = gws.gen_EE(
-            N_excit_neurons=self.N_excit_neurons, prob=prob, time=self.time
+            N_excit_neurons=self.N_excit_neurons, 
+            prob=prob, 
+            time=self.time
         )
         self.W_ei = gws.gen_EI(
             N_excit_neurons=self.N_excit_neurons,
@@ -170,6 +173,7 @@ class SNN_STDP:
             self.num_neurons
 
         ) = train_data(
+            R=self.R,
             A=self.A,
             B=self.B,
             beta=self.beta,
@@ -202,4 +206,7 @@ class SNN_STDP:
                 self.W_ie
             )
     def test_data(self):
+        # do something
+
+    def eval_perform(self):
         # do something

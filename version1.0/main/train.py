@@ -4,6 +4,7 @@ from tqdm import tqdm
 
 
 def train_data(
+    R: float | int,
     A: float | int,
     B: float | int,
     beta: float | int,
@@ -46,18 +47,18 @@ def train_data(
             # Update incoming spikes as I_in
             I_in = (
                 np.dot(
-                    W_se[:, n],
+                    W_se[t, :, n],
                     spikes[t, :N_input_neurons],
                 )
                 + np.dot(
-                    W_ee[:, n],
+                    W_ee[t, :, n],
                     spikes[
                         t,
                         N_input_neurons + 1 : N_input_neurons + N_excit_neurons,
                     ],
                 )
                 + np.dot(
-                    W_ie[:, n],
+                    W_ie[t, :, n],
                     spikes[t, n + N_input_neurons + N_excit_neurons + 1 :],
                 )
             )
@@ -77,7 +78,7 @@ def train_data(
                 spikes[t, n + N_input_neurons + 1] = 0
 
             # Get all pre-synaptic indices
-            pre_syn_indices = np.nonzero(W_se[:, n])
+            pre_syn_indices = np.nonzero(W_se[t, :, n])
 
             # Loop through each synapse to update strength
             for s in range(pre_syn_indices):
@@ -88,14 +89,14 @@ def train_data(
 
                 # Get learning components
                 hebb = A * pre_trace * post_trace**2 - B * pre_trace * post_trace
-                hetero_syn = -beta * (W_se[s, n] - ideal_w) * post_trace**4
+                hetero_syn = -beta * (W_se[t, s, n] - ideal_w) * post_trace**4
                 dopamine_reg = delta * pre_trace
 
                 # Assemble components to update weight
-                W_se[s, n] = hebb + hetero_syn + dopamine_reg
+                W_se[t, s, n] = hebb + hetero_syn + dopamine_reg
 
             # Get all pre-synaptic indices
-            pre_syn_indices = np.nonzero(W_ee[:, n])
+            pre_syn_indices = np.nonzero(W_ee[t, :, n])
 
             # Loop through each synapse to update strength
             for s in range(pre_syn_indices):
@@ -110,18 +111,18 @@ def train_data(
 
                 # Get learning components
                 hebb = A * pre_trace * post_trace**2 - B * pre_trace * post_trace
-                hetero_syn = -beta * (W_ee[s, n] - ideal_w) * post_trace**4
+                hetero_syn = -beta * (W_ee[t, s, n] - ideal_w) * post_trace**4
                 dopamine_reg = delta * pre_trace
 
                 # Assemble components to update weight
-                W_ee[s, n] = hebb + hetero_syn + dopamine_reg
+                W_ee[t, s, n] = hebb + hetero_syn + dopamine_reg
 
         # Update excitatory-inhibitory weights
         for n in range(N_excit_neurons):
 
             # Update incoming spikes as I_in
             I_in = np.dot(
-                W_ie[:, n],
+                W_ie[t, :, n],
                 spikes[
                     t,
                     N_input_neurons + 1 : N_input_neurons + N_excit_neurons,
@@ -147,7 +148,7 @@ def train_data(
 
             # Update incoming spikes as I_in
             I_in = np.dot(
-                W_ei[:, n],
+                W_ei[t, :, n],
                 spikes[t, N_input_neurons + N_excit_neurons + 1 :],
             )
             # Update membrane potential based on I_in

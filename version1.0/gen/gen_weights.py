@@ -2,12 +2,12 @@ import numpy as np
 
 
 class gen_weights:
-    def gen_SE(radius, N_input_neurons, N_excit_neurons):
+    def gen_SE(radius, N_input_neurons, N_excit_neurons, time):
         # Calculate the side length of the square grid of input neurons
         input_shape = int(np.sqrt(N_input_neurons))
 
         # Initialize the weight matrix with zeros (for all input to excitatory neuron connections)
-        W_se = np.zeros((N_input_neurons, N_excit_neurons))
+        W_se = np.zeros((time, N_input_neurons, N_excit_neurons))
 
         # Compute the 2D grid positions for each excitatory neuron based on their index
         excitatory_positions = [
@@ -40,20 +40,20 @@ class gen_weights:
                     p = row * input_shape + col
 
                     # Assign a random weight to the connection
-                    W_se[p, mu] = np.random.random()
+                    W_se[0, p, mu] = np.random.random()
 
         return W_se
 
     def gen_EE(N_excit_neurons, prob, time):
         # Initialize the arrays for weights
-        W_ee = np.zeros((N_excit_neurons, N_excit_neurons, time))
+        W_ee = np.zeros((time, N_excit_neurons, N_excit_neurons))
 
         # Initial weights at time 0 set to random for prob portion
-        W_ee[:, :, 0] = np.random.rand(N_excit_neurons, N_excit_neurons)
-        W_ee[:, :, 0] *= np.random.rand(N_excit_neurons, N_excit_neurons) < prob
+        W_ee[0, :, :] = np.random.rand(N_excit_neurons, N_excit_neurons)
+        W_ee[0, :, :] *= np.random.rand(N_excit_neurons, N_excit_neurons) < prob
 
         # Ensure no self-connections at the initial time
-        np.fill_diagonal(W_ee[:, :, 0], 0)
+        np.fill_diagonal(W_ee[0, :, :], 0)
 
         return W_ee
 
@@ -62,35 +62,37 @@ class gen_weights:
         prob = N_excit_neurons / (N_excit_neurons + N_inhib_neurons)
 
         # Create weight array for EI
-        W_ei = np.zeros((N_excit_neurons, N_inhib_neurons, time))
+        W_ei = np.zeros((time, N_excit_neurons, N_inhib_neurons))
 
         # Assign random weights to N inhibitory neurons
-        W_ei[:, :, 0] = np.random.rand(N_excit_neurons, N_inhib_neurons)
-        W_ei[:, :, 0] *= np.random.rand(N_excit_neurons, N_inhib_neurons) < prob
+        W_ei[0, :, :] = np.random.rand(N_excit_neurons, N_inhib_neurons)
+        W_ei[0, :, :] *= np.random.rand(N_excit_neurons, N_inhib_neurons) < prob
 
         return W_ei
 
-    def gen_IE(N_inhib_neurons, N_excit_neurons, W_ei, prob, time):
+    def gen_IE(N_inhib_neurons, N_excit_neurons, W_ei, radius, time):
         # Initialize the weight array for IE connections
-        W_ie = np.zeros((N_inhib_neurons, N_excit_neurons, time))
+        W_ie = np.zeros((time, N_inhib_neurons, N_excit_neurons))
 
         # Set initial weights by transposing the EI weights for the initial time step
-        W_ie[:, :, 0] = W_ei[:, :, 0].T
+        W_ie = W_ei.T
 
-        # Identify positions in the transposed matrix (IE) that correspond to non-zero weights in EI
-        non_zero_positions = W_ie[:, :, 0] != 0
+        # Loop through each receiving neuron
+        for n in W_ie[0].shape[0]:
+            # Define neighbourhood of connections based on mean presynaptic connections
+            mid_point =  int(np.mean(W_ei[:,n]))
+            diff_min = min(W_ei[0, :, n]) - mid_point - radius 
+            diff_max = max(W_ei[0, :, n]) - mid_point + radius
+            range = (mid_point - radius + diff_min, mid_point + radius - diff_max)
 
-        # Generate a mask for potential connections based on the specified probability
-        W_idx = np.random.rand(N_inhib_neurons, N_excit_neurons) < prob
+            # Get indices from range
+            indices = np.arange(range[0],range[1])
 
-        # Ensure that new connections (where W_idx is true) do not override existing non-zero connections from EI
-        # This step respects the established connections by not allowing feedback loops
-        valid_new_connections = np.logical_and(W_idx, ~non_zero_positions)
+            # Find nonzero elements
+            nz_indices = np.nonzero(W_ei[0, ])
 
-        # Assign random weights only to valid new connection positions
-        initial_random_weights = np.random.rand(N_inhib_neurons, N_excit_neurons)
-        W_ie[:, :, 0] = np.where(
-            valid_new_connections, initial_random_weights, W_ie[:, :, 0]
-        )
+            # Create list of potential indices
+            pot_ind = 
+
 
         return W_ie
