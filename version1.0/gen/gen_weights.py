@@ -3,7 +3,7 @@ import random
 
 
 class gen_weights:
-    def gen_SE(radius, N_input_neurons, N_excit_neurons, time):
+    def gen_SE(radius, N_input_neurons, N_excit_neurons, time, basenum):
         # Calculate the side length of the square grid of input neurons
         input_shape = int(np.sqrt(N_input_neurons))
 
@@ -43,9 +43,12 @@ class gen_weights:
                     # Assign a random weight to the connection
                     W_se[0, p, mu] = np.random.random()
 
-        return W_se
+        # Define ideal weights set to base_num
+        W_se_ideal = np.full((time, N_input_neurons, N_excit_neurons), basenum)
 
-    def gen_EE(N_excit_neurons, prob, time):
+        return W_se, W_se_ideal
+
+    def gen_EE(N_excit_neurons, prob, time, basenum):
         # Initialize the arrays for weights
         W_ee = np.zeros((time, N_excit_neurons, N_excit_neurons))
 
@@ -56,9 +59,12 @@ class gen_weights:
         # Ensure no self-connections at the initial time
         np.fill_diagonal(W_ee[0, :, :], 0)
 
-        return W_ee
+        # Define ideal weights set to base_num
+        W_ee_ideal = np.full((time, N_excit_neurons, N_excit_neurons), basenum)
 
-    def gen_EI(N_excit_neurons, N_inhib_neurons, time):
+        return W_ee, W_ee_ideal
+
+    def gen_EI(N_excit_neurons, N_inhib_neurons, time, weight_val):
         # Calculate probability of connection
         prob = N_excit_neurons / (N_excit_neurons + N_inhib_neurons)
 
@@ -66,12 +72,15 @@ class gen_weights:
         W_ei = np.zeros((time, N_excit_neurons, N_inhib_neurons))
 
         # Assign random weights to N inhibitory neurons
-        W_ei[0, :, :] = np.random.rand(N_excit_neurons, N_inhib_neurons)
+        W_ei[0, :, :] = np.full((N_excit_neurons, N_inhib_neurons), weight_val)
         W_ei[0, :, :] *= np.random.rand(N_excit_neurons, N_inhib_neurons) < prob
 
-        return W_ei
+        # Create ideal weights array
+        W_ei_ideal = np.full((N_excit_neurons, N_inhib_neurons), weight_val)
 
-    def gen_IE(N_inhib_neurons, N_excit_neurons, W_ei, radius, time, N_ws):
+        return W_ei, W_ei_ideal
+
+    def gen_IE(N_inhib_neurons, N_excit_neurons, W_ei, radius, time, N_ws, weight_val):
         # Initialize the weight array for IE connections
         W_ie = np.zeros((time, N_inhib_neurons, N_excit_neurons))
 
@@ -94,6 +103,9 @@ class gen_weights:
 
             # Create synapses
             for idx in nz_indices:
-                W_ie[0, n, idx] = np.random.random()
+                W_ie[0, n, idx] = weight_val
 
-        return W_ie
+        # Create array of ideal weights
+        W_ie_ideal = np.full((N_inhib_neurons, N_excit_neurons), weight_val)
+
+        return W_ie, W_ie_ideal

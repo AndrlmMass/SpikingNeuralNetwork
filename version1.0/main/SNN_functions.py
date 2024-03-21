@@ -12,7 +12,7 @@ os.chdir(
 
 from plot.plot_training import *
 from plot.plot_network import *
-from gen.gen_weights import *
+from gen_weights import *
 from train import *
 
 
@@ -87,23 +87,23 @@ class SNN_STDP:
         # Generate weights
         gws = gen_weights()
 
-        self.W_se = gws.gen_SE(
+        self.W_se, self.W_se_ideal = gws.gen_SE(
             radius=radius,
             N_input_neurons=self.N_input_neurons,
             N_excit_neurons=self.N_excit_neurons,
             time=self.time
         )
-        self.W_ee = gws.gen_EE(
+        self.W_ee, self.W_ee_ideal = gws.gen_EE(
             N_excit_neurons=self.N_excit_neurons, 
             prob=prob, 
             time=self.time
         )
-        self.W_ei = gws.gen_EI(
+        self.W_ei, self.W_ei_ideal = gws.gen_EI(
             N_excit_neurons=self.N_excit_neurons,
             N_inhib_neurons=self.N_inhib_neurons,
             time=self.time,
         )
-        self.W_ie = gws.gen_IE(
+        self.W_ie. self.W_ie_ideal = gws.gen_IE(
             N_inhib_neurons=self.N_inhib_neurons,
             N_excit_neurons=self.N_excit_neurons,
             W_ei=self.W_ei,
@@ -150,24 +150,17 @@ class SNN_STDP:
             )
 
     def train_data(self, retur):
-        self.num_neurons = (
-            self.N_excit_neurons + self.N_inhib_neurons + self.N_input_neurons
-        )
-        self.spikes = np.zeros((self.time, self.num_neurons))
-        self.pre_synaptic_trace = np.zeros(
-            (self.time, self.num_neurons - self.N_input_neurons)
-        )
-        self.post_synaptic_trace = np.zeros(
-            (self.time, self.num_neurons - self.N_input_neurons)
-        )
-
         (
             self.spikes,
             self.MemPot,
             self.W_se,
+            self.W_se_ideal,
             self.W_ee,
+            self.W_ee_ideal,
             self.W_ei,
+            self.W_ei_ideal,
             self.W_ie,
+            self.W_ie_ideal,
             self.pre_synaptic_trace,
             self.post_synaptic_trace,
             self.num_neurons
@@ -191,9 +184,13 @@ class SNN_STDP:
             N_input_neurons=self.N_input_neurons,
             MemPot=self.MemPot,
             W_se=self.W_se,
+            W_se_ideal=self.W_se_ideal,
             W_ee=self.W_ee,
+            W_ee_ideal=self.W_ee_ideal,
             W_ei=self.W_ei,
+            W_ei_ideal=self.W_ei_ideal,
             W_ie=self.W_ie,
+            W_ie_ideal=self.W_ie_ideal
         )
 
         if retur:

@@ -7,24 +7,30 @@ def train_data(
     R: float | int,
     A: float | int,
     B: float | int,
+    P: float | int,
+    w_p: float | int,
     beta: float | int,
     delta: float | int,
-    ideal_w: float | int | np.ndarray,
     time: int,
     V_th: int,
     V_rest: int,
     V_reset: int,
     dt: float | int,
     tau_m: float | int,
+    tau_const: float | int,
     training_data: np.ndarray,
     N_excit_neurons: int,
     N_inhib_neurons: int,
     N_input_neurons: int,
     MemPot: np.ndarray,
     W_se: np.ndarray,
+    W_se_ideal: np.ndarray,
     W_ee: np.ndarray,
+    W_ee_ideal: np.ndarray,
     W_ei: np.ndarray,
+    W_ei_ideal: np.ndarray,
     W_ie: np.ndarray,
+    W_ie_ideal: np.ndarray,
 ):
     num_neurons = N_excit_neurons + N_inhib_neurons + N_input_neurons
     spikes = np.zeros((time, num_neurons))
@@ -87,9 +93,18 @@ def train_data(
                 pre_trace = pre_synaptic_trace[t, s]
                 post_trace = post_synaptic_trace[t, n + N_input_neurons + 1]
 
+                # Update ideal weight
+                W_se_ideal[t, s, n] = tau_const * (
+                    W_se[t, s, n]
+                    - W_se_ideal[t, s, n]
+                    - P * W_se_ideal[t, s, n] * ((w_p - W_se_ideal[t, s, n]) / 2)
+                )
+
                 # Get learning components
                 hebb = A * pre_trace * post_trace**2 - B * pre_trace * post_trace
-                hetero_syn = -beta * (W_se[t, s, n] - ideal_w) * post_trace**4
+                hetero_syn = (
+                    -beta * (W_se[t, s, n] - W_se_ideal[t, s, n]) * post_trace**4
+                )
                 dopamine_reg = delta * pre_trace
 
                 # Assemble components to update weight
@@ -109,9 +124,18 @@ def train_data(
                 pre_trace = pre_synaptic_trace[t, s + N_excit_neurons]
                 post_trace = post_synaptic_trace[t, n + N_excit_neurons]
 
+                # Update ideal weight
+                W_ee_ideal[t, s, n] = tau_const * (
+                    W_ee[t, s, n]
+                    - W_ee_ideal[t, s, n]
+                    - P * W_ee_ideal[t, s, n] * ((w_p - W_ee_ideal[t, s, n]) / 2)
+                )
+
                 # Get learning components
                 hebb = A * pre_trace * post_trace**2 - B * pre_trace * post_trace
-                hetero_syn = -beta * (W_ee[t, s, n] - ideal_w) * post_trace**4
+                hetero_syn = (
+                    -beta * (W_ee[t, s, n] - W_ee_ideal[t, s, n]) * post_trace**4
+                )
                 dopamine_reg = delta * pre_trace
 
                 # Assemble components to update weight
@@ -170,9 +194,13 @@ def train_data(
         spikes,
         MemPot,
         W_se,
+        W_se_ideal,
         W_ee,
+        W_ee_ideal,
         W_ei,
+        W_ei_ideal,
         W_ie,
+        W_ie_ideal,
         pre_synaptic_trace,
         post_synaptic_trace,
         num_neurons,
