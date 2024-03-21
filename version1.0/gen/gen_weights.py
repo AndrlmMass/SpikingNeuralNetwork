@@ -1,4 +1,5 @@
 import numpy as np
+import random
 
 
 class gen_weights:
@@ -70,7 +71,7 @@ class gen_weights:
 
         return W_ei
 
-    def gen_IE(N_inhib_neurons, N_excit_neurons, W_ei, radius, time):
+    def gen_IE(N_inhib_neurons, N_excit_neurons, W_ei, radius, time, N_ws):
         # Initialize the weight array for IE connections
         W_ie = np.zeros((time, N_inhib_neurons, N_excit_neurons))
 
@@ -80,19 +81,19 @@ class gen_weights:
         # Loop through each receiving neuron
         for n in W_ie[0].shape[0]:
             # Define neighbourhood of connections based on mean presynaptic connections
-            mid_point =  int(np.mean(W_ei[:,n]))
-            diff_min = min(W_ei[0, :, n]) - mid_point - radius 
+            mid_point = int(np.mean(W_ei[:, n]))
+            diff_min = min(W_ei[0, :, n]) - mid_point - radius
             diff_max = max(W_ei[0, :, n]) - mid_point + radius
             range = (mid_point - radius + diff_min, mid_point + radius - diff_max)
 
-            # Get indices from range
-            indices = np.arange(range[0],range[1])
+            # Find zero-valued positions
+            zeros = np.where(W_ei[0, range[0] : range[1], n] == 0)
 
-            # Find nonzero elements
-            nz_indices = np.nonzero(W_ei[0, ])
+            # Draw N_ws samples from index-list
+            nz_indices = random.sample(zeros, N_ws)
 
-            # Create list of potential indices
-            pot_ind = 
-
+            # Create synapses
+            for idx in nz_indices:
+                W_ie[0, n, idx] = np.random.random()
 
         return W_ie
