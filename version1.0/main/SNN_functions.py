@@ -12,8 +12,8 @@ os.chdir(
 
 from plot.plot_training import *
 from plot.plot_network import *
-from gen_weights import *
-from train import *
+from gen.gen_weights import *
+from main.train import *
 
 
 # Initialize class variable

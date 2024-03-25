@@ -1,5 +1,7 @@
 # Gen data according to y number of classes
 import os
+import statistics
+import math
 from tqdm import tqdm
 import pickle
 import numpy as np
@@ -90,12 +92,13 @@ def gen_float_data_(
         # Execute the lambda function for the current class_index and assign its output
         input_space[item] = functions[t]()
         labels[item, t] = 1
+        print(t)
 
         # Assign blank part after symbol-input
         input_space[item] = functions[4]()
-        labels[item, 4] = 1
+        labels[item + 1, 4] = 1
 
-        if t == N_classes:
+        if t == N_classes - 1:
             t = 0
         else:
             t += 1
@@ -195,7 +198,7 @@ def input_space_plotted_single(data):
 
 # define function to create a raster plot of the input data
 def raster_plot(data, labels):
-    labels_name = ["ISI", "tri", "O", "sq", "X"]
+    labels_name = ["tri", "o", "sq", "x", "-"]
     indices = np.argmax(labels, axis=1)
 
     # Create raster plot with dots
@@ -205,11 +208,10 @@ def raster_plot(data, labels):
         plt.scatter(
             spike_times, np.ones_like(spike_times) * neuron_index, color="black", s=10
         )
-    t = 1
+    t = 0
 
     for item_boundary in range(0, data.shape[0], 100 + 1):
         # Get label name
-        print(indices)
         plt.axvline(x=item_boundary, color="red", linestyle="--")
         plt.text(
             x=item_boundary + 25,
@@ -217,10 +219,21 @@ def raster_plot(data, labels):
             s=labels_name[indices[t]],
             size=12,
         )
+
         t += 1
 
-        if t > 4:
-            t = 1
+    # Calculate the frequency of the spikes to check that it is acceptable
+    sum_ = []
+    timepoints = data.shape[0] // 2
+    for j in range(0, data.shape[0], 201):
+        sum_.append(sum(data[j]))
+
+    print(statistics.mean(sum_), timepoints * 0.001)
+    # Calculate the average frequency
+    average_frequency = round(statistics.mean(sum_) / ((timepoints * 0.001) / 2), 2)
+
+    # Print the result
+    print(f"This is the current spiking frequency: {average_frequency} Hz")
 
     plt.xlabel("Time (ms)")
     plt.ylabel("Neuron Index")
@@ -273,12 +286,16 @@ training_data, testing_data, labels_train, labels_test = float_2_pos_spike(
     labels=labels,
     timesteps=100,
     dt=0.001,
-    input_scaler=2,
+    input_scaler=20,
     train_2_test=0.8,
     save=False,
     retur=True,
-    rand_lvl=0,
+    rand_lvl=rand_lvl,
 )
+
 print(data.shape)
 print(training_data.shape, testing_data.shape)
+
 raster_plot(training_data, labels_train)
+for j in range(data.shape[0]):
+    input_space_plotted_single(data[j])
