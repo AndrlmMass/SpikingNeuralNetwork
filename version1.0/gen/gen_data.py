@@ -5,14 +5,14 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 
-os.chdir(
-    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
-)
 # os.chdir(
-#    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
+#    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
 # )
+os.chdir(
+    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
+)
 
-from gen_symbol import *
+from gen.gen_symbol import *
 
 
 def gen_float_data_(
@@ -195,7 +195,7 @@ def input_space_plotted_single(data):
 
 # define function to create a raster plot of the input data
 def raster_plot(data, labels):
-    labels_name = ["tri", "O", "sq", "X", "ISI"]
+    labels_name = ["ISI", "tri", "O", "sq", "X"]
     indices = np.argmax(labels, axis=1)
 
     # Create raster plot with dots
@@ -205,10 +205,11 @@ def raster_plot(data, labels):
         plt.scatter(
             spike_times, np.ones_like(spike_times) * neuron_index, color="black", s=10
         )
-    t = 0
+    t = 1
 
     for item_boundary in range(0, data.shape[0], 100 + 1):
         # Get label name
+        print(indices)
         plt.axvline(x=item_boundary, color="red", linestyle="--")
         plt.text(
             x=item_boundary + 25,
@@ -218,8 +219,9 @@ def raster_plot(data, labels):
         )
         t += 1
 
-    ax = plt.gca()
-    # ax.set_xlim([0, 1600])
+        if t > 4:
+            t = 1
+
     plt.xlabel("Time (ms)")
     plt.ylabel("Neuron Index")
     plt.show()
@@ -255,3 +257,28 @@ for rand_lvl in random_lvls:
     raster_plot(training_data, labels_train)
 
     input_space_plotted_single(data[0])
+
+data, labels = gen_float_data_(
+    N_classes=4,
+    N_input_neurons=2025,
+    items=40,
+    noise_rand_lvl=0,
+    signal_rand=True,
+    sign_rand_lvl=0.9,
+    retur=True,
+)
+
+training_data, testing_data, labels_train, labels_test = float_2_pos_spike(
+    data=data,
+    labels=labels,
+    timesteps=100,
+    dt=0.001,
+    input_scaler=2,
+    train_2_test=0.8,
+    save=False,
+    retur=True,
+    rand_lvl=0,
+)
+print(data.shape)
+print(training_data.shape, testing_data.shape)
+raster_plot(training_data, labels_train)

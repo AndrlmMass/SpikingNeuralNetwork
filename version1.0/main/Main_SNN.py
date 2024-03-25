@@ -6,11 +6,11 @@ import numpy as np
 
 # os.chdir("C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork")
 os.chdir(
-    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork"
+    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork\\version1.0"
 )
 
 # Import libraries
-from SNN_functions import *
+from main.SNN_functions import *
 
 # Initialize SNN object
 snn = SNN_STDP(
