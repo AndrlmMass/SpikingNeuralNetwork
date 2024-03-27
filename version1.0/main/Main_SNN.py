@@ -2,41 +2,42 @@
 
 # Set cw
 import os
-import numpy as np
 
-# os.chdir("C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork")
 os.chdir(
-    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork"
+    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
 )
+# os.chdir(
+#    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork"
+# )
 
 # Import libraries
-from SNN_functions import *
+from main.SNN_functions import *
 
 # Initialize SNN object
 snn = SNN_STDP(
-    V_th=0.7,
-    V_reset=-0.7,
+    V_th=-65,
+    V_reset=-75,
+    C=1,
     R=1,
-    tau_m=0.7,
-    num_items=100,
-    tau_stdp=50,
-    A_plus=0.004,
-    A_minus=-0.004,
-    dt=0.00005,
-    T=0.01,
-    V_rest=0.1,
-    num_neurons=20,
-    init_cals=700,
+    tau_m=0.01,
+    num_neurons=3600,
+    num_items=20,
+    tau_stdp=0.01,
+    dt=0.001,
+    T=1,
+    V_rest=-70,
     excit_inhib_ratio=0.8,
-    alpha=0.2,
-    num_input_neurons=4,
-    max_weight=1,
-    min_weight=-1,
-    input_scaler=1,
+    alpha=1,
+    max_weight=5,
+    min_weight=0,
+    input_scaler=2,
+    num_epochs=100,  # This is not being used yet
+    init_cals=1,  # This is not being used yet
+    target_weight=0,
+    A=1,
+    B=1,
+    beta=1,
 )
-
-# Prepare data
-prep_data = snn.prepping_data(base_mean=10, mean_increment=3, variance=1)
 
 # Initialize & visualize pre-trained network
 MemPot, t_since_spik, W_se, W_ee, W_ei, W_ie = snn.initialize_network()

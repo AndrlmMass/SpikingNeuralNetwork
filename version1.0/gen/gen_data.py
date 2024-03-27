@@ -12,7 +12,7 @@ os.chdir(
 #    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
 # )
 
-from gen_symbol import *
+from gen.gen_symbol import *
 
 
 def gen_float_data_(
@@ -114,7 +114,6 @@ def float_2_pos_spike(
     timesteps: int,
     dt: float,
     input_scaler: int | float,
-    train_2_test: float,
     save: bool,
     retur: bool,
     rand_lvl: float,
@@ -144,43 +143,31 @@ def float_2_pos_spike(
                 index = i * timesteps + t
                 poisson_input[index, j] = 1 if spike_count > 0 else 0
 
-    # Divide data and labels into training and testing
-    training_data = poisson_input[: int(items * train_2_test) * timesteps]
-    testing_data = poisson_input[int(items * train_2_test) * timesteps :]
-    labels_train = labels[: int(items * train_2_test) * timesteps]
-    labels_test = labels[int(items * train_2_test) * timesteps :]
-
     # save data if true
     if save:
         print(
             f"Saving training and testing data with labels for random level {rand_lvl}"
         )
         with open(f"data/training_data/training_data_{rand_lvl}.pkl", "wb") as file:
-            pickle.dump(training_data, file)
+            pickle.dump(poisson_input, file)
         print("training data is saved in data folder")
 
-        with open(f"data/testing_data/testing_data_{rand_lvl}.pkl", "wb") as file:
-            pickle.dump(testing_data, file)
-        print("testing data is saved in data folder")
-
-        with open(f"data/labels_data/labels_train_{rand_lvl}.pkl", "wb") as file:
-            pickle.dump(labels_train, file)
-        print("labels train are saved in data folder")
-
-        with open(f"data/labels_data/labels_test_{rand_lvl}.pkl", "wb") as file:
-            pickle.dump(labels_test, file)
-        print("labels test are saved in data folder")
+        with open(f"data/labels_train/testing_data_{rand_lvl}.pkl", "wb") as file:
+            pickle.dump(labels, file)
+        print("training labels is saved in data folder")
 
     if retur:
-        return training_data, testing_data, labels_train, labels_test
+        return poisson_input, labels
 
 
 # Plot input_data structure to ensure realistic creation
 def input_space_plotted_single(data):
+    print(data.shape)
     # The function receives a 2D array of values
+    sqr_side = int(np.sqrt(data.shape))
 
     # Convert 1D array to 2D
-    data = np.reshape(data, (45, 45))
+    data = np.reshape(data, (sqr_side, sqr_side))
 
     # Create a plt subplot
     fig, ax = plt.subplots()
@@ -229,9 +216,11 @@ def raster_plot(data, labels):
 random_lvls = [0, 0.3, 0.5, 0.7]
 
 for rand_lvl in random_lvls:
+    print(f"generating training data at {rand_lvl} randomness level:\n")
+
     data, labels = gen_float_data_(
         N_classes=4,
-        N_input_neurons=2025,
+        N_input_neurons=1600,
         items=40,
         noise_rand_lvl=rand_lvl,
         signal_rand=True,
@@ -239,19 +228,18 @@ for rand_lvl in random_lvls:
         retur=True,
     )
 
-    training_data, testing_data, labels_train, labels_test = float_2_pos_spike(
+    training_data, labels_train = float_2_pos_spike(
         data=data,
         labels=labels,
         timesteps=100,
         dt=0.001,
-        input_scaler=2,
-        train_2_test=0.8,
-        save=False,
+        input_scaler=17,
+        save=True,
         retur=True,
         rand_lvl=rand_lvl,
     )
-    print(data.shape)
-    print(training_data.shape, testing_data.shape)
-    raster_plot(training_data, labels_train)
 
-    input_space_plotted_single(data[0])
+raster_plot(training_data, labels_train)
+
+for j in range(100):
+    input_space_plotted_single(data[j])

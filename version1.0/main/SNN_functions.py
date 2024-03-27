@@ -5,15 +5,17 @@ import os
 import pickle
 import numpy as np
 
-# os.chdir("C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork")
 os.chdir(
-    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork\\version1.0"
+    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
 )
+# os.chdir(
+#    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork\\version1.0"
+# )
 
 from plot.plot_training import *
 from plot.plot_network import *
-from gen_weights import *
-from train import *
+from gen.gen_weights import *
+from main.train import *
 
 
 # Initialize class variable
@@ -27,8 +29,8 @@ class SNN_STDP:
         R: int,
         tau_m: float,
         num_items: float,
-        num_input_neurons: float,
         tau_stdp: float,
+        num_neurons: int, 
         dt: float,
         T: int,
         V_rest: int,
@@ -55,13 +57,13 @@ class SNN_STDP:
         self.A = A
         self.B = B
         self.beta = beta
+        self.num_neurons = num_neurons
         self.target_weight = target_weight
         self.num_timesteps = int(T / dt)
+        self.num_items = num_items
         self.time = self.num_timesteps * self.num_items
         self.V_rest = V_rest
         self.leakage_rate = 1 / self.R
-        self.num_items = num_items
-        self.num_classes = num_input_neurons
         self.excit_inhib_ratio = excit_inhib_ratio
         self.alpha = alpha / (self.num_neurons * 0.1)
         self.init_cals = init_cals
@@ -91,19 +93,17 @@ class SNN_STDP:
             radius=radius,
             N_input_neurons=self.N_input_neurons,
             N_excit_neurons=self.N_excit_neurons,
-            time=self.time
+            time=self.time,
         )
         self.W_ee, self.W_ee_ideal = gws.gen_EE(
-            N_excit_neurons=self.N_excit_neurons, 
-            prob=prob, 
-            time=self.time
+            N_excit_neurons=self.N_excit_neurons, prob=prob, time=self.time
         )
         self.W_ei, self.W_ei_ideal = gws.gen_EI(
             N_excit_neurons=self.N_excit_neurons,
             N_inhib_neurons=self.N_inhib_neurons,
             time=self.time,
         )
-        self.W_ie. self.W_ie_ideal = gws.gen_IE(
+        self.W_ie.self.W_ie_ideal = gws.gen_IE(
             N_inhib_neurons=self.N_inhib_neurons,
             N_excit_neurons=self.N_excit_neurons,
             W_ei=self.W_ei,
@@ -163,8 +163,7 @@ class SNN_STDP:
             self.W_ie_ideal,
             self.pre_synaptic_trace,
             self.post_synaptic_trace,
-            self.num_neurons
-
+            self.num_neurons,
         ) = train_data(
             R=self.R,
             A=self.A,
@@ -190,7 +189,7 @@ class SNN_STDP:
             W_ei=self.W_ei,
             W_ei_ideal=self.W_ei_ideal,
             W_ie=self.W_ie,
-            W_ie_ideal=self.W_ie_ideal
+            W_ie_ideal=self.W_ie_ideal,
         )
 
         if retur:
@@ -200,10 +199,5 @@ class SNN_STDP:
                 self.W_se,
                 self.W_ee,
                 self.W_ei,
-                self.W_ie
+                self.W_ie,
             )
-    def test_data(self):
-        # do something
-
-    def eval_perform(self):
-        # do something
