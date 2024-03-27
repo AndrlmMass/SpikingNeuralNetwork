@@ -1,16 +1,18 @@
 # Gen data according to y number of classes
 import os
+import statistics
+import math
 from tqdm import tqdm
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 
-os.chdir(
-    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
-)
 # os.chdir(
-#    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
+#    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
 # )
+os.chdir(
+    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
+)
 
 from gen.gen_symbol import *
 
@@ -90,12 +92,13 @@ def gen_float_data_(
         # Execute the lambda function for the current class_index and assign its output
         input_space[item] = functions[t]()
         labels[item, t] = 1
+        print(t)
 
         # Assign blank part after symbol-input
         input_space[item] = functions[4]()
-        labels[item, 4] = 1
+        labels[item + 1, 4] = 1
 
-        if t == N_classes:
+        if t == N_classes - 1:
             t = 0
         else:
             t += 1
@@ -182,7 +185,7 @@ def input_space_plotted_single(data):
 
 # define function to create a raster plot of the input data
 def raster_plot(data, labels):
-    labels_name = ["tri", "O", "sq", "X", "ISI"]
+    labels_name = ["tri", "o", "sq", "x", "-"]
     indices = np.argmax(labels, axis=1)
 
     # Create raster plot with dots
@@ -203,10 +206,22 @@ def raster_plot(data, labels):
             s=labels_name[indices[t]],
             size=12,
         )
+
         t += 1
 
-    ax = plt.gca()
-    # ax.set_xlim([0, 1600])
+    # Calculate the frequency of the spikes to check that it is acceptable
+    sum_ = []
+    timepoints = data.shape[0] // 2
+    for j in range(0, data.shape[0], 201):
+        sum_.append(sum(data[j]))
+
+    print(statistics.mean(sum_), timepoints * 0.001)
+    # Calculate the average frequency
+    average_frequency = round(statistics.mean(sum_) / ((timepoints * 0.001) / 2), 2)
+
+    # Print the result
+    print(f"This is the current spiking frequency: {average_frequency} Hz")
+
     plt.xlabel("Time (ms)")
     plt.ylabel("Neuron Index")
     plt.show()
