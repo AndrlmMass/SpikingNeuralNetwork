@@ -1,7 +1,6 @@
 # Gen data according to y number of classes
 import os
 import statistics
-import math
 from tqdm import tqdm
 import pickle
 import numpy as np
@@ -21,10 +20,10 @@ def gen_float_data_(
     N_classes: int,
     N_input_neurons: int,
     items: int,
-    noise_rand_lvl: float,
-    signal_rand: bool,
-    sign_rand_lvl: float,
+    noise_rand: bool,
+    noise_variance: float | int,
     retur: bool,
+    mean: float | int,
 ):
     # Check if n_classes and items are compatible
     if items % N_classes != 0:
@@ -48,35 +47,36 @@ def gen_float_data_(
             input_dims=input_dims,
             triangle_size=0.7,
             triangle_thickness=230,
-            noise_rand_lvl=noise_rand_lvl,
-            signal_rand=signal_rand,
-            sign_rand_lvl=sign_rand_lvl,
+            noise_rand=noise_rand,
+            noise_variance=noise_variance,
         ),
         lambda: gen_circle(
             input_dims=input_dims,
             circle_size=0.6,
             circle_thickness=3,
-            noise_rand_lvl=noise_rand_lvl,
-            signal_rand=signal_rand,
-            sign_rand_lvl=sign_rand_lvl,
+            noise_rand=noise_rand,
+            noise_variance=noise_variance,
         ),
         lambda: gen_square(
             input_dims=input_dims,
             square_size=0.9,
             square_thickness=10,
-            noise_rand_lvl=noise_rand_lvl,
-            signal_rand=signal_rand,
-            sign_rand_lvl=sign_rand_lvl,
+            noise_rand=noise_rand,
+            noise_variance=noise_variance,
         ),
-        lambda: gen_x_symbol(
+        lambda: gen_x(
             input_dims=input_dims,
             x_size=0.6,
             x_thickness=200,
-            noise_rand_lvl=noise_rand_lvl,
-            signal_rand=signal_rand,
-            sign_rand_lvl=sign_rand_lvl,
+            noise_rand=noise_rand,
+            noise_variance=noise_variance,
         ),
-        lambda: gen_blank(input_dims=input_dims),
+        lambda: gen_blank(
+            input_dims=input_dims,
+            noise_rand=True,
+            noise_variance=noise_variance,
+            mean=mean,
+        ),
     ]
 
     # Ensure we have enough functions for the requested classes
@@ -94,7 +94,7 @@ def gen_float_data_(
         labels[item, t] = 1
 
         # Assign blank part after symbol-input
-        input_space[item] = functions[4]()
+        input_space[item + 1] = functions[4]()
         labels[item + 1, 4] = 1
 
         if t == N_classes - 1:
@@ -183,7 +183,7 @@ def input_space_plotted_single(data):
 
 # define function to create a raster plot of the input data
 def raster_plot(data, labels):
-    labels_name = ["tri", "o", "sq", "x", " "]
+    labels_name = ["t", "o", "s", "x", " "]
     indices = np.argmax(labels, axis=1)
 
     # Create raster plot with dots
@@ -195,12 +195,12 @@ def raster_plot(data, labels):
         )
     t = 0
 
-    for item_boundary in range(0, data.shape[0], 100 + 1):
+    for item_boundary in range(0, data.shape[0], 100):
         # Get label name
         plt.axvline(x=item_boundary, color="red", linestyle="--")
         plt.text(
             x=item_boundary + 25,
-            y=2200,
+            y=1700,
             s=labels_name[indices[t]],
             size=12,
         )
@@ -235,10 +235,10 @@ for rand_lvl in random_lvls:
         N_classes=4,
         N_input_neurons=1600,
         items=40,
-        noise_rand_lvl=rand_lvl,
-        signal_rand=True,
-        sign_rand_lvl=0.9,
-        retur=True,
+        noise_rand=True,
+        noise_variance=rand_lvl,
+        mean=2,
+        retur=True
     )
 
     training_data, labels_train = float_2_pos_spike(
@@ -246,15 +246,39 @@ for rand_lvl in random_lvls:
         labels=labels,
         timesteps=100,
         dt=0.001,
-        input_scaler=17,
-        save=True,
+        input_scaler=2,
+        save=False,
         retur=True,
         rand_lvl=rand_lvl,
     )
 
     raster_plot(training_data, labels_train)
 
-    for j in range(100):
-        input_space_plotted_single(data[j])
+    input_space_plotted_single(data[0])
+    
 
+data, labels = gen_float_data_(
+    N_classes=4,
+    N_input_neurons=1600,
+    items=40,
+    noise_rand=False,
+    noise_variance=0.01,
+    mean=0.1,
+    retur=True
+)
 
+training_data, labels_train = float_2_pos_spike(
+    data=data,
+    labels=labels,
+    timesteps=100,
+    dt=0.001,
+    input_scaler=5,
+    save=False,
+    retur=True,
+    rand_lvl=0,
+)
+
+raster_plot(training_data, labels_train)
+
+input_space_plotted_single(data[0])
+input_space_plotted_single(data[1])

@@ -1,15 +1,26 @@
 import numpy as np
 from skimage.draw import line
 from skimage.draw import circle_perimeter
+import matplotlib.pyplot as plt
+
+
+def generate_uniform_random(mean, variance):
+    # Calculate a and b from mean and variance
+    a = mean - np.sqrt(3 * variance)
+    b = mean + np.sqrt(3 * variance)
+
+    # Generate a random number from U(a,b)
+    random_number = np.random.uniform(a, b)
+
+    return random_number
 
 
 def gen_triangle(
     input_dims: int,
     triangle_size: float,
     triangle_thickness: int,
-    noise_rand_lvl: float,
-    signal_rand: bool,
-    sign_rand_lvl: float,
+    noise_rand: bool,
+    noise_variance: float | int,
 ):
 
     # Initialize the input space with zeros
@@ -85,13 +96,19 @@ def gen_triangle(
     input_space_flipped = np.flipud(input_space_normalized)
 
     # Add noise to input_space_flipped based on rand_lvl variable
-    for j in range(input_space_flipped.shape[0]):
-        for l in range(input_space_flipped.shape[1]):
-            val = input_space_flipped[j, l]
-            if val < 0.5:
-                input_space_flipped[j, l] = np.random.uniform(0, noise_rand_lvl)
-            elif signal_rand:
-                input_space_flipped[j, l] = np.random.uniform(sign_rand_lvl, 1)
+    if noise_rand:
+        for j in range(input_space_flipped.shape[0]):
+            for l in range(input_space_flipped.shape[1]):
+                mean, variance = input_space_flipped[j, l], noise_variance
+
+                fuzzy_val = generate_uniform_random(mean=mean, variance=variance)
+
+                if fuzzy_val > 1:
+                    fuzzy_val = 1
+                elif fuzzy_val < 0:
+                    fuzzy_val = 0
+
+                input_space_flipped[j, l] = fuzzy_val
 
     return input_space_flipped
 
@@ -100,9 +117,8 @@ def gen_square(
     input_dims: int,
     square_size: float,
     square_thickness: int,
-    noise_rand_lvl: float,
-    signal_rand: bool,
-    sign_rand_lvl: float,
+    noise_rand: bool,
+    noise_variance: float | int,
 ):
 
     # Define the input_space
@@ -129,24 +145,29 @@ def gen_square(
         input_space[start_idx:end_idx, end_idx - 1 - i] = 1
 
     # Add noise to input_space_flipped based on rand_lvl variable
-    for j in range(input_space.shape[0]):
-        for l in range(input_space.shape[1]):
-            val = input_space[j, l]
-            if val < sign_rand_lvl:
-                input_space[j, l] = np.random.uniform(0, noise_rand_lvl)
-            elif signal_rand:
-                input_space[j, l] = np.random.uniform(sign_rand_lvl, 1)
+    if noise_rand:
+        for j in range(input_space.shape[0]):
+            for l in range(input_space.shape[1]):
+                mean, variance = input_space[j, l], noise_variance
+
+                fuzzy_val = generate_uniform_random(mean=mean, variance=variance)
+
+                if fuzzy_val > 1:
+                    fuzzy_val = 1
+                elif fuzzy_val < 0:
+                    fuzzy_val = 0
+
+                input_space[j, l] = fuzzy_val
 
     return input_space
 
 
-def gen_x_symbol(
+def gen_x(
     input_dims: int,
     x_size: float,
     x_thickness: float,
-    noise_rand_lvl: float,
-    signal_rand: bool,
-    sign_rand_lvl: float,
+    noise_rand: bool,
+    noise_variance: float | int,
 ):
 
     # if input_dims % 2 == 0:
@@ -225,13 +246,19 @@ def gen_x_symbol(
     input_space_normalized = input_space / max_value if max_value > 0 else input_space
 
     # Add noise to input_space_flipped based on rand_lvl variable
-    for j in range(input_space_normalized.shape[0]):
-        for l in range(input_space_normalized.shape[1]):
-            val = input_space_normalized[j, l]
-            if val < sign_rand_lvl:
-                input_space_normalized[j, l] = np.random.uniform(0, noise_rand_lvl)
-            elif signal_rand:
-                input_space_normalized[j, l] = np.random.uniform(sign_rand_lvl, 1)
+    if noise_rand:
+        for j in range(input_space_normalized.shape[0]):
+            for l in range(input_space_normalized.shape[1]):
+                mean, variance = input_space_normalized[j, l], noise_variance
+
+                fuzzy_val = generate_uniform_random(mean=mean, variance=variance)
+
+                if fuzzy_val > 1:
+                    fuzzy_val = 1
+                elif fuzzy_val < 0:
+                    fuzzy_val = 0
+
+                input_space_normalized[j, l] = fuzzy_val
 
     return input_space_normalized
 
@@ -240,9 +267,8 @@ def gen_circle(
     input_dims: int,
     circle_size: float,
     circle_thickness: int,
-    noise_rand_lvl: float,
-    signal_rand: bool,
-    sign_rand_lvl: float,
+    noise_rand: bool,
+    noise_variance: float | int,
 ):
     if not (0 <= circle_size <= 1):
         raise ValueError("Circle size must be between 0 and 1.")
@@ -304,36 +330,76 @@ def gen_circle(
     input_space_normalized = input_space / max_value if max_value > 0 else input_space
 
     # Add noise to input_space_flipped based on rand_lvl variable
-    for j in range(input_space_normalized.shape[0]):
-        for l in range(input_space_normalized.shape[1]):
-            val = input_space_normalized[j, l]
-            if val < sign_rand_lvl:
-                input_space_normalized[j, l] = np.random.uniform(0, noise_rand_lvl)
-            elif signal_rand:
-                input_space_normalized[j, l] = np.random.uniform(sign_rand_lvl, 1)
+    if noise_rand:
+        for j in range(input_space_normalized.shape[0]):
+            for l in range(input_space_normalized.shape[1]):
+                mean, variance = input_space_normalized[j, l], noise_variance
+
+                fuzzy_val = generate_uniform_random(mean=mean, variance=variance)
+
+                if fuzzy_val > 1:
+                    fuzzy_val = 1
+                elif fuzzy_val < 0:
+                    fuzzy_val = 0
+
+                input_space_normalized[j, l] = fuzzy_val
 
     return input_space_normalized
 
 
-def gen_blank(input_dims: int):
+def generate_uniform_random_clipped(mean, variance):
+    a = mean - np.sqrt(3 * variance)
+    b = mean + np.sqrt(3 * variance)
 
-    # Create uniform random values for uppen bound given by noise_rand_lvl
-    input_space = np.reshape(
-        np.random.uniform(0, 0.05, input_dims * input_dims), (input_dims, input_dims)
-    )
+    # Generate a random number from U(a,b)
+    random_number = np.random.uniform(a, b)
+
+    # Clip the random number to be within [0, 1]
+    random_number_clipped = np.clip(random_number, 0, 1)
+
+    return random_number_clipped
+
+
+def gen_blank(input_dims, noise_rand, noise_variance, mean):
+    if noise_rand:
+        # Use the modified function with clipping
+        func = lambda i, j: generate_uniform_random_clipped(
+            mean=mean, variance=noise_variance
+        )
+
+        # Generate an input_dims*input_dims array
+        input_space = np.fromfunction(np.vectorize(func), (input_dims, input_dims))
+    else:
+        input_space = np.zeros(shape=(input_dims, input_dims))
 
     return input_space
 
-
-
-# Check that the functions work properly by plotting their outputs
-
-data = gen_triangle(
-            input_dims=40,
+data = gen_triangle(input_dims=40,
             triangle_size=0.7,
             triangle_thickness=230,
-            noise_rand_lvl=0,
-            signal_rand=False,
-            sign_rand_lvl=0,
-        )
+            noise_rand=True,
+            noise_variance=0.1)
 
+def input_space_plotted_single(data):
+
+    # The function receives a 2D array of values
+    sqr_side = int(np.sqrt(data.shape))
+
+    # Convert 1D array to 2D
+    data = np.reshape(data, (sqr_side, sqr_side))
+
+    # Create a plt subplot
+    fig, ax = plt.subplots()
+
+    # Create plot
+    ax.imshow(data, cmap="Greys", interpolation="nearest")
+
+    plt.grid(visible=True, which="both")
+    plt.show()
+
+data = gen_blank(input_dims=40, noise_rand=True, noise_variance=0.05, mean=0.1)
+
+data = data.flatten()
+
+
+input_space_plotted_single(data)

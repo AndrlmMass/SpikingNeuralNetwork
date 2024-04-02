@@ -40,7 +40,7 @@ snn = SNN_STDP(
 )
 
 # Initialize & visualize pre-trained network
-MemPot, t_since_spik, W_se, W_ee, W_ei, W_ie = snn.initialize_network()
+MemPot, t_since_spik, W_se, W_ee, W_ei, W_ie = snn.initialize_network(N_input_neurons, N_excit_neurons, N_inhib_neurons, radius, prob, retur)
 
 # Load data
 snn.load_data()
