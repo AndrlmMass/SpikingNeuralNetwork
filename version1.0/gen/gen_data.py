@@ -7,12 +7,12 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 
-# os.chdir(
-#    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
-# )
 os.chdir(
-    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
+    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
 )
+# os.chdir(
+#    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
+# )
 
 from gen.gen_symbol import *
 
@@ -92,7 +92,6 @@ def gen_float_data_(
         # Execute the lambda function for the current class_index and assign its output
         input_space[item] = functions[t]()
         labels[item, t] = 1
-        print(t)
 
         # Assign blank part after symbol-input
         input_space[item] = functions[4]()
@@ -165,7 +164,7 @@ def float_2_pos_spike(
 
 # Plot input_data structure to ensure realistic creation
 def input_space_plotted_single(data):
-    print(data.shape)
+
     # The function receives a 2D array of values
     sqr_side = int(np.sqrt(data.shape))
 
@@ -179,13 +178,12 @@ def input_space_plotted_single(data):
     ax.imshow(data, cmap="Greys", interpolation="nearest")
 
     plt.grid(visible=True, which="both")
-
     plt.show()
 
 
 # define function to create a raster plot of the input data
 def raster_plot(data, labels):
-    labels_name = ["tri", "o", "sq", "x", "-"]
+    labels_name = ["tri", "o", "sq", "x", " "]
     indices = np.argmax(labels, axis=1)
 
     # Create raster plot with dots
@@ -254,7 +252,9 @@ for rand_lvl in random_lvls:
         rand_lvl=rand_lvl,
     )
 
-raster_plot(training_data, labels_train)
+    raster_plot(training_data, labels_train)
 
-for j in range(100):
-    input_space_plotted_single(data[j])
+    for j in range(100):
+        input_space_plotted_single(data[j])
+
+

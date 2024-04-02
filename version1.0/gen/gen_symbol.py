@@ -323,3 +323,17 @@ def gen_blank(input_dims: int):
     )
 
     return input_space
+
+
+
+# Check that the functions work properly by plotting their outputs
+
+data = gen_triangle(
+            input_dims=40,
+            triangle_size=0.7,
+            triangle_thickness=230,
+            noise_rand_lvl=0,
+            signal_rand=False,
+            sign_rand_lvl=0,
+        )
+
