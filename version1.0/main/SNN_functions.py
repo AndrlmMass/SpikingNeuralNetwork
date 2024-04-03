@@ -5,12 +5,12 @@ import os
 import pickle
 import numpy as np
 
-os.chdir(
-    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
-)
 # os.chdir(
-#    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork\\version1.0"
+#    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
 # )
+os.chdir(
+    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork\\version1.0"
+)
 
 from plot.plot_training import *
 from plot.plot_network import *
@@ -30,7 +30,7 @@ class SNN_STDP:
         tau_m: float,
         num_items: float,
         tau_stdp: float,
-        num_neurons: int, 
+        num_neurons: int,
         dt: float,
         T: int,
         V_rest: int,
@@ -79,7 +79,7 @@ class SNN_STDP:
         N_excit_neurons: int,
         N_inhib_neurons: int,
         radius: int,
-        prob: float | int,
+        W_ie_prob: float | int,
         retur: bool,
     ):
         self.N_input_neurons = N_input_neurons
@@ -107,7 +107,7 @@ class SNN_STDP:
             N_inhib_neurons=self.N_inhib_neurons,
             N_excit_neurons=self.N_excit_neurons,
             W_ei=self.W_ei,
-            prob=prob,
+            prob=W_ie_prob,
             time=self.time,
         )
 

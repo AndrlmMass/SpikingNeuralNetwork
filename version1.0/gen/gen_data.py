@@ -6,14 +6,14 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 
-os.chdir(
-    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
-)
 # os.chdir(
-#    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
+#    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
 # )
+os.chdir(
+    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\gen"
+)
 
-from gen.gen_symbol import *
+from gen_symbol import *
 
 
 def gen_float_data_(
@@ -23,7 +23,7 @@ def gen_float_data_(
     noise_rand: bool,
     noise_variance: float | int,
     retur: bool,
-    mean: float | int,
+    mean: int | float,
 ):
     # Check if n_classes and items are compatible
     if items % N_classes != 0:
@@ -45,37 +45,34 @@ def gen_float_data_(
     functions = [
         lambda: gen_triangle(
             input_dims=input_dims,
-            triangle_size=0.7,
-            triangle_thickness=230,
+            triangle_size=0.8,
+            triangle_thickness=300,
             noise_rand=noise_rand,
             noise_variance=noise_variance,
         ),
         lambda: gen_circle(
             input_dims=input_dims,
-            circle_size=0.6,
-            circle_thickness=3,
+            circle_size=0.8,
+            circle_thickness=5,
             noise_rand=noise_rand,
             noise_variance=noise_variance,
         ),
         lambda: gen_square(
             input_dims=input_dims,
-            square_size=0.9,
-            square_thickness=10,
+            square_size=0.8,
+            square_thickness=8,
             noise_rand=noise_rand,
             noise_variance=noise_variance,
         ),
         lambda: gen_x(
             input_dims=input_dims,
-            x_size=0.6,
-            x_thickness=200,
+            x_size=0.8,
+            x_thickness=350,
             noise_rand=noise_rand,
             noise_variance=noise_variance,
         ),
         lambda: gen_blank(
-            input_dims=input_dims,
-            noise_rand=True,
-            noise_variance=noise_variance,
-            mean=mean,
+            input_dims=input_dims, noise_variance=noise_variance, mean=mean
         ),
     ]
 
@@ -138,6 +135,9 @@ def float_2_pos_spike(
         for j in range(N_input_neurons):  # Iterating over neurons
             # Calculate the mean spike count for the Poisson distribution
             lambda_poisson = data[i, j] * dt * input_scaler
+
+            if lambda_poisson < 0 or np.isnan(lambda_poisson):
+                lambda_poisson = 0
 
             # Generate spikes using Poisson distribution
             for t in range(timesteps):
@@ -210,8 +210,9 @@ def raster_plot(data, labels):
     # Calculate the frequency of the spikes to check that it is acceptable
     sum_ = []
     timepoints = data.shape[0] // 2
-    for j in range(0, data.shape[0], 201):
-        sum_.append(sum(data[j]))
+    for j in range(0, data.shape[0], 100):
+        if (j // 100) % 2 == 0 or j == 0:
+            sum_.append(sum(data[j]))
 
     print(statistics.mean(sum_), timepoints * 0.001)
     # Calculate the average frequency
@@ -225,46 +226,14 @@ def raster_plot(data, labels):
     plt.show()
 
 
-# Define randomness levels for the training data in a list
-random_lvls = [0, 0.3, 0.5, 0.7]
-
-for rand_lvl in random_lvls:
-    print(f"generating training data at {rand_lvl} randomness level:\n")
-
-    data, labels = gen_float_data_(
-        N_classes=4,
-        N_input_neurons=1600,
-        items=40,
-        noise_rand=True,
-        noise_variance=rand_lvl,
-        mean=2,
-        retur=True
-    )
-
-    training_data, labels_train = float_2_pos_spike(
-        data=data,
-        labels=labels,
-        timesteps=100,
-        dt=0.001,
-        input_scaler=2,
-        save=False,
-        retur=True,
-        rand_lvl=rand_lvl,
-    )
-
-    raster_plot(training_data, labels_train)
-
-    input_space_plotted_single(data[0])
-    
-
 data, labels = gen_float_data_(
     N_classes=4,
     N_input_neurons=1600,
     items=40,
     noise_rand=True,
     noise_variance=0.05,
-    mean=0.1,
-    retur=True
+    retur=True,
+    mean=0,
 )
 
 training_data, labels_train = float_2_pos_spike(
@@ -272,7 +241,7 @@ training_data, labels_train = float_2_pos_spike(
     labels=labels,
     timesteps=100,
     dt=0.001,
-    input_scaler=10,
+    input_scaler=5,
     save=False,
     retur=True,
     rand_lvl=0,
