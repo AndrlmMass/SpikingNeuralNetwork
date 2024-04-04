@@ -6,12 +6,12 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 
-# os.chdir(
-#    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
-# )
 os.chdir(
-    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\gen"
+    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\gen"
 )
+# os.chdir(
+#    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\gen"
+# )
 
 from gen_symbol import *
 
@@ -24,6 +24,7 @@ def gen_float_data_(
     noise_variance: float | int,
     retur: bool,
     mean: int | float,
+    blank_variance: int | float,
 ):
     # Check if n_classes and items are compatible
     if items % N_classes != 0:
@@ -52,27 +53,27 @@ def gen_float_data_(
         ),
         lambda: gen_circle(
             input_dims=input_dims,
-            circle_size=0.7,
-            circle_thickness=3,
+            circle_size=0.575,
+            circle_thickness=2,
             noise_rand=noise_rand,
             noise_variance=noise_variance,
         ),
         lambda: gen_square(
             input_dims=input_dims,
-            square_size=0.6,
-            square_thickness=4,
+            square_size=0.63,
+            square_thickness=2,
             noise_rand=noise_rand,
             noise_variance=noise_variance,
         ),
         lambda: gen_x(
             input_dims=input_dims,
-            x_size=0.8,
-            x_thickness=350,
+            x_size=0.6,
+            x_thickness=200,
             noise_rand=noise_rand,
             noise_variance=noise_variance,
         ),
         lambda: gen_blank(
-            input_dims=input_dims, noise_variance=noise_variance, mean=mean
+            input_dims=input_dims, blank_variance=blank_variance, mean=mean
         ),
     ]
 
@@ -112,12 +113,12 @@ def float_2_pos_spike(
     labels: np.ndarray,
     timesteps: int,
     dt: float,
-    input_scaler: int | float,
     save: bool,
     retur: bool,
     rand_lvl: float,
+    scaler: int | float
 ):
-    # Data has shape items x neurons
+    # Data has shape time x neurons
 
     # Assert number of items
     items = data.shape[0]
@@ -134,7 +135,7 @@ def float_2_pos_spike(
     for i in range(items):  # Iterating over items
         for j in range(N_input_neurons):  # Iterating over neurons
             # Calculate the mean spike count for the Poisson distribution
-            lambda_poisson = data[i, j] * dt * input_scaler
+            lambda_poisson = data[i, j] * dt * scaler
 
             if lambda_poisson < 0 or np.isnan(lambda_poisson):
                 lambda_poisson = 0
@@ -145,7 +146,7 @@ def float_2_pos_spike(
                 index = i * timesteps + t
                 poisson_input[index, j] = 1 if spike_count > 0 else 0
 
-    # save data if true
+    # save data if save=true
     if save:
         print(
             f"Saving training and testing data with labels for random level {rand_lvl}"
@@ -208,18 +209,38 @@ def raster_plot(data, labels):
         t += 1
 
     # Calculate the frequency of the spikes to check that it is acceptable
-    t_counts = sum([np.sum(data[j : j + 100]) for j in range(0, data.shape[0], 800)])
-    c_counts = sum([np.sum(data[j : j + 100]) for j in range(200, data.shape[0], 800)])
-    s_counts = sum([np.sum(data[j : j + 100]) for j in range(400, data.shape[0], 800)])
-    x_counts = sum([np.sum(data[j : j + 100]) for j in range(600, data.shape[0], 800)])
-    b_counts = sum([np.sum(data[j : j + 100]) for j in range(100, data.shape[0], 200)])
+    t_counts = (
+        sum([np.sum(data[j : j + 99]) for j in range(0, data.shape[0], 800)])
+        // data.shape[1]
+    )
+    t_steps = (data.shape[0] // 800) * 100
+    c_counts = (
+        sum([np.sum(data[j : j + 99]) for j in range(200, data.shape[0], 800)])
+        // data.shape[1]
+    )
+    c_steps = ((data.shape[0] - 200) // 800) * 100
+    s_counts = (
+        sum([np.sum(data[j : j + 99]) for j in range(400, data.shape[0], 800)])
+        // data.shape[1]
+    )
+    s_steps = ((data.shape[0] - 400) // 800) * 100
+    x_counts = (
+        sum([np.sum(data[j : j + 99]) for j in range(600, data.shape[0], 800)])
+        // data.shape[1]
+    )
+    x_steps = ((data.shape[0] - 600) // 800) * 100
+    b_counts = (
+        sum([np.sum(data[j : j + 99]) for j in range(100, data.shape[0], 200)])
+        // data.shape[1]
+    )
+    b_steps = ((data.shape[0] - 100) // 200) * 100
 
     # Calculate the frquency of firing according to this formula: (spikes / possible spikes (units)) * timeunit (this is used to convert the unit to seconds, not milieconds)
-    t_hz = t_counts / (100 * (t_counts // 100) * 0.001)
-    c_hz = c_counts / (100 * (t_counts // 100) * 0.001)
-    s_hz = s_counts / (100 * (t_counts // 100) * 0.001)
-    x_hz = x_counts / (100 * (t_counts // 100) * 0.001)
-    b_hz = b_counts / (100 * (t_counts // 100) * 0.001)
+    t_hz = t_counts // (t_steps * 0.001)
+    c_hz = c_counts // (c_steps * 0.001)
+    s_hz = s_counts // (s_steps * 0.001)
+    x_hz = x_counts // (x_steps * 0.001)
+    b_hz = b_counts // (b_steps * 0.001)
 
     print(f"t: {t_hz} Hz\nc: {c_hz} Hz\ns: {s_hz} Hz\nx: {x_hz} Hz\nb: {b_hz} Hz")
 
@@ -236,6 +257,7 @@ data, labels = gen_float_data_(
     noise_variance=0.05,
     retur=True,
     mean=0,
+    blank_variance=0.01
 )
 
 training_data, labels_train = float_2_pos_spike(
@@ -243,13 +265,13 @@ training_data, labels_train = float_2_pos_spike(
     labels=labels,
     timesteps=100,
     dt=0.001,
-    input_scaler=10,
     save=False,
     retur=True,
     rand_lvl=0,
+    scaler=50
 )
 
 raster_plot(training_data, labels_train)
 
-for j in range(0, 10):
+for j in range(0, 8):
     input_space_plotted_single(data[j])

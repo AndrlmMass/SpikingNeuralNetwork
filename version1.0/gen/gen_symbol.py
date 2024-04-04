@@ -290,8 +290,8 @@ def gen_circle(
 
     def draw_circle_with_thickness(center, radius, thickness):
         # Calculate the range of radii for the concentric circles
-        min_radius = radius - thickness // 2
-        max_radius = radius + thickness // 2
+        min_radius = int(radius - thickness // 2)
+        max_radius = int(radius + thickness // 2)
 
         for r in range(min_radius, max_radius + 1):
             rr, cc = circle_perimeter(
@@ -345,9 +345,9 @@ def gen_circle(
     return input_space_normalized
 
 
-def gen_blank(input_dims, noise_variance, mean):
+def gen_blank(input_dims, blank_variance, mean):
     # Standard deviation is the square root of variance
-    std_dev = np.sqrt(noise_variance)
+    std_dev = np.sqrt(blank_variance)
     # Generate a 2D array of values from a normal distribution
     input_space = np.random.normal(mean, std_dev, (input_dims, input_dims))
     return input_space
