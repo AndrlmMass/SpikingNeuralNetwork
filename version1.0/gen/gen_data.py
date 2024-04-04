@@ -45,22 +45,22 @@ def gen_float_data_(
     functions = [
         lambda: gen_triangle(
             input_dims=input_dims,
-            triangle_size=0.8,
-            triangle_thickness=300,
+            triangle_size=0.7,
+            triangle_thickness=250,
             noise_rand=noise_rand,
             noise_variance=noise_variance,
         ),
         lambda: gen_circle(
             input_dims=input_dims,
-            circle_size=0.8,
-            circle_thickness=5,
+            circle_size=0.7,
+            circle_thickness=3,
             noise_rand=noise_rand,
             noise_variance=noise_variance,
         ),
         lambda: gen_square(
             input_dims=input_dims,
-            square_size=0.8,
-            square_thickness=8,
+            square_size=0.6,
+            square_thickness=4,
             noise_rand=noise_rand,
             noise_variance=noise_variance,
         ),
@@ -208,18 +208,20 @@ def raster_plot(data, labels):
         t += 1
 
     # Calculate the frequency of the spikes to check that it is acceptable
-    sum_ = []
-    timepoints = data.shape[0] // 2
-    for j in range(0, data.shape[0], 100):
-        if (j // 100) % 2 == 0 or j == 0:
-            sum_.append(sum(data[j]))
+    t_counts = sum([np.sum(data[j : j + 100]) for j in range(0, data.shape[0], 800)])
+    c_counts = sum([np.sum(data[j : j + 100]) for j in range(200, data.shape[0], 800)])
+    s_counts = sum([np.sum(data[j : j + 100]) for j in range(400, data.shape[0], 800)])
+    x_counts = sum([np.sum(data[j : j + 100]) for j in range(600, data.shape[0], 800)])
+    b_counts = sum([np.sum(data[j : j + 100]) for j in range(100, data.shape[0], 200)])
 
-    print(statistics.mean(sum_), timepoints * 0.001)
-    # Calculate the average frequency
-    average_frequency = round(statistics.mean(sum_) / ((timepoints * 0.001) / 2), 2)
+    # Calculate the frquency of firing according to this formula: (spikes / possible spikes (units)) * timeunit (this is used to convert the unit to seconds, not milieconds)
+    t_hz = t_counts / (100 * (t_counts // 100) * 0.001)
+    c_hz = c_counts / (100 * (t_counts // 100) * 0.001)
+    s_hz = s_counts / (100 * (t_counts // 100) * 0.001)
+    x_hz = x_counts / (100 * (t_counts // 100) * 0.001)
+    b_hz = b_counts / (100 * (t_counts // 100) * 0.001)
 
-    # Print the result
-    print(f"This is the current spiking frequency: {average_frequency} Hz")
+    print(f"t: {t_hz} Hz\nc: {c_hz} Hz\ns: {s_hz} Hz\nx: {x_hz} Hz\nb: {b_hz} Hz")
 
     plt.xlabel("Time (ms)")
     plt.ylabel("Neuron Index")
@@ -241,7 +243,7 @@ training_data, labels_train = float_2_pos_spike(
     labels=labels,
     timesteps=100,
     dt=0.001,
-    input_scaler=5,
+    input_scaler=10,
     save=False,
     retur=True,
     rand_lvl=0,
@@ -249,5 +251,5 @@ training_data, labels_train = float_2_pos_spike(
 
 raster_plot(training_data, labels_train)
 
-input_space_plotted_single(data[0])
-input_space_plotted_single(data[1])
+for j in range(0, 10):
+    input_space_plotted_single(data[j])
