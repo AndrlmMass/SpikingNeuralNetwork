@@ -101,7 +101,7 @@ def gen_triangle(
                 mean, variance = input_space_flipped[j, l], noise_variance
 
                 fuzzy_val = generate_normal_value(mean=mean, variance=variance)
-
+                
                 fuzzy_val = np.clip(fuzzy_val, a_min=0, a_max=1)
 
                 input_space_flipped[j, l] = fuzzy_val

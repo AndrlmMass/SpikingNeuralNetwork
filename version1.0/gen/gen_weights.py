@@ -3,7 +3,7 @@ import random
 
 
 class gen_weights:
-    def gen_SE(radius, N_input_neurons, N_excit_neurons, time, basenum):
+    def gen_SE(self, radius, N_input_neurons, N_excit_neurons, time, basenum):
         # Calculate the side length of the square grid of input neurons
         input_shape = int(np.sqrt(N_input_neurons))
 

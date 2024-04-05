@@ -5,17 +5,23 @@ import os
 import pickle
 import numpy as np
 
-# os.chdir(
-#    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
-# )
 os.chdir(
-    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork\\version1.0"
+    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
 )
+#os.chdir(
+#    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork\\version1.0"
+#)
 
-from plot.plot_training import *
-from plot.plot_network import *
-from gen.gen_weights import *
-from main.train import *
+# Import other functions
+import sys
+sys.path.append('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\plot')
+sys.path.append('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\gen')
+sys.path.append('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\main')
+
+from plot_training import *
+from plot_network import *
+from gen_weights import *
+from train import *
 
 
 # Initialize class variable
@@ -78,9 +84,10 @@ class SNN_STDP:
         N_input_neurons: int,
         N_excit_neurons: int,
         N_inhib_neurons: int,
-        radius: int,
+        radius_: int,
         W_ie_prob: float | int,
-        retur: bool,
+        W_ee_prob: float | int,
+        retur: bool
     ):
         self.N_input_neurons = N_input_neurons
         self.N_excit_neurons = N_excit_neurons
@@ -90,13 +97,14 @@ class SNN_STDP:
         gws = gen_weights()
 
         self.W_se, self.W_se_ideal = gws.gen_SE(
-            radius=radius,
+            radius=radius_,
             N_input_neurons=self.N_input_neurons,
             N_excit_neurons=self.N_excit_neurons,
             time=self.time,
+            basenum=1
         )
         self.W_ee, self.W_ee_ideal = gws.gen_EE(
-            N_excit_neurons=self.N_excit_neurons, prob=prob, time=self.time
+            N_excit_neurons=self.N_excit_neurons, prob=W_ee_prob, time=self.time
         )
         self.W_ei, self.W_ei_ideal = gws.gen_EI(
             N_excit_neurons=self.N_excit_neurons,

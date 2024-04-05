@@ -148,6 +148,9 @@ def float_2_pos_spike(
 
     # save data if save=true
     if save:
+        os.chdir(
+            "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
+        )
         print(
             f"Saving training and testing data with labels for random level {rand_lvl}"
         )
@@ -248,30 +251,28 @@ def raster_plot(data, labels):
     plt.ylabel("Neuron Index")
     plt.show()
 
+rand_lvls = [0.01, 0.025, 0.05]
 
-data, labels = gen_float_data_(
-    N_classes=4,
-    N_input_neurons=1600,
-    items=40,
-    noise_rand=True,
-    noise_variance=0.05,
-    retur=True,
-    mean=0,
-    blank_variance=0.01
-)
+for l in range(len(rand_lvls)):
+    data, labels = gen_float_data_(
+        N_classes=4,
+        N_input_neurons=1600,
+        items=40,
+        noise_rand=True,
+        noise_variance=rand_lvls[l],
+        retur=True,
+        mean=0,
+        blank_variance=0.01
+    )
 
-training_data, labels_train = float_2_pos_spike(
-    data=data,
-    labels=labels,
-    timesteps=100,
-    dt=0.001,
-    save=False,
-    retur=True,
-    rand_lvl=0,
-    scaler=50
-)
+    training_data, labels_train = float_2_pos_spike(
+        data=data,
+        labels=labels,
+        timesteps=100,
+        dt=0.001,
+        save=True,
+        retur=True,
+        rand_lvl=0,
+        scaler=50
+    )
 
-raster_plot(training_data, labels_train)
-
-for j in range(0, 8):
-    input_space_plotted_single(data[j])

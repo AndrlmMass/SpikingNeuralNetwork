@@ -3,15 +3,19 @@
 # Set cw
 import os
 
+
 os.chdir(
     "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
 )
 # os.chdir(
-#    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork"
+#    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork\\version1.0"
 # )
 
 # Import libraries
-from main.SNN_functions import *
+import sys
+sys.path.append('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\gen')
+sys.path.append('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\main')
+from SNN_functions import *
 
 # Initialize SNN object
 snn = SNN_STDP(
@@ -36,7 +40,7 @@ snn = SNN_STDP(
     target_weight=0,
     A=1,
     B=1,
-    beta=1,
+    beta=1
 )
 
 # Initialize & visualize pre-trained network
@@ -44,9 +48,10 @@ MemPot, t_since_spik, W_se, W_ee, W_ei, W_ie = snn.initialize_network(
     N_input_neurons=1600,
     N_excit_neurons=1600,
     N_inhib_neurons=400,
-    radius=2,
+    radius_=2,
     W_ie_prob=0.1,
-    retur=True,
+    W_ee_prob=0.1,
+    retur=True
 )
 
 # Load data
