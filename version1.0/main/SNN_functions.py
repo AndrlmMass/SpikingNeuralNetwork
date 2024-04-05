@@ -104,19 +104,22 @@ class SNN_STDP:
             basenum=1
         )
         self.W_ee, self.W_ee_ideal = gws.gen_EE(
-            N_excit_neurons=self.N_excit_neurons, prob=W_ee_prob, time=self.time
+            N_excit_neurons=self.N_excit_neurons, prob=W_ee_prob, time=self.time, basenum=1
         )
         self.W_ei, self.W_ei_ideal = gws.gen_EI(
             N_excit_neurons=self.N_excit_neurons,
             N_inhib_neurons=self.N_inhib_neurons,
             time=self.time,
+            weight_val=1
         )
         self.W_ie.self.W_ie_ideal = gws.gen_IE(
             N_inhib_neurons=self.N_inhib_neurons,
             N_excit_neurons=self.N_excit_neurons,
             W_ei=self.W_ei,
-            prob=W_ie_prob,
             time=self.time,
+            N_ws=4,
+            weight_val=1,
+            radius=1
         )
 
         # Generate membrane potential and spikes array

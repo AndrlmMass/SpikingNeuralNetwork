@@ -48,7 +48,7 @@ class gen_weights:
 
         return W_se, W_se_ideal
 
-    def gen_EE(N_excit_neurons, prob, time, basenum):
+    def gen_EE(self, N_excit_neurons, prob, time, basenum):
         # Initialize the arrays for weights
         W_ee = np.zeros((time, N_excit_neurons, N_excit_neurons))
 
@@ -64,7 +64,7 @@ class gen_weights:
 
         return W_ee, W_ee_ideal
 
-    def gen_EI(N_excit_neurons, N_inhib_neurons, time, weight_val):
+    def gen_EI(self, N_excit_neurons, N_inhib_neurons, time, weight_val):
         # Calculate probability of connection
         prob = N_excit_neurons / (N_excit_neurons + N_inhib_neurons)
 
@@ -80,7 +80,9 @@ class gen_weights:
 
         return W_ei, W_ei_ideal
 
-    def gen_IE(N_inhib_neurons, N_excit_neurons, W_ei, radius, time, N_ws, weight_val):
+    def gen_IE(
+        self, N_inhib_neurons, N_excit_neurons, W_ei, radius, time, N_ws, weight_val
+    ):
         # Initialize the weight array for IE connections
         W_ie = np.zeros((time, N_inhib_neurons, N_excit_neurons))
 
@@ -88,15 +90,15 @@ class gen_weights:
         W_ie = W_ei.T
 
         # Loop through each receiving neuron
-        for n in W_ie[0].shape[0]:
+        for n in range(W_ie[0].shape[0]):
             # Define neighbourhood of connections based on mean presynaptic connections
             mid_point = int(np.mean(W_ei[:, n]))
             diff_min = min(W_ei[0, :, n]) - mid_point - radius
             diff_max = max(W_ei[0, :, n]) - mid_point + radius
-            range = (mid_point - radius + diff_min, mid_point + radius - diff_max)
+            range_ = (mid_point - radius + diff_min, mid_point + radius - diff_max)
 
             # Find zero-valued positions
-            zeros = np.where(W_ei[0, range[0] : range[1], n] == 0)
+            zeros = np.where(W_ei[0, range_[0] : range_[1], n] == 0)
 
             # Draw N_ws samples from index-list
             nz_indices = random.sample(zeros, N_ws)

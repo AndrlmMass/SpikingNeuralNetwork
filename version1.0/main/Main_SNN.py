@@ -24,7 +24,7 @@ snn = SNN_STDP(
     C=1,
     R=1,
     tau_m=0.01,
-    num_neurons=3600,
+    num_neurons=360,
     num_items=20,
     tau_stdp=0.01,
     dt=0.001,
@@ -45,9 +45,9 @@ snn = SNN_STDP(
 
 # Initialize & visualize pre-trained network
 MemPot, t_since_spik, W_se, W_ee, W_ei, W_ie = snn.initialize_network(
-    N_input_neurons=1600,
-    N_excit_neurons=1600,
-    N_inhib_neurons=400,
+    N_input_neurons=160,
+    N_excit_neurons=160,
+    N_inhib_neurons=40,
     radius_=2,
     W_ie_prob=0.1,
     W_ee_prob=0.1,
