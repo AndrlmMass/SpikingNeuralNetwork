@@ -1,17 +1,28 @@
 # Gen data according to y number of classes
 import os
-import statistics
+import sys
 from tqdm import tqdm
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 
-# os.chdir(
-#    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
-# )
-os.chdir(
-    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\gen"
-)
+if os.path.exists(
+    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork"
+):
+    os.chdir(
+        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
+    )
+    sys.path.append(
+        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\gen"
+    )
+else:
+    os.chdir(
+        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
+    )
+    sys.path.append(
+        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\gen"
+    )
+
 
 from gen_symbol import *
 
@@ -24,6 +35,7 @@ def gen_float_data_(
     noise_variance: float | int,
     retur: bool,
     mean: int | float,
+    blank_variance: int | float,
 ):
     # Check if n_classes and items are compatible
     if items % N_classes != 0:
@@ -72,7 +84,7 @@ def gen_float_data_(
             noise_variance=noise_variance,
         ),
         lambda: gen_blank(
-            input_dims=input_dims, noise_variance=noise_variance, mean=mean
+            input_dims=input_dims, blank_variance=blank_variance, mean=mean
         ),
     ]
 
@@ -81,7 +93,6 @@ def gen_float_data_(
         raise ValueError(
             "Not enough functions to generate symbols for the requested number of classes"
         )
-
     # Loop over items to generate symbols
     t = 0
     for item in tqdm(range(0, items, 2), ncols=100):
@@ -154,7 +165,7 @@ def float_2_pos_spike(
             pickle.dump(poisson_input, file)
         print("training data is saved in data folder")
 
-        with open(f"data/labels_train/testing_data_{rand_lvl}.pkl", "wb") as file:
+        with open(f"data/labels_train/labels_train_{rand_lvl}.pkl", "wb") as file:
             pickle.dump(labels, file)
         print("training labels is saved in data folder")
 
@@ -216,11 +227,10 @@ def raster_plot(data, labels):
 
     # Calculate the frquency of firing according to this formula: (spikes / possible spikes (units)) * timeunit (this is used to convert the unit to seconds, not milieconds)
     t_hz = t_counts / (100 * (t_counts // 100) * 0.001)
-    c_hz = c_counts / (100 * (t_counts // 100) * 0.001)
-    s_hz = s_counts / (100 * (t_counts // 100) * 0.001)
-    x_hz = x_counts / (100 * (t_counts // 100) * 0.001)
-    b_hz = b_counts / 
-    (100 * (t_counts // 100) * 0.001)
+    c_hz = c_counts / (100 * (c_counts // 100) * 0.001)
+    s_hz = s_counts / (100 * (s_counts // 100) * 0.001)
+    x_hz = x_counts / (100 * (x_counts // 100) * 0.001)
+    b_hz = b_counts / (100 * (b_counts // 100) * 0.001)
 
     print(f"t: {t_hz} Hz\nc: {c_hz} Hz\ns: {s_hz} Hz\nx: {x_hz} Hz\nb: {b_hz} Hz")
 
@@ -229,28 +239,32 @@ def raster_plot(data, labels):
     plt.show()
 
 
-data, labels = gen_float_data_(
-    N_classes=4,
-    N_input_neurons=1600,
-    items=40,
-    noise_rand=True,
-    noise_variance=0.05,
-    retur=True,
-    mean=0,
-)
+rand_lvl = [0, 0.01, 0.03, 0.05]
 
-training_data, labels_train = float_2_pos_spike(
-    data=data,
-    labels=labels,
-    timesteps=100,
-    dt=0.001,
-    input_scaler=10,
-    save=False,
-    retur=True,
-    rand_lvl=0,
-)
+for j in range(len(rand_lvl)):
+    data, labels = gen_float_data_(
+        N_classes=4,
+        N_input_neurons=1600,
+        items=40,
+        noise_rand=True,
+        noise_variance=rand_lvl[j],
+        retur=True,
+        mean=0,
+        blank_variance=0.01,
+    )
 
-raster_plot(training_data, labels_train)
+    float_2_pos_spike(
+        data=data,
+        labels=labels,
+        timesteps=100,
+        dt=0.001,
+        input_scaler=10,
+        save=True,
+        retur=False,
+        rand_lvl=rand_lvl[j],
+    )
 
-for j in range(0, 10):
-    input_space_plotted_single(data[j])
+# raster_plot(training_data, labels_train)
+
+# for j in range(0, 10):
+#   input_space_plotted_single(data[j])

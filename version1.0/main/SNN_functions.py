@@ -69,6 +69,7 @@ class SNN_STDP:
         A: float | int,
         B: float | int,
         beta: float | int,
+        delta: float | int,
     ):
         self.V_th = V_th
         self.V_reset = V_reset
@@ -81,6 +82,7 @@ class SNN_STDP:
         self.A = A
         self.B = B
         self.beta = beta
+        self.delta = delta
         self.num_neurons = num_neurons
         self.target_weight = target_weight
         self.num_timesteps = int(T / dt)
@@ -157,28 +159,24 @@ class SNN_STDP:
                 self.W_ie,
             )
 
-    def load_data(self, rand_lvl, retur):
-        with open(
-            f"/data/training_data/training_data_{rand_lvl}.pkl", "rb"
-        ) as openfile:
+    def load_data(self, rand_lvl: float | int, retur: bool):
+        cur_path = os.getcwd()
+        data_path = f"\\data\\training_data\\training_data_{rand_lvl}.pkl"
+        data_dir = cur_path + data_path
+        print(data_dir)
+        print(cur_path)
+
+        with open(data_dir, "rb") as openfile:
             self.training_data = pickle.load(openfile)
 
-        with open(f"/data/testing_data/testing_data_{rand_lvl}.pkl", "rb") as openfile:
-            self.testing_data = pickle.load(openfile)
+        label_path = f"\\data\\labels_train\\labels_train_{rand_lvl}.pkl"
+        label_dir = cur_path + label_path
 
-        with open(f"/data/labels_train/labels_train_{rand_lvl}.pkl", "rb") as openfile:
+        with open(label_dir, "rb") as openfile:
             self.labels_train = pickle.load(openfile)
 
-        with open(f"/data/labels_test/labels_test_{rand_lvl}.pkl", "rb") as openfile:
-            self.labels_test = pickle.load(openfile)
-
         if retur:
-            return (
-                self.training_data,
-                self.testing_data,
-                self.labels_train,
-                self.labels_test,
-            )
+            return (self.training_data, self.labels_train)
 
     def train_data(self, retur):
         (

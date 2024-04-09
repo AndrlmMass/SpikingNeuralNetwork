@@ -53,29 +53,30 @@ snn = SNN_STDP(
     A=1,
     B=1,
     beta=1,
+    delta=1,
 )
 
 # Initialize & visualize pre-trained network
-MemPot, t_since_spik, W_se, W_ee, W_ei, W_ie = snn.initialize_network(
+snn.initialize_network(
     N_input_neurons=160,
     N_excit_neurons=160,
     N_inhib_neurons=40,
     radius_=2,
     W_ee_prob=0.1,
-    retur=True,
+    retur=False,
 )
 
 # Load data
-snn.load_data()
+snn.load_data(rand_lvl=0.01, retur=False)
 
-snn.visualize_network(drw_edg=False)
+# Visualize network
+
 
 # Train network
-avg_spike_counts = snn.neuronal_activity()
+snn.train_data(retur=False)
 
 # Evaluate performance
 
 # Test network on unseen data and estimate performance
 
 # Visualize training and testing results
-snn.plot_training(plt_mV=False)
