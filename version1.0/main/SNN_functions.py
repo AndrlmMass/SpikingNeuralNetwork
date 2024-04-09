@@ -2,21 +2,39 @@
 
 # Import libraries
 import os
+import sys
 import pickle
 import numpy as np
 
-os.chdir(
-    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
-)
-#os.chdir(
-#    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork\\version1.0"
-#)
-
-# Import other functions
-import sys
-sys.path.append('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\plot')
-sys.path.append('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\gen')
-sys.path.append('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\main')
+# Set current working directories and add relevant directories to path
+if os.path.exists(
+    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork"
+):
+    os.chdir(
+        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
+    )
+    sys.path.append(
+        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\gen"
+    )
+    sys.path.append(
+        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\main"
+    )
+    sys.path.append(
+        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\main"
+    )
+else:
+    os.chdir(
+        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
+    )
+    sys.path.append(
+        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\gen"
+    )
+    sys.path.append(
+        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\main"
+    )
+    sys.path.append(
+        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\plot"
+    )
 
 from plot_training import *
 from plot_network import *
@@ -85,9 +103,8 @@ class SNN_STDP:
         N_excit_neurons: int,
         N_inhib_neurons: int,
         radius_: int,
-        W_ie_prob: float | int,
         W_ee_prob: float | int,
-        retur: bool
+        retur: bool,
     ):
         self.N_input_neurons = N_input_neurons
         self.N_excit_neurons = N_excit_neurons
@@ -101,25 +118,28 @@ class SNN_STDP:
             N_input_neurons=self.N_input_neurons,
             N_excit_neurons=self.N_excit_neurons,
             time=self.time,
-            basenum=1
+            basenum=1,
         )
         self.W_ee, self.W_ee_ideal = gws.gen_EE(
-            N_excit_neurons=self.N_excit_neurons, prob=W_ee_prob, time=self.time, basenum=1
+            N_excit_neurons=self.N_excit_neurons,
+            prob=W_ee_prob,
+            time=self.time,
+            basenum=1,
         )
         self.W_ei, self.W_ei_ideal = gws.gen_EI(
             N_excit_neurons=self.N_excit_neurons,
             N_inhib_neurons=self.N_inhib_neurons,
             time=self.time,
-            weight_val=1
+            weight_val=1,
         )
-        self.W_ie.self.W_ie_ideal = gws.gen_IE(
+        self.W_ie, self.W_ie_ideal = gws.gen_IE(
             N_inhib_neurons=self.N_inhib_neurons,
             N_excit_neurons=self.N_excit_neurons,
             W_ei=self.W_ei,
             time=self.time,
             N_ws=4,
             weight_val=1,
-            radius=1
+            radius=radius_,
         )
 
         # Generate membrane potential and spikes array
@@ -130,7 +150,7 @@ class SNN_STDP:
         if retur:
             return (
                 self.MemPot,
-                self.t_since_spike,
+                self.spikes,
                 self.W_se,
                 self.W_ee,
                 self.W_ei,

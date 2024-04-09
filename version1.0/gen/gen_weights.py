@@ -87,21 +87,36 @@ class gen_weights:
         W_ie = np.zeros((time, N_inhib_neurons, N_excit_neurons))
 
         # Set initial weights by transposing the EI weights for the initial time step
-        W_ie = W_ei.T
+        W_ie[0] = np.logical_not(W_ei[0].T).astype(int)
 
         # Loop through each receiving neuron
         for n in range(W_ie[0].shape[0]):
             # Define neighbourhood of connections based on mean presynaptic connections
-            mid_point = int(np.mean(W_ei[:, n]))
-            diff_min = min(W_ei[0, :, n]) - mid_point - radius
-            diff_max = max(W_ei[0, :, n]) - mid_point + radius
-            range_ = (mid_point - radius + diff_min, mid_point + radius - diff_max)
+            indices = np.where(W_ei[0, n, :] == 0)[0]
+            mid_point = np.random.randint(low=0, high=indices.shape[0])
+            if mid_point + radius > indices.shape[0]:
+                diff_min = mid_point + radius - indices.shape[0]
+            else:
+                diff_min = 0
 
+            if mid_point - radius < 0:
+                diff_max = abs(mid_point - radius)
+            else:
+                diff_max = 0
+            range_ = (
+                int(max(mid_point - radius - diff_min, 0)),
+                int(min(mid_point + radius + diff_max, indices.shape[0])),
+            )
+            print(range_[0], range_[1], mid_point)
             # Find zero-valued positions
-            zeros = np.where(W_ei[0, range_[0] : range_[1], n] == 0)
+            nu_connects = list(indices[range_[0] : range_[1]])
+            print(type(nu_connects))
 
             # Draw N_ws samples from index-list
-            nz_indices = random.sample(zeros, N_ws)
+            if len(nu_connects) >= N_ws:
+                nz_indices = random.sample(nu_connects, N_ws)
+            else:
+                nz_indices = nu_connects
 
             # Create synapses
             for idx in nz_indices:

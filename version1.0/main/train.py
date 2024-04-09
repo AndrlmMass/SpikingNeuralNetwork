@@ -1,4 +1,4 @@
-# Create script to train network
+# Train network script
 import numpy as np
 from tqdm import tqdm
 

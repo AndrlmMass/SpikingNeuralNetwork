@@ -2,19 +2,31 @@
 
 # Set cw
 import os
-
-
-os.chdir(
-    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
-)
-# os.chdir(
-#    "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Github\\BONSAI\\SpikingNeuralNetwork\\version1.0"
-# )
-
-# Import libraries
 import sys
-sys.path.append('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\gen')
-sys.path.append('C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\main')
+
+# Set current working directories and add relevant directories to path
+if os.path.exists(
+    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork"
+):
+    os.chdir(
+        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
+    )
+    sys.path.append(
+        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\gen"
+    )
+    sys.path.append(
+        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\main"
+    )
+else:
+    os.chdir(
+        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
+    )
+    sys.path.append(
+        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\gen"
+    )
+    sys.path.append(
+        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\main"
+    )
 from SNN_functions import *
 
 # Initialize SNN object
@@ -40,7 +52,7 @@ snn = SNN_STDP(
     target_weight=0,
     A=1,
     B=1,
-    beta=1
+    beta=1,
 )
 
 # Initialize & visualize pre-trained network
@@ -49,9 +61,8 @@ MemPot, t_since_spik, W_se, W_ee, W_ei, W_ie = snn.initialize_network(
     N_excit_neurons=160,
     N_inhib_neurons=40,
     radius_=2,
-    W_ie_prob=0.1,
     W_ee_prob=0.1,
-    retur=True
+    retur=True,
 )
 
 # Load data
