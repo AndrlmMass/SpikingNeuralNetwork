@@ -36,13 +36,11 @@ snn = SNN_STDP(
     C=1,
     R=1,
     tau_m=0.01,
-    num_neurons=360,
     num_items=20,
     tau_stdp=0.01,
     dt=0.001,
     T=1,
     V_rest=-70,
-    excit_inhib_ratio=0.8,
     alpha=1,
     max_weight=5,
     min_weight=0,
@@ -58,13 +56,15 @@ snn = SNN_STDP(
 
 # Initialize & visualize pre-trained network
 snn.initialize_network(
-    N_input_neurons=160,
+    N_input_neurons=1600,
     N_excit_neurons=160,
     N_inhib_neurons=40,
     radius_=2,
     W_ee_prob=0.1,
     retur=False,
 )
+# Generate data
+snn.gen_data()
 
 # Load data
 snn.load_data(rand_lvl=0.01, retur=False)
@@ -73,7 +73,7 @@ snn.load_data(rand_lvl=0.01, retur=False)
 
 
 # Train network
-snn.train_data(retur=False)
+snn.train_data(retur=False, w_p=0.5)
 
 # Evaluate performance
 

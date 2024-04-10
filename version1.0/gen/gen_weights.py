@@ -44,7 +44,7 @@ class gen_weights:
                     W_se[0, p, mu] = np.random.random()
 
         # Define ideal weights set to base_num
-        W_se_ideal = np.full((time, N_input_neurons, N_excit_neurons), basenum)
+        W_se_ideal = np.full((N_input_neurons, N_excit_neurons), basenum)
 
         return W_se, W_se_ideal
 
@@ -60,7 +60,7 @@ class gen_weights:
         np.fill_diagonal(W_ee[0, :, :], 0)
 
         # Define ideal weights set to base_num
-        W_ee_ideal = np.full((time, N_excit_neurons, N_excit_neurons), basenum)
+        W_ee_ideal = np.full((N_excit_neurons, N_excit_neurons), basenum)
 
         return W_ee, W_ee_ideal
 
@@ -107,10 +107,9 @@ class gen_weights:
                 int(max(mid_point - radius - diff_min, 0)),
                 int(min(mid_point + radius + diff_max, indices.shape[0])),
             )
-            print(range_[0], range_[1], mid_point)
+
             # Find zero-valued positions
             nu_connects = list(indices[range_[0] : range_[1]])
-            print(type(nu_connects))
 
             # Draw N_ws samples from index-list
             if len(nu_connects) >= N_ws:

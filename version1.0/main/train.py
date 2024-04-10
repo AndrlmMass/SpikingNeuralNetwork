@@ -89,6 +89,16 @@ def train_data(
             # Loop through each synapse to update strength
             for s in range(pre_syn_indices):
 
+                # Update ideal weight
+                W_se_ideal[s, n] = tau_const * (
+                    W_se[t - 1, s, n]
+                    - W_se_ideal[s, n]
+                    - P
+                    * W_se_ideal[s, n]
+                    * ((w_p / 2) - W_se_ideal[s, n])
+                    * (w_p - W_se_ideal[s, n])
+                )
+
                 # Use the current trace values for STDP calculation
                 pre_trace = pre_synaptic_trace[t, s]
                 post_trace = post_synaptic_trace[t, n + N_input_neurons + 1]
@@ -97,7 +107,7 @@ def train_data(
                 W_se_ideal[t, s, n] = tau_const * (
                     W_se[t, s, n]
                     - W_se_ideal[t, s, n]
-                    - P * W_se_ideal[t, s, n] * ((w_p - W_se_ideal[t, s, n]) / 2)
+                    - P * W_se_ideal[t, s, n] * ((w_p - W_se_ideal[s, n]) / 2)
                 )
 
                 # Get learning components
@@ -119,6 +129,15 @@ def train_data(
                     raise UserWarning(
                         "There are self-connections within the W_ee array"
                     )
+
+                W_ee_ideal[s, n] = tau_const * (
+                    W_ee[t - 1, s, n]
+                    - W_ee_ideal[s, n]
+                    - P
+                    * W_ee_ideal[s, n]
+                    * ((w_p / 2) - W_ee_ideal[s, n])
+                    * (w_p - W_ee_ideal[s, n])
+                )
 
                 # Use the current trace values for STDP calculation
                 pre_trace = pre_synaptic_trace[t, s + N_excit_neurons]
@@ -203,5 +222,4 @@ def train_data(
         W_ie_ideal,
         pre_synaptic_trace,
         post_synaptic_trace,
-        num_neurons,
     )

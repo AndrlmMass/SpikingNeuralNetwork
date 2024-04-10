@@ -39,6 +39,7 @@ else:
 from plot_training import *
 from plot_network import *
 from gen_weights import *
+from gen_data import *
 from train import *
 
 
@@ -54,11 +55,9 @@ class SNN_STDP:
         tau_m: float,
         num_items: float,
         tau_stdp: float,
-        num_neurons: int,
         dt: float,
         T: int,
         V_rest: int,
-        excit_inhib_ratio: float,
         alpha: float | int,
         max_weight: float | int,
         min_weight: float | int,
@@ -83,15 +82,13 @@ class SNN_STDP:
         self.B = B
         self.beta = beta
         self.delta = delta
-        self.num_neurons = num_neurons
         self.target_weight = target_weight
         self.num_timesteps = int(T / dt)
         self.num_items = num_items
         self.time = self.num_timesteps * self.num_items
         self.V_rest = V_rest
         self.leakage_rate = 1 / self.R
-        self.excit_inhib_ratio = excit_inhib_ratio
-        self.alpha = alpha / (self.num_neurons * 0.1)
+        self.alpha = alpha
         self.init_cals = init_cals
         self.max_weight = max_weight
         self.min_weight = min_weight
@@ -111,6 +108,9 @@ class SNN_STDP:
         self.N_input_neurons = N_input_neurons
         self.N_excit_neurons = N_excit_neurons
         self.N_inhib_neurons = N_inhib_neurons
+        self.num_neurons = (
+            self.N_excit_neurons + self.N_inhib_neurons + self.N_input_neurons
+        )
 
         # Generate weights
         gws = gen_weights()
@@ -145,9 +145,11 @@ class SNN_STDP:
         )
 
         # Generate membrane potential and spikes array
-        self.MemPot = np.zeros((self.time, self.num_neurons - self.N_input_neurons))
+        self.MemPot = np.zeros(
+            (self.time, (self.N_excit_neurons + self.N_inhib_neurons))
+        )
         self.MemPot[0, :] = self.V_rest
-        self.spikes = np.ones((self.time, self.num_neurons))
+        self.spikes = np.zeros((self.time, self.num_neurons))
 
         if retur:
             return (
@@ -157,14 +159,59 @@ class SNN_STDP:
                 self.W_ee,
                 self.W_ei,
                 self.W_ie,
+                self.W_se_ideal,
+                self.W_ee_ideal,
+                self.W_ei_ideal,
+                self.W_ie_ideal,
             )
+
+    def gen_data(
+        N_classes: int,
+        N_input_neurons: int,
+        items: int,
+        noise_rand_ls: float | int,
+        retur1: bool,
+        mean: int | float,
+        blank_variance: int | float,
+        data: np.ndarray,
+        labels: np.ndarray,
+        timesteps: int,
+        dt: float,
+        input_scaler: int | float,
+        save: bool,
+        retur2: bool,
+    ):
+        for j in range(len(noise_rand_ls)):
+            data, labels = gen_float_data_(
+                N_classes=N_classes,
+                N_input_neurons=N_input_neurons,
+                items=items,
+                noise_variance=noise_rand_ls[j],
+                retur=retur1,
+                mean=mean,
+                blank_variance=blank_variance,
+            )
+
+            float_2_pos_spike(
+                data=data,
+                labels=labels,
+                timesteps=timesteps,
+                dt=dt,
+                input_scaler=input_scaler,  # Should be set to 10
+                save=save,
+                retur=retur2,
+                rand_lvl=noise_rand_ls[j],
+            )
+
+        # raster_plot(training_data, labels_train)
+
+        # for j in range(0, 10):
+        #   input_space_plotted_single(data[j])
 
     def load_data(self, rand_lvl: float | int, retur: bool):
         cur_path = os.getcwd()
         data_path = f"\\data\\training_data\\training_data_{rand_lvl}.pkl"
         data_dir = cur_path + data_path
-        print(data_dir)
-        print(cur_path)
 
         with open(data_dir, "rb") as openfile:
             self.training_data = pickle.load(openfile)
@@ -178,7 +225,7 @@ class SNN_STDP:
         if retur:
             return (self.training_data, self.labels_train)
 
-    def train_data(self, retur):
+    def train_data(self, w_p, retur):
         (
             self.spikes,
             self.MemPot,
@@ -194,18 +241,20 @@ class SNN_STDP:
             self.post_synaptic_trace,
             self.num_neurons,
         ) = train_data(
-            R=self.R,
-            A=self.A,
-            B=self.B,
-            beta=self.beta,
-            delta=self.delta,
-            ideal_w=self.ideal_w,
+            R=1,
+            A=1,
+            B=1,
+            P=1,
+            w_p=w_p,  # Defines the upper stable point of weight convergence
+            beta=1,
+            delta=1,
             time=self.time,
             V_th=self.V_th,
             V_rest=self.V_rest,
             V_reset=self.V_reset,
             dt=self.dt,
             tau_m=self.tau_m,
+            tau_const=1,  # Defines the rate of convergence, e.g., 20 minutes
             training_data=self.training_data,
             N_excit_neurons=self.N_excit_neurons,
             N_inhib_neurons=self.N_inhib_neurons,
