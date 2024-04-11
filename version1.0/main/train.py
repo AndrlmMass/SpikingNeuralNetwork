@@ -36,7 +36,7 @@ def train_data(
     spikes = np.zeros((time, num_neurons))
     pre_synaptic_trace = np.zeros((time, num_neurons - N_input_neurons))
     post_synaptic_trace = np.zeros((time, num_neurons - N_input_neurons))
-
+    print(spikes.shape, training_data.shape)
     # Add input data before training for input neurons
     spikes[:, :N_input_neurons] = training_data
 
@@ -51,6 +51,7 @@ def train_data(
         for n in range(N_excit_neurons):
 
             # Update incoming spikes as I_in
+            print()
             I_in = (
                 np.dot(
                     W_se[t, :, n],
@@ -60,7 +61,7 @@ def train_data(
                     W_ee[t, :, n],
                     spikes[
                         t,
-                        N_input_neurons + 1 : N_input_neurons + N_excit_neurons,
+                        N_input_neurons + n : N_input_neurons + N_excit_neurons,
                     ],
                 )
                 + np.dot(

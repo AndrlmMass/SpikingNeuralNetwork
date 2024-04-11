@@ -28,15 +28,18 @@ from gen_symbol import *
 
 
 def gen_float_data_(
+    run: bool,
     N_classes: int,
     N_input_neurons: int,
     items: int,
     noise_rand: bool,
     noise_variance: float | int,
-    retur: bool,
     mean: int | float,
     blank_variance: int | float,
 ):
+    if not run:
+        return
+
     # Check if n_classes and items are compatible
     if items % N_classes != 0:
         raise UserWarning(
@@ -114,8 +117,7 @@ def gen_float_data_(
     input_space = np.reshape(input_space, (int(items), input_dims**2))
 
     # return if true
-    if retur:
-        return input_space, labels
+    return input_space, labels
 
 
 def float_2_pos_spike(
@@ -132,9 +134,7 @@ def float_2_pos_spike(
 
     # Assert number of items
     items = data.shape[0]
-    print(items)
     N_input_neurons = data.shape[1]
-    print(N_input_neurons)
 
     # Set time variable
     time = items * timesteps
@@ -237,34 +237,3 @@ def raster_plot(data, labels):
     plt.xlabel("Time (ms)")
     plt.ylabel("Neuron Index")
     plt.show()
-
-
-rand_lvl = [0, 0.01, 0.03, 0.05]
-
-for j in range(len(rand_lvl)):
-    data, labels = gen_float_data_(
-        N_classes=4,
-        N_input_neurons=1600,
-        items=40,
-        noise_rand=True,
-        noise_variance=rand_lvl[j],
-        retur=True,
-        mean=0,
-        blank_variance=0.01,
-    )
-
-    float_2_pos_spike(
-        data=data,
-        labels=labels,
-        timesteps=100,
-        dt=0.001,
-        input_scaler=10,
-        save=True,
-        retur=False,
-        rand_lvl=rand_lvl[j],
-    )
-
-# raster_plot(training_data, labels_train)
-
-# for j in range(0, 10):
-#   input_space_plotted_single(data[j])

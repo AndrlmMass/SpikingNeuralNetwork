@@ -50,6 +50,7 @@ class SNN_STDP:
         self,
         V_th: float,
         V_reset: float,
+        P: int | float,
         C: int,
         R: int,
         tau_m: float,
@@ -64,7 +65,6 @@ class SNN_STDP:
         input_scaler: float | int,
         num_epochs: int,
         init_cals: int,
-        target_weight: float,
         A: float | int,
         B: float | int,
         beta: float | int,
@@ -80,9 +80,9 @@ class SNN_STDP:
         self.T = T
         self.A = A
         self.B = B
+        self.P = P
         self.beta = beta
         self.delta = delta
-        self.target_weight = target_weight
         self.num_timesteps = int(T / dt)
         self.num_items = num_items
         self.time = self.num_timesteps * self.num_items
@@ -166,28 +166,27 @@ class SNN_STDP:
             )
 
     def gen_data(
+        self,
+        run: bool,
         N_classes: int,
-        N_input_neurons: int,
-        items: int,
+        noise_rand: bool,
         noise_rand_ls: float | int,
-        retur1: bool,
         mean: int | float,
         blank_variance: int | float,
-        data: np.ndarray,
-        labels: np.ndarray,
-        timesteps: int,
-        dt: float,
         input_scaler: int | float,
         save: bool,
-        retur2: bool,
+        retur: bool,
     ):
+        if not run:
+            return
         for j in range(len(noise_rand_ls)):
             data, labels = gen_float_data_(
+                run=run,
                 N_classes=N_classes,
-                N_input_neurons=N_input_neurons,
-                items=items,
+                N_input_neurons=self.N_input_neurons,
+                items=self.num_items,
+                noise_rand=noise_rand,
                 noise_variance=noise_rand_ls[j],
-                retur=retur1,
                 mean=mean,
                 blank_variance=blank_variance,
             )
@@ -195,11 +194,11 @@ class SNN_STDP:
             float_2_pos_spike(
                 data=data,
                 labels=labels,
-                timesteps=timesteps,
-                dt=dt,
+                timesteps=self.num_timesteps,
+                dt=self.dt,
                 input_scaler=input_scaler,  # Should be set to 10
                 save=save,
-                retur=retur2,
+                retur=retur,
                 rand_lvl=noise_rand_ls[j],
             )
 
@@ -241,13 +240,13 @@ class SNN_STDP:
             self.post_synaptic_trace,
             self.num_neurons,
         ) = train_data(
-            R=1,
-            A=1,
-            B=1,
+            R=self.R,
+            A=self.A,
+            B=self.B,
             P=1,
             w_p=w_p,  # Defines the upper stable point of weight convergence
-            beta=1,
-            delta=1,
+            beta=self.beta,
+            delta=self.beta,
             time=self.time,
             V_th=self.V_th,
             V_rest=self.V_rest,
