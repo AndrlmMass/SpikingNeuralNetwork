@@ -168,26 +168,26 @@ def train_data(
 
             # Update incoming spikes as I_in
             I_in = np.dot(
-                W_ie[t, :, n],
+                W_ie[t, n - 1, :],
                 spikes[
                     t,
-                    N_input_neurons + 1 : N_input_neurons + N_excit_neurons,
+                    N_input_neurons : N_input_neurons + N_excit_neurons,
                 ],
             )
             # Update membrane potential based on I_in
-            MemPot[t, n + N_excit_neurons + 1] = (
-                MemPot[t - 1, n + N_excit_neurons + 1]
-                + (-MemPot[t - 1, n + N_excit_neurons + 1] + V_rest + R * I_in) / tau_m
+            MemPot[t, n + N_excit_neurons - 1] = (
+                MemPot[t - 1, n + N_excit_neurons - 1]
+                + (-MemPot[t - 1, n + N_excit_neurons - 1] + V_rest + R * I_in) / tau_m
             )
 
             # Update spikes
-            if MemPot[t, n + N_excit_neurons + 1] > V_th:
-                spikes[t, n + N_input_neurons + N_excit_neurons + 1] = 1
-                pre_synaptic_trace[t, n + N_input_neurons + N_excit_neurons + 1] += 1
+            if MemPot[t, n + N_excit_neurons] > V_th:
+                spikes[t, n + N_input_neurons + N_excit_neurons] = 1
+                pre_synaptic_trace[t, n + N_input_neurons + N_excit_neurons] += 1
                 post_synaptic_trace[t, n + N_input_neurons + N_excit_neurons + 1] += 1
                 MemPot[t, n + N_excit_neurons + 1] = V_reset
             else:
-                spikes[t, n + N_input_neurons + N_excit_neurons + 1] = 0
+                spikes[t, n + N_input_neurons + N_excit_neurons] = 0
 
         # Update excitatory-inhibitory weights
         for n in range(N_inhib_neurons):
