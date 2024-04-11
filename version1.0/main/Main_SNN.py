@@ -33,18 +33,18 @@ from SNN_functions import *
 snn = SNN_STDP(
     V_th=-65,
     V_reset=-75,
-    P=1,
-    C=1,
-    R=1,
-    tau_m=0.01,
-    num_items=20,
-    tau_stdp=0.01,
+    P=1,  # Don't know starting value
+    C=1,  # Don't know starting value, also needs updating
+    R=1,  # Don't know starting value, also needs updating
+    tau_m=0.01,  # Don't know starting value
+    num_items=8,
+    tau_stdp=0.01,  # Don't know starting value
     dt=0.001,
-    T=1,
+    T=0.1,
     V_rest=-70,
-    alpha=1,
-    max_weight=5,
+    alpha=1,  # Don't know starting value
     min_weight=0,
+    max_weight=5,
     input_scaler=2,
     num_epochs=100,  # N/A
     init_cals=1,  # N/A
@@ -59,20 +59,20 @@ snn.initialize_network(
     N_input_neurons=484,
     N_excit_neurons=484,
     N_inhib_neurons=121,
-    radius_=2,
+    radius_=4,
     W_ee_prob=0.1,
     retur=False,
 )
 # Generate data
 snn.gen_data(
-    run=True,
+    run=False,
     N_classes=4,
     noise_rand=True,
     noise_rand_ls=[0, 0.01, 0.03, 0.05],
     mean=0,
     blank_variance=0.01,
     input_scaler=10,
-    save=True,
+    save=False,
     retur=False,
 )
 
