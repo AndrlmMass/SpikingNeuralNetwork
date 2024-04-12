@@ -123,6 +123,8 @@ def gen_float_data_(
 def float_2_pos_spike(
     data: np.ndarray,
     labels: np.ndarray,
+    items: int,
+    time: int | float,
     timesteps: int,
     dt: float,
     input_scaler: int | float,
@@ -133,11 +135,7 @@ def float_2_pos_spike(
     # Data has shape items x neurons
 
     # Assert number of items
-    items = data.shape[0]
     N_input_neurons = data.shape[1]
-
-    # Set time variable
-    time = items * timesteps
 
     # Correct the dimensions for the 2D-array: time x neurons
     poisson_input = np.zeros((time, N_input_neurons))

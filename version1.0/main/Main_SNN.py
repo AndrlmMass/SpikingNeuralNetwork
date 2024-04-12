@@ -83,7 +83,9 @@ snn.load_data(rand_lvl=0.01, retur=False)
 
 
 # Train network
-snn.train_data(retur=False, w_p=0.5)
+snn.train_data(
+    retur=False, w_p=0.5, update_frequency=100, plot_spikes=True, plot_weights=True
+)
 
 # Evaluate performance
 

@@ -3,6 +3,9 @@
 # Import libraries
 import numpy as np
 import imageio
+from sklearn.manifold import (
+    TSNE,
+)  # This will be applied later to illustrate clustering in the SNN
 import matplotlib.pyplot as plt
 
 
@@ -107,10 +110,6 @@ def plot_weights(weights, dt_items):
     plt.xlabel("Time")
     plt.ylabel("Weight Value")
     plt.title("Weight Changes Over Time")
-
-    # Optional: Comment out the legend if there are too many lines to make it readable
-    # plt.legend()
-
     plt.show()
 
 
@@ -198,7 +197,9 @@ def plot_relative_activity(spikes, classes, input_idx, num_neurons):
                 for item_idx in class_items:
                     # Compute x position with slight offset for each neuron to avoid overlap
                     x_pos = (
-                        item_idx + (neuron_idx * 0.01) - (mean_activity.shape[0] / 2 * 0.01)
+                        item_idx
+                        + (neuron_idx * 0.01)
+                        - (mean_activity.shape[0] / 2 * 0.01)
                     )
                     x_positions.append(x_pos)
                     y_positions.append(mean_activity[neuron_idx, item_idx])
@@ -214,7 +215,9 @@ def plot_relative_activity(spikes, classes, input_idx, num_neurons):
                     )
 
                 # Draw lines connecting points for this neuron within the same class
-                if len(x_positions) > 1:  # Only draw lines if there are at least two points
+                if (
+                    len(x_positions) > 1
+                ):  # Only draw lines if there are at least two points
                     plt.plot(
                         x_positions,
                         y_positions,
@@ -228,4 +231,51 @@ def plot_relative_activity(spikes, classes, input_idx, num_neurons):
     plt.xlabel("Item Index (with slight offset for each neuron)")
     plt.ylabel("Mean Activity")
     plt.grid(True)
+    plt.show()
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+def plot_weights_and_spikes(spikes, t, W_se, W_ee, dt, update_interval=10):
+    # Create a figure and a set of subplots
+    fig, axs = plt.subplots(
+        2, 1, figsize=(12, 16)
+    )  # Large figure to accommodate both plots
+
+    # Plot spike raster
+    axs[0].eventplot([np.where(spikes[t])[0]], colors="black")
+    axs[0].set_title(f"Spike Raster at Time {t}")
+    axs[0].set_xlabel("Neuron Index")
+    axs[0].set_ylabel("Spikes")
+
+    # Only update weights if t is a multiple of update_interval
+    if t % update_interval == 0:
+        # Concatenate W_se and W_ee along the neuron axis
+        weights = np.concatenate((W_se, W_ee), axis=1)
+
+        # Time steps array, adjusted to plot weights up to current time
+        time_steps = np.arange(0, (t + 1) * dt, dt)
+
+        # Plot weight changes over time
+        for i in range(weights.shape[0]):  # Iterate over all starting neurons
+            for j in range(weights.shape[1]):  # Iterate over all ending neurons
+                if np.any(
+                    weights[i, j, : t + 1] != 0
+                ):  # Check if there are any non-zero weights
+                    axs[1].plot(
+                        time_steps[
+                            : len(weights[i, j, : t + 1])
+                        ],  # Correct time range for existing data
+                        weights[i, j, : t + 1],
+                        label=f"Weight from Neuron {i+1} to {j+1}",
+                    )
+
+        axs[1].set_xlabel("Time")
+        axs[1].set_ylabel("Weight Value")
+        axs[1].set_title("Weight Changes Over Time")
+        axs[1].legend()  # Optional, can be omitted for clarity if too many lines
+
+    plt.tight_layout()
     plt.show()

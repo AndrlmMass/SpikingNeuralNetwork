@@ -200,12 +200,8 @@ class SNN_STDP:
                 save=save,
                 retur=retur,
                 rand_lvl=noise_rand_ls[j],
+                items=self.num_items,
             )
-
-        # raster_plot(training_data, labels_train)
-
-        # for j in range(0, 10):
-        #   input_space_plotted_single(data[j])
 
     def load_data(self, rand_lvl: float | int, retur: bool):
         cur_path = os.getcwd()
@@ -224,7 +220,7 @@ class SNN_STDP:
         if retur:
             return (self.training_data, self.labels_train)
 
-    def train_data(self, w_p, retur):
+    def train_data(self, w_p, retur, update_frequency, plot_spikes, plot_weights):
         (
             self.spikes,
             self.MemPot,
@@ -238,7 +234,6 @@ class SNN_STDP:
             self.W_ie_ideal,
             self.pre_synaptic_trace,
             self.post_synaptic_trace,
-            self.num_neurons,
         ) = train_data(
             R=self.R,
             A=self.A,
@@ -267,6 +262,9 @@ class SNN_STDP:
             W_ei_ideal=self.W_ei_ideal,
             W_ie=self.W_ie,
             W_ie_ideal=self.W_ie_ideal,
+            update_frequency=update_frequency,
+            plot_weights=plot_weights,
+            plot_spikes=plot_spikes,
         )
 
         if retur:
