@@ -1,9 +1,6 @@
 # Train network script
 import numpy as np
 from tqdm import tqdm
-from IPython.display import display, clear_output
-import matplotlib.pyplot as plt
-
 import os
 import sys
 
@@ -12,10 +9,13 @@ if os.path.exists(
     "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
 ):
     os.chdir(
-        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\main"
+        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
     )
     sys.path.append(
         "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\plot"
+    )
+    sys.path.append(
+        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\tool"
     )
 else:
     os.chdir(
@@ -24,8 +24,12 @@ else:
     sys.path.append(
         "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\plot"
     )
+    sys.path.append(
+        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\tool"
+    )
 
 from plot_training import *
+from vis_train import *
 
 
 def train_data(
@@ -57,8 +61,8 @@ def train_data(
     W_ie: np.ndarray,
     W_ie_ideal: np.ndarray,
     update_frequency: int,
-    plot_weights: bool,
-    plot_spikes: bool,
+    interactive_tool: bool,
+    callback: function,
 ):
     num_neurons = N_excit_neurons + N_inhib_neurons + N_input_neurons
     spikes = np.zeros((time, num_neurons))
@@ -235,15 +239,10 @@ def train_data(
                 MemPot[t, n + N_excit_neurons] = V_reset
             else:
                 spikes[t, n + N_input_neurons + N_excit_neurons] = 0
-        # Visualization hook
-        plot_weights_and_spikes(
-            spikes[t],
-            t=t,
-            W_se=W_se,
-            W_ee=W_ee,
-            dt=dt,
-            update_interval=update_frequency,
-        )
+
+        if interactive_tool and t % update_frequency == 0:
+            callback(W_se, W_ee, spikes, t)
+
     return (
         spikes,
         MemPot,

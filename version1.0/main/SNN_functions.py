@@ -220,7 +220,15 @@ class SNN_STDP:
         if retur:
             return (self.training_data, self.labels_train)
 
-    def train_data(self, w_p, retur, update_frequency, plot_spikes, plot_weights):
+    def train_data(
+        self,
+        w_p: float | int,
+        retur: bool,
+        update_frequency: int,
+        plot_spikes: bool,
+        plot_weights: bool,
+        interactive_tool: bool,
+    ):
         (
             self.spikes,
             self.MemPot,
@@ -265,6 +273,7 @@ class SNN_STDP:
             update_frequency=update_frequency,
             plot_weights=plot_weights,
             plot_spikes=plot_spikes,
+            interactive_tool=interactive_tool,
         )
 
         if retur:
