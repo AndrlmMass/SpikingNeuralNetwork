@@ -3,7 +3,6 @@ import os
 from PyQt5.QtWidgets import (
     QMainWindow,
     QSlider,
-    QCheckBox,
     QPushButton,
     QVBoxLayout,
     QHBoxLayout,
@@ -63,8 +62,20 @@ class MainWidget(QWidget):
         W_ie_ideal,
         train_data,
     ):
-        self.slider_layout = QVBoxLayout()
+        # Main layout with horizontal orientation
         main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(
+            0, 0, 0, 0
+        )  # Remove margins around the main layout
+        main_layout.setSpacing(0)  # Remove spacing between elements in the main layout
+
+        # Left column for sliders
+        slider_column = QVBoxLayout()
+        slider_column.setContentsMargins(
+            15, 0, 10, 10
+        )  # Remove margins around the slider column
+        slider_column.setSpacing(5)
+        slider_column.setAlignment(Qt.AlignLeft)
         # Assume some range settings are already defined, you can adjust them as needed
         self.R_slider, self.R_label = self.create_slider(0.5, 2.0, 0.1, R, "R")
         self.A_slider, self.A_label = self.create_slider(0.001, 0.1, 0.001, A, "A")
@@ -76,9 +87,6 @@ class MainWidget(QWidget):
         )
         self.delta_slider, self.delta_label = self.create_slider(
             0.001, 0.1, 0.001, delta, "delta"
-        )
-        self.time_slider, self.time_label = self.create_slider(
-            50, 500, 50, time, "Time"
         )
         self.V_th_slider, self.V_th_label = self.create_slider(
             -60, -40, 1, V_th, "V_th"
@@ -100,9 +108,6 @@ class MainWidget(QWidget):
             1, 50, 1, update_frequency, "Update frequency"
         )
 
-        # Left column for sliders
-        slider_column = QVBoxLayout()
-
         # Add sliders to the slider column
         sliders = [
             self.R_slider,
@@ -112,7 +117,6 @@ class MainWidget(QWidget):
             self.w_p_slider,
             self.beta_slider,
             self.delta_slider,
-            self.time_slider,
             self.V_th_slider,
             self.V_rest_slider,
             self.V_reset_slider,
@@ -129,7 +133,6 @@ class MainWidget(QWidget):
             self.w_p_label,
             self.beta_label,
             self.delta_label,
-            self.time_label,
             self.V_th_label,
             self.V_rest_label,
             self.V_reset_label,
@@ -145,12 +148,28 @@ class MainWidget(QWidget):
 
         main_layout.addLayout(slider_column)
 
-        # Middle column for plotting (placeholder)
         plot_area = QVBoxLayout()
-        plot_placeholder = QLabel("Plotting Area Placeholder")
-        plot_placeholder.setFixedSize(400, 550)
-        plot_placeholder.setStyleSheet("background-color: #DDDDDD")
-        plot_area.addWidget(plot_placeholder)
+        plot_area.setContentsMargins(0, 0, 0, 0)  # Adjust margins if needed
+
+        # Upper plot for weights
+        dt_weights_plot = QLabel("DT Weights Plot Placeholder")
+        dt_weights_plot.setStyleSheet("background-color: #DDDDDD")
+        dt_weights_plot.setFrameStyle(
+            QLabel.Box
+        )  # Just for visual distinction; remove if not needed
+        dt_weights_plot.setAlignment(Qt.AlignCenter)  # Placeholder text alignment
+
+        # Lower plot for spikes
+        dt_spike_plot = QLabel("DT Spike Plot Placeholder")
+        dt_spike_plot.setStyleSheet("background-color: #CCCCCC")
+        dt_spike_plot.setFrameStyle(
+            QLabel.Box
+        )  # Just for visual distinction; remove if not needed
+        dt_spike_plot.setAlignment(Qt.AlignCenter)  # Placeholder text alignment
+
+        # Add the plots to the plotting area layout
+        plot_area.addWidget(dt_weights_plot, 10)  # 1 is the stretch factor
+        plot_area.addWidget(dt_spike_plot, 1)  # Equal stretch factor for both
 
         # Add the plot area to the main layout
         main_layout.addLayout(plot_area)
@@ -168,6 +187,7 @@ class MainWidget(QWidget):
         self.W_ei_ideal = W_ei_ideal
         self.W_ie = W_ie
         self.W_ie_ideal = W_ie_ideal
+        self.time = time
 
         # Define button and connect it
         self.button = QPushButton("Run Simulation")
@@ -186,6 +206,7 @@ class MainWidget(QWidget):
         slider.setMaximum(int(max_val * scale))
         slider.setSingleStep(1)
         slider.setValue(int(initial_val * scale))
+        slider.setFixedWidth(100)
 
         # Create label
         slider_label = QLabel(f"{label_text}: {initial_val:.2f}")
@@ -206,9 +227,6 @@ class MainWidget(QWidget):
         w_p = float(self.w_p_label.text().split(": ")[1])
         beta = float(self.beta_label.text().split(": ")[1])
         delta = float(self.delta_label.text().split(": ")[1])
-        time = int(
-            self.time_label.text().split(": ")[1]
-        )  # Assuming 'time' is intended as an integer
         V_th = int(self.V_th_label.text().split(": ")[1])
         V_rest = int(self.V_rest_label.text().split(": ")[1])
         V_reset = int(self.V_reset_label.text().split(": ")[1])
@@ -226,7 +244,7 @@ class MainWidget(QWidget):
             w_p=w_p,
             beta=beta,
             delta=delta,
-            time=time,
+            time=self.time,
             V_th=V_th,
             V_rest=V_rest,
             V_reset=V_reset,
