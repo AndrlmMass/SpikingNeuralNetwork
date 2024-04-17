@@ -89,7 +89,6 @@ snn.train_data(
     plot_spikes=True,
     plot_weights=True,
     interactive_tool=True,
-    callback=None,
     update_frequency=100,
 )
 

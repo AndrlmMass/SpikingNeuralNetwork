@@ -5,6 +5,7 @@ import os
 import sys
 import pickle
 import numpy as np
+from PyQt5.QtWidgets import QApplication
 
 # Set current working directories and add relevant directories to path
 if os.path.exists(
@@ -20,7 +21,10 @@ if os.path.exists(
         "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\main"
     )
     sys.path.append(
-        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\main"
+        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\plot"
+    )
+    sys.path.append(
+        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\tool"
     )
 else:
     os.chdir(
@@ -35,10 +39,14 @@ else:
     sys.path.append(
         "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\plot"
     )
+    sys.path.append(
+        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\tool"
+    )
 
 from plot_training import *
 from plot_network import *
 from gen_weights import *
+from train_widget import *
 from gen_data import *
 from train import *
 
@@ -229,52 +237,90 @@ class SNN_STDP:
         plot_weights: bool,
         interactive_tool: bool,
     ):
-        (
-            self.spikes,
-            self.MemPot,
-            self.W_se,
-            self.W_se_ideal,
-            self.W_ee,
-            self.W_ee_ideal,
-            self.W_ei,
-            self.W_ei_ideal,
-            self.W_ie,
-            self.W_ie_ideal,
-            self.pre_synaptic_trace,
-            self.post_synaptic_trace,
-        ) = train_data(
-            R=self.R,
-            A=self.A,
-            B=self.B,
-            P=1,
-            w_p=w_p,  # Defines the upper stable point of weight convergence
-            beta=self.beta,
-            delta=self.beta,
-            time=self.time,
-            V_th=self.V_th,
-            V_rest=self.V_rest,
-            V_reset=self.V_reset,
-            dt=self.dt,
-            tau_m=self.tau_m,
-            tau_const=1,  # Defines the rate of convergence, e.g., 20 minutes
-            training_data=self.training_data,
-            N_excit_neurons=self.N_excit_neurons,
-            N_inhib_neurons=self.N_inhib_neurons,
-            N_input_neurons=self.N_input_neurons,
-            MemPot=self.MemPot,
-            W_se=self.W_se,
-            W_se_ideal=self.W_se_ideal,
-            W_ee=self.W_ee,
-            W_ee_ideal=self.W_ee_ideal,
-            W_ei=self.W_ei,
-            W_ei_ideal=self.W_ei_ideal,
-            W_ie=self.W_ie,
-            W_ie_ideal=self.W_ie_ideal,
-            update_frequency=update_frequency,
-            plot_weights=plot_weights,
-            plot_spikes=plot_spikes,
-            interactive_tool=interactive_tool,
-        )
+        if interactive_tool:
+            app = QApplication(sys.argv)
+            MW = MainWidget()
+            MW.init_gui(
+                V_th=self.V_th,
+                V_reset=self.V_reset,
+                P=self.P,
+                R=self.R,
+                A=self.A,
+                B=self.B,
+                w_p=w_p,
+                beta=self.beta,
+                delta=self.delta,
+                time=self.time,
+                V_rest=self.V_rest,
+                dt=self.dt,
+                tau_m=self.tau_m,
+                tau_const=1,
+                update_frequency=update_frequency,
+                plot_weights=plot_weights,
+                plot_spikes=plot_spikes,
+                N_excit_neurons=self.N_excit_neurons,
+                N_inhib_neurons=self.N_inhib_neurons,
+                N_input_neurons=self.N_input_neurons,
+                MemPot=self.MemPot,
+                W_se=self.W_se,
+                W_se_ideal=self.W_se_ideal,
+                W_ee=self.W_ee,
+                W_ee_ideal=self.W_ee_ideal,
+                W_ei=self.W_ei,
+                W_ei_ideal=self.W_ei_ideal,
+                W_ie=self.W_ie,
+                W_ie_ideal=self.W_ie_ideal,
+                train_data=self.training_data,
+            )
+            MainWindow().show()
+            sys.exit(app.exec_())
+        else:
+            (
+                self.spikes,
+                self.MemPot,
+                self.W_se,
+                self.W_se_ideal,
+                self.W_ee,
+                self.W_ee_ideal,
+                self.W_ei,
+                self.W_ei_ideal,
+                self.W_ie,
+                self.W_ie_ideal,
+                self.pre_synaptic_trace,
+                self.post_synaptic_trace,
+            ) = train_data(
+                R=self.R,
+                A=self.A,
+                B=self.B,
+                P=1,
+                w_p=w_p,  # Defines the upper stable point of weight convergence
+                beta=self.beta,
+                delta=self.beta,
+                time=self.time,
+                V_th=self.V_th,
+                V_rest=self.V_rest,
+                V_reset=self.V_reset,
+                dt=self.dt,
+                tau_m=self.tau_m,
+                tau_const=1,  # Defines the rate of convergence, e.g., 20 minutes
+                training_data=self.training_data,
+                N_excit_neurons=self.N_excit_neurons,
+                N_inhib_neurons=self.N_inhib_neurons,
+                N_input_neurons=self.N_input_neurons,
+                MemPot=self.MemPot,
+                W_se=self.W_se,
+                W_se_ideal=self.W_se_ideal,
+                W_ee=self.W_ee,
+                W_ee_ideal=self.W_ee_ideal,
+                W_ei=self.W_ei,
+                W_ei_ideal=self.W_ei_ideal,
+                W_ie=self.W_ie,
+                W_ie_ideal=self.W_ie_ideal,
+                update_frequency=update_frequency,
+                plot_weights=plot_weights,
+                plot_spikes=plot_spikes,
+                interactive_tool=interactive_tool,
+            )
 
         if retur:
             return (
