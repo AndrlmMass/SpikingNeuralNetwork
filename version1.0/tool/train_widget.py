@@ -64,37 +64,37 @@ class MainWidget(QWidget):
         train_data,
     ):
         # Assume some range settings are already defined, you can adjust them as needed
-        self.R_label, self.R_slider = self.create_slider(0.5, 2.0, 0.1, R, "R")
-        self.A_label, self.A_slider = self.create_slider(0.001, 0.1, 0.001, A, "A")
-        self.B_label, self.B_slider = self.create_slider(0.001, 0.1, 0.001, B, "B")
-        self.P_label, self.P_slider = self.create_slider(0.05, 1.0, 0.05, P, "P")
-        self.w_p_label, self.w_p_slider = self.create_slider(0.5, 2.0, 0.1, w_p, "w_p")
-        self.beta_label, self.beta_slider = self.create_slider(
+        self.R_slider, self.R_label = self.create_slider(0.5, 2.0, 0.1, R, "R")
+        self.A_slider, self.A_label = self.create_slider(0.001, 0.1, 0.001, A, "A")
+        self.B_slider, self.B_label = self.create_slider(0.001, 0.1, 0.001, B, "B")
+        self.P_slider, self.P_label = self.create_slider(0.05, 1.0, 0.05, P, "P")
+        self.w_p_slider, self.w_p_label = self.create_slider(0.5, 2.0, 0.1, w_p, "w_p")
+        self.beta_slider, self.beta_label = self.create_slider(
             0.001, 0.1, 0.001, beta, "beta"
         )
-        self.delta_label, self.delta_slider = self.create_slider(
+        self.delta_slider, self.delta_label = self.create_slider(
             0.001, 0.1, 0.001, delta, "delta"
         )
-        self.time_label, self.time_slider = self.create_slider(
+        self.time_slider, self.time_label = self.create_slider(
             50, 500, 50, time, "Time"
         )
-        self.V_th_label, self.V_th_slider = self.create_slider(
+        self.V_th_slider, self.V_th_label = self.create_slider(
             -60, -40, 1, V_th, "V_th"
         )
-        self.V_rest_label, self.V_rest_slider = self.create_slider(
+        self.V_rest_slider, self.V_rest_label = self.create_slider(
             -80, -60, 1, V_rest, "V_rest"
         )
-        self.V_reset_label, self.V_reset_slider = self.create_slider(
+        self.V_reset_slider, self.V_reset_label = self.create_slider(
             -90, -70, 1, V_reset, "V_reset"
         )
-        self.dt_label, self.dt_slider = self.create_slider(0.01, 1.0, 0.01, dt, "dt")
-        self.tau_m_label, self.tau_m_slider = self.create_slider(
+        self.dt_slider, self.dt_label = self.create_slider(0.01, 1.0, 0.01, dt, "dt")
+        self.tau_m_slider, self.tau_m_label = self.create_slider(
             10, 30, 1, tau_m, "tau_m"
         )
-        self.tau_const_label, self.tau_const_slider = self.create_slider(
+        self.tau_const_slider, self.tau_const_label = self.create_slider(
             0.5, 2.0, 0.1, tau_const, "tau_const"
         )
-        self.update_frequency_label, self.update_frequency_slider = self.create_slider(
+        self.update_frequency_slider, self.update_frequency_label = self.create_slider(
             1, 50, 1, update_frequency, "Update frequency"
         )
         self.N_excit_neurons = N_excit_neurons

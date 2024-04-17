@@ -5,7 +5,7 @@ import os
 import sys
 import pickle
 import numpy as np
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QMainWindow
 
 # Set current working directories and add relevant directories to path
 if os.path.exists(
@@ -49,6 +49,15 @@ from gen_weights import *
 from train_widget import *
 from gen_data import *
 from train import *
+
+
+# Create widget window class
+class MainWindow(QMainWindow):
+    def __init__(self, main_widget):
+        super().__init__()
+        self.setCentralWidget(main_widget)
+        self.setWindowTitle("Interactive Tool")
+        self.setGeometry(100, 100, 800, 600)  # x, y, width, height
 
 
 # Initialize class variable
@@ -239,6 +248,7 @@ class SNN_STDP:
     ):
         if interactive_tool:
             app = QApplication(sys.argv)
+
             MW = MainWidget()
             MW.init_gui(
                 V_th=self.V_th,
@@ -272,7 +282,9 @@ class SNN_STDP:
                 W_ie_ideal=self.W_ie_ideal,
                 train_data=self.training_data,
             )
-            MainWindow().show()
+
+            main_window = MainWindow(MW)
+            main_window.show()
             sys.exit(app.exec_())
         else:
             (
