@@ -1,7 +1,6 @@
 import sys
 import os
 from PyQt5.QtWidgets import (
-    QApplication,
     QMainWindow,
     QSlider,
     QCheckBox,
@@ -30,6 +29,9 @@ from train import *
 
 
 class MainWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
     def init_gui(
         self,
         V_th,
@@ -47,8 +49,6 @@ class MainWidget(QWidget):
         tau_m,
         tau_const,
         update_frequency,
-        plot_weights,
-        plot_spikes,
         N_excit_neurons,
         N_inhib_neurons,
         N_input_neurons,
@@ -63,6 +63,8 @@ class MainWidget(QWidget):
         W_ie_ideal,
         train_data,
     ):
+        self.slider_layout = QVBoxLayout()
+        main_layout = QHBoxLayout()
         # Assume some range settings are already defined, you can adjust them as needed
         self.R_slider, self.R_label = self.create_slider(0.5, 2.0, 0.1, R, "R")
         self.A_slider, self.A_label = self.create_slider(0.001, 0.1, 0.001, A, "A")
@@ -97,6 +99,62 @@ class MainWidget(QWidget):
         self.update_frequency_slider, self.update_frequency_label = self.create_slider(
             1, 50, 1, update_frequency, "Update frequency"
         )
+
+        # Left column for sliders
+        slider_column = QVBoxLayout()
+
+        # Add sliders to the slider column
+        sliders = [
+            self.R_slider,
+            self.A_slider,
+            self.B_slider,
+            self.P_slider,
+            self.w_p_slider,
+            self.beta_slider,
+            self.delta_slider,
+            self.time_slider,
+            self.V_th_slider,
+            self.V_rest_slider,
+            self.V_reset_slider,
+            self.dt_slider,
+            self.tau_m_slider,
+            self.tau_const_slider,
+            self.update_frequency_slider,
+        ]
+        labels = [
+            self.R_label,
+            self.A_label,
+            self.B_label,
+            self.P_label,
+            self.w_p_label,
+            self.beta_label,
+            self.delta_label,
+            self.time_label,
+            self.V_th_label,
+            self.V_rest_label,
+            self.V_reset_label,
+            self.dt_label,
+            self.tau_m_label,
+            self.tau_const_label,
+            self.update_frequency_label,
+        ]
+
+        for slider, label in zip(sliders, labels):
+            slider_column.addWidget(label)
+            slider_column.addWidget(slider)
+
+        main_layout.addLayout(slider_column)
+
+        # Middle column for plotting (placeholder)
+        plot_area = QVBoxLayout()
+        plot_placeholder = QLabel("Plotting Area Placeholder")
+        plot_placeholder.setFixedSize(400, 550)
+        plot_placeholder.setStyleSheet("background-color: #DDDDDD")
+        plot_area.addWidget(plot_placeholder)
+
+        # Add the plot area to the main layout
+        main_layout.addLayout(plot_area)
+
         self.N_excit_neurons = N_excit_neurons
         self.N_inhib_neurons = N_inhib_neurons
         self.N_input_neurons = N_input_neurons
@@ -111,46 +169,9 @@ class MainWidget(QWidget):
         self.W_ie = W_ie
         self.W_ie_ideal = W_ie_ideal
 
-        self.plot_weights_checkbox = QCheckBox("Plot Weights")
-        self.plot_spikes_checkbox = QCheckBox("Plot Spikes")
-        self.plot_weights_checkbox.setChecked(plot_weights)
-        self.plot_spikes_checkbox.setChecked(plot_spikes)
-
         # Define button and connect it
         self.button = QPushButton("Run Simulation")
         self.button.clicked.connect(self.on_button_clicked)
-
-        # Organize the sliders into groups using QVBoxLayout and QHBoxLayout
-        param_box1 = QVBoxLayout()
-        param_box2 = QVBoxLayout()
-        param_box3 = QVBoxLayout()
-        param_box4 = QVBoxLayout()
-        checkboxes = QVBoxLayout()
-        param_box1.addWidget(self.R_slider)
-        param_box1.addWidget(self.A_slider)
-        param_box1.addWidget(self.B_slider)
-        param_box1.addWidget(self.P_slider)
-        param_box2.addWidget(self.w_p_slider)
-        param_box2.addWidget(self.beta_slider)
-        param_box2.addWidget(self.delta_slider)
-        param_box2.addWidget(self.time_slider)
-        param_box3.addWidget(self.V_th_slider)
-        param_box3.addWidget(self.V_rest_slider)
-        param_box3.addWidget(self.V_reset_slider)
-        param_box4.addWidget(self.dt_slider)
-        param_box4.addWidget(self.tau_m_slider)
-        param_box4.addWidget(self.tau_const_slider)
-        param_box4.addWidget(self.update_frequency_slider)
-        checkboxes.addWidget(self.plot_weights_checkbox)
-        checkboxes.addWidget(self.plot_spikes_checkbox)
-
-        # Main layout
-        main_layout = QHBoxLayout()
-        main_layout.addLayout(param_box1)
-        main_layout.addLayout(param_box2)
-        main_layout.addLayout(param_box3)
-        main_layout.addLayout(param_box4)
-        main_layout.addLayout(checkboxes)
 
         # Set main layout
         self.setLayout(main_layout)
@@ -177,9 +198,6 @@ class MainWidget(QWidget):
         return slider, slider_label
 
     def on_button_clicked(self):
-        # Placeholder for running the simulation logic
-        print("Simulation starting...")
-
         # Parse float values from labels
         R = float(self.R_label.text().split(": ")[1])
         A = float(self.A_label.text().split(": ")[1])

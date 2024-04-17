@@ -266,8 +266,6 @@ class SNN_STDP:
                 tau_m=self.tau_m,
                 tau_const=1,
                 update_frequency=update_frequency,
-                plot_weights=plot_weights,
-                plot_spikes=plot_spikes,
                 N_excit_neurons=self.N_excit_neurons,
                 N_inhib_neurons=self.N_inhib_neurons,
                 N_input_neurons=self.N_input_neurons,
