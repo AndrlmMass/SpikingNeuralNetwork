@@ -89,7 +89,7 @@ snn.train_data(
     plot_spikes=True,
     plot_weights=True,
     interactive_tool=True,
-    update_frequency=100,
+    update_frequency=5,
 )
 
 # Evaluate performance

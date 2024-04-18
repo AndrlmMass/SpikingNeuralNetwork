@@ -1,5 +1,8 @@
+import numpy as np
 import sys
 import os
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5.QtWidgets import (
     QMainWindow,
     QSlider,
@@ -63,7 +66,7 @@ class MainWidget(QWidget):
         train_data,
     ):
         # Main layout with horizontal orientation
-        main_layout = QHBoxLayout()
+        main_layout = QVBoxLayout()
         main_layout.setContentsMargins(
             0, 0, 0, 0
         )  # Remove margins around the main layout
@@ -148,31 +151,17 @@ class MainWidget(QWidget):
 
         main_layout.addLayout(slider_column)
 
-        plot_area = QVBoxLayout()
-        plot_area.setContentsMargins(0, 0, 0, 0)  # Adjust margins if needed
+        self.figure_weights = plt.Figure()
+        self.canvas_weights = FigureCanvas(self.figure_weights)
+        self.ax_weights = self.figure_weights.add_subplot(111)
 
-        # Upper plot for weights
-        dt_weights_plot = QLabel("DT Weights Plot Placeholder")
-        dt_weights_plot.setStyleSheet("background-color: #DDDDDD")
-        dt_weights_plot.setFrameStyle(
-            QLabel.Box
-        )  # Just for visual distinction; remove if not needed
-        dt_weights_plot.setAlignment(Qt.AlignCenter)  # Placeholder text alignment
+        self.figure_spikes = plt.Figure()
+        self.canvas_spikes = FigureCanvas(self.figure_spikes)
+        self.ax_spikes = self.figure_spikes.add_subplot(111)
 
-        # Lower plot for spikes
-        dt_spike_plot = QLabel("DT Spike Plot Placeholder")
-        dt_spike_plot.setStyleSheet("background-color: #CCCCCC")
-        dt_spike_plot.setFrameStyle(
-            QLabel.Box
-        )  # Just for visual distinction; remove if not needed
-        dt_spike_plot.setAlignment(Qt.AlignCenter)  # Placeholder text alignment
-
-        # Add the plots to the plotting area layout
-        plot_area.addWidget(dt_weights_plot, 10)  # 1 is the stretch factor
-        plot_area.addWidget(dt_spike_plot, 1)  # Equal stretch factor for both
-
-        # Add the plot area to the main layout
-        main_layout.addLayout(plot_area)
+        # Layout to place the canvas
+        main_layout.addWidget(self.canvas_weights)
+        main_layout.addWidget(self.canvas_spikes)
 
         self.N_excit_neurons = N_excit_neurons
         self.N_inhib_neurons = N_inhib_neurons
@@ -192,9 +181,24 @@ class MainWidget(QWidget):
         # Define button and connect it
         self.button = QPushButton("Run Simulation")
         self.button.clicked.connect(self.on_button_clicked)
+        main_layout.addWidget(self.button)
 
         # Set main layout
         self.setLayout(main_layout)
+
+    def update_plots(self, W_se, W_ee, spikes, t):
+        # Update the weights plot
+        self.ax_weights.clear()
+        combined_weights = np.concatenate((W_se[t], W_ee[t]), axis=1)
+        self.ax_weights.matshow(combined_weights, aspect="auto")
+        self.ax_weights.set_title(f"Weights at Time {t}")
+        self.canvas_weights.draw()
+
+        # Update the spikes plot
+        self.ax_spikes.clear()
+        self.ax_spikes.imshow(spikes[:t, :], aspect="auto", interpolation="nearest")
+        self.ax_spikes.set_title(f"Spikes up to Time {t}")
+        self.canvas_spikes.draw()
 
     def create_slider(self, min_val, max_val, step, initial_val, label_text):
         # Scale factor to convert float values to int
@@ -227,13 +231,13 @@ class MainWidget(QWidget):
         w_p = float(self.w_p_label.text().split(": ")[1])
         beta = float(self.beta_label.text().split(": ")[1])
         delta = float(self.delta_label.text().split(": ")[1])
-        V_th = int(self.V_th_label.text().split(": ")[1])
-        V_rest = int(self.V_rest_label.text().split(": ")[1])
-        V_reset = int(self.V_reset_label.text().split(": ")[1])
+        V_th = float(self.V_th_label.text().split(": ")[1])
+        V_rest = float(self.V_rest_label.text().split(": ")[1])
+        V_reset = float(self.V_reset_label.text().split(": ")[1])
         dt = float(self.dt_label.text().split(": ")[1])
         tau_m = float(self.tau_m_label.text().split(": ")[1])
         tau_const = float(self.tau_const_label.text().split(": ")[1])
-        update_frequency = int(self.update_frequency_label.text().split(": ")[1])
+        update_frequency = float(self.update_frequency_label.text().split(": ")[1])
 
         # Call the train_data function with parsed label values
         train_data(
@@ -264,7 +268,7 @@ class MainWidget(QWidget):
             W_ei_ideal=self.W_ei_ideal,
             W_ie=self.W_ie,
             W_ie_ideal=self.W_ie_ideal,
-            callback=lambda W_se, W_ee, spikes, t: self.update_plots(
+            callback=lambda spikes, W_se, W_ee, t: self.update_plots(
                 W_se, W_ee, spikes, t
             ),
             update_frequency=update_frequency,

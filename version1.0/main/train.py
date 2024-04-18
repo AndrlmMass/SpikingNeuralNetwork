@@ -60,7 +60,7 @@ def train_data(
     W_ie: np.ndarray,
     W_ie_ideal: np.ndarray,
     update_frequency: int,
-    interactive_tool: bool,
+    callback: None,
 ):
     num_neurons = N_excit_neurons + N_inhib_neurons + N_input_neurons
     spikes = np.zeros((time, num_neurons))
@@ -237,6 +237,9 @@ def train_data(
                 MemPot[t, n + N_excit_neurons] = V_reset
             else:
                 spikes[t, n + N_input_neurons + N_excit_neurons] = 0
+
+        if t % update_frequency == 0 and callback is not None:
+            callback(spikes, W_se, W_ee, t)
 
     return (
         spikes,
