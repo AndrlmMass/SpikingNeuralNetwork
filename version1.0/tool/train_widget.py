@@ -8,7 +8,6 @@ from PyQt5.QtWidgets import (
     QSlider,
     QPushButton,
     QVBoxLayout,
-    QHBoxLayout,
     QWidget,
     QLabel,
     QAction,
@@ -186,17 +185,41 @@ class MainWidget(QWidget):
         # Set main layout
         self.setLayout(main_layout)
 
+    def simplify_magic(self, weights, intervals, t_unit):
+        # Shape of weight matrix: (t, N*N) => (800, 484*484)
+        nu_weights = np.zeros(shape=(weights.shape[0], 10))
+        for t in range(1, t_unit):
+            d = 0
+            for n in range(len(intervals) - 1):
+                # Extract the segment
+                segment = weights[t, intervals[n] : intervals[n + 1] - 1]
+                # Filter out zeros and calculate mean
+                filtered_segment = segment[segment != 0]
+                if filtered_segment.size > 0:
+                    nu_weights[t, d] = np.mean(filtered_segment)
+                d += 1
+
+        return nu_weights
+
     def update_plots(self, W_se, W_ee, spikes, t):
-        # Update the weights plot
+        W_se, W_ee = np.reshape(
+            W_se, (W_se.shape[0], (W_se.shape[1] * W_se.shape[2]))
+        ), np.reshape(W_ee, (W_se.shape[0], (W_se.shape[1] * W_se.shape[2])))
+        W_se = self.simplify_magic(
+            W_se, np.linspace(0, W_se.shape[1], 10).astype(int), t
+        )
+        W_ee = self.simplify_magic(
+            W_ee, np.linspace(0, W_ee.shape[1], 10).astype(int), t
+        )
         self.ax_weights.clear()
-        combined_weights = np.concatenate((W_se[t], W_ee[t]), axis=1)
-        self.ax_weights.matshow(combined_weights, aspect="auto")
+        self.ax_weights.plot(np.arange(t), W_se[:t])
+        self.ax_weights.plot(np.arange(t), W_ee[:t])
         self.ax_weights.set_title(f"Weights at Time {t}")
         self.canvas_weights.draw()
 
         # Update the spikes plot
         self.ax_spikes.clear()
-        self.ax_spikes.imshow(spikes[:t, :], aspect="auto", interpolation="nearest")
+        self.ax_spikes.imshow(spikes[:t], aspect="auto", interpolation="nearest")
         self.ax_spikes.set_title(f"Spikes up to Time {t}")
         self.canvas_spikes.draw()
 
