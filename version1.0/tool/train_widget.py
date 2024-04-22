@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import (
     QAction,
 )
 from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QThread, pyqtSignal, QTimer
 
 # Set current working directories and add relevant directories to path
 if os.path.exists(
@@ -27,6 +28,20 @@ else:
     )
 
 from train import *
+
+
+class TrainingThread(QThread):
+    update_signal = pyqtSignal(np.ndarray, np.ndarray, np.ndarray, int)
+
+    def __init__(self, params):
+        super().__init__()
+        self.params = params
+
+    def run(self):
+        result = train_data(**self.params, callback=self.emit_update)
+
+    def emit_update(self, spikes, W_se, W_ee, t):
+        self.update_signal.emit(spikes, W_se, W_ee, t)
 
 
 class MainWidget(QWidget):

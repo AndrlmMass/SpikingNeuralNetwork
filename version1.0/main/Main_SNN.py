@@ -88,7 +88,7 @@ snn.train_data(
     w_p=0.5,
     plot_spikes=True,
     plot_weights=True,
-    interactive_tool=True,
+    interactive_tool=False,
     update_frequency=5,
 )
 
@@ -97,3 +97,4 @@ snn.train_data(
 # Test network on unseen data and estimate performance
 
 # Visualize training and testing results
+snn.plot_training()

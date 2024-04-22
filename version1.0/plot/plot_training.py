@@ -33,44 +33,44 @@ def plot_membrane_activity(MemPot, num_neurons, num_items, input_idx, timesteps)
     plt.show()
 
 
-def plot_weights_and_spikes(spikes, t, W_se, W_ee, dt, update_interval=10):
+def plot_weights_and_spikes(spikes, W_se, W_ee, dt, update_interval=10):
     # Create a figure and a set of subplots
     fig, axs = plt.subplots(
         2, 1, figsize=(12, 16)
     )  # Large figure to accommodate both plots
 
+    # Get firing times for each neuron
+    Firing_times = [np.where(spikes[t, 484:])[0] for t in range(spikes.shape[0])]
+
     # Plot spike raster
-    axs[0].eventplot([np.where(spikes[t])[0]], colors="black")
-    axs[0].set_title(f"Spike Raster at Time {t}")
+    axs[0].eventplot(Firing_times, colors="black")
+    axs[0].set_title(f"Spikes during training")
     axs[0].set_xlabel("Neuron Index")
     axs[0].set_ylabel("Spikes")
 
-    # Only update weights if t is a multiple of update_interval
-    if t % update_interval == 0:
-        # Concatenate W_se and W_ee along the neuron axis
-        weights = np.concatenate((W_se, W_ee), axis=1)
+    # Concatenate W_se and W_ee along the neuron axis
+    weights = np.concatenate(
+        (W_se, W_ee), axis=2
+    )  # Using axis=2 to concatenate along the feature dimension
+    weights = np.reshape(
+        weights, (weights.shape[0], -1)
+    )  # Flatten the last two dimensions
 
-        # Time steps array, adjusted to plot weights up to current time
-        time_steps = np.arange(0, (t + 1) * dt, dt)
+    # Time steps array, adjust based on your dt
+    dt = 1  # Set your time step duration
+    time_steps = np.arange(0, weights.shape[0] * dt, dt)
 
-        # Plot weight changes over time
-        for i in range(weights.shape[0]):  # Iterate over all starting neurons
-            for j in range(weights.shape[1]):  # Iterate over all ending neurons
-                if np.any(
-                    weights[i, j, : t + 1] != 0
-                ):  # Check if there are any non-zero weights
-                    axs[1].plot(
-                        time_steps[
-                            : len(weights[i, j, : t + 1])
-                        ],  # Correct time range for existing data
-                        weights[i, j, : t + 1],
-                        label=f"Weight from Neuron {i+1} to {j+1}",
-                    )
+    # Find indices of nonzero weights in the first row (assuming sparsity)
+    non_zero_indices = np.nonzero(weights[0])[0]
 
-        axs[1].set_xlabel("Time")
-        axs[1].set_ylabel("Weight Value")
-        axs[1].set_title("Weight Changes Over Time")
-        axs[1].legend()  # Optional, can be omitted for clarity if too many lines
+    for j in non_zero_indices:
+        axs[1].plot(time_steps, weights[:, j], label=f"Weight {j}")
+
+    # Adding legend, labels, and title
+    axs[1].legend(title="Legend", bbox_to_anchor=(1.05, 1), loc="upper left")
+    axs[1].set_xlabel("Time")
+    axs[1].set_ylabel("Weight Value")
+    axs[1].set_title("Weight Changes Over Time")
 
     plt.tight_layout()
     plt.show()

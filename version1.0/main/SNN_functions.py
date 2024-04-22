@@ -327,10 +327,9 @@ class SNN_STDP:
                 W_ie=self.W_ie,
                 W_ie_ideal=self.W_ie_ideal,
                 update_frequency=update_frequency,
-                plot_weights=plot_weights,
-                plot_spikes=plot_spikes,
-                interactive_tool=interactive_tool,
+                callback=None,
             )
+        self.update_frequency = update_frequency
 
         if retur:
             return (
@@ -341,3 +340,12 @@ class SNN_STDP:
                 self.W_ei,
                 self.W_ie,
             )
+
+    def plot_training(self):
+        plot_weights_and_spikes(
+            spikes=self.spikes,
+            W_se=self.W_se,
+            W_ee=self.W_ee,
+            dt=self.dt,
+            update_interval=self.update_frequency,
+        )
