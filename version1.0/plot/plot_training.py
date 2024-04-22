@@ -6,22 +6,24 @@ import matplotlib.pyplot as plt
 
 
 def plot_membrane_activity(
-    MemPot: np.ndarray, idx_start: int, idx_stop: int, update_interval: int
+    MemPot: np.ndarray,
+    idx_start: int,
+    idx_stop: int,
+    update_interval: int,
+    time_start: int,
+    time_stop: int,
 ):
     # MemPot shape: (time, num_neurons-N_input_neurons)
-    time_units = np.arange(idx_start, idx_stop, update_interval)
+    time_units = np.arange(time_start, time_stop - 1, update_interval)
     for neuron in range(idx_start, idx_stop):
         mv_ls = []
         for t in time_units:
             mv_ls.append(MemPot[t, neuron])
-        print(mv_ls)
-        print(len(mv_ls))
-        plt.plot((time_units, mv_ls), label=f"Neuron {neuron}")
+        plt.plot(time_units, mv_ls, label=f"Neuron {neuron}")
 
     plt.xlabel("Time")
     plt.ylabel("Membrane Potential")
     plt.title("Membrane Potential Changes Over Time")
-    plt.legend(title="Legend")
     plt.show()
 
 

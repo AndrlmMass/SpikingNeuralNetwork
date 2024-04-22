@@ -310,7 +310,7 @@ class SNN_STDP:
                 V_reset=self.V_reset,
                 dt=self.dt,
                 tau_m=self.tau_m,
-                tau_const=1,  # Defines the rate of convergence, e.g., 20 minutes
+                tau_const=0.001,  # Defines the rate of convergence, e.g., 20 minutes
                 training_data=self.training_data,
                 N_excit_neurons=self.N_excit_neurons,
                 N_inhib_neurons=self.N_inhib_neurons,
@@ -340,7 +340,13 @@ class SNN_STDP:
             )
 
     def plot_training(
-        self, ws_nd_spikes: bool, idx_start: int, idx_stop: int, mv: bool
+        self,
+        ws_nd_spikes: bool,
+        idx_start: int,
+        idx_stop: int,
+        mv: bool,
+        time_start: int,
+        time_stop: int,
     ):
         if ws_nd_spikes:
             plot_weights_and_spikes(
@@ -356,4 +362,6 @@ class SNN_STDP:
                 idx_start=idx_start,
                 idx_stop=idx_stop,
                 update_interval=self.update_frequency,
+                time_start=time_start,
+                time_stop=time_stop,
             )

@@ -83,8 +83,15 @@ snn.load_data(rand_lvl=0.01, retur=False)
 
 
 # Train network
-snn.train_data(
-    retur=False,
+(
+    spikes,
+    MemPot,
+    W_se,
+    W_ee,
+    W_ei,
+    W_ie,
+) = snn.train_data(
+    retur=True,
     w_p=0.5,
     interactive_tool=False,
     update_frequency=5,
@@ -95,4 +102,11 @@ snn.train_data(
 # Test network on unseen data and estimate performance
 
 # Visualize training and testing results
-snn.plot_training(ws_nd_spikes=False, idx_start=484, idx_stop=490, mv=True)
+snn.plot_training(
+    ws_nd_spikes=False,
+    idx_start=0,
+    idx_stop=605,
+    mv=True,
+    time_start=0,
+    time_stop=800,
+)
