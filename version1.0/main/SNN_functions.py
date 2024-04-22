@@ -242,8 +242,6 @@ class SNN_STDP:
         w_p: float | int,
         retur: bool,
         update_frequency: int,
-        plot_spikes: bool,
-        plot_weights: bool,
         interactive_tool: bool,
     ):
         if interactive_tool:
@@ -341,11 +339,21 @@ class SNN_STDP:
                 self.W_ie,
             )
 
-    def plot_training(self):
-        plot_weights_and_spikes(
-            spikes=self.spikes,
-            W_se=self.W_se,
-            W_ee=self.W_ee,
-            dt=self.dt,
-            update_interval=self.update_frequency,
-        )
+    def plot_training(
+        self, ws_nd_spikes: bool, idx_start: int, idx_stop: int, mv: bool
+    ):
+        if ws_nd_spikes:
+            plot_weights_and_spikes(
+                spikes=self.spikes,
+                W_se=self.W_se,
+                W_ee=self.W_ee,
+                dt=self.dt,
+                update_interval=self.update_frequency,
+            )
+        if mv:
+            plot_membrane_activity(
+                MemPot=self.MemPot,
+                idx_start=idx_start,
+                idx_stop=idx_stop,
+                update_interval=self.update_frequency,
+            )

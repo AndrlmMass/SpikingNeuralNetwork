@@ -31,17 +31,17 @@ from SNN_functions import *
 
 # Initialize SNN object
 snn = SNN_STDP(
-    V_th=-65,
-    V_reset=-75,
+    V_th=0.5,
+    V_reset=0,
     P=1,  # Don't know starting value
     C=1,  # Don't know starting value, also needs updating
     R=1,  # Don't know starting value, also needs updating
-    tau_m=0.01,  # Don't know starting value
+    tau_m=0.1,  # Don't know starting value
     num_items=8,
     tau_stdp=0.01,  # Don't know starting value
     dt=0.001,
     T=0.1,
-    V_rest=-70,
+    V_rest=0.2,
     alpha=1,  # Don't know starting value
     min_weight=0,
     max_weight=5,
@@ -86,8 +86,6 @@ snn.load_data(rand_lvl=0.01, retur=False)
 snn.train_data(
     retur=False,
     w_p=0.5,
-    plot_spikes=True,
-    plot_weights=True,
     interactive_tool=False,
     update_frequency=5,
 )
@@ -97,4 +95,4 @@ snn.train_data(
 # Test network on unseen data and estimate performance
 
 # Visualize training and testing results
-snn.plot_training()
+snn.plot_training(ws_nd_spikes=False, idx_start=484, idx_stop=490, mv=True)
