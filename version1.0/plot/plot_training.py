@@ -21,7 +21,7 @@ def plot_membrane_activity(
             mv_ls.append(MemPot[t, neuron])
         plt.plot(time_units, mv_ls, label=f"Neuron {neuron}")
 
-    plt.xlabel("Time")
+    plt.xlabel("ms")
     plt.ylabel("Membrane Potential")
     plt.title("Membrane Potential Changes Over Time")
     plt.show()

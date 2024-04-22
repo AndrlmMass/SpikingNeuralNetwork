@@ -31,37 +31,47 @@ from SNN_functions import *
 
 # Initialize SNN object
 snn = SNN_STDP(
-    V_th=0.5,
-    V_reset=0,
+    V_th=-55,
+    V_reset=-60,
     P=1,  # Don't know starting value
     C=1,  # Don't know starting value, also needs updating
     R=1,  # Don't know starting value, also needs updating
-    tau_m=0.1,  # Don't know starting value
+    tau_m=100,  # Don't know starting value
     num_items=8,
-    tau_stdp=0.01,  # Don't know starting value
+    tau_stdp=0.1,  # Don't know starting value
     dt=0.001,
     T=0.1,
-    V_rest=0.2,
+    V_rest=-65,
     alpha=1,  # Don't know starting value
     min_weight=0,
     max_weight=5,
-    input_scaler=2,
     num_epochs=100,  # N/A
     init_cals=1,  # N/A
-    A=1,  # Don't know starting value, also needs updating
-    B=1,  # Don't know starting value, also needs updating
-    beta=1,  # Don't know starting value, also needs updating
-    delta=1,  # Don't know starting value, also needs updating
+    A=1,  # Regulates hebbian learning -> larger == more hebbian learning
+    B=0.1,  # Regulates hebbian learning -> larger == less hebbian learning
+    beta=1,  # Regulates heterosynpatic learning
+    delta=10,  # Regulates dopamin_reg
 )
 
 # Initialize & visualize pre-trained network
-snn.initialize_network(
+(
+    MemPot,
+    spikes,
+    W_se,
+    W_ee,
+    W_ei,
+    W_ie,
+    W_se_ideal,
+    W_ee_ideal,
+    W_ei_ideal,
+    W_ie_ideal,
+) = snn.initialize_network(
     N_input_neurons=484,
     N_excit_neurons=484,
     N_inhib_neurons=121,
     radius_=4,
     W_ee_prob=0.1,
-    retur=False,
+    retur=True,
 )
 # Generate data
 snn.gen_data(
@@ -77,7 +87,7 @@ snn.gen_data(
 )
 
 # Load data
-snn.load_data(rand_lvl=0.01, retur=False)
+data, labels = snn.load_data(rand_lvl=0.01, retur=True)
 
 # Visualize network
 
@@ -108,5 +118,5 @@ snn.plot_training(
     idx_stop=605,
     mv=True,
     time_start=0,
-    time_stop=800,
+    time_stop=50,
 )

@@ -79,7 +79,6 @@ class SNN_STDP:
         alpha: float | int,
         max_weight: float | int,
         min_weight: float | int,
-        input_scaler: float | int,
         num_epochs: int,
         init_cals: int,
         A: float | int,
@@ -109,7 +108,6 @@ class SNN_STDP:
         self.init_cals = init_cals
         self.max_weight = max_weight
         self.min_weight = min_weight
-        self.input_scaler = input_scaler
         self.num_epochs = num_epochs
         self.max_spike_diff = int(self.num_timesteps * 0.1)
 
@@ -157,7 +155,7 @@ class SNN_STDP:
             W_ei=self.W_ei,
             time=self.time,
             N_ws=4,
-            weight_val=1,
+            weight_val=0.5,
             radius=radius_,
         )
 
@@ -211,6 +209,7 @@ class SNN_STDP:
             float_2_pos_spike(
                 data=data,
                 labels=labels,
+                time=self.time,
                 timesteps=self.num_timesteps,
                 dt=self.dt,
                 input_scaler=input_scaler,  # Should be set to 10
@@ -235,7 +234,7 @@ class SNN_STDP:
             self.labels_train = pickle.load(openfile)
 
         if retur:
-            return (self.training_data, self.labels_train)
+            return self.training_data, self.labels_train
 
     def train_data(
         self,

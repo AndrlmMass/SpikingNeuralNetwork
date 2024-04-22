@@ -119,7 +119,7 @@ class gen_weights:
 
             # Create synapses
             for idx in nz_indices:
-                W_ie[0, n, idx] = weight_val
+                W_ie[0, n, idx] = np.random.normal(loc=weight_val, scale=0.1)
 
         # Create array of ideal weights
         W_ie_ideal = np.full((N_inhib_neurons, N_excit_neurons), weight_val)
