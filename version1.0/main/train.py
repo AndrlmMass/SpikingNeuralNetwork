@@ -111,10 +111,10 @@ def train_data(
             nonzero_se_ws = np.nonzero(W_se[t, :, n])[0]
 
             # Update pre_synaptic_trace for W_se
-            for w in range(len(nonzero_se_ws)):
+            for w in range(len(nonzero_se_ws) - 1):
                 if spikes[t, nonzero_se_ws[w]] == 1:
                     pre_synaptic_trace[
-                        t, nonzero_ie_ws[w]
+                        t, nonzero_se_ws[w]
                     ] += 1  # Remember that the presynaptic neuron will increase its trace size indepedent on whether the postsynaptic neuron fires or not
 
             # Get nonzero weights from excitatory neurons to current excitatory neuron
@@ -130,10 +130,8 @@ def train_data(
 
             # Update pre_synaptic_trace for W_ee
             for w in range(len(nonzero_ie_ws)):
-                if spikes[t, N_input_neurons + nonzero_ee_ws[w]] == 1:
-                    pre_synaptic_trace[
-                        t, N_input_neurons + N_excit_neurons + nonzero_ee_ws[w]
-                    ] += 1
+                if spikes[t, N_input_neurons + nonzero_ie_ws[w]] == 1:
+                    pre_synaptic_trace[t, N_input_neurons + nonzero_ie_ws[w]] += 1
 
             # Update spikes
             if MemPot[t, n] > V_th:
@@ -167,21 +165,28 @@ def train_data(
                     post_trace = post_synaptic_trace[t, n]
 
                     # Update ideal weight
-                    W_se_ideal[s, n] = tau_const * (
-                        W_se[t, s, n]
-                        - W_se_ideal[s, n]
-                        - P * W_se_ideal[s, n] * ((w_p - W_se_ideal[s, n]) / 2)
+                    W_se_ideal[pre_syn_indices[s], n] = tau_const * (
+                        W_se[t, pre_syn_indices[s], n]
+                        - W_se_ideal[pre_syn_indices[s], n]
+                        - P
+                        * W_se_ideal[pre_syn_indices[s], n]
+                        * ((w_p - W_se_ideal[pre_syn_indices[s], n]) / 2)
                     )
 
                     # Get learning components
                     hebb = A * pre_trace * post_trace**2 - B * pre_trace * post_trace
                     hetero_syn = (
-                        -beta * (W_se[t, s, n] - W_se_ideal[s, n]) * post_trace**4
+                        -beta
+                        * (
+                            W_se[t, pre_syn_indices[s], n]
+                            - W_se_ideal[pre_syn_indices[s], n]
+                        )
+                        * post_trace**4
                     )
                     dopamine_reg = delta * pre_trace
 
                     # Assemble components to update weight
-                    W_se[t, s, n] = hebb + hetero_syn + dopamine_reg
+                    W_se[t, pre_syn_indices[s], n] = hebb + hetero_syn + dopamine_reg
 
             # Get all pre-synaptic indices
             pre_syn_indices = np.nonzero(W_ee[t, :, n])[0]
@@ -190,7 +195,7 @@ def train_data(
             if pre_syn_indices.size != 0:
                 # Loop through each synapse to update strength
                 for s in range(len(pre_syn_indices)):
-                    if s == n:
+                    if pre_syn_indices[s] == n:
                         raise UserWarning(
                             "There are self-connections within the W_ee array"
                         )
@@ -209,21 +214,28 @@ def train_data(
                     post_trace = post_synaptic_trace[t, n]
 
                     # Update ideal weight
-                    W_ee_ideal[t, s, n] = tau_const * (
-                        W_ee[t, s, n]
-                        - W_ee_ideal[t, s, n]
-                        - P * W_ee_ideal[t, s, n] * ((w_p - W_ee_ideal[t, s, n]) / 2)
+                    W_ee_ideal[pre_syn_indices[s], n] = tau_const * (
+                        W_ee[t, pre_syn_indices[s], n]
+                        - W_ee_ideal[pre_syn_indices[s], n]
+                        - P
+                        * W_ee_ideal[pre_syn_indices[s], n]
+                        * ((w_p - W_ee_ideal[pre_syn_indices[s], n]) / 2)
                     )
 
                     # Get learning components
                     hebb = A * pre_trace * post_trace**2 - B * pre_trace * post_trace
                     hetero_syn = (
-                        -beta * (W_ee[t, s, n] - W_ee_ideal[t, s, n]) * post_trace**4
+                        -beta
+                        * (
+                            W_ee[t, pre_syn_indices[s], n]
+                            - W_ee_ideal[pre_syn_indices[s], n]
+                        )
+                        * post_trace**4
                     )
                     dopamine_reg = delta * pre_trace
 
                     # Assemble components to update weight
-                    W_ee[t, s, n] = hebb + hetero_syn + dopamine_reg
+                    W_ee[t, pre_syn_indices[s], n] = hebb + hetero_syn + dopamine_reg
 
         # Update inhibitory-exitatory weights
         for n in range(0, N_excit_neurons - 1):
