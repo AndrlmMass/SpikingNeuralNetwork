@@ -164,15 +164,6 @@ def train_data(
                     pre_trace = pre_synaptic_trace[t, pre_syn_indices[s]]
                     post_trace = post_synaptic_trace[t, n]
 
-                    # Update ideal weight
-                    W_se_ideal[pre_syn_indices[s], n] = tau_const * (
-                        W_se[t, pre_syn_indices[s], n]
-                        - W_se_ideal[pre_syn_indices[s], n]
-                        - P
-                        * W_se_ideal[pre_syn_indices[s], n]
-                        * ((w_p - W_se_ideal[pre_syn_indices[s], n]) / 2)
-                    )
-
                     # Get learning components
                     hebb = A * pre_trace * post_trace**2 - B * pre_trace * post_trace
                     hetero_syn = (
@@ -213,15 +204,6 @@ def train_data(
                     pre_trace = pre_synaptic_trace[t, pre_syn_indices[s]]
                     post_trace = post_synaptic_trace[t, n]
 
-                    # Update ideal weight
-                    W_ee_ideal[pre_syn_indices[s], n] = tau_const * (
-                        W_ee[t, pre_syn_indices[s], n]
-                        - W_ee_ideal[pre_syn_indices[s], n]
-                        - P
-                        * W_ee_ideal[pre_syn_indices[s], n]
-                        * ((w_p - W_ee_ideal[pre_syn_indices[s], n]) / 2)
-                    )
-
                     # Get learning components
                     hebb = A * pre_trace * post_trace**2 - B * pre_trace * post_trace
                     hetero_syn = (
@@ -233,6 +215,8 @@ def train_data(
                         * post_trace**4
                     )
                     dopamine_reg = delta * pre_trace
+                    if n == 0 and t % 2 == 0:
+                        print(hebb + hetero_syn + dopamine_reg)
 
                     # Assemble components to update weight
                     W_ee[t, pre_syn_indices[s], n] = hebb + hetero_syn + dopamine_reg

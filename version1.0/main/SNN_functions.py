@@ -311,7 +311,7 @@ class SNN_STDP:
                 V_reset=self.V_reset,
                 dt=self.dt,
                 tau_m=self.tau_m,
-                tau_const=0.001,  # Defines the rate of convergence, e.g., 20 minutes
+                tau_const=10,  # Defines the rate of convergence with ideal weights, e.g., 20 minutes
                 training_data=self.training_data,
                 N_excit_neurons=self.N_excit_neurons,
                 N_inhib_neurons=self.N_inhib_neurons,

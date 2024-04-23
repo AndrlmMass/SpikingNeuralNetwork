@@ -31,17 +31,17 @@ from SNN_functions import *
 
 # Initialize SNN object
 snn = SNN_STDP(
-    V_th=-55,
+    V_th=-50,
     V_reset=-75,
-    P=1,  # Don't know starting value
+    P=20,  # Ideal weight scaler
     C=1,  # Capacitance
     R=100,  # Resistance
-    tau_m=20,  # Scales membrane potential update
+    tau_m=0.02,  # Scales membrane potential update
     num_items=20,
     tau_stdp=0.1,  # Don't know starting value
     dt=0.001,
     T=0.1,
-    V_rest=-65,
+    V_rest=-60,
     alpha=1,  # Don't know starting value
     min_weight=0,
     max_weight=5,
@@ -49,8 +49,8 @@ snn = SNN_STDP(
     init_cals=1,  # N/A
     A=1,  # Regulates hebbian learning -> larger == more hebbian learning
     B=0.1,  # Regulates hebbian learning -> larger == less hebbian learning
-    beta=1,  # Regulates heterosynpatic learning
-    delta=10,  # Regulates dopamin_reg
+    beta=0.05,  # Regulates heterosynpatic learning
+    delta=2 * np.exp(-5),  # Regulates dopamin_reg
 )
 
 # Initialize & visualize pre-trained network
