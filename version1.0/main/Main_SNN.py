@@ -32,12 +32,12 @@ from SNN_functions import *
 # Initialize SNN object
 snn = SNN_STDP(
     V_th=-55,
-    V_reset=-60,
+    V_reset=-75,
     P=1,  # Don't know starting value
-    C=1,  # Don't know starting value, also needs updating
-    R=1,  # Don't know starting value, also needs updating
-    tau_m=100,  # Don't know starting value
-    num_items=8,
+    C=1,  # Capacitance
+    R=100,  # Resistance
+    tau_m=20,  # Scales membrane potential update
+    num_items=20,
     tau_stdp=0.1,  # Don't know starting value
     dt=0.001,
     T=0.1,
@@ -81,13 +81,13 @@ snn.gen_data(
     noise_rand_ls=[0, 0.01, 0.03, 0.05],
     mean=0,
     blank_variance=0.01,
-    input_scaler=10,
+    input_scaler=100,
     save=False,
     retur=False,
 )
 
 # Load data
-data, labels = snn.load_data(rand_lvl=0.01, retur=True)
+data, labels = snn.load_data(rand_lvl=0.05, retur=True)
 
 # Visualize network
 
@@ -113,10 +113,12 @@ data, labels = snn.load_data(rand_lvl=0.01, retur=True)
 
 # Visualize training and testing results
 snn.plot_training(
-    ws_nd_spikes=False,
+    ws_nd_spikes=True,
     idx_start=0,
     idx_stop=605,
     mv=True,
     time_start=0,
-    time_stop=50,
+    time_stop=800,
 )
+
+snn.plot_I_in()

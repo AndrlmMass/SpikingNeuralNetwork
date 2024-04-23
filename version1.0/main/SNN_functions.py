@@ -5,6 +5,7 @@ import os
 import sys
 import pickle
 import numpy as np
+import matplotlib.pyplot as plt
 from PyQt5.QtWidgets import QApplication, QMainWindow
 
 # Set current working directories and add relevant directories to path
@@ -295,6 +296,7 @@ class SNN_STDP:
                 self.W_ie_ideal,
                 self.pre_synaptic_trace,
                 self.post_synaptic_trace,
+                self.I_in_ls,
             ) = train_data(
                 R=self.R,
                 A=self.A,
@@ -364,3 +366,8 @@ class SNN_STDP:
                 time_start=time_start,
                 time_stop=time_stop,
             )
+
+    def plot_I_in(self):
+        d = np.arange(0, len(self.I_in_ls))
+        plt.plot(d, self.I_in_ls)
+        plt.show()

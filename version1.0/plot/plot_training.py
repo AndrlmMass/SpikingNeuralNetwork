@@ -32,15 +32,13 @@ def plot_weights_and_spikes(spikes, W_se, W_ee, dt, update_interval=10):
     fig, axs = plt.subplots(2, 1, figsize=(12, 16))
 
     # Get firing times for each neuron
-    Firing_times = [
-        np.where(spikes[t, 484:])[0] for t in range(0, spikes.shape[0], update_interval)
-    ]
+    Firing_times = [np.where(spikes[:, n])[0] for n in range(0, 1089)]
 
     # Plot spike raster
     axs[0].eventplot(Firing_times, colors="black")
     axs[0].set_title(f"Spikes during training")
-    axs[0].set_xlabel("Neuron Index")
-    axs[0].set_ylabel("Spikes")
+    axs[0].set_xlabel("time (ms)")
+    axs[0].set_ylabel("Neuron index")
 
     # Concatenate W_se and W_ee along the neuron axis
     weights = np.concatenate((W_se, W_ee), axis=2)

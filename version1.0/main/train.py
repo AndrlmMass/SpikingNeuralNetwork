@@ -1,6 +1,7 @@
 # Train network script
 import numpy as np
 from tqdm import tqdm
+import pdb
 import os
 import sys
 
@@ -69,24 +70,22 @@ def train_data(
     # Add input data before training for input neurons
     spikes[:, :N_input_neurons] = training_data
 
-    print(W_se[0, :, 0])
-    print(W_ee[0, :, 0])
-    print(W_ie[0, :, 0])
+    I_in_sum = []
 
     # Loop through time and update membrane potential, spikes and weights
-    for t in tqdm(range(1, time), desc="Training network"):
+    for t in tqdm(range(0, time - 2), desc="Training network"):
 
         # Update decay traces
         pre_synaptic_trace[t] *= np.exp(-dt / tau_m)
         post_synaptic_trace[t] *= np.exp(-dt / tau_m)
 
-        # Update stimulation-excitation, excitation-excitation and inhibitory-excitatory synapses
+        # Update stimulation-excitation, excitation-excitation and inhibitory-excitatory synapsees
         for n in range(0, N_excit_neurons - 1):
 
             # Update incoming spikes as I_in
             I_in = (
                 np.dot(
-                    W_se[t, :, n],
+                    W_se[t, :, 25],
                     spikes[t, :N_input_neurons],
                 )
                 + np.dot(
@@ -101,10 +100,11 @@ def train_data(
                     spikes[t, N_input_neurons + N_excit_neurons :],
                 )
             )
+            I_in_sum.append(I_in)
 
             # Update membrane potential based on I_in
             MemPot[t, n] = (
-                MemPot[t - 1, n] + (-MemPot[t - 1, n] + V_rest + R * I_in) / tau_m
+                MemPot[t - 1, n] + (-(MemPot[t - 1, n] - V_rest) + R * I_in) / tau_m
             )
 
             # Get nonzero weights from input neurons to current excitatory neuron
@@ -130,7 +130,7 @@ def train_data(
 
             # Update pre_synaptic_trace for W_ee
             for w in range(len(nonzero_ie_ws)):
-                if spikes[t, N_input_neurons + N_excit_neurons + nonzero_ee_ws[w]] == 1:
+                if spikes[t, N_input_neurons + nonzero_ee_ws[w]] == 1:
                     pre_synaptic_trace[
                         t, N_input_neurons + N_excit_neurons + nonzero_ee_ws[w]
                     ] += 1
@@ -285,4 +285,5 @@ def train_data(
         W_ie_ideal,
         pre_synaptic_trace,
         post_synaptic_trace,
+        I_in_sum,
     )
