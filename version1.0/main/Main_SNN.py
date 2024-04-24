@@ -51,7 +51,7 @@ snn = SNN_STDP(
     B=0.001,  # Regulates hebbian learning -> larger == less hebbian learning
     beta=0.05,  # Regulates heterosynpatic learning
     delta=0.00002,  # Regulates dopamin_reg
-    tau_const=100000000000000000000,  # Time constant in learning
+    tau_const=0.0001,  # Time constant in learning
 )
 
 # Initialize & visualize pre-trained network
@@ -107,6 +107,8 @@ data, labels = snn.load_data(rand_lvl=0.05, retur=True)
     interactive_tool=False,
     update_frequency=5,
 )
+
+print(np.sum(MemPot[5:], axis=1))
 
 # Evaluate performance
 

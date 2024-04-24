@@ -75,7 +75,7 @@ def train_data(
     I_in_sum = []
 
     # Loop through time and update membrane potential, spikes and weights
-    for t in tqdm(range(0, time - 1), desc="Training network"):
+    for t in tqdm(range(1, time - 1), desc="Training network"):
 
         # Update decay traces
         pre_synaptic_trace *= np.exp(-dt / tau_m)
@@ -88,7 +88,7 @@ def train_data(
             I_in = (
                 np.dot(
                     W_se[t - 1, :, n],
-                    spikes[t, :N_input_neurons],
+                    spikes[t - 1, :N_input_neurons],  # This might be wrong
                 )
                 + np.dot(
                     W_ee[t - 1, :, n],
@@ -218,7 +218,7 @@ def train_data(
                         * post_trace**4
                     )
                     dopamine_reg = delta * pre_trace
-                    if n == 0 and t % 2 == 0:
+                    if n == 0:
                         print(
                             "hebb: ",
                             hebb,

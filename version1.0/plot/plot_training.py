@@ -15,12 +15,10 @@ def plot_membrane_activity(
 ):
     # MemPot shape: (time, num_neurons-N_input_neurons)
     time_units = np.arange(time_start, time_stop - 1, update_interval)
+    t_unit = np.arange(0, MemPot.shape[0])
     print(MemPot.shape)
-    for neuron in range(idx_start, idx_stop):
-        mv_ls = []
-        for t in time_units:
-            mv_ls.append(MemPot[t - 1, neuron - 1])
-        plt.plot(time_units, mv_ls, label=f"Neuron {neuron}")
+    # for neuron in range(idx_start, idx_stop):
+    plt.plot(t_unit, MemPot)
 
     plt.xlabel("ms")
     plt.ylabel("Membrane Potential")
