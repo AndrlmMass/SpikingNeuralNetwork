@@ -15,10 +15,11 @@ def plot_membrane_activity(
 ):
     # MemPot shape: (time, num_neurons-N_input_neurons)
     time_units = np.arange(time_start, time_stop - 1, update_interval)
+    print(MemPot.shape)
     for neuron in range(idx_start, idx_stop):
         mv_ls = []
         for t in time_units:
-            mv_ls.append(MemPot[t, neuron])
+            mv_ls.append(MemPot[t - 1, neuron - 1])
         plt.plot(time_units, mv_ls, label=f"Neuron {neuron}")
 
     plt.xlabel("ms")
@@ -27,7 +28,7 @@ def plot_membrane_activity(
     plt.show()
 
 
-def plot_weights_and_spikes(spikes, W_se, W_ee, dt, update_interval=10):
+def plot_weights_and_spikes(spikes, W_se, dt, update_interval=10):
     # Create a figure and a set of subplots
     fig, axs = plt.subplots(2, 1, figsize=(12, 16))
 
@@ -41,7 +42,7 @@ def plot_weights_and_spikes(spikes, W_se, W_ee, dt, update_interval=10):
     axs[0].set_ylabel("Neuron index")
 
     # Concatenate W_se and W_ee along the neuron axis
-    weights = np.concatenate((W_se, W_ee), axis=2)
+    weights = W_se
     weights = np.reshape(weights, (weights.shape[0], -1))
 
     # Convert weight matrix to a tenth of its current width

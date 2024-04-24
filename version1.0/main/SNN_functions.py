@@ -86,6 +86,7 @@ class SNN_STDP:
         B: float | int,
         beta: float | int,
         delta: float | int,
+        tau_const: float | int,
     ):
         self.V_th = V_th
         self.V_reset = V_reset
@@ -106,6 +107,7 @@ class SNN_STDP:
         self.V_rest = V_rest
         self.leakage_rate = 1 / self.R
         self.alpha = alpha
+        self.tau_const = tau_const
         self.init_cals = init_cals
         self.max_weight = max_weight
         self.min_weight = min_weight
@@ -165,6 +167,7 @@ class SNN_STDP:
             (self.time, (self.N_excit_neurons + self.N_inhib_neurons))
         )
         self.MemPot[0, :] = self.V_rest
+        print(self.MemPot[0, :])
         self.spikes = np.zeros((self.time, self.num_neurons))
 
         if retur:
@@ -262,7 +265,7 @@ class SNN_STDP:
                 V_rest=self.V_rest,
                 dt=self.dt,
                 tau_m=self.tau_m,
-                tau_const=1,
+                tau_const=self.tau_const,
                 update_frequency=update_frequency,
                 N_excit_neurons=self.N_excit_neurons,
                 N_inhib_neurons=self.N_inhib_neurons,
@@ -304,14 +307,14 @@ class SNN_STDP:
                 P=1,
                 w_p=w_p,  # Defines the upper stable point of weight convergence
                 beta=self.beta,
-                delta=self.beta,
+                delta=self.delta,
                 time=self.time,
                 V_th=self.V_th,
                 V_rest=self.V_rest,
                 V_reset=self.V_reset,
                 dt=self.dt,
                 tau_m=self.tau_m,
-                tau_const=10,  # Defines the rate of convergence with ideal weights, e.g., 20 minutes
+                tau_const=0.0001,  # Defines the rate of convergence with ideal weights, e.g., 20 minutes
                 training_data=self.training_data,
                 N_excit_neurons=self.N_excit_neurons,
                 N_inhib_neurons=self.N_inhib_neurons,
@@ -355,7 +358,6 @@ class SNN_STDP:
             plot_weights_and_spikes(
                 spikes=self.spikes,
                 W_se=self.W_se,
-                W_ee=self.W_ee,
                 dt=self.dt,
                 update_interval=self.update_frequency,
             )

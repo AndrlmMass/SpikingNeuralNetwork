@@ -87,7 +87,7 @@ def train_data(
             # Update incoming spikes as I_in
             I_in = (
                 np.dot(
-                    W_se[t - 1, :, 25],
+                    W_se[t - 1, :, n],
                     spikes[t, :N_input_neurons],
                 )
                 + np.dot(
@@ -180,7 +180,7 @@ def train_data(
                     dopamine_reg = delta * pre_trace
 
                     # Assemble components to update weight
-                    W_se[t, pre_syn_indices[s], n] = hebb + hetero_syn + dopamine_reg
+                    W_se[t, pre_syn_indices[s], n] = round(hebb + dopamine_reg)
 
             # Get all pre-synaptic indices
             pre_syn_indices = nonzero_ee_ws
@@ -219,10 +219,20 @@ def train_data(
                     )
                     dopamine_reg = delta * pre_trace
                     if n == 0 and t % 2 == 0:
+                        print(
+                            "hebb: ",
+                            hebb,
+                            "hetero_syn: ",
+                            hetero_syn,
+                            "dopamine_reg: ",
+                            dopamine_reg,
+                            "W_ee: ",
+                            W_ee[t, pre_syn_indices[s], n],
+                        )
                         print(hebb + hetero_syn + dopamine_reg)
 
                     # Assemble components to update weight
-                    W_ee[t, pre_syn_indices[s], n] = hebb + hetero_syn + dopamine_reg
+                    W_ee[t, pre_syn_indices[s], n] = round(hebb + dopamine_reg, 4)
 
         # Update inhibitory-exitatory weights
         for n in range(0, N_excit_neurons - 1):
@@ -289,14 +299,15 @@ def train_data(
             callback(spikes, W_se, W_ee, t)
 
         # Clip weights to avoid runaway effects
-        W_se = np.clip(W_se, min_weight, max_weight)
-        W_ee = np.clip(W_ee, min_weight, max_weight)
-        W_ei = np.clip(W_ei, min_weight, max_weight)
-        W_ie = np.clip(W_ie, min_weight, max_weight)
-        W_se_ideal = np.clip(W_se_ideal, min_weight, max_weight)
-        W_ee_ideal = np.clip(W_ee_ideal, min_weight, max_weight)
-        W_ei_ideal = np.clip(W_ei_ideal, min_weight, max_weight)
-        W_ie_ideal = np.clip(W_ie_ideal, min_weight, max_weight)
+        if t % 10 == 0:
+            W_se = np.clip(W_se, min_weight, max_weight)
+            W_ee = np.clip(W_ee, min_weight, max_weight)
+            W_ei = np.clip(W_ei, min_weight, max_weight)
+            W_ie = np.clip(W_ie, min_weight, max_weight)
+            W_se_ideal = np.clip(W_se_ideal, min_weight, max_weight)
+            W_ee_ideal = np.clip(W_ee_ideal, min_weight, max_weight)
+            W_ei_ideal = np.clip(W_ei_ideal, min_weight, max_weight)
+            W_ie_ideal = np.clip(W_ie_ideal, min_weight, max_weight)
 
     return (
         spikes,

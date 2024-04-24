@@ -47,10 +47,11 @@ snn = SNN_STDP(
     max_weight=5,  # Maximum weight
     num_epochs=100,  # N/A
     init_cals=1,  # N/A
-    A=1,  # Regulates hebbian learning -> larger == more hebbian learning
-    B=0.1,  # Regulates hebbian learning -> larger == less hebbian learning
+    A=0.001,  # Regulates hebbian learning -> larger == more hebbian learning
+    B=0.001,  # Regulates hebbian learning -> larger == less hebbian learning
     beta=0.05,  # Regulates heterosynpatic learning
     delta=0.00002,  # Regulates dopamin_reg
+    tau_const=100000000000000000000,  # Time constant in learning
 )
 
 # Initialize & visualize pre-trained network
@@ -75,14 +76,14 @@ snn = SNN_STDP(
 )
 # Generate data
 snn.gen_data(
-    run=True,
+    run=False,
     N_classes=4,
     noise_rand=True,
     noise_rand_ls=[0, 0.01, 0.03, 0.05],
     mean=0,
     blank_variance=0.01,
     input_scaler=50,
-    save=True,
+    save=False,
     retur=False,
 )
 
@@ -115,10 +116,10 @@ data, labels = snn.load_data(rand_lvl=0.05, retur=True)
 snn.plot_training(
     ws_nd_spikes=True,
     idx_start=0,
-    idx_stop=605,
+    idx_stop=1,
     mv=True,
     time_start=0,
-    time_stop=800,
+    time_stop=400,
 )
 
 snn.plot_I_in()
