@@ -317,6 +317,8 @@ class SNN_STDP:
                 N_inhib_neurons=self.N_inhib_neurons,
                 N_input_neurons=self.N_input_neurons,
                 MemPot=self.MemPot,
+                max_weight=self.max_weight,
+                min_weight=self.min_weight,
                 W_se=self.W_se,
                 W_se_ideal=self.W_se_ideal,
                 W_ee=self.W_ee,

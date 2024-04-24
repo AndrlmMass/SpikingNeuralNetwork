@@ -34,23 +34,23 @@ snn = SNN_STDP(
     V_th=-50,
     V_reset=-75,
     P=20,  # Ideal weight scaler
-    C=1,  # Capacitance
+    C=1,  # Not sure what this does
     R=100,  # Resistance
     tau_m=0.02,  # Scales membrane potential update
-    num_items=20,
+    num_items=4,  # Num of training items
     tau_stdp=0.1,  # Don't know starting value
-    dt=0.001,
-    T=0.1,
-    V_rest=-60,
-    alpha=1,  # Don't know starting value
-    min_weight=0,
-    max_weight=5,
+    dt=0.001,  # timeunit
+    T=0.1,  # total time per item
+    V_rest=-60,  # Resting potential
+    alpha=1,  # Not sure what this does
+    min_weight=0,  # Minimum weight
+    max_weight=5,  # Maximum weight
     num_epochs=100,  # N/A
     init_cals=1,  # N/A
     A=1,  # Regulates hebbian learning -> larger == more hebbian learning
     B=0.1,  # Regulates hebbian learning -> larger == less hebbian learning
     beta=0.05,  # Regulates heterosynpatic learning
-    delta=2 * np.exp(-5),  # Regulates dopamin_reg
+    delta=0.00002,  # Regulates dopamin_reg
 )
 
 # Initialize & visualize pre-trained network
@@ -75,14 +75,14 @@ snn = SNN_STDP(
 )
 # Generate data
 snn.gen_data(
-    run=False,
+    run=True,
     N_classes=4,
     noise_rand=True,
     noise_rand_ls=[0, 0.01, 0.03, 0.05],
     mean=0,
     blank_variance=0.01,
-    input_scaler=100,
-    save=False,
+    input_scaler=50,
+    save=True,
     retur=False,
 )
 
