@@ -76,7 +76,7 @@ snn = SNN_STDP(
 )
 # Generate data
 snn.gen_data(
-    run=True,
+    run=False,
     N_classes=4,
     noise_rand=True,
     noise_rand_ls=[0, 0.01, 0.03, 0.05],
