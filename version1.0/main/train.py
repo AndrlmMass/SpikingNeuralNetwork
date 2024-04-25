@@ -76,21 +76,9 @@ def train_data(
     for t in tqdm(range(1, time), desc="Training network"):
         I_in_sum = []
 
-        # Print membrane potential
-        # print("MemPot 1:", MemPot[1, :])
-        # print("Spikes 1:", spikes[1, 484:600])
-        # print("MemPot 5:", MemPot[5, :])
-        # print("Spikes 5:", spikes[5, 484:600])
-
         # Update decay traces
         pre_synaptic_trace *= np.exp(-dt / tau_m)
         post_synaptic_trace *= np.exp(-dt / tau_m)
-        print(
-            "Pre-synaptic trace:",
-            pre_synaptic_trace,
-            "Post-synaptic trace:",
-            post_synaptic_trace,
-        )
 
         # Update stimulation-excitation, excitation-excitation and inhibitory-excitatory synapsees
         for n in range(0, N_excit_neurons):
@@ -126,9 +114,6 @@ def train_data(
             # Update pre_synaptic_trace for W_ee
             for w in range(len(nonzero_se_ws)):
                 if spikes[t - 1, nonzero_se_ws[w]] == 1:
-                    print(
-                        f"We will update the pre-synaptic trace at index: {n} for {nonzero_se_ws[w]}"
-                    )
                     pre_synaptic_trace[nonzero_se_ws[w]] += 1
 
             # Get nonzero weights from excitatory neurons to current excitatory neuron
@@ -137,9 +122,6 @@ def train_data(
             # Update pre_synaptic_trace for W_ee
             for w in range(len(nonzero_ee_ws)):
                 if spikes[t - 1, N_input_neurons + nonzero_ee_ws[w]] == 1:
-                    print(
-                        f"We will update the pre-synaptic trace at index: {n} for {nonzero_ee_ws[w]}"
-                    )
                     pre_synaptic_trace[N_input_neurons + nonzero_ee_ws[w]] += 1
 
             # Get non-zero weights from inhibitory neurons to current excitatory neuron
@@ -151,16 +133,12 @@ def train_data(
                     spikes[t - 1, N_input_neurons + N_excit_neurons + nonzero_ie_ws[w]]
                     == 1
                 ):
-                    print(
-                        f"We will update the pre-synaptic trace at index: {n} for {nonzero_ie_ws[w]}"
-                    )
                     pre_synaptic_trace[
                         N_input_neurons + N_excit_neurons + nonzero_ie_ws[w]
                     ] += 1
 
             # Update spikes
             if MemPot[t, n] > V_th:
-                print(MemPot[t, n])
                 spikes[t, n + N_input_neurons] = 1
                 post_synaptic_trace[n] += 1
                 MemPot[t, n] = V_reset
@@ -203,9 +181,9 @@ def train_data(
                     dopamine_reg = delta * pre_trace
 
                     # Assemble components to update weight
-                    W_se[t, pre_syn_indices[s], n] = round(
-                        (hebb + dopamine_reg + hetero_syn), 6
-                    )
+                    W_se[t, pre_syn_indices[s], n] = W_se[
+                        t, pre_syn_indices[s], n
+                    ] + round((hebb + dopamine_reg + hetero_syn), 6)
 
             # Get all pre-synaptic indices
             pre_syn_indices = nonzero_ee_ws
@@ -254,7 +232,9 @@ def train_data(
                     #     hebb + dopamine_reg,
                     # )
                     # Assemble components to update weight
-                    W_ee[t, pre_syn_indices[s], n] = round((hebb + dopamine_reg), 6)
+                    W_ee[t, pre_syn_indices[s], n] = W_ee[
+                        t - 1, pre_syn_indices[s], n
+                    ] + round((hebb + dopamine_reg), 6)
 
         # Update excitatory-inhibitory weights
         for n in range(0, N_inhib_neurons):
@@ -286,30 +266,28 @@ def train_data(
             # Update pre_synaptic_trace for W_ee
             for w in range(len(nonzero_ei_ws)):
                 if spikes[t - 1, N_input_neurons + nonzero_ei_ws[w]] == 1:
-                    print(
-                        f"We will update the pre-synaptic trace at index: {n} for {nonzero_ei_ws[w]}"
-                    )
                     pre_synaptic_trace[N_input_neurons + nonzero_ei_ws[w]] += 1
 
         if t % update_frequency == 0 and callback is not None:
             callback(spikes, W_se, W_ee, t)
 
         # Clip weights to avoid runaway effects
-        if t % 10 == 0:
-            W_se = np.clip(W_se, min_weight, max_weight)
-            W_ee = np.clip(W_ee, min_weight, max_weight)
-            W_ei = np.clip(W_ei, min_weight, max_weight)
-            W_ie = np.clip(W_ie, min_weight, max_weight)
-            W_se_ideal = np.clip(W_se_ideal, min_weight, max_weight)
-            W_ee_ideal = np.clip(W_ee_ideal, min_weight, max_weight)
-            W_ei_ideal = np.clip(W_ei_ideal, min_weight, max_weight)
-            W_ie_ideal = np.clip(W_ie_ideal, min_weight, max_weight)
+        # if t % 10 == 0:
+        W_se = np.clip(W_se, min_weight, max_weight)
+        W_ee = np.clip(W_ee, min_weight, max_weight)
+        W_ei = np.clip(W_ei, min_weight, max_weight)
+        W_ie = np.clip(W_ie, min_weight, max_weight)
+        W_se_ideal = np.clip(W_se_ideal, min_weight, max_weight)
+        W_ee_ideal = np.clip(W_ee_ideal, min_weight, max_weight)
+        W_ei_ideal = np.clip(W_ei_ideal, min_weight, max_weight)
+        W_ie_ideal = np.clip(W_ie_ideal, min_weight, max_weight)
 
         # print(I_in_sum)
 
         # Ensure weights change
         W_ei[t] = W_ei[t - 1]
         W_ie[t] = W_ie[t - 1]
+        print(W_ei[t])
 
     return (
         spikes,
