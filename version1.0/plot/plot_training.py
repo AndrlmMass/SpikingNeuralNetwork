@@ -26,7 +26,7 @@ def plot_membrane_activity(
     plt.show()
 
 
-def plot_weights_and_spikes(spikes, W_se, dt, update_interval=10):
+def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie, dt, update_interval=10):
     # Create a figure and a set of subplots
     fig, axs = plt.subplots(2, 1, figsize=(12, 16))
 
@@ -39,36 +39,28 @@ def plot_weights_and_spikes(spikes, W_se, dt, update_interval=10):
     axs[0].set_xlabel("time (ms)")
     axs[0].set_ylabel("Neuron index")
 
-    # Concatenate W_se and W_ee along the neuron axis
-    weights = W_se
-    weights = np.reshape(weights, (weights.shape[0], -1))
+    # Reshape weight matrix
+    W_se = W_se.reshape(W_se.shape[0], -1)
+    W_ee = W_ee.reshape(W_ee.shape[0], -1)
+    W_ie = W_ie.reshape(W_ie.shape[0], -1)
 
-    # Convert weight matrix to a tenth of its current width
-    nu_ws = np.zeros((weights.shape[0], weights.shape[1] // 10))
-    step_size = weights.shape[1] // 10
+    # Reduce complexity of weight matrix
+    W_se = W_se[:, :10]
+    W_ee = W_ee[:, :10]
+    W_ie = W_ie[:, :10]
 
-    for id in range(nu_ws.shape[1]):
-        start_index = id * step_size
-        end_index = start_index + step_size
-        if weights[:, start_index:end_index].shape[1] != 0:
-            nu_ws[:, id] = np.mean(weights[:, start_index:end_index], axis=1)
+    # Create x-variable for weight matrix
+    x = np.arange(0, W_se.shape[0] * dt, dt)
 
-    # Create list of time_units for each weight to reduce computation
-    time_units = np.arange(0, nu_ws.shape[0], update_interval)
+    # Plot weights
+    axs[1].plot(x, W_se, label="W_se", color="red")
+    axs[1].plot(x, W_ee, label="W_ee", color="blue")
+    axs[1].plot(x, W_ie, label="W_ie", color="green")
+    axs[1].set_title(f"Weight matrix changes")
+    axs[1].set_xlabel("time (ms)")
+    axs[1].set_ylabel("Weight value")
+    axs[1].legend()
 
-    # Time steps array, adjust based on your dt
-    time_steps = time_units * dt
-
-    # Find indices of nonzero weights in the first row (assuming sparsity)
-    non_zero_indices = np.nonzero(nu_ws[0])[0]
-
-    for j in non_zero_indices:
-        axs[1].plot(time_steps, weights[time_units, j], label=f"Weight {j}")
-
-    # Adding legend, labels, and title
-    axs[1].legend(title="Legend", loc="upper right")
-    axs[1].set_xlabel("Time")
-    axs[1].set_ylabel("Weight Value")
-    axs[1].set_title("Weight Changes Over Time")
+    plt.show()
 
     plt.show()

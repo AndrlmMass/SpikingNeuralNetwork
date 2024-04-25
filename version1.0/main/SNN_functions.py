@@ -167,7 +167,6 @@ class SNN_STDP:
             (self.time, (self.N_excit_neurons + self.N_inhib_neurons))
         )
         self.MemPot[0, :] = self.V_rest
-        self.MemPot[1, :] = 1
         self.spikes = np.zeros((self.time, self.num_neurons))
 
         if retur:
@@ -358,6 +357,8 @@ class SNN_STDP:
             plot_weights_and_spikes(
                 spikes=self.spikes,
                 W_se=self.W_se,
+                W_ee=self.W_ee,
+                W_ie=self.W_ie,
                 dt=self.dt,
                 update_interval=self.update_frequency,
             )

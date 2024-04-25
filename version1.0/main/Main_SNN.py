@@ -35,8 +35,8 @@ snn = SNN_STDP(
     V_reset=-75,
     P=20,  # Ideal weight scaler
     C=1,  # Not sure what this does
-    R=100,  # Resistance
-    tau_m=0.02,  # Scales membrane potential update
+    R=100,  # Scales up the I_in value
+    tau_m=10,  # Scales membrane potential update
     num_items=4,  # Num of training items
     tau_stdp=0.1,  # Don't know starting value
     dt=0.001,  # timeunit
@@ -45,7 +45,7 @@ snn = SNN_STDP(
     alpha=1,  # Not sure what this does
     min_weight=0,  # Minimum weight
     max_weight=5,  # Maximum weight
-    num_epochs=100,  # N/A
+    num_epochs=1,  # N/A
     init_cals=1,  # N/A
     A=0.001,  # Regulates hebbian learning -> larger == more hebbian learning
     B=0.001,  # Regulates hebbian learning -> larger == less hebbian learning
@@ -76,14 +76,14 @@ snn = SNN_STDP(
 )
 # Generate data
 snn.gen_data(
-    run=False,
+    run=True,
     N_classes=4,
     noise_rand=True,
     noise_rand_ls=[0, 0.01, 0.03, 0.05],
     mean=0,
     blank_variance=0.01,
-    input_scaler=50,
-    save=False,
+    input_scaler=20,
+    save=True,
     retur=False,
 )
 
@@ -107,8 +107,6 @@ data, labels = snn.load_data(rand_lvl=0.05, retur=True)
     interactive_tool=False,
     update_frequency=5,
 )
-
-print(np.sum(MemPot[5:], axis=1))
 
 # Evaluate performance
 
