@@ -45,22 +45,33 @@ def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie, dt, update_interval=10):
     W_ie = W_ie.reshape(W_ie.shape[0], -1)
 
     # Reduce complexity of weight matrix
-    W_se = W_se[:, :10]
-    W_ee = W_ee[:, :10]
-    W_ie = W_ie[:, :10]
+    W_se = W_se[:300, :10]
+    W_ee = W_ee[:300, :10]
+    W_ie = W_ie[:300, :10]
 
     # Create x-variable for weight matrix
-    x = np.arange(0, W_se.shape[0] * dt, dt)
+    x = np.arange(0, W_se.shape[0])
+
+    # Define color and label mapping for plots
+    weight_plots = {
+        "W_se": {"data": W_se, "color": "red"},
+        "W_ee": {"data": W_ee, "color": "blue"},
+        "W_ie": {"data": W_ie, "color": "green"},
+    }
 
     # Plot weights
-    axs[1].plot(x, W_se, label="W_se", color="red")
-    axs[1].plot(x, W_ee, label="W_ee", color="blue")
-    axs[1].plot(x, W_ie, label="W_ie", color="green")
-    axs[1].set_title(f"Weight matrix changes")
-    axs[1].set_xlabel("time (ms)")
+    for key, info in weight_plots.items():
+        for i, weights in enumerate(info["data"].T):
+            if i == 0:
+                axs[1].plot(
+                    x, weights, color=info["color"], label=key
+                )  # Label only the first line of each type
+            else:
+                axs[1].plot(x, weights, color=info["color"])
+
+    axs[1].set_title("Weight matrix changes")
+    axs[1].set_xlabel("Time (ms)")
     axs[1].set_ylabel("Weight value")
     axs[1].legend()
-
-    plt.show()
 
     plt.show()

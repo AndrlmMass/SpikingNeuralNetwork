@@ -71,13 +71,16 @@ class SNN_STDP:
         P: int | float,
         C: int,
         R: int,
-        tau_m: float,
+        tau_plus: float | int,
+        tau_minus: float | int,
+        tau_slow: float | int,
+        tau_m: float | int,
+        tau_ht: float | int,
+        tau_hom: float | int,
         num_items: float,
-        tau_stdp: float,
         dt: float,
         T: int,
         V_rest: int,
-        alpha: float | int,
         max_weight: float | int,
         min_weight: float | int,
         num_epochs: int,
@@ -92,8 +95,12 @@ class SNN_STDP:
         self.V_reset = V_reset
         self.C = C
         self.R = R
+        self.tau_plus = tau_plus
+        self.tau_minus = tau_minus
+        self.tau_slow = tau_slow
         self.tau_m = tau_m
-        self.tau_stdp = tau_stdp
+        self.tau_ht = tau_ht
+        self.tau_hom = tau_hom
         self.dt = dt
         self.T = T
         self.A = A
@@ -106,7 +113,6 @@ class SNN_STDP:
         self.time = self.num_timesteps * self.num_items
         self.V_rest = V_rest
         self.leakage_rate = 1 / self.R
-        self.alpha = alpha
         self.tau_const = tau_const
         self.init_cals = init_cals
         self.max_weight = max_weight
@@ -150,7 +156,8 @@ class SNN_STDP:
             N_excit_neurons=self.N_excit_neurons,
             N_inhib_neurons=self.N_inhib_neurons,
             time=self.time,
-            weight_val=1,
+            weight_val=0.2,
+            prob=0.1,
         )
         self.W_ie, self.W_ie_ideal = gws.gen_IE(
             N_inhib_neurons=self.N_inhib_neurons,
@@ -158,7 +165,7 @@ class SNN_STDP:
             W_ei=self.W_ei,
             time=self.time,
             N_ws=4,
-            weight_val=0.5,
+            weight_val=0.1,
             radius=radius_,
         )
 
@@ -166,7 +173,6 @@ class SNN_STDP:
         self.MemPot = np.zeros(
             (self.time, (self.N_excit_neurons + self.N_inhib_neurons))
         )
-        self.MemPot[0, :] = self.V_rest
         self.spikes = np.zeros((self.time, self.num_neurons))
 
         if retur:
@@ -263,6 +269,9 @@ class SNN_STDP:
                 time=self.time,
                 V_rest=self.V_rest,
                 dt=self.dt,
+                tau_plus=self.tau_plus,
+                tau_minus=self.tau_minus,
+                tau_slow=self.tau_slow,
                 tau_m=self.tau_m,
                 tau_const=self.tau_const,
                 update_frequency=update_frequency,
@@ -312,7 +321,12 @@ class SNN_STDP:
                 V_rest=self.V_rest,
                 V_reset=self.V_reset,
                 dt=self.dt,
+                tau_plus=self.tau_plus,
+                tau_minus=self.tau_minus,
+                tau_slow=self.tau_slow,
                 tau_m=self.tau_m,
+                tau_ht=self.tau_ht,
+                tau_hom=self.tau_hom,
                 tau_const=0.0001,  # Defines the rate of convergence with ideal weights, e.g., 20 minutes
                 training_data=self.training_data,
                 N_excit_neurons=self.N_excit_neurons,

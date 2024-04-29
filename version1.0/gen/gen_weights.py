@@ -64,10 +64,7 @@ class gen_weights:
 
         return W_ee, W_ee_ideal
 
-    def gen_EI(self, N_excit_neurons, N_inhib_neurons, time, weight_val):
-        # Calculate probability of connection
-        prob = N_excit_neurons / (N_excit_neurons + N_inhib_neurons)
-
+    def gen_EI(self, N_excit_neurons, N_inhib_neurons, time, weight_val, prob):
         # Create weight array for EI
         W_ei = np.zeros((time, N_excit_neurons, N_inhib_neurons))
 

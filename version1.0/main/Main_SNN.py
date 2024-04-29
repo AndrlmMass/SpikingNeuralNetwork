@@ -31,27 +31,30 @@ from SNN_functions import *
 
 # Initialize SNN object
 snn = SNN_STDP(
-    V_th=-50,
-    V_reset=-75,
+    V_th=-50,  # Firing threshold
+    V_reset=-100,  # Reset potential
     P=20,  # Ideal weight scaler
-    C=1,  # Not sure what this does
+    C=1,  # Regulates B which regulates LTP
     R=100,  # Scales up the I_in value
-    tau_m=10,  # Scales membrane potential update
+    tau_plus=0.02,  # Time constant in presynaptic learning
+    tau_minus=0.02,  # Time constant in postsynaptic learning
+    tau_slow=0.1,  # Time constant in slow postsynaptic learning
+    tau_m=0.01,  # Time constant in membrane potential
+    tau_ht=0.01,  # Time constant in heterosynaptic learning
+    tau_hom=0.02,  # Time constant in doublet LTD
     num_items=4,  # Num of training items
-    tau_stdp=0.1,  # Don't know starting value
     dt=0.001,  # timeunit
     T=0.1,  # total time per item
     V_rest=-60,  # Resting potential
-    alpha=1,  # Not sure what this does
     min_weight=0,  # Minimum weight
     max_weight=5,  # Maximum weight
     num_epochs=1,  # N/A
     init_cals=1,  # N/A
-    A=0.001,  # Regulates hebbian learning -> larger == more hebbian learning
-    B=0.001,  # Regulates hebbian learning -> larger == less hebbian learning
-    beta=0.05,  # Regulates heterosynpatic learning
-    delta=0.00002,  # Regulates dopamin_reg
-    tau_const=0.0001,  # Time constant in learning
+    A=0.0001,  # Regulates hebbian learning -> larger == more hebbian learning - fixed
+    B=0.01,  # Regulates hebbian learning -> larger == less hebbian learning
+    beta=0.005,  # Regulates heterosynpatic learning -> larger == more heterosynaptic learning - fixed
+    delta=0.00002,  # Regulates dopamin_reg - Fixed
+    tau_const=0.0001,  # Time constant in ideal_weight update
 )
 
 # Initialize & visualize pre-trained network
