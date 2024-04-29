@@ -45,9 +45,12 @@ def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie, dt, update_interval=10):
     W_ie = W_ie.reshape(W_ie.shape[0], -1)
 
     # Reduce complexity of weight matrix
-    W_se = W_se[:300, :10]
-    W_ee = W_ee[:300, :10]
-    W_ie = W_ie[:300, :10]
+    W_se_idx = np.nonzero(W_se)[0][:100]
+    W_se = W_se[:, W_se_idx]
+    W_ee_idx = np.nonzero(W_ee)[0][:100]
+    W_ee = W_ee[:, W_ee_idx]
+    W_ie_idx = np.nonzero(W_ie)[0][:100]
+    W_ie = W_ie[:, W_ie_idx]
 
     # Create x-variable for weight matrix
     x = np.arange(0, W_se.shape[0])
