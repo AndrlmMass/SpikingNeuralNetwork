@@ -173,6 +173,7 @@ class SNN_STDP:
         self.MemPot = np.zeros(
             (self.time, (self.N_excit_neurons + self.N_inhib_neurons))
         )
+        self.MemPot[0, :] = self.V_rest
         self.spikes = np.zeros((self.time, self.num_neurons))
 
         if retur:
@@ -364,8 +365,6 @@ class SNN_STDP:
         idx_start: int,
         idx_stop: int,
         mv: bool,
-        time_start: int,
-        time_stop: int,
     ):
         if ws_nd_spikes:
             plot_weights_and_spikes(
@@ -378,12 +377,9 @@ class SNN_STDP:
             )
         if mv:
             plot_membrane_activity(
-                MemPot=self.MemPot[:, -1],
+                MemPot=self.MemPot,
                 idx_start=idx_start,
                 idx_stop=idx_stop,
-                update_interval=self.update_frequency,
-                time_start=time_start,
-                time_stop=time_stop,
             )
 
     def plot_I_in(self):

@@ -32,16 +32,16 @@ from SNN_functions import *
 # Initialize SNN object
 snn = SNN_STDP(
     V_th=-50,  # Firing threshold
-    V_reset=-100,  # Reset potential
+    V_reset=-70,  # Reset potential
     P=20,  # Ideal weight scaler
     C=1,  # Regulates B which regulates LTP
     R=100,  # Scales up the I_in value
-    tau_plus=0.02,  # Time constant in presynaptic learning
-    tau_minus=0.02,  # Time constant in postsynaptic learning
-    tau_slow=0.1,  # Time constant in slow postsynaptic learning
-    tau_m=0.01,  # Time constant in membrane potential
-    tau_ht=0.01,  # Time constant in heterosynaptic learning
-    tau_hom=0.02,  # Time constant in doublet LTD
+    tau_plus=0.15,  # Time constant in presynaptic learning
+    tau_minus=0.15,  # Time constant in postsynaptic learning
+    tau_slow=0.09,  # Time constant in slow postsynaptic learning
+    tau_m=0.15,  # Time constant in membrane potential
+    tau_ht=0.15,  # Time constant in heterosynaptic learning
+    tau_hom=0.15,  # Time constant in doublet LTD
     num_items=4,  # Num of training items
     dt=0.001,  # timeunit
     T=0.1,  # total time per item
@@ -119,10 +119,8 @@ data, labels = snn.load_data(rand_lvl=0.05, retur=True)
 snn.plot_training(
     ws_nd_spikes=True,
     idx_start=0,
-    idx_stop=1,
+    idx_stop=100,
     mv=True,
-    time_start=0,
-    time_stop=400,
 )
 
 snn.plot_I_in()

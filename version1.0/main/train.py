@@ -1,7 +1,6 @@
 # Train network script
 import numpy as np
 from tqdm import tqdm
-import pdb
 import os
 import sys
 
@@ -86,11 +85,11 @@ def train_data(
         I_in_sum = []
 
         # Update decay traces
-        pre_synaptic_trace *= np.exp(-dt / tau_plus)
-        post_synaptic_trace *= np.exp(-dt / tau_minus)
-        slow_post_synaptic_trace *= np.exp(-dt / tau_slow)
-        z_ht *= np.exp(-dt / tau_ht)
-        C *= np.exp(-dt / tau_hom)
+        pre_synaptic_trace *= 1 - (dt / tau_plus)
+        post_synaptic_trace *= 1 - (dt / tau_minus)
+        slow_post_synaptic_trace *= 1 - (dt / tau_slow)
+        z_ht *= 1 - (dt / tau_ht)
+        C *= 1 - (dt / tau_hom)
 
         # Update stimulation-excitation, excitation-excitation and inhibitory-excitatory synapsees
         for n in range(0, N_excit_neurons):
@@ -118,8 +117,11 @@ def train_data(
             I_in_sum.append(I_in)
 
             # Update membrane potential based on I_in
-            delta_MemPot = round((-(MemPot[t - 1, n] - V_rest) + R * I_in) / tau_m, 4)
-            MemPot[t, n] = MemPot[t - 1, n] + delta_MemPot
+            delta_MemPot = round(
+                (-((MemPot[t - 1, n] - V_rest) + R * I_in) / tau_m) * dt, 4
+            )
+            nu_mem = MemPot[t - 1, n] - delta_MemPot
+            MemPot[t, n] = nu_mem
 
             # Get nonzero weights from input neurons to current excitatory neuron
             nonzero_se_ws = np.nonzero(W_se[t - 1, :, n])[0]
@@ -127,7 +129,7 @@ def train_data(
             # Update pre_synaptic_trace for W_ee
             for w in range(len(nonzero_se_ws)):
                 if spikes[t - 1, nonzero_se_ws[w]] == 1:
-                    pre_synaptic_trace[nonzero_se_ws[w]] += 1
+                    pre_synaptic_trace[nonzero_se_ws[w]] += dt
 
             # Get nonzero weights from excitatory neurons to current excitatory neuron
             nonzero_ee_ws = np.nonzero(W_ee[t - 1, :, n])[0]
@@ -135,7 +137,7 @@ def train_data(
             # Update pre_synaptic_trace for W_ee
             for w in range(len(nonzero_ee_ws)):
                 if spikes[t - 1, N_input_neurons + nonzero_ee_ws[w]] == 1:
-                    pre_synaptic_trace[N_input_neurons + nonzero_ee_ws[w]] += 1
+                    pre_synaptic_trace[N_input_neurons + nonzero_ee_ws[w]] += dt
 
             # Get non-zero weights from inhibitory neurons to current excitatory neuron
             nonzero_ie_ws = np.nonzero(W_ie[t - 1, :, n])[0]
@@ -148,12 +150,12 @@ def train_data(
                 ):
                     pre_synaptic_trace[
                         N_input_neurons + N_excit_neurons + nonzero_ie_ws[w]
-                    ] += 1
+                    ] += dt
 
             # Update spikes
             if MemPot[t, n] > V_th:
                 spikes[t, n + N_input_neurons] = 1
-                post_synaptic_trace[n] += 1
+                post_synaptic_trace[n] += dt
                 MemPot[t, n] = V_reset
             else:
                 spikes[t, n + N_input_neurons] = 0
@@ -168,13 +170,17 @@ def train_data(
                 for s in range(len(pre_syn_indices)):
 
                     # Update ideal weight
-                    W_se_ideal[pre_syn_indices[s], n] = tau_const * (
-                        W_se[t - 1, pre_syn_indices[s], n]
-                        - W_se_ideal[pre_syn_indices[s], n]
-                        - P
-                        * W_se_ideal[pre_syn_indices[s], n]
-                        * ((w_p / 2) - W_se_ideal[pre_syn_indices[s], n])
-                        * (w_p - W_se_ideal[pre_syn_indices[s], n])
+                    W_se_ideal[pre_syn_indices[s], n] = (
+                        dt
+                        * tau_const
+                        * (
+                            W_se[t - 1, pre_syn_indices[s], n]
+                            - W_se_ideal[pre_syn_indices[s], n]
+                            - P
+                            * W_se_ideal[pre_syn_indices[s], n]
+                            * ((w_p / 2) - W_se_ideal[pre_syn_indices[s], n])
+                            * (w_p - W_se_ideal[pre_syn_indices[s], n])
+                        )
                     )
 
                     # Use the current trace values for STDP calculation
@@ -183,10 +189,10 @@ def train_data(
                     slow_trace = slow_post_synaptic_trace[n]
 
                     # Update z_ht, C and B
-                    z_ht[n] = z_ht[n] + spikes[t, pre_syn_indices[s]]
-                    C[n] += z_ht[n]
+                    z_ht[n] += dt * spikes[t, pre_syn_indices[s]]
+                    C[n] += dt * z_ht[n]
 
-                    if A * C[n] > 1:
+                    if A * C[n] <= 1:
                         B = C[n]
                     else:
                         B = A
@@ -212,7 +218,8 @@ def train_data(
                     transmitter = delta * spikes[t, N_input_neurons + n]
                     # Assemble components to update weight
                     W_se[t, pre_syn_indices[s], n] = (
-                        W_se[t - 1, pre_syn_indices[s], n] + Hebb + Hetero + transmitter
+                        W_se[t - 1, pre_syn_indices[s], n]
+                        + (Hebb + Hetero + transmitter) * dt
                     )
 
             # Get all pre-synaptic indices
@@ -227,13 +234,17 @@ def train_data(
                             "There are self-connections within the W_ee array"
                         )
 
-                    W_ee_ideal[pre_syn_indices[s], n] = tau_const * (
-                        W_ee[t - 1, pre_syn_indices[s], n]
-                        - W_ee_ideal[pre_syn_indices[s], n]
-                        - P
-                        * W_ee_ideal[pre_syn_indices[s], n]
-                        * ((w_p / 2) - W_ee_ideal[pre_syn_indices[s], n])
-                        * (w_p - W_ee_ideal[pre_syn_indices[s], n])
+                    W_ee_ideal[pre_syn_indices[s], n] = (
+                        dt
+                        * tau_const
+                        * (
+                            W_ee[t - 1, pre_syn_indices[s], n]
+                            - W_ee_ideal[pre_syn_indices[s], n]
+                            - P
+                            * W_ee_ideal[pre_syn_indices[s], n]
+                            * ((w_p / 2) - W_ee_ideal[pre_syn_indices[s], n])
+                            * (w_p - W_ee_ideal[pre_syn_indices[s], n])
+                        )
                     )
 
                     # Use the current trace values for STDP calculation
@@ -241,14 +252,14 @@ def train_data(
                     post_trace = post_synaptic_trace[n]
 
                     # Update z_ht, C and B
-                    z_ht[N_input_neurons + n] = (
-                        z_ht[N_input_neurons + n]
-                        + spikes[t, N_input_neurons + pre_syn_indices[s]]
+                    z_ht[N_input_neurons + n] += (
+                        dt * spikes[t, N_input_neurons + pre_syn_indices[s]]
                     )
-                    C[N_input_neurons + n] += z_ht[N_input_neurons + n]
+
+                    C[N_input_neurons + n] += dt * z_ht[N_input_neurons + n]
 
                     if A * C[N_input_neurons + n] > 1:
-                        B = C[N_input_neurons + n]
+                        B = dt * C[N_input_neurons + n]
                     else:
                         B = A
 
@@ -276,7 +287,8 @@ def train_data(
                     transmitter = delta * spikes[t, N_input_neurons + n]
                     # Assemble components to update weight
                     W_ee[t, pre_syn_indices[s], n] = (
-                        W_ee[t - 1, pre_syn_indices[s], n] + Hebb + Hetero + transmitter
+                        W_ee[t - 1, pre_syn_indices[s], n]
+                        + (Hebb + Hetero + transmitter) * dt
                     )
 
         # Update excitatory-inhibitory weights
@@ -289,8 +301,8 @@ def train_data(
             )
             # Update membrane potential based on I_in
             delta_MemPot = (
-                -(MemPot[t - 1, n + N_excit_neurons] - V_rest) + R * I_in
-            ) / tau_m
+                -((MemPot[t - 1, n + N_excit_neurons] - V_rest) + R * I_in) / tau_m
+            ) * dt
             MemPot[t, n + N_excit_neurons] = MemPot[t - 1, n + N_excit_neurons] + round(
                 delta_MemPot, 4
             )
@@ -298,7 +310,7 @@ def train_data(
             # Update spikes
             if MemPot[t, n + N_excit_neurons] > V_th:
                 spikes[t, n + N_input_neurons + N_excit_neurons] = 1
-                post_synaptic_trace[n + N_excit_neurons] += 1
+                post_synaptic_trace[n + N_excit_neurons] += dt
                 MemPot[t, n + N_excit_neurons] = V_reset
             else:
                 spikes[t, n + N_input_neurons + N_excit_neurons] = 0
@@ -309,7 +321,7 @@ def train_data(
             # Update pre_synaptic_trace for excitatory neurons
             for w in range(len(nonzero_ei_ws)):
                 if spikes[t - 1, N_input_neurons + nonzero_ei_ws[w]] == 1:
-                    pre_synaptic_trace[N_input_neurons + nonzero_ei_ws[w]] += 1
+                    pre_synaptic_trace[N_input_neurons + nonzero_ei_ws[w]] += dt
 
         if t % update_frequency == 0 and callback is not None:
             callback(spikes, W_se, W_ee, t)
