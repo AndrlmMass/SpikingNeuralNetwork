@@ -36,12 +36,12 @@ snn = SNN_STDP(
     P=20,  # Ideal weight scaler
     C=1,  # Regulates B which regulates LTP
     R=100,  # Scales up the I_in value
-    tau_plus=0.15,  # Time constant in presynaptic learning
-    tau_minus=0.15,  # Time constant in postsynaptic learning
-    tau_slow=0.09,  # Time constant in slow postsynaptic learning
-    tau_m=0.15,  # Time constant in membrane potential
+    tau_plus=0.1,  # Time constant in presynaptic learning
+    tau_minus=0.1,  # Time constant in postsynaptic learning
+    tau_slow=0.1,  # Time constant in slow postsynaptic learning
+    tau_m=0.125,  # Time constant in membrane potential
     tau_ht=0.15,  # Time constant in heterosynaptic learning
-    tau_hom=0.15,  # Time constant in doublet LTD
+    tau_hom=0.157,  # Time constant in doublet LTD
     num_items=4,  # Num of training items
     dt=0.001,  # timeunit
     T=0.1,  # total time per item
@@ -50,7 +50,7 @@ snn = SNN_STDP(
     max_weight=5,  # Maximum weight
     num_epochs=1,  # N/A
     init_cals=1,  # N/A
-    A=0.0001,  # Regulates hebbian learning -> larger == more hebbian learning - fixed
+    A=0.01,  # Regulates hebbian learning -> larger == more hebbian learning - fixed
     B=0.01,  # Regulates hebbian learning -> larger == less hebbian learning
     beta=0.005,  # Regulates heterosynpatic learning -> larger == more heterosynaptic learning - fixed
     delta=0.00002,  # Regulates dopamin_reg - Fixed
@@ -118,8 +118,8 @@ data, labels = snn.load_data(rand_lvl=0.05, retur=True)
 # Visualize training and testing results
 snn.plot_training(
     ws_nd_spikes=True,
-    idx_start=0,
-    idx_stop=100,
+    idx_start=484,
+    idx_stop=600,
     mv=True,
 )
 

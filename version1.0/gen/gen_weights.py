@@ -69,11 +69,11 @@ class gen_weights:
         W_ei = np.zeros((time, N_excit_neurons, N_inhib_neurons))
 
         # Assign random weights to N inhibitory neurons
-        W_ei[0, :, :] = np.full((N_excit_neurons, N_inhib_neurons), weight_val)
+        W_ei[0, :, :] = np.random.rand(N_excit_neurons, N_inhib_neurons)
         W_ei[0, :, :] *= np.random.rand(N_excit_neurons, N_inhib_neurons) < prob
 
         # Create ideal weights array
-        W_ei_ideal = np.full((N_excit_neurons, N_inhib_neurons), weight_val)
+        W_ei_ideal = np.full((N_excit_neurons, N_inhib_neurons), 0)
 
         return W_ei, W_ei_ideal
 

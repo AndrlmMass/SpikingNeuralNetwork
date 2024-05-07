@@ -6,38 +6,18 @@ import numpy as np
 
 
 # Plot receptor field for weights between layers in the network
-def draw_receptive_field_single(weights, N_input_neurons):
-    input_shape = int(
-        np.sqrt(N_input_neurons)
-    )  # Calculate the size of one dimension of the square input grid
+def draw_weights_layer(weights, title, xlabel, ylabel):
+    fig, ax = plt.subplots()  # Create a plot for the current excitatory neuron
 
-    for ex in range(weights.shape[1]):
-        fig, ax = plt.subplots(
-            figsize=(5, 5)
-        )  # Create a plot for the current excitatory neuron
-        ax.set_xlim(-0.5, input_shape - 0.5)
-        ax.set_ylim(-0.5, input_shape - 0.5)
-        ax.set_xticks(np.arange(0, input_shape, 1))
-        ax.set_yticks(np.arange(0, input_shape, 1))
-        ax.set_title(f"Excitatory Neuron {ex + 1}")
-        plt.grid(True)
+    # Create a heatmap
+    cax = ax.imshow(weights, cmap="viridis", interpolation="nearest")
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
 
-        # Draw each input neuron as a grey dot
-        for i in range(input_shape):
-            for j in range(input_shape):
-                ax.plot(i, j, "o", color="lightgrey", markersize=10)
-
-        # Find positions where the excitatory neuron has an input synapse (non-zero weights)
-        active_synapses = np.where(weights[:, ex] > 0)[0]
-        for pos in active_synapses:
-            y, x = divmod(pos, input_shape)
-            # Draw red boxes around active synapses
-            rect = plt.Rectangle(
-                (x - 0.5, y - 0.5), 1, 1, fill=False, edgecolor="red", linewidth=2
-            )
-            ax.add_patch(rect)
-
-        plt.show()
+    plt.grid(False)  # Disable grid to make the heatmap cleaner
+    plt.colorbar(cax)  # Show color scale
+    plt.show()
 
 
 def plot_input_space(input_space):

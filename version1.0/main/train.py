@@ -29,6 +29,7 @@ else:
     )
 
 from plot_training import *
+from plot_network import *
 
 
 def train_data(
@@ -79,6 +80,16 @@ def train_data(
 
     # Add input data before training for input neurons
     spikes[:, :N_input_neurons] = training_data
+
+    # Print weights
+    print("W_se: ", W_se[0])
+    print("W_ee: ", W_ee[0])
+    print("W_ei: ", W_ei[0])
+    print("W_ie: ", W_ie[0])
+
+    # Draw heatmap of weights
+    # draw_weights_layer(W_ei[0], "W_ei", "Inhibitory Neurons", "Excitatory Neurons")
+    # draw_weights_layer(W_ie[0], "W_ie", "Excitatory Neurons", "Inhibitory Neurons")
 
     # Loop through time and update membrane potential, spikes and weights
     for t in tqdm(range(1, time), desc="Training network"):
@@ -156,6 +167,7 @@ def train_data(
             if MemPot[t, n] > V_th:
                 spikes[t, n + N_input_neurons] = 1
                 post_synaptic_trace[n] += dt
+                slow_post_synaptic_trace[n] += dt
                 MemPot[t, n] = V_reset
             else:
                 spikes[t, n + N_input_neurons] = 0
@@ -217,9 +229,14 @@ def train_data(
                     )
                     transmitter = delta * spikes[t, N_input_neurons + n]
                     # Assemble components to update weight
+                    delta_w = Hebb + Hetero + transmitter
+
+                    # if n == 0 and t > 5:
+                    #    print(
+                    #        f"delta_w: {delta_w}, Hebb: {Hebb}, Hetero: {Hetero} trans: {transmitter}"
+                    #    )
                     W_se[t, pre_syn_indices[s], n] = (
-                        W_se[t - 1, pre_syn_indices[s], n]
-                        + (Hebb + Hetero + transmitter) * dt
+                        W_se[t - 1, pre_syn_indices[s], n] + delta_w
                     )
 
             # Get all pre-synaptic indices
@@ -258,8 +275,8 @@ def train_data(
 
                     C[N_input_neurons + n] += dt * z_ht[N_input_neurons + n]
 
-                    if A * C[N_input_neurons + n] > 1:
-                        B = dt * C[N_input_neurons + n]
+                    if A * C[N_input_neurons + n] <= 1:
+                        B = C[N_input_neurons + n]
                     else:
                         B = A
 
@@ -285,13 +302,14 @@ def train_data(
                         * spikes[t, N_input_neurons + pre_syn_indices[s]]
                     )
                     transmitter = delta * spikes[t, N_input_neurons + n]
+                    delta_w = (Hebb + Hetero + transmitter) * dt
+
                     # Assemble components to update weight
                     W_ee[t, pre_syn_indices[s], n] = (
-                        W_ee[t - 1, pre_syn_indices[s], n]
-                        + (Hebb + Hetero + transmitter) * dt
+                        W_ee[t - 1, pre_syn_indices[s], n] + delta_w
                     )
 
-        # Update excitatory-inhibitory weights
+        # Update excitatory-inhibitory mempot and spikes
         for n in range(0, N_inhib_neurons):
 
             # Update incoming spikes as I_in
@@ -303,7 +321,7 @@ def train_data(
             delta_MemPot = (
                 -((MemPot[t - 1, n + N_excit_neurons] - V_rest) + R * I_in) / tau_m
             ) * dt
-            MemPot[t, n + N_excit_neurons] = MemPot[t - 1, n + N_excit_neurons] + round(
+            MemPot[t, n + N_excit_neurons] = MemPot[t - 1, n + N_excit_neurons] - round(
                 delta_MemPot, 4
             )
 
@@ -311,6 +329,7 @@ def train_data(
             if MemPot[t, n + N_excit_neurons] > V_th:
                 spikes[t, n + N_input_neurons + N_excit_neurons] = 1
                 post_synaptic_trace[n + N_excit_neurons] += dt
+                slow_post_synaptic_trace[n + N_excit_neurons] += dt
                 MemPot[t, n + N_excit_neurons] = V_reset
             else:
                 spikes[t, n + N_input_neurons + N_excit_neurons] = 0
@@ -326,16 +345,15 @@ def train_data(
         if t % update_frequency == 0 and callback is not None:
             callback(spikes, W_se, W_ee, t)
 
-        # Clip weights to avoid runaway effects
-        if t % 5 == 0:
-            W_se = np.clip(W_se, min_weight, max_weight)
-            W_ee = np.clip(W_ee, min_weight, max_weight)
-            W_ei = np.clip(W_ei, min_weight, max_weight)
-            W_ie = np.clip(W_ie, min_weight, max_weight)
-
         # Ensure weights continue their value
         W_ei[t] = W_ei[t - 1]
         W_ie[t] = W_ie[t - 1]
+
+    # print weights heatmapped
+    draw_weights_layer(W_ei[-1], "W_ei", "Inhibitory Neurons", "Excitatory Neurons")
+    draw_weights_layer(W_ie[-1], "W_ie", "Excitatory Neurons", "Inhibitory Neurons")
+    draw_weights_layer(W_se[-1], "W_se", "Input Neurons", "Excitatory Neurons")
+    draw_weights_layer(W_ee[-1], "W_ee", "Excitatory Neurons", "Excitatory Neurons")
 
     return (
         spikes,
