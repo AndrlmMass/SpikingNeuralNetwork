@@ -46,7 +46,7 @@ snn = SNN_STDP(
     tau_H=10,  # Time constant in iSTDP
     learning_rate=0.00001,  # learning rate iSTDP
     gamma=0.1,  # Transmitter triggered plasticity
-    num_items=4,  # Num of training items
+    num_items=20,  # Num of training items
     dt=0.001,  # timeunit
     T=0.1,  # total time per item
     V_rest=-60,  # Resting potential
@@ -56,9 +56,9 @@ snn = SNN_STDP(
     init_cals=1,  # N/A
     A=0.01,  # Regulates hebbian learning -> larger == more hebbian learning - fixed
     B=0.01,  # Regulates hebbian learning -> larger == less hebbian learning
-    beta=0.005,  # Regulates heterosynpatic learning -> larger == more heterosynaptic learning - fixed
-    delta=0.00002,  # Regulates dopamin_reg - Fixed
-    tau_const=0.0001,  # Time constant in ideal_weight update
+    beta=0.5,  # Regulates heterosynpatic learning -> larger == more heterosynaptic learning - fixed
+    delta=0.002,  # Regulates dopamin_reg - Fixed
+    tau_const=1,  # Time constant in ideal_weight update
 )
 
 # Initialize & visualize pre-trained network
@@ -83,7 +83,7 @@ snn = SNN_STDP(
 )
 # Generate data
 snn.gen_data(
-    run=False,
+    run=True,
     N_classes=4,
     noise_rand=True,
     noise_rand_ls=[0, 0.01, 0.03, 0.05],

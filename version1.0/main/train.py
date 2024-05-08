@@ -87,10 +87,10 @@ def train_data(
     # Add input data before training for input neurons
     spikes[:, :N_input_neurons] = training_data
 
-    draw_weights_layer(W_ei[0], "W_ei", "Inhibitory Neurons", "Excitatory Neurons")
-    draw_weights_layer(W_ie[0], "W_ie", "Excitatory Neurons", "Inhibitory Neurons")
-    draw_weights_layer(W_se[0], "W_se", "Input Neurons", "Excitatory Neurons")
-    draw_weights_layer(W_ee[0], "W_ee", "Excitatory Neurons", "Excitatory Neurons")
+    # draw_weights_layer(W_ei[0], "W_ei", "Inhibitory Neurons", "Excitatory Neurons")
+    # draw_weights_layer(W_ie[0], "W_ie", "Excitatory Neurons", "Inhibitory Neurons")
+    # draw_weights_layer(W_se[0], "W_se", "Input Neurons", "Excitatory Neurons")
+    # draw_weights_layer(W_ee[0], "W_ee", "Excitatory Neurons", "Excitatory Neurons")
 
     # Loop through time and update membrane potential, spikes and weights
     for t in tqdm(range(1, time), desc="Training network"):
@@ -231,11 +231,8 @@ def train_data(
                     transmitter = delta * spikes[t, N_input_neurons + n]
                     # Assemble components to update weight
                     delta_w = Hebb + Hetero + transmitter
+                    delta_w_indisc = Hebb + Hetero + transmitter
 
-                    # if n == 0 and t > 5:
-                    #    print(
-                    #        f"delta_w: {delta_w}, Hebb: {Hebb}, Hetero: {Hetero} trans: {transmitter}"
-                    #    )
                     W_se[t, pre_syn_indices[s], n] = (
                         W_se[t - 1, pre_syn_indices[s], n] + delta_w
                     )
@@ -350,6 +347,8 @@ def train_data(
                 W_ei[t - 1, :, n],
                 spikes[t - 1, N_input_neurons : N_input_neurons + N_excit_neurons],
             )
+
+            I_in_sum.append(I_in)
             # Update membrane potential based on I_in
             delta_MemPot = (
                 -((MemPot[t - 1, n + N_excit_neurons] - V_rest) + R * I_in) / tau_m
