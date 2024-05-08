@@ -77,6 +77,10 @@ class SNN_STDP:
         tau_m: float | int,
         tau_ht: float | int,
         tau_hom: float | int,
+        tau_stdp: float | int,
+        tau_H: float | int,
+        gamma: float | int,
+        learning_rate: float | int,
         num_items: float,
         dt: float,
         T: int,
@@ -101,6 +105,10 @@ class SNN_STDP:
         self.tau_m = tau_m
         self.tau_ht = tau_ht
         self.tau_hom = tau_hom
+        self.tau_stdp = tau_stdp
+        self.tau_H = tau_H
+        self.gamma = gamma
+        self.learning_rate = learning_rate
         self.dt = dt
         self.T = T
         self.A = A
@@ -275,6 +283,10 @@ class SNN_STDP:
                 tau_slow=self.tau_slow,
                 tau_m=self.tau_m,
                 tau_const=self.tau_const,
+                tau_H=self.tau_H,
+                tau_stdp=self.tau_stdp,
+                learning_rate=self.learning_rate,
+                gamma=self.gamma,
                 update_frequency=update_frequency,
                 N_excit_neurons=self.N_excit_neurons,
                 N_inhib_neurons=self.N_inhib_neurons,
@@ -328,6 +340,10 @@ class SNN_STDP:
                 tau_m=self.tau_m,
                 tau_ht=self.tau_ht,
                 tau_hom=self.tau_hom,
+                tau_stdp=self.tau_stdp,
+                tau_H=self.tau_H,
+                learning_rate=self.learning_rate,
+                gamma=self.gamma,
                 tau_const=0.0001,  # Defines the rate of convergence with ideal weights, e.g., 20 minutes
                 training_data=self.training_data,
                 N_excit_neurons=self.N_excit_neurons,

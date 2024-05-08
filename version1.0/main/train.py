@@ -52,6 +52,9 @@ def train_data(
     tau_ht: float | int,
     tau_hom: float | int,
     tau_const: float | int,
+    tau_H: float | int,
+    tau_stdp: float | int,
+    learning_rate: float | int,
     training_data: np.ndarray,
     N_excit_neurons: int,
     N_inhib_neurons: int,
@@ -69,6 +72,7 @@ def train_data(
     W_ie_ideal: np.ndarray,
     update_frequency: int,
     callback: None,
+    gamma: float | int,
 ):
     num_neurons = N_excit_neurons + N_inhib_neurons + N_input_neurons
     spikes = np.zeros((time, num_neurons))
@@ -77,19 +81,11 @@ def train_data(
     slow_post_synaptic_trace = np.zeros((num_neurons - N_input_neurons))
     C = np.full(num_neurons, A)
     z_ht = np.ones((num_neurons))
+    z_istdp = np.zeros((N_excit_neurons))
+    H = 0
 
     # Add input data before training for input neurons
     spikes[:, :N_input_neurons] = training_data
-
-    # Print weights
-    print("W_se: ", W_se[0])
-    print("W_ee: ", W_ee[0])
-    print("W_ei: ", W_ei[0])
-    print("W_ie: ", W_ie[0])
-
-    # Draw heatmap of weights
-    # draw_weights_layer(W_ei[0], "W_ei", "Inhibitory Neurons", "Excitatory Neurons")
-    # draw_weights_layer(W_ie[0], "W_ie", "Excitatory Neurons", "Inhibitory Neurons")
 
     # Loop through time and update membrane potential, spikes and weights
     for t in tqdm(range(1, time), desc="Training network"):
@@ -309,13 +305,45 @@ def train_data(
                         W_ee[t - 1, pre_syn_indices[s], n] + delta_w
                     )
 
+            # Update weights based on ISP-function from Zenke between inhibitory and excitatory neurons
+            if nonzero_ie_ws.size != 0:
+                # Update H
+                H += (
+                    -(H / tau_H) + sum(spikes[t, N_input_neurons + N_excit_neurons :])
+                ) * dt
+                G = H - gamma
+                z_istdp[n] += (
+                    -z_istdp[n] / tau_stdp
+                    + sum(spikes[t, N_input_neurons + N_excit_neurons :])
+                ) * dt
+
+                for id, s in enumerate(nonzero_ie_ws):
+
+                    # Get traces
+                    pre_trace = pre_synaptic_trace[
+                        N_input_neurons + N_excit_neurons + s
+                    ]
+                    post_trace = post_synaptic_trace[n]
+
+                    # Calculate delta weights
+                    delta_w = (
+                        learning_rate
+                        * G
+                        * (z_istdp[n] + 1)
+                        * spikes[t, N_input_neurons + N_excit_neurons + s]
+                        + post_trace * spikes[t, n]
+                    )
+
+                    # Update weights
+                    W_ie[t, s, n] = W_ie[t - 1, s, n] + delta_w
+
         # Update excitatory-inhibitory mempot and spikes
         for n in range(0, N_inhib_neurons):
 
             # Update incoming spikes as I_in
             I_in = np.dot(
-                W_ei[t, :, n],
-                spikes[t, N_input_neurons : N_input_neurons + N_excit_neurons],
+                W_ei[t - 1, :, n],
+                spikes[t - 1, N_input_neurons : N_input_neurons + N_excit_neurons],
             )
             # Update membrane potential based on I_in
             delta_MemPot = (
@@ -333,14 +361,6 @@ def train_data(
                 MemPot[t, n + N_excit_neurons] = V_reset
             else:
                 spikes[t, n + N_input_neurons + N_excit_neurons] = 0
-
-            # Get nonzero weights from excitatory neurons to current excitatory neuron
-            nonzero_ei_ws = np.nonzero(W_ei[t - 1, :, n])[0]
-
-            # Update pre_synaptic_trace for excitatory neurons
-            for w in range(len(nonzero_ei_ws)):
-                if spikes[t - 1, N_input_neurons + nonzero_ei_ws[w]] == 1:
-                    pre_synaptic_trace[N_input_neurons + nonzero_ei_ws[w]] += dt
 
         if t % update_frequency == 0 and callback is not None:
             callback(spikes, W_se, W_ee, t)
