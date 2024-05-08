@@ -53,7 +53,7 @@ def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie, dt, update_interval=10):
 
     # Plot weights with different colors for each weight matrix
     for key, info in weight_plots.items():
-        for i, weights in enumerate(info["data"]):
+        for i, weights in enumerate(info["data"].T):
             if i == 0:
                 axs[1].plot(
                     weights, color=info["color"], label=key
