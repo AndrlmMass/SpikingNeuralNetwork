@@ -38,17 +38,11 @@ def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie, dt, update_interval=10):
     axs[0].set_ylabel("Neuron index")
 
     # Reshape weight matrices
-    W_se = W_se.reshape(W_se.shape[0], -1)[:, ::1000]
-    W_ee = W_ee.reshape(W_ee.shape[0], -1)[:, ::1000]
-    W_ie = W_ie.reshape(W_ie.shape[0], -1)[:, ::1000]
+    W_se = W_se.reshape(W_se.shape[0], -1)[:, ::500]
+    W_ee = W_ee.reshape(W_ee.shape[0], -1)[:, ::500]
+    W_ie = W_ie.reshape(W_ie.shape[0], -1)[:, ::500]
 
-    # Create x-variable for weight matrix
-    x = np.arange(0, W_se.shape[0])
-
-    print("Shape of x:", x.shape)
-    print(
-        "Example shape of weights:", W_se.T.shape
-    )  # Transposed to match plotting dimensions
+    print(f"W_se: {W_se.shape}, W_ee: {W_ee.shape}, W_ie: {W_ie.shape}")
 
     # Define color and label mapping for plots
     weight_plots = {

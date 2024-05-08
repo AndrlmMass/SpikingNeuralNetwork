@@ -87,6 +87,11 @@ def train_data(
     # Add input data before training for input neurons
     spikes[:, :N_input_neurons] = training_data
 
+    draw_weights_layer(W_ei[0], "W_ei", "Inhibitory Neurons", "Excitatory Neurons")
+    draw_weights_layer(W_ie[0], "W_ie", "Excitatory Neurons", "Inhibitory Neurons")
+    draw_weights_layer(W_se[0], "W_se", "Input Neurons", "Excitatory Neurons")
+    draw_weights_layer(W_ee[0], "W_ee", "Excitatory Neurons", "Excitatory Neurons")
+
     # Loop through time and update membrane potential, spikes and weights
     for t in tqdm(range(1, time), desc="Training network"):
         I_in_sum = []

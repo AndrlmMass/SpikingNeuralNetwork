@@ -89,7 +89,7 @@ class gen_weights:
         # Loop through each receiving neuron
         for n in range(W_ie[0].shape[0]):
             # Define neighbourhood of connections based on mean presynaptic connections
-            indices = np.where(W_ei[0, n, :] == 0)[0]
+            indices = np.where(W_ei[0, :, n] == 0)[0]
             mid_point = np.random.randint(low=0, high=indices.shape[0])
             if mid_point + radius > indices.shape[0]:
                 diff_min = mid_point + radius - indices.shape[0]
@@ -119,6 +119,7 @@ class gen_weights:
                 W_ie[0, n, idx] = np.random.random()
 
         # Convert all ones to zeros in array
+        W_ie[0][W_ie[0] == 1] = 0
 
         # Create array of ideal weights
         W_ie_ideal = np.full((N_inhib_neurons, N_excit_neurons), weight_val)

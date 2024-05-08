@@ -174,7 +174,7 @@ class SNN_STDP:
             time=self.time,
             N_ws=4,
             weight_val=0.1,
-            radius=radius_,
+            radius=10,
         )
 
         # Generate membrane potential and spikes array
