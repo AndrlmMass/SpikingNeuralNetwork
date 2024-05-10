@@ -90,9 +90,9 @@ class SNN_STDP:
         num_epochs: int,
         init_cals: int,
         A: float | int,
-        B: float | int,
         beta: float | int,
         delta: float | int,
+        euler: float | int,
         tau_const: float | int,
     ):
         self.V_th = V_th
@@ -107,12 +107,12 @@ class SNN_STDP:
         self.tau_hom = tau_hom
         self.tau_stdp = tau_stdp
         self.tau_H = tau_H
+        self.euler = euler
         self.gamma = gamma
         self.learning_rate = learning_rate
         self.dt = dt
         self.T = T
         self.A = A
-        self.B = B
         self.P = P
         self.beta = beta
         self.delta = delta
@@ -271,10 +271,10 @@ class SNN_STDP:
                 P=self.P,
                 R=self.R,
                 A=self.A,
-                B=self.B,
                 w_p=w_p,
                 beta=self.beta,
                 delta=self.delta,
+                euler=self.euler,
                 time=self.time,
                 V_rest=self.V_rest,
                 dt=self.dt,
@@ -324,11 +324,11 @@ class SNN_STDP:
             ) = train_data(
                 R=self.R,
                 A=self.A,
-                B=self.B,
                 P=1,
                 w_p=w_p,  # Defines the upper stable point of weight convergence
                 beta=self.beta,
                 delta=self.delta,
+                euler=self.euler,
                 time=self.time,
                 V_th=self.V_th,
                 V_rest=self.V_rest,

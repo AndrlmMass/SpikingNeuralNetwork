@@ -35,11 +35,11 @@ from plot_network import *
 def train_data(
     R: float | int,
     A: float | int,
-    B: float | int,
     P: float | int,
     w_p: float | int,
     beta: float | int,
     delta: float | int,
+    euler: float | int,
     time: int,
     V_th: int,
     V_rest: int,
@@ -78,11 +78,12 @@ def train_data(
     spikes = np.zeros((time, num_neurons))
     pre_synaptic_trace = np.zeros((num_neurons))
     post_synaptic_trace = np.zeros((num_neurons - N_input_neurons))
-    slow_post_synaptic_trace = np.zeros((num_neurons - N_input_neurons))
+    slow_post_synaptic_trace = np.zeros((num_neurons))
     C = np.full(num_neurons, A)
     z_ht = np.ones((num_neurons))
     z_istdp = np.zeros((N_excit_neurons))
     H = 0
+    B = np.full(num_neurons - N_inhib_neurons, A)
 
     # Add input data before training for input neurons
     spikes[:, :N_input_neurons] = training_data
@@ -94,6 +95,9 @@ def train_data(
 
     # Loop through time and update membrane potential, spikes and weights
     for t in tqdm(range(1, time), desc="Training network"):
+        # Define time difference for slow post synaptic trace
+        time_diff = t - euler
+
         I_in_sum = []
 
         # Update decay traces
@@ -119,7 +123,7 @@ def train_data(
                         N_input_neurons : N_input_neurons + N_excit_neurons,
                     ],
                 )
-                + np.dot(
+                - np.dot(
                     W_ie[t - 1, :, n],
                     spikes[t - 1, N_input_neurons + N_excit_neurons :],
                 ),
@@ -168,7 +172,7 @@ def train_data(
             if MemPot[t, n] > V_th:
                 spikes[t, n + N_input_neurons] = 1
                 post_synaptic_trace[n] += dt
-                slow_post_synaptic_trace[n] += dt
+                slow_post_synaptic_trace[N_input_neurons + n] += dt
                 MemPot[t, n] = V_reset
             else:
                 spikes[t, n + N_input_neurons] = 0
@@ -199,23 +203,27 @@ def train_data(
                     # Use the current trace values for STDP calculation
                     pre_trace = pre_synaptic_trace[pre_syn_indices[s]]
                     post_trace = post_synaptic_trace[n]
-                    slow_trace = slow_post_synaptic_trace[n]
+                    slow_trace = slow_post_synaptic_trace[pre_syn_indices[s]]
 
                     # Update z_ht, C and B
-                    z_ht[n] += dt * spikes[t, pre_syn_indices[s]]
-                    C[n] += dt * z_ht[n]
+                    if spikes[t, pre_syn_indices[s]] == 1:
+                        z_ht[pre_syn_indices[s]] += dt
+                        C[pre_syn_indices[s]] += (z_ht[pre_syn_indices[s]]) ** 2
 
-                    if A * C[n] <= 1:
-                        B = C[n]
+                    if A * C[pre_syn_indices[s]] <= 1:
+                        B[pre_syn_indices[s]] = C[pre_syn_indices[s]]
                     else:
-                        B = A
+                        B[pre_syn_indices[s]] = A
 
                     # Get learning components
                     triplet_LTP = (
                         A * pre_trace * slow_trace * spikes[t, pre_syn_indices[s]]
                     )
                     doublet_LTD = (
-                        B * post_trace * slow_trace * spikes[t, N_input_neurons + n]
+                        B[pre_syn_indices[s]]
+                        * post_trace
+                        * slow_trace
+                        * spikes[t, N_input_neurons + n]
                     )
 
                     Hebb = triplet_LTP - doublet_LTD
@@ -230,8 +238,26 @@ def train_data(
                     )
                     transmitter = delta * spikes[t, N_input_neurons + n]
                     # Assemble components to update weight
-                    delta_w = Hebb + Hetero + transmitter
-                    delta_w_indisc = Hebb + Hetero + transmitter
+                    delta_w = (Hebb + Hetero + transmitter) * dt
+                    if delta_w > 0.001:
+                        print(
+                            "delta_w",
+                            delta_w,
+                            "Hebb",
+                            Hebb,
+                            "Hetero",
+                            Hetero,
+                            "transmitter",
+                            transmitter,
+                            "A",
+                            A,
+                            "B",
+                            B[n],
+                            "C",
+                            C[pre_syn_indices[s]],
+                            "z_ht",
+                            z_ht[pre_syn_indices[s]],
+                        )
 
                     W_se[t, pre_syn_indices[s], n] = (
                         W_se[t - 1, pre_syn_indices[s], n] + delta_w
@@ -265,28 +291,37 @@ def train_data(
                     # Use the current trace values for STDP calculation
                     pre_trace = pre_synaptic_trace[N_input_neurons + pre_syn_indices[s]]
                     post_trace = post_synaptic_trace[n]
+                    slow_trace = slow_post_synaptic_trace[
+                        N_input_neurons + pre_syn_indices[s]
+                    ]
 
                     # Update z_ht, C and B
-                    z_ht[N_input_neurons + n] += (
-                        dt * spikes[t, N_input_neurons + pre_syn_indices[s]]
-                    )
+                    if spikes[t, N_input_neurons + pre_syn_indices[s]] == 1:
+                        z_ht[N_input_neurons + pre_syn_indices[s]] += dt
 
-                    C[N_input_neurons + n] += dt * z_ht[N_input_neurons + n]
+                        C[N_input_neurons + pre_syn_indices[s]] += (
+                            z_ht[N_input_neurons + pre_syn_indices[s]] ** 2
+                        )
 
-                    if A * C[N_input_neurons + n] <= 1:
-                        B = C[N_input_neurons + n]
+                    if A * C[N_input_neurons + pre_syn_indices[s]] <= 1:
+                        B[N_input_neurons + pre_syn_indices[s]] = C[
+                            N_input_neurons + pre_syn_indices[s]
+                        ]
                     else:
-                        B = A
+                        B[N_input_neurons + pre_syn_indices[s]] = A
 
                     # Get learning components
                     triplet_LTP = (
                         A
-                        * pre_trace
-                        * slow_trace
-                        * spikes[t, N_input_neurons + pre_syn_indices[s]]
+                        * post_trace
+                        * slow_trace  # presynaptic slow trace
+                        * spikes[time_diff, N_input_neurons + pre_syn_indices[s]]
                     )
                     doublet_LTD = (
-                        B * post_trace * slow_trace * spikes[t, N_input_neurons + n]
+                        B[N_input_neurons + pre_syn_indices[s]]
+                        * post_trace
+                        * slow_trace
+                        * spikes[t, N_input_neurons + n]
                     )
 
                     Hebb = triplet_LTP - doublet_LTD
