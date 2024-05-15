@@ -2,6 +2,7 @@
 
 # Import libraries
 import numpy as np
+import math
 import matplotlib.pyplot as plt
 
 
@@ -69,4 +70,38 @@ def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie, dt, update_interval=10):
     plt.show()
 
 
-# Example usage would require you to define spikes, W_se, W_ee, W_ie, and dt variables.
+def plot_clusters(spikes, labels, N_input_neurons, N_excit_neurons, N_inhib_neurons):
+    # Create list for class-preference
+    class_preference = np.zeros(spikes.shape[1])
+
+    # Loop through each neuron and assign class-preference
+    for n in range(spikes.shape[1]):
+        total_class_spikes = [0, 0, 0, 0]
+
+        # Count spikes for each class
+        for i in range(4):
+            total_class_spikes[i] = np.sum(spikes[np.where(labels[:, i] == 1)[0], n])
+
+        # Append class-preference to list
+        class_preference[n] = np.argmax(total_class_spikes)
+
+    # Create a figure and a set of subplots
+    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+
+    # Reshape class-preference for plotting
+    W_ee_pref = class_preference[
+        N_input_neurons : N_input_neurons + N_excit_neurons
+    ].reshape(int(math.sqrt(N_excit_neurons)), int(math.sqrt(N_excit_neurons)))
+
+    W_ie_pref = class_preference[N_input_neurons + N_excit_neurons :].reshape(
+        int(math.sqrt(N_inhib_neurons)), int(math.sqrt(N_inhib_neurons))
+    )
+
+    # Create a heatmap for class-preference of the weights
+    ax[0].imshow(W_ee_pref, cmap="viridis", interpolation="nearest")
+    ax[0].set_title("Class preference in excitatory layer")
+
+    ax[1].imshow(W_ie_pref, cmap="viridis", interpolation="nearest")
+    ax[1].set_title("Class preference in inhibitory layer")
+
+    plt.show()

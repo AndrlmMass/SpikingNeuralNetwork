@@ -92,7 +92,6 @@ class SNN_STDP:
         A: float | int,
         beta: float | int,
         delta: float | int,
-        euler: float | int,
         tau_const: float | int,
     ):
         self.V_th = V_th
@@ -107,7 +106,6 @@ class SNN_STDP:
         self.tau_hom = tau_hom
         self.tau_stdp = tau_stdp
         self.tau_H = tau_H
-        self.euler = euler
         self.gamma = gamma
         self.learning_rate = learning_rate
         self.dt = dt
@@ -259,111 +257,63 @@ class SNN_STDP:
         w_p: float | int,
         retur: bool,
         update_frequency: int,
-        interactive_tool: bool,
+        save_model: bool,
     ):
-        if interactive_tool:
-            app = QApplication(sys.argv)
-
-            MW = MainWidget()
-            MW.init_gui(
-                V_th=self.V_th,
-                V_reset=self.V_reset,
-                P=self.P,
-                R=self.R,
-                A=self.A,
-                w_p=w_p,
-                beta=self.beta,
-                delta=self.delta,
-                euler=self.euler,
-                time=self.time,
-                V_rest=self.V_rest,
-                dt=self.dt,
-                tau_plus=self.tau_plus,
-                tau_minus=self.tau_minus,
-                tau_slow=self.tau_slow,
-                tau_m=self.tau_m,
-                tau_const=self.tau_const,
-                tau_H=self.tau_H,
-                tau_stdp=self.tau_stdp,
-                learning_rate=self.learning_rate,
-                gamma=self.gamma,
-                update_frequency=update_frequency,
-                N_excit_neurons=self.N_excit_neurons,
-                N_inhib_neurons=self.N_inhib_neurons,
-                N_input_neurons=self.N_input_neurons,
-                MemPot=self.MemPot,
-                W_se=self.W_se,
-                W_se_ideal=self.W_se_ideal,
-                W_ee=self.W_ee,
-                W_ee_ideal=self.W_ee_ideal,
-                W_ei=self.W_ei,
-                W_ei_ideal=self.W_ei_ideal,
-                W_ie=self.W_ie,
-                W_ie_ideal=self.W_ie_ideal,
-                train_data=self.training_data,
-            )
-
-            main_window = MainWindow(MW)
-            main_window.show()
-            sys.exit(app.exec_())
-        else:
-            (
-                self.spikes,
-                self.MemPot,
-                self.W_se,
-                self.W_se_ideal,
-                self.W_ee,
-                self.W_ee_ideal,
-                self.W_ei,
-                self.W_ei_ideal,
-                self.W_ie,
-                self.W_ie_ideal,
-                self.pre_synaptic_trace,
-                self.post_synaptic_trace,
-                self.I_in_ls,
-            ) = train_data(
-                R=self.R,
-                A=self.A,
-                P=1,
-                w_p=w_p,  # Defines the upper stable point of weight convergence
-                beta=self.beta,
-                delta=self.delta,
-                euler=self.euler,
-                time=self.time,
-                V_th=self.V_th,
-                V_rest=self.V_rest,
-                V_reset=self.V_reset,
-                dt=self.dt,
-                tau_plus=self.tau_plus,
-                tau_minus=self.tau_minus,
-                tau_slow=self.tau_slow,
-                tau_m=self.tau_m,
-                tau_ht=self.tau_ht,
-                tau_hom=self.tau_hom,
-                tau_stdp=self.tau_stdp,
-                tau_H=self.tau_H,
-                learning_rate=self.learning_rate,
-                gamma=self.gamma,
-                tau_const=0.0001,  # Defines the rate of convergence with ideal weights, e.g., 20 minutes
-                training_data=self.training_data,
-                N_excit_neurons=self.N_excit_neurons,
-                N_inhib_neurons=self.N_inhib_neurons,
-                N_input_neurons=self.N_input_neurons,
-                MemPot=self.MemPot,
-                max_weight=self.max_weight,
-                min_weight=self.min_weight,
-                W_se=self.W_se,
-                W_se_ideal=self.W_se_ideal,
-                W_ee=self.W_ee,
-                W_ee_ideal=self.W_ee_ideal,
-                W_ei=self.W_ei,
-                W_ei_ideal=self.W_ei_ideal,
-                W_ie=self.W_ie,
-                W_ie_ideal=self.W_ie_ideal,
-                update_frequency=update_frequency,
-                callback=None,
-            )
-        self.update_frequency = update_frequency
+        (
+            self.spikes,
+            self.MemPot,
+            self.W_se,
+            self.W_se_ideal,
+            self.W_ee,
+            self.W_ee_ideal,
+            self.W_ei,
+            self.W_ei_ideal,
+            self.W_ie,
+            self.W_ie_ideal,
+            self.pre_synaptic_trace,
+            self.post_synaptic_trace,
+            self.I_in_ls,
+        ) = train_data(
+            R=self.R,
+            A=self.A,
+            P=self.P,
+            w_p=w_p,  # Defines the upper stable point of weight convergence
+            beta=self.beta,
+            delta=self.delta,
+            time=self.time,
+            V_th=self.V_th,
+            V_rest=self.V_rest,
+            V_reset=self.V_reset,
+            dt=self.dt,
+            tau_plus=self.tau_plus,
+            tau_minus=self.tau_minus,
+            tau_slow=self.tau_slow,
+            tau_m=self.tau_m,
+            tau_ht=self.tau_ht,
+            tau_hom=self.tau_hom,
+            tau_stdp=self.tau_stdp,
+            tau_H=self.tau_H,
+            learning_rate=self.learning_rate,
+            gamma=self.gamma,
+            tau_const=self.tau_const,  # Defines the rate of convergence with ideal weights, e.g., 20 minutes
+            training_data=self.training_data,
+            N_excit_neurons=self.N_excit_neurons,
+            N_inhib_neurons=self.N_inhib_neurons,
+            N_input_neurons=self.N_input_neurons,
+            MemPot=self.MemPot,
+            max_weight=self.max_weight,
+            min_weight=self.min_weight,
+            W_se=self.W_se,
+            W_se_ideal=self.W_se_ideal,
+            W_ee=self.W_ee,
+            W_ee_ideal=self.W_ee_ideal,
+            W_ei=self.W_ei,
+            W_ei_ideal=self.W_ei_ideal,
+            W_ie=self.W_ie,
+            W_ie_ideal=self.W_ie_ideal,
+            update_frequency=update_frequency,
+            save_model=save_model,
+        )
 
         if retur:
             return (
@@ -381,6 +331,7 @@ class SNN_STDP:
         idx_start: int,
         idx_stop: int,
         mv: bool,
+        overlap: bool,
     ):
         if ws_nd_spikes:
             plot_weights_and_spikes(
@@ -396,6 +347,14 @@ class SNN_STDP:
                 MemPot=self.MemPot,
                 idx_start=idx_start,
                 idx_stop=idx_stop,
+            )
+        if overlap:
+            plot_clusters(
+                spikes=self.spikes,
+                labels=self.labels_train,
+                N_input_neurons=self.N_input_neurons,
+                N_excit_neurons=self.N_excit_neurons,
+                N_inhib_neurons=self.N_inhib_neurons,
             )
 
     def plot_I_in(self):

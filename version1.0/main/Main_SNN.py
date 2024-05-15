@@ -3,6 +3,7 @@
 # Set cw
 import os
 import sys
+import importlib
 
 # Set current working directories and add relevant directories to path
 if os.path.exists(
@@ -27,39 +28,42 @@ else:
     sys.path.append(
         "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\main"
     )
-from SNN_functions import *
+import SNN_functions
+from SNN_functions import SNN_STDP
 
-# Initialize SNN object
-snn = SNN_STDP(
-    V_th=-50,  # Firing threshold
-    V_reset=-70,  # Reset potential
-    P=20,  # Ideal weight scaler
-    C=1,  # Regulates B which regulates LTP
-    R=100,  # Scales up the I_in value
-    tau_plus=0.1,  # Time constant in presynaptic learning
-    tau_minus=0.1,  # Time constant in postsynaptic learning
-    tau_slow=0.1,  # Time constant in slow postsynaptic learning
-    tau_m=0.125,  # Time constant in membrane potential
-    tau_ht=0.15,  # Time constant in heterosynaptic learning
-    tau_hom=0.157,  # Time constant in doublet LTD
-    tau_stdp=0.1,  # Time constant in STDP
-    tau_H=10,  # Time constant in iSTDP
-    learning_rate=0.00001,  # learning rate iSTDP
-    gamma=0.1,  # Transmitter triggered plasticity
-    num_items=4,  # Num of training items
-    dt=0.001,  # timeunit
-    T=0.1,  # total time per item
-    V_rest=-60,  # Resting potential
-    min_weight=0,  # Minimum weight
-    max_weight=5,  # Maximum weight
-    num_epochs=1,  # N/A
-    init_cals=1,  # N/A
-    A=0.01,  # Regulates hebbian learning -> larger == more hebbian learning - fixed
-    beta=0.5,  # Regulates heterosynpatic learning -> larger == more heterosynaptic learning - fixed
-    delta=0.002,  # Regulates dopamin_reg - Fixed
-    euler=10,  # Time step backwards for slow presynaptic trace
-    tau_const=1,  # Time constant in ideal_weight update
-)
+# Store the parameters in a dictionary
+snn_params = {
+    "V_th": -50,
+    "V_reset": -70,
+    "P": 20,
+    "C": 1,
+    "R": 100,
+    "tau_plus": 0.1,
+    "tau_minus": 0.1,
+    "tau_slow": 0.1,
+    "tau_m": 0.125,
+    "tau_ht": 0.15,
+    "tau_hom": 0.157,
+    "tau_stdp": 0.1,
+    "tau_H": 10,
+    "learning_rate": 0.00001,
+    "gamma": 0.1,
+    "num_items": 8,
+    "dt": 0.001,
+    "T": 0.1,
+    "V_rest": -60,
+    "min_weight": 0,
+    "max_weight": 5,
+    "num_epochs": 1,
+    "init_cals": 1,
+    "A": 0.01,
+    "beta": 0.5,
+    "delta": 0.002,
+    "tau_const": 1,
+}
+
+# Initiate SNN object
+snn = SNN_STDP(**snn_params)
 
 # Initialize & visualize pre-trained network
 (
@@ -111,20 +115,28 @@ data, labels = snn.load_data(rand_lvl=0.05, retur=True)
 ) = snn.train_data(
     retur=True,
     w_p=0.5,
-    interactive_tool=False,
     update_frequency=5,
+    save_model=True,
 )
 
-# Evaluate performance
+# Reload model
 
-# Test network on unseen data and estimate performance
 
 # Visualize training and testing results
 snn.plot_training(
-    ws_nd_spikes=True,
+    ws_nd_spikes=False,
     idx_start=484,
     idx_stop=600,
-    mv=True,
+    mv=False,
+    overlap=True,
 )
 
 snn.plot_I_in()
+
+# Update the plot_trainign function
+importlib.reload(SNN_functions)
+snn = SNN_functions.SNN_STDP
+
+snn.plot_training = SNN_functions.SNN_STDP.plot_training.__get__(
+    snn, SNN_functions.SNN_STDP
+)

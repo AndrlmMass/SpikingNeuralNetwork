@@ -39,7 +39,6 @@ def train_data(
     w_p: float | int,
     beta: float | int,
     delta: float | int,
-    euler: float | int,
     time: int,
     V_th: int,
     V_rest: int,
@@ -71,8 +70,8 @@ def train_data(
     W_ie: np.ndarray,
     W_ie_ideal: np.ndarray,
     update_frequency: int,
-    callback: None,
     gamma: float | int,
+    save_model: bool,
 ):
     num_neurons = N_excit_neurons + N_inhib_neurons + N_input_neurons
     spikes = np.zeros((time, num_neurons))
@@ -88,16 +87,8 @@ def train_data(
     # Add input data before training for input neurons
     spikes[:, :N_input_neurons] = training_data
 
-    # draw_weights_layer(W_ei[0], "W_ei", "Inhibitory Neurons", "Excitatory Neurons")
-    # draw_weights_layer(W_ie[0], "W_ie", "Excitatory Neurons", "Inhibitory Neurons")
-    # draw_weights_layer(W_se[0], "W_se", "Input Neurons", "Excitatory Neurons")
-    # draw_weights_layer(W_ee[0], "W_ee", "Excitatory Neurons", "Excitatory Neurons")
-
     # Loop through time and update membrane potential, spikes and weights
     for t in tqdm(range(1, time), desc="Training network"):
-        # Define time difference for slow post synaptic trace
-        time_diff = t - euler
-
         I_in_sum = []
 
         # Update decay traces
@@ -315,7 +306,7 @@ def train_data(
                         A
                         * post_trace
                         * slow_trace  # presynaptic slow trace
-                        * spikes[time_diff, N_input_neurons + pre_syn_indices[s]]
+                        * spikes[t, N_input_neurons + pre_syn_indices[s]]
                     )
                     doublet_LTD = (
                         B[N_input_neurons + pre_syn_indices[s]]
@@ -401,10 +392,7 @@ def train_data(
             else:
                 spikes[t, n + N_input_neurons + N_excit_neurons] = 0
 
-        if t % update_frequency == 0 and callback is not None:
-            callback(spikes, W_se, W_ee, t)
-
-        # Ensure weights continue their value
+        # Ensure weights continue their value to the next time step
         W_ei[t] = W_ei[t - 1]
         W_ie[t] = W_ie[t - 1]
 
@@ -413,6 +401,19 @@ def train_data(
     draw_weights_layer(W_ie[-1], "W_ie", "Excitatory Neurons", "Inhibitory Neurons")
     draw_weights_layer(W_se[-1], "W_se", "Input Neurons", "Excitatory Neurons")
     draw_weights_layer(W_ee[-1], "W_ee", "Excitatory Neurons", "Excitatory Neurons")
+
+    if save_model:
+        # Create folder to save model
+        if not os.path.exists("model"):
+            os.makedirs("model")
+
+        # Save model weights, spikes and MemPot
+        np.save("model/W_se.npy", W_se)
+        np.save("model/W_ee.npy", W_ee)
+        np.save("model/W_ei.npy", W_ei)
+        np.save("model/W_ie.npy", W_ie)
+        np.save("model/spikes.npy", spikes)
+        np.save("model/MemPot.npy", MemPot)
 
     return (
         spikes,
