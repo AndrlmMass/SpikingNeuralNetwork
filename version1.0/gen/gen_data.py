@@ -154,6 +154,9 @@ def float_2_pos_spike(
                 index = i * timesteps + t
                 poisson_input[index, j] = 1 if spike_count > 0 else 0
 
+    # Extend labels to match the poisson_input
+    labels = np.repeat(labels, timesteps, axis=0)
+
     # save data if true
     if save:
         print(

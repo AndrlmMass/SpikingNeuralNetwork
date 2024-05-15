@@ -325,6 +325,15 @@ class SNN_STDP:
                 self.W_ie,
             )
 
+    def reload_model(self):
+        self.W_se = np.load("model/W_se.npy")
+        self.W_ee = np.load("model/W_ee.npy")
+        self.W_ie = np.load("model/W_ie.npy")
+        self.W_ei = np.load("model/W_ei.npy")
+        self.spikes = np.load("model/spikes.npy")
+        self.MemPot = np.load("model/MemPot.npy")
+        return self.W_se, self.W_ee, self.W_ie, self.W_ei, self.spikes, self.MemPot
+
     def plot_training(
         self,
         ws_nd_spikes: bool,
@@ -340,7 +349,6 @@ class SNN_STDP:
                 W_ee=self.W_ee,
                 W_ie=self.W_ie,
                 dt=self.dt,
-                update_interval=self.update_frequency,
             )
         if mv:
             plot_membrane_activity(

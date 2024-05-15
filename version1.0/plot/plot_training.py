@@ -4,6 +4,7 @@
 import numpy as np
 import math
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 
 
 def plot_membrane_activity(
@@ -19,7 +20,7 @@ def plot_membrane_activity(
     plt.show()
 
 
-def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie, dt, update_interval=10):
+def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie, dt):
     # Create a figure and a set of subplots
     fig, axs = plt.subplots(2, 1, figsize=(12, 16))
 
@@ -73,6 +74,7 @@ def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie, dt, update_interval=10):
 def plot_clusters(spikes, labels, N_input_neurons, N_excit_neurons, N_inhib_neurons):
     # Create list for class-preference
     class_preference = np.zeros(spikes.shape[1])
+    intensity = np.zeros(spikes.shape[1])
 
     # Loop through each neuron and assign class-preference
     for n in range(spikes.shape[1]):
@@ -83,25 +85,73 @@ def plot_clusters(spikes, labels, N_input_neurons, N_excit_neurons, N_inhib_neur
             total_class_spikes[i] = np.sum(spikes[np.where(labels[:, i] == 1)[0], n])
 
         # Append class-preference to list
-        class_preference[n] = np.argmax(total_class_spikes)
+        idx = np.argmax(total_class_spikes)
+        class_preference[n] = idx
+        intensity[n] = total_class_spikes[idx] / np.sum(total_class_spikes)
+
+    # Define base colors for each class
+    base_colors = np.array(
+        [
+            [1, 0, 0],  # Red for class 0
+            [0, 1, 0],  # Green for class 1
+            [0, 0, 1],  # Blue for class 2
+            [1, 1, 0],  # Yellow for class 3
+        ]
+    )
 
     # Create a figure and a set of subplots
-    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+    fig, ax = plt.subplots(1, 3, figsize=(18, 8))
 
-    # Reshape class-preference for plotting
+    # Reshape class-preference and intensity for plotting
     W_ee_pref = class_preference[
+        N_input_neurons : N_input_neurons + N_excit_neurons
+    ].reshape(int(math.sqrt(N_excit_neurons)), int(math.sqrt(N_excit_neurons)))
+    W_ee_intensity = intensity[
         N_input_neurons : N_input_neurons + N_excit_neurons
     ].reshape(int(math.sqrt(N_excit_neurons)), int(math.sqrt(N_excit_neurons)))
 
     W_ie_pref = class_preference[N_input_neurons + N_excit_neurons :].reshape(
         int(math.sqrt(N_inhib_neurons)), int(math.sqrt(N_inhib_neurons))
     )
+    W_ie_intensity = intensity[N_input_neurons + N_excit_neurons :].reshape(
+        int(math.sqrt(N_inhib_neurons)), int(math.sqrt(N_inhib_neurons))
+    )
 
-    # Create a heatmap for class-preference of the weights
-    ax[0].imshow(W_ee_pref, cmap="viridis", interpolation="nearest")
+    W_se_pref = class_preference[:N_input_neurons].reshape(
+        int(math.sqrt(N_input_neurons)), int(math.sqrt(N_input_neurons))
+    )
+    W_se_intensity = intensity[:N_input_neurons].reshape(
+        int(math.sqrt(N_input_neurons)), int(math.sqrt(N_input_neurons))
+    )
+
+    # Function to create the combined color array
+    def create_color_array(class_pref, intensity):
+        color_array = np.zeros((*class_pref.shape, 3))
+        for i in range(4):  # Assuming classes are 0 to 3
+            class_mask = class_pref == i
+            for j in range(3):  # For RGB channels
+                color_array[..., j] += class_mask * base_colors[i, j] * intensity
+        return color_array
+
+    # Create color arrays
+    W_ee_colors = create_color_array(W_ee_pref, W_ee_intensity)
+    W_ie_colors = create_color_array(W_ie_pref, W_ie_intensity)
+    W_se_colors = create_color_array(W_se_pref, W_se_intensity)
+
+    # Plot the heatmaps with intensity scaling
+    ax[0].imshow(W_ee_colors, interpolation="nearest")
     ax[0].set_title("Class preference in excitatory layer")
 
-    ax[1].imshow(W_ie_pref, cmap="viridis", interpolation="nearest")
+    ax[1].imshow(W_ie_colors, interpolation="nearest")
     ax[1].set_title("Class preference in inhibitory layer")
+
+    cax3 = ax[2].imshow(W_se_colors, interpolation="nearest")
+    ax[2].set_title("Class preference in stimulation layer")
+
+    # Create a colorbar for the last subplot
+    cbar3 = fig.colorbar(cax3, ax=ax[2], orientation="vertical")
+    cbar3.set_ticks([0.25, 0.75, 1.25, 1.75])
+    cbar3.ax.set_yticklabels(["Class 0", "Class 1", "Class 2", "Class 3"])
+    cbar3.set_label("Class preference")
 
     plt.show()

@@ -48,7 +48,7 @@ snn_params = {
     "tau_H": 10,
     "learning_rate": 0.00001,
     "gamma": 0.1,
-    "num_items": 8,
+    "num_items": 20,
     "dt": 0.001,
     "T": 0.1,
     "V_rest": -60,
@@ -87,7 +87,7 @@ snn = SNN_STDP(**snn_params)
 )
 # Generate data
 snn.gen_data(
-    run=False,
+    run=True,
     N_classes=4,
     noise_rand=True,
     noise_rand_ls=[0, 0.01, 0.03, 0.05],
@@ -120,11 +120,11 @@ data, labels = snn.load_data(rand_lvl=0.05, retur=True)
 )
 
 # Reload model
-
+# W_se, W_ee, W_ie, W_ei, spikes, mempot = snn.reload_model()
 
 # Visualize training and testing results
 snn.plot_training(
-    ws_nd_spikes=False,
+    ws_nd_spikes=True,
     idx_start=484,
     idx_stop=600,
     mv=False,
@@ -132,11 +132,3 @@ snn.plot_training(
 )
 
 snn.plot_I_in()
-
-# Update the plot_trainign function
-importlib.reload(SNN_functions)
-snn = SNN_functions.SNN_STDP
-
-snn.plot_training = SNN_functions.SNN_STDP.plot_training.__get__(
-    snn, SNN_functions.SNN_STDP
-)
