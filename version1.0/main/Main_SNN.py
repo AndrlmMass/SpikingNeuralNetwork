@@ -57,7 +57,7 @@ snn_params = {
     "init_cals": 1,
     "A": 0.01,
     "beta": 0.5,
-    "delta": 0.002,
+    "delta": 0.02,
     "tau_const": 10,
 }
 

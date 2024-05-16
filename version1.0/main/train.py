@@ -215,7 +215,7 @@ def train_data(
                     # Get learning components
                     triplet_LTP = (
                         A * pre_trace * slow_trace * spikes[t, pre_syn_indices[s]]
-                    )
+                    )  # This value is either 0 or very small -> weakens learning
                     doublet_LTD = (
                         B[pre_syn_indices[s]]
                         * post_trace
@@ -235,8 +235,8 @@ def train_data(
                     )
                     transmitter = delta * spikes[t, N_input_neurons + n]
                     # Assemble components to update weight
-                    delta_w = (Hebb + Hetero + transmitter) * dt
-                    if delta_w > 0.0001:
+                    delta_w = Hebb + Hetero + transmitter
+                    if delta_w != 0.0001:
                         print(
                             "delta_w",
                             delta_w,
@@ -334,7 +334,7 @@ def train_data(
                         * spikes[t, N_input_neurons + pre_syn_indices[s]]
                     )
                     transmitter = delta * spikes[t, N_input_neurons + n]
-                    delta_w = (Hebb + Hetero + transmitter) * dt
+                    delta_w = Hebb + Hetero + transmitter
 
                     # Assemble components to update weight
                     W_ee[t, pre_syn_indices[s], n] = (
