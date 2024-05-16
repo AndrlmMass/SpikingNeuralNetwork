@@ -133,10 +133,11 @@ def train_data(
             # Get nonzero weights from input neurons to current excitatory neuron
             nonzero_se_ws = np.nonzero(W_se[t - 1, :, n])[0]
 
-            # Update pre_synaptic_trace for W_ee
+            # Update pre_synaptic_trace for W_se
             for w in range(len(nonzero_se_ws)):
                 if spikes[t - 1, nonzero_se_ws[w]] == 1:
                     pre_synaptic_trace[t, nonzero_se_ws[w]] += dt
+                    slow_pre_synaptic_trace[t, nonzero_se_ws[w]] += dt
 
             # Get nonzero weights from excitatory neurons to current excitatory neuron
             nonzero_ee_ws = np.nonzero(W_ee[t - 1, :, n])[0]
@@ -145,6 +146,7 @@ def train_data(
             for w in range(len(nonzero_ee_ws)):
                 if spikes[t - 1, N_input_neurons + nonzero_ee_ws[w]] == 1:
                     pre_synaptic_trace[t, N_input_neurons + nonzero_ee_ws[w]] += dt
+                    slow_pre_synaptic_trace[t, N_input_neurons + nonzero_ee_ws[w]] += dt
 
             # Get non-zero weights from inhibitory neurons to current excitatory neuron
             nonzero_ie_ws = np.nonzero(W_ie[t - 1, :, n])[0]
@@ -158,12 +160,14 @@ def train_data(
                     pre_synaptic_trace[
                         t, N_input_neurons + N_excit_neurons + nonzero_ie_ws[w]
                     ] += dt
+                    slow_pre_synaptic_trace[
+                        t, N_input_neurons + N_excit_neurons + nonzero_ie_ws[w]
+                    ] += dt
 
             # Update spikes
             if MemPot[t, n] > V_th:
                 spikes[t, n + N_input_neurons] = 1
                 post_synaptic_trace[t, n] += dt
-                slow_pre_synaptic_trace[t, N_input_neurons + n] += dt
                 MemPot[t, n] = V_reset
             else:
                 spikes[t, n + N_input_neurons] = 0
@@ -218,8 +222,6 @@ def train_data(
                         * slow_trace
                         * spikes[t, N_input_neurons + n]
                     )
-                    if t > 50 and n == 0:
-                        print("triplet_LTP", triplet_LTP, "doublet_LTD", doublet_LTD)
 
                     Hebb = triplet_LTP - doublet_LTD
                     Hetero = (
