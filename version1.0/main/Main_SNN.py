@@ -119,7 +119,7 @@ data, labels = snn.load_data(rand_lvl=0.05, retur=True)
 )
 
 # Reload model
-W_se, W_ee, W_ie, W_ei, spikes, mempot = snn.reload_model()
+snn.reload_model()
 
 # Visualize training and testing results
 snn.plot_training(
@@ -128,6 +128,7 @@ snn.plot_training(
     idx_stop=600,
     mv=False,
     overlap=True,
+    traces=True,
 )
 
 snn.plot_I_in()

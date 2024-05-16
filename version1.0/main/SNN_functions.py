@@ -272,6 +272,7 @@ class SNN_STDP:
             self.W_ie_ideal,
             self.pre_synaptic_trace,
             self.post_synaptic_trace,
+            self.slow_synaptic_trace,
             self.I_in_ls,
         ) = train_data(
             R=self.R,
@@ -331,7 +332,9 @@ class SNN_STDP:
         self.W_ei = np.load("model/W_ei.npy")
         self.spikes = np.load("model/spikes.npy")
         self.MemPot = np.load("model/MemPot.npy")
-        return self.W_se, self.W_ee, self.W_ie, self.W_ei, self.spikes, self.MemPot
+        self.pre_trace = np.load("model/pre_synaptic_trace.npy")
+        self.post_trace = np.load("model/post_synaptic_trace.npy")
+        self.slow_trace = np.load("model/slow_pre_synaptic_trace.npy")
 
     def plot_training(
         self,
@@ -340,6 +343,7 @@ class SNN_STDP:
         idx_stop: int,
         mv: bool,
         overlap: bool,
+        traces: bool,
     ):
         if ws_nd_spikes:
             plot_weights_and_spikes(
@@ -362,6 +366,13 @@ class SNN_STDP:
                 N_input_neurons=self.N_input_neurons,
                 N_excit_neurons=self.N_excit_neurons,
                 N_inhib_neurons=self.N_inhib_neurons,
+            )
+        if traces:
+            plot_traces(
+                pre_synaptic_trace=self.pre_trace,
+                post_synaptic_trace=self.post_trace,
+                slow_pre_synaptic_trace=self.slow_trace,
+                N_input_neurons=self.N_input_neurons,
             )
 
     def plot_I_in(self):

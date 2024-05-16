@@ -1,6 +1,7 @@
 # Train network script
 import numpy as np
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 import os
 import sys
 
@@ -74,9 +75,9 @@ def train_data(
 ):
     num_neurons = N_excit_neurons + N_inhib_neurons + N_input_neurons
     spikes = np.zeros((time, num_neurons))
-    pre_synaptic_trace = np.zeros((num_neurons))
-    post_synaptic_trace = np.zeros((num_neurons - N_input_neurons))
-    slow_post_synaptic_trace = np.zeros((num_neurons))
+    pre_synaptic_trace = np.zeros((time, num_neurons))
+    post_synaptic_trace = np.zeros((time, num_neurons - N_input_neurons))
+    slow_pre_synaptic_trace = np.zeros((time, num_neurons))
     C = np.full(num_neurons, A)
     z_ht = np.ones((num_neurons))
     z_istdp = np.zeros((N_excit_neurons))
@@ -91,9 +92,9 @@ def train_data(
         I_in_sum = []
 
         # Update decay traces
-        pre_synaptic_trace *= 1 - (dt / tau_plus)
-        post_synaptic_trace *= 1 - (dt / tau_minus)
-        slow_post_synaptic_trace *= 1 - (dt / tau_slow)
+        pre_synaptic_trace[t] *= 1 - (dt / tau_plus)
+        post_synaptic_trace[t] *= 1 - (dt / tau_minus)
+        slow_pre_synaptic_trace[t] *= 1 - (dt / tau_slow)
         z_ht *= 1 - (dt / tau_ht)
         C *= 1 - (dt / tau_hom)
 
@@ -135,7 +136,7 @@ def train_data(
             # Update pre_synaptic_trace for W_ee
             for w in range(len(nonzero_se_ws)):
                 if spikes[t - 1, nonzero_se_ws[w]] == 1:
-                    pre_synaptic_trace[nonzero_se_ws[w]] += dt
+                    pre_synaptic_trace[t, nonzero_se_ws[w]] += dt
 
             # Get nonzero weights from excitatory neurons to current excitatory neuron
             nonzero_ee_ws = np.nonzero(W_ee[t - 1, :, n])[0]
@@ -143,7 +144,7 @@ def train_data(
             # Update pre_synaptic_trace for W_ee
             for w in range(len(nonzero_ee_ws)):
                 if spikes[t - 1, N_input_neurons + nonzero_ee_ws[w]] == 1:
-                    pre_synaptic_trace[N_input_neurons + nonzero_ee_ws[w]] += dt
+                    pre_synaptic_trace[t, N_input_neurons + nonzero_ee_ws[w]] += dt
 
             # Get non-zero weights from inhibitory neurons to current excitatory neuron
             nonzero_ie_ws = np.nonzero(W_ie[t - 1, :, n])[0]
@@ -155,14 +156,14 @@ def train_data(
                     == 1
                 ):
                     pre_synaptic_trace[
-                        N_input_neurons + N_excit_neurons + nonzero_ie_ws[w]
+                        t, N_input_neurons + N_excit_neurons + nonzero_ie_ws[w]
                     ] += dt
 
             # Update spikes
             if MemPot[t, n] > V_th:
                 spikes[t, n + N_input_neurons] = 1
-                post_synaptic_trace[n] += dt
-                slow_post_synaptic_trace[N_input_neurons + n] += dt
+                post_synaptic_trace[t, n] += dt
+                slow_pre_synaptic_trace[t, N_input_neurons + n] += dt
                 MemPot[t, n] = V_reset
             else:
                 spikes[t, n + N_input_neurons] = 0
@@ -177,7 +178,7 @@ def train_data(
                 for s in range(len(pre_syn_indices)):
 
                     # Update ideal weight
-                    nu_ideal = (
+                    W_se_ideal[pre_syn_indices[s], n] += (
                         dt
                         * tau_const
                         * (
@@ -189,15 +190,13 @@ def train_data(
                             * (w_p - W_se_ideal[pre_syn_indices[s], n])
                         )
                     )
-                    W_se_ideal[pre_syn_indices[s], n] = (
-                        W_se_ideal[pre_syn_indices[s], n] + nu_ideal
-                    )
-                    print(nu_ideal, W_se_ideal[pre_syn_indices[s], n])
 
                     # Use the current trace values for STDP calculation
-                    pre_trace = pre_synaptic_trace[pre_syn_indices[s]]
-                    post_trace = post_synaptic_trace[n]
-                    slow_trace = slow_post_synaptic_trace[pre_syn_indices[s]]
+                    pre_trace = round(pre_synaptic_trace[t, pre_syn_indices[s]], 4)
+                    post_trace = round(post_synaptic_trace[t, n], 4)
+                    slow_trace = round(
+                        slow_pre_synaptic_trace[t, pre_syn_indices[s]], 4
+                    )
 
                     # Update z_ht, C and B
                     if spikes[t, pre_syn_indices[s]] == 1:
@@ -219,6 +218,8 @@ def train_data(
                         * slow_trace
                         * spikes[t, N_input_neurons + n]
                     )
+                    if t > 50 and n == 0:
+                        print("triplet_LTP", triplet_LTP, "doublet_LTD", doublet_LTD)
 
                     Hebb = triplet_LTP - doublet_LTD
                     Hetero = (
@@ -233,7 +234,7 @@ def train_data(
                     transmitter = delta * spikes[t, N_input_neurons + n]
                     # Assemble components to update weight
                     delta_w = (Hebb + Hetero + transmitter) * dt
-                    if delta_w > 0.001:
+                    if delta_w > 0.0001:
                         print(
                             "delta_w",
                             delta_w,
@@ -283,10 +284,12 @@ def train_data(
                     )
 
                     # Use the current trace values for STDP calculation
-                    pre_trace = pre_synaptic_trace[N_input_neurons + pre_syn_indices[s]]
-                    post_trace = post_synaptic_trace[n]
-                    slow_trace = slow_post_synaptic_trace[
-                        N_input_neurons + pre_syn_indices[s]
+                    pre_trace = pre_synaptic_trace[
+                        t, N_input_neurons + pre_syn_indices[s]
+                    ]
+                    post_trace = post_synaptic_trace[t, n]
+                    slow_trace = slow_pre_synaptic_trace[
+                        t, N_input_neurons + pre_syn_indices[s]
                     ]
 
                     # Update z_ht, C and B
@@ -352,9 +355,9 @@ def train_data(
 
                     # Get traces
                     pre_trace = pre_synaptic_trace[
-                        N_input_neurons + N_excit_neurons + s
+                        t, N_input_neurons + N_excit_neurons + s
                     ]
-                    post_trace = post_synaptic_trace[n]
+                    post_trace = post_synaptic_trace[t, n]
 
                     # Calculate delta weights
                     delta_w = (
@@ -389,8 +392,8 @@ def train_data(
             # Update spikes
             if MemPot[t, n + N_excit_neurons] > V_th:
                 spikes[t, n + N_input_neurons + N_excit_neurons] = 1
-                post_synaptic_trace[n + N_excit_neurons] += dt
-                slow_post_synaptic_trace[n + N_excit_neurons] += dt
+                post_synaptic_trace[t, n + N_excit_neurons] += dt
+                slow_pre_synaptic_trace[t, n + N_excit_neurons] += dt
                 MemPot[t, n + N_excit_neurons] = V_reset
             else:
                 spikes[t, n + N_input_neurons + N_excit_neurons] = 0
@@ -398,6 +401,12 @@ def train_data(
         # Ensure weights continue their value to the next time step
         W_ei[t] = W_ei[t - 1]
         W_ie[t] = W_ie[t - 1]
+
+        # Ensure spike traces continue their value to the next time step
+        if t < time - 1:
+            pre_synaptic_trace[t + 1] = pre_synaptic_trace[t]
+            post_synaptic_trace[t + 1] = post_synaptic_trace[t]
+            slow_pre_synaptic_trace[t + 1] = slow_pre_synaptic_trace[t]
 
     # print weights heatmapped
     draw_weights_layer(W_ei[-1], "W_ei", "Inhibitory Neurons", "Excitatory Neurons")
@@ -417,6 +426,9 @@ def train_data(
         np.save("model/W_ie.npy", W_ie)
         np.save("model/spikes.npy", spikes)
         np.save("model/MemPot.npy", MemPot)
+        np.save("model/pre_synaptic_trace.npy", pre_synaptic_trace)
+        np.save("model/post_synaptic_trace.npy", post_synaptic_trace)
+        np.save("model/slow_pre_synaptic_trace.npy", slow_pre_synaptic_trace)
 
     return (
         spikes,
@@ -431,5 +443,6 @@ def train_data(
         W_ie_ideal,
         pre_synaptic_trace,
         post_synaptic_trace,
+        slow_pre_synaptic_trace,
         I_in_sum,
     )

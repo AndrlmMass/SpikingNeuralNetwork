@@ -155,3 +155,22 @@ def plot_clusters(spikes, labels, N_input_neurons, N_excit_neurons, N_inhib_neur
     cbar3.set_label("Class preference")
 
     plt.show()
+
+
+def plot_traces(
+    pre_synaptic_trace, post_synaptic_trace, slow_pre_synaptic_trace, N_input_neurons
+):
+    # Draw traces
+    plt.plot(
+        pre_synaptic_trace[:, 40 : 60 + 20],
+        label="pre_synaptic_trace",
+        color="red",
+    )
+    plt.plot(post_synaptic_trace[:, :20], label="post_synaptic_trace", color="blue")
+    plt.plot(
+        slow_pre_synaptic_trace[:, N_input_neurons : N_input_neurons + 20],
+        label="slow_pre_synaptic_trace",
+        color="green",
+    )
+    plt.legend()
+    plt.show()
