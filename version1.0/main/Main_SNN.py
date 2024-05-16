@@ -3,7 +3,6 @@
 # Set cw
 import os
 import sys
-import importlib
 
 # Set current working directories and add relevant directories to path
 if os.path.exists(
@@ -48,7 +47,7 @@ snn_params = {
     "tau_H": 10,
     "learning_rate": 0.00001,
     "gamma": 0.1,
-    "num_items": 20,
+    "num_items": 4,
     "dt": 0.001,
     "T": 0.1,
     "V_rest": -60,
@@ -59,7 +58,7 @@ snn_params = {
     "A": 0.01,
     "beta": 0.5,
     "delta": 0.002,
-    "tau_const": 1,
+    "tau_const": 10,
 }
 
 # Initiate SNN object
@@ -87,7 +86,7 @@ snn = SNN_STDP(**snn_params)
 )
 # Generate data
 snn.gen_data(
-    run=True,
+    run=False,
     N_classes=4,
     noise_rand=True,
     noise_rand_ls=[0, 0.01, 0.03, 0.05],
@@ -120,7 +119,7 @@ data, labels = snn.load_data(rand_lvl=0.05, retur=True)
 )
 
 # Reload model
-# W_se, W_ee, W_ie, W_ei, spikes, mempot = snn.reload_model()
+W_se, W_ee, W_ie, W_ei, spikes, mempot = snn.reload_model()
 
 # Visualize training and testing results
 snn.plot_training(

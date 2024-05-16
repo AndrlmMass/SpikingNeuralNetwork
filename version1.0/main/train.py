@@ -69,7 +69,6 @@ def train_data(
     W_ei_ideal: np.ndarray,
     W_ie: np.ndarray,
     W_ie_ideal: np.ndarray,
-    update_frequency: int,
     gamma: float | int,
     save_model: bool,
 ):
@@ -178,7 +177,7 @@ def train_data(
                 for s in range(len(pre_syn_indices)):
 
                     # Update ideal weight
-                    W_se_ideal[pre_syn_indices[s], n] = (
+                    nu_ideal = (
                         dt
                         * tau_const
                         * (
@@ -190,6 +189,10 @@ def train_data(
                             * (w_p - W_se_ideal[pre_syn_indices[s], n])
                         )
                     )
+                    W_se_ideal[pre_syn_indices[s], n] = (
+                        W_se_ideal[pre_syn_indices[s], n] + nu_ideal
+                    )
+                    print(nu_ideal, W_se_ideal[pre_syn_indices[s], n])
 
                     # Use the current trace values for STDP calculation
                     pre_trace = pre_synaptic_trace[pre_syn_indices[s]]

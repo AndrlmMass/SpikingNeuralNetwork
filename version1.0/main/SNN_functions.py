@@ -150,13 +150,13 @@ class SNN_STDP:
             N_input_neurons=self.N_input_neurons,
             N_excit_neurons=self.N_excit_neurons,
             time=self.time,
-            basenum=1,
+            basenum=0.1,
         )
         self.W_ee, self.W_ee_ideal = gws.gen_EE(
             N_excit_neurons=self.N_excit_neurons,
             prob=W_ee_prob,
             time=self.time,
-            basenum=1,
+            basenum=0.1,
         )
         self.W_ei, self.W_ei_ideal = gws.gen_EI(
             N_excit_neurons=self.N_excit_neurons,
@@ -311,7 +311,6 @@ class SNN_STDP:
             W_ei_ideal=self.W_ei_ideal,
             W_ie=self.W_ie,
             W_ie_ideal=self.W_ie_ideal,
-            update_frequency=update_frequency,
             save_model=save_model,
         )
 
