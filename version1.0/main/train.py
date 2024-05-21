@@ -169,8 +169,8 @@ def train_data(
             # Update pre_synaptic_trace for W_se
             for w in range(len(nonzero_se_ws)):
                 if spikes[t - 1, nonzero_se_ws[w]] == 1:
-                    pre_synaptic_trace[t, nonzero_se_ws[w]] += dt
-                    slow_pre_synaptic_trace[t, nonzero_se_ws[w]] += dt
+                    pre_synaptic_trace[t, nonzero_se_ws[w]] += 1
+                    slow_pre_synaptic_trace[t, nonzero_se_ws[w]] += 1
 
             # Get nonzero weights from excitatory neurons to current excitatory neuron
             nonzero_ee_ws = np.nonzero(W_ee[t - 1, :, n])[0]
@@ -178,8 +178,8 @@ def train_data(
             # Update pre_synaptic_trace for W_ee
             for w in range(len(nonzero_ee_ws)):
                 if spikes[t - 1, N_input_neurons + nonzero_ee_ws[w]] == 1:
-                    pre_synaptic_trace[t, N_input_neurons + nonzero_ee_ws[w]] += dt
-                    slow_pre_synaptic_trace[t, N_input_neurons + nonzero_ee_ws[w]] += dt
+                    pre_synaptic_trace[t, N_input_neurons + nonzero_ee_ws[w]] += 1
+                    slow_pre_synaptic_trace[t, N_input_neurons + nonzero_ee_ws[w]] += 1
 
             # Get non-zero weights from inhibitory neurons to current excitatory neuron
             nonzero_ie_ws = np.nonzero(W_ie[t - 1, :, n])[0]
@@ -192,15 +192,15 @@ def train_data(
                 ):
                     pre_synaptic_trace[
                         t, N_input_neurons + N_excit_neurons + nonzero_ie_ws[w]
-                    ] += dt
+                    ] += 1
                     slow_pre_synaptic_trace[
                         t, N_input_neurons + N_excit_neurons + nonzero_ie_ws[w]
-                    ] += dt
+                    ] += 1
 
             # Update spikes
             if MemPot[t, n] > V_th[n]:
                 spikes[t, n + N_input_neurons] = 1
-                post_synaptic_trace[t, n] += dt * 100
+                post_synaptic_trace[t, n] += 1
                 MemPot[t, n] = V_reset
                 V_th[n] += 1
             else:
@@ -433,8 +433,8 @@ def train_data(
             # Update spikes
             if MemPot[t, n + N_excit_neurons] > V_th[n + N_excit_neurons]:
                 spikes[t, n + N_input_neurons + N_excit_neurons] = 1
-                post_synaptic_trace[t, n + N_excit_neurons] += dt
-                slow_pre_synaptic_trace[t, n + N_excit_neurons] += dt
+                post_synaptic_trace[t, n + N_excit_neurons] += 1
+                slow_pre_synaptic_trace[t, n + N_excit_neurons] += 1
                 MemPot[t, n + N_excit_neurons] = V_reset
             else:
                 spikes[t, n + N_input_neurons + N_excit_neurons] = 0
