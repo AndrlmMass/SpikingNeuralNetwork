@@ -118,7 +118,7 @@ def train_data(
                 # Update membrane potential for each excitatory neuron
                 per_spik = np.sum(spikes[t - update_freq : t - 1, N_excit_neurons + n])
 
-                if tot_spik < 0:
+                if tot_spik > 0:
 
                     print("IT WORKED DAMN", per_spik, tot_spik)
 
