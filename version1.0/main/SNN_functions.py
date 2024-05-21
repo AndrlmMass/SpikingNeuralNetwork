@@ -282,7 +282,7 @@ class SNN_STDP:
             beta=self.beta,
             delta=self.delta,
             time=self.time,
-            V_th=self.V_th,
+            V_th_=self.V_th,
             V_rest=self.V_rest,
             V_reset=self.V_reset,
             dt=self.dt,
