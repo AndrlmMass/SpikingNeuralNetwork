@@ -59,26 +59,27 @@ def update_membrane_potential(
     dt,
     N_excit_neurons,
     N_input_neurons,
+    N_inhib_neurons,
     V_rest,
     R,
     tau_mm,
 ):
     # Update I_in
     I_in_e = (
-        np.dot(W_se, spikes[:N_input_neurons])
+        np.dot(W_se, spikes[:-1, :N_input_neurons])
         + np.dot(
             W_ee,
-            spikes[N_input_neurons : N_input_neurons + N_excit_neurons],
+            spikes[:-1, N_input_neurons:-N_inhib_neurons],
         )
         + np.dot(
             W_ie.T,
-            spikes[N_input_neurons + N_excit_neurons :],
+            spikes[:-1, N_input_neurons + N_excit_neurons :],
         )
     )
 
     I_in_i = np.dot(
         W_ei,
-        spikes[N_input_neurons:-N_input_neurons],
+        spikes[N_input_neurons:-N_inhib_neurons],
     )
 
     # Update membrane potential based on I_in

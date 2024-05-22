@@ -107,7 +107,7 @@ def train_data(
         # Update adaptive membrane potential threshold
         if t % update_freq == 0:
             V_th = adjust_membrane_threshold(
-                spikes,
+                spikes[t],
                 t,
                 update_freq,
                 V_th,
@@ -126,20 +126,18 @@ def train_data(
             spikes[t - 1],
             t,
             dt,
+            N_excit_neurons,
+            N_input_neurons,
             V_rest,
             R,
+            tau_mm,
         )
 
         # Update spikes based on mempot
-        spike_mask = MemPot[t, :N_excit_neurons] > V_th[:N_excit_neurons]
-        spikes[t, N_input_neurons : N_input_neurons + N_excit_neurons] = (
-            spike_mask.astype(int)
-        )
-        MemPot[t, :N_excit_neurons][spike_mask] = V_reset
-        V_th[:N_excit_neurons][spike_mask] += 1
-        post_synaptic_trace[t, :N_excit_neurons] += (
-            spikes[t, N_input_neurons : N_input_neurons + N_excit_neurons] * dt * 100
-        )
+        spike_mask = MemPot[t] > V_th
+        spikes[t] = spike_mask.astype(int)
+        MemPot[t][spike_mask] = V_reset
+        V_th[spike_mask] += 1
 
         #### EXCITATORY NEURONS ####
 
