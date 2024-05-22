@@ -75,6 +75,7 @@ class SNN_STDP:
         tau_minus: float | int,
         tau_slow: float | int,
         tau_m: float | int,
+        tau_mm: float | int,
         tau_ht: float | int,
         tau_hom: float | int,
         tau_stdp: float | int,
@@ -102,6 +103,7 @@ class SNN_STDP:
         self.tau_minus = tau_minus
         self.tau_slow = tau_slow
         self.tau_m = tau_m
+        self.tau_mm = tau_mm
         self.tau_ht = tau_ht
         self.tau_hom = tau_hom
         self.tau_stdp = tau_stdp
@@ -198,7 +200,6 @@ class SNN_STDP:
 
     def gen_data(
         self,
-        run: bool,
         N_classes: int,
         noise_rand: bool,
         noise_rand_ls: float | int,
@@ -208,11 +209,18 @@ class SNN_STDP:
         save: bool,
         retur: bool,
     ):
-        if not run:
-            return
+        # Check if training data already exists
+        files = os.listdir("data/training_data/")
+        for rand in noise_rand_ls:
+            if any(
+                f"training_data_{rand}_items_{self.num_items}_.pkl" in file
+                for file in files
+            ):
+                return
+
+        # Create training data since it does not exist already
         for j in range(len(noise_rand_ls)):
             data, labels = gen_float_data_(
-                run=run,
                 N_classes=N_classes,
                 N_input_neurons=self.N_input_neurons,
                 items=self.num_items,
@@ -237,13 +245,15 @@ class SNN_STDP:
 
     def load_data(self, rand_lvl: float | int, retur: bool):
         cur_path = os.getcwd()
-        data_path = f"\\data\\training_data\\training_data_{rand_lvl}.pkl"
+        data_path = f"\\data\\training_data\\training_data_{rand_lvl}_items_{self.num_items}_.pkl"
         data_dir = cur_path + data_path
 
         with open(data_dir, "rb") as openfile:
             self.training_data = pickle.load(openfile)
 
-        label_path = f"\\data\\labels_train\\labels_train_{rand_lvl}.pkl"
+        label_path = (
+            f"\\data\\labels_train\\labels_train_{rand_lvl}_items_{self.num_items}_.pkl"
+        )
         label_dir = cur_path + label_path
 
         with open(label_dir, "rb") as openfile:
@@ -290,6 +300,7 @@ class SNN_STDP:
             tau_minus=self.tau_minus,
             tau_slow=self.tau_slow,
             tau_m=self.tau_m,
+            tau_mm=self.tau_mm,
             tau_ht=self.tau_ht,
             tau_hom=self.tau_hom,
             tau_stdp=self.tau_stdp,

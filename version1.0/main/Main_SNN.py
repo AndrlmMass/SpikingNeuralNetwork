@@ -41,13 +41,14 @@ snn_params = {
     "tau_minus": 1,
     "tau_slow": 0.07,
     "tau_m": 0.525,
+    "tau_mm": 0.125,
     "tau_ht": 0.15,
     "tau_hom": 0.157,
     "tau_stdp": 0.1,
     "tau_H": 10,
-    "learning_rate": 0.00001,
+    "learning_rate": 0.001,
     "gamma": 0.1,
-    "num_items": 16,
+    "num_items": 8,
     "dt": 0.001,
     "T": 0.1,
     "V_rest": -60,
@@ -86,7 +87,6 @@ snn = SNN_STDP(**snn_params)
 )
 # Generate data
 snn.gen_data(
-    run=False,
     N_classes=4,
     noise_rand=True,
     noise_rand_ls=[0, 0.01, 0.03, 0.05],
@@ -126,7 +126,7 @@ snn.plot_training(
     ws_nd_spikes=True,
     idx_start=484,
     idx_stop=600,
-    mv=False,
+    mv=True,
     overlap=True,
     traces=True,
 )

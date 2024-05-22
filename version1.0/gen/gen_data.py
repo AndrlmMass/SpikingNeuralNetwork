@@ -28,7 +28,6 @@ from gen_symbol import *
 
 
 def gen_float_data_(
-    run: bool,
     N_classes: int,
     N_input_neurons: int,
     items: int,
@@ -37,8 +36,6 @@ def gen_float_data_(
     mean: int | float,
     blank_variance: int | float,
 ):
-    if not run:
-        return
 
     # Check if n_classes and items are compatible
     if items % N_classes != 0:
@@ -162,11 +159,15 @@ def float_2_pos_spike(
         print(
             f"Saving training and testing data with labels for random level {rand_lvl}"
         )
-        with open(f"data/training_data/training_data_{rand_lvl}.pkl", "wb") as file:
+        with open(
+            f"data/training_data/training_data_{rand_lvl}_items_{items}_.pkl", "wb"
+        ) as file:
             pickle.dump(poisson_input, file)
         print("training data is saved in data folder")
 
-        with open(f"data/labels_train/labels_train_{rand_lvl}.pkl", "wb") as file:
+        with open(
+            f"data/labels_train/labels_train_{rand_lvl}_items_{items}_.pkl", "wb"
+        ) as file:
             pickle.dump(labels, file)
         print("training labels is saved in data folder")
 
