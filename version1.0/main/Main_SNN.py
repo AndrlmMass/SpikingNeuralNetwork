@@ -60,6 +60,7 @@ snn_params = {
     "beta": 0.05,
     "delta": 0.02,
     "tau_const": 10,
+    "euler": 5,
 }
 
 # Initiate SNN object

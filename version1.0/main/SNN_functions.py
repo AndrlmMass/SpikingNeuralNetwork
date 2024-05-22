@@ -94,6 +94,7 @@ class SNN_STDP:
         beta: float | int,
         delta: float | int,
         tau_const: float | int,
+        euler: int,
     ):
         self.V_th = V_th
         self.V_reset = V_reset
@@ -127,6 +128,7 @@ class SNN_STDP:
         self.min_weight = min_weight
         self.num_epochs = num_epochs
         self.max_spike_diff = int(self.num_timesteps * 0.1)
+        self.euler = euler
 
     def initialize_network(
         self,
@@ -324,6 +326,7 @@ class SNN_STDP:
             W_ie=self.W_ie,
             W_ie_ideal=self.W_ie_ideal,
             save_model=save_model,
+            euler=self.euler,
         )
 
         if retur:

@@ -127,7 +127,7 @@ def train_data(
                 spikes[t - 1, N_input_neurons : N_input_neurons + N_excit_neurons],
             )
             + np.dot(
-                W_ie[t - 1, :, :N_excit_neurons],
+                W_ie[t - 1, :, :N_excit_neurons].T,
                 spikes[t - 1, N_input_neurons + N_excit_neurons :],
             )
         )
@@ -143,7 +143,7 @@ def train_data(
         )
         MemPot[t, :N_excit_neurons][spike_mask] = V_reset
         V_th[:N_excit_neurons][spike_mask] += 1
-        post_synaptic_trace[t, :] += (
+        post_synaptic_trace[t, :N_excit_neurons] += (
             spikes[t, N_input_neurons : N_input_neurons + N_excit_neurons] * dt * 100
         )
 
@@ -163,9 +163,9 @@ def train_data(
         pre_synaptic_trace[t] = (
             pre_synaptic_trace[t - 1] * np.exp(-dt / tau_plus) + spikes[t] * dt
         )
-        post_synaptic_trace[t] = post_synaptic_trace[t - 1, :N_excit_neurons] * np.exp(
-            -dt / tau_minus
-        )
+        post_synaptic_trace[t, :N_excit_neurons] = post_synaptic_trace[
+            t - 1, :N_excit_neurons
+        ] * np.exp(-dt / tau_minus)
         slow_pre_synaptic_trace[t] = (
             slow_pre_synaptic_trace[t - 1] * np.exp(-dt / tau_slow)
             + spikes[t - t_unit] * dt
@@ -174,43 +174,36 @@ def train_data(
         C = C * np.exp(-dt / tau_hom) + z_ht**2
         B = np.where(A * C <= 1, C, A)
 
-        # Use the current trace values for STDP calculation
-        pre_trace = round(pre_synaptic_trace[t, :N_excit_neurons], 4)
-        post_trace = round(
-            post_synaptic_trace[t, N_input_neurons : N_input_neurons + N_excit_neurons],
-            4,
-        )
-        slow_trace = round(
-            slow_pre_synaptic_trace[
-                t - t_unit, N_input_neurons : N_input_neurons + N_excit_neurons
-            ],
-            4,
+        # Define pre, slow and post trace
+        pre_trace = pre_synaptic_trace[t, :N_input_neurons]
+        slow_trace = slow_pre_synaptic_trace[t - t_unit, :N_input_neurons]
+        post_trace = post_synaptic_trace[t, :N_excit_neurons]
+        post_spikes = spikes[t, N_input_neurons : N_input_neurons + N_excit_neurons]
+        pre_spikes = spikes[t, :N_input_neurons]
+
+        # Print shapes to ensure compatibility
+        print(
+            f"Pre trace shape: {pre_trace.shape}, slow trace shape: {slow_trace.shape}, post trace shape: {post_trace.shape}, post spikes shape: {post_spikes.shape}, pre spikes shape: {pre_spikes.shape}, W_se shape: {W_se.shape}, W_se_ideal shape: {W_se_ideal.shape}"
         )
 
         # Get learning components
-        triplet_LTP = A * pre_trace * spikes[t, :N_input_neurons]
+        triplet_LTP = A * post_trace * slow_trace * pre_spikes
 
-        doublet_LTD = (
-            B[pre_syn_indices[s]] * post_trace * spikes[t, N_input_neurons + n]
-        )
+        doublet_LTD = B[:N_input_neurons] * pre_trace * post_spikes
 
-        Hebb = round(triplet_LTP - doublet_LTD, 6)
+        Hebb = np.round(triplet_LTP - doublet_LTD, 6)
 
-        Hetero = round(
-            -beta
-            * (W_se[t - 1, pre_syn_indices[s], n] - W_se_ideal[pre_syn_indices[s], n])
-            * (post_trace) ** 3
-            * spikes[
-                t, pre_syn_indices[s]
-            ],  # There are never any spikes => this stays at 0
+        Hetero = np.round(
+            -beta * (W_se[t - 1] - W_se_ideal) * (post_trace) ** 3 * pre_spikes,
             5,
         )
 
-        transmitter = delta * spikes[t, N_input_neurons + n]
+        transmitter = delta * post_spikes
+
         # Assemble components to update weight
         delta_w = Hebb + Hetero + transmitter
 
-        W_se[t, pre_syn_indices[s], n] = W_se[t - 1, pre_syn_indices[s], n] + delta_w
+        W_se[t] = W_se[t - 1] + delta_w
 
         # Update stimulation-excitation, excitation-excitation and inhibitory-excitatory synapsees
         for n in range(0, N_excit_neurons):
