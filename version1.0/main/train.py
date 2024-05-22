@@ -3,7 +3,6 @@ import numpy as np
 from tqdm import tqdm
 import os
 import sys
-import math
 
 # Set current working directories and add relevant directories to path
 if os.path.exists(
@@ -18,6 +17,9 @@ if os.path.exists(
     sys.path.append(
         "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\tool"
     )
+    sys.path.append(
+        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\train_funcs"
+    )
 else:
     os.chdir(
         "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
@@ -28,9 +30,13 @@ else:
     sys.path.append(
         "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\tool"
     )
+    sys.path.append(
+        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\train_funcs"
+    )
 
 from plot_training import *
 from plot_network import *
+from train_funcs import adjust_membrane_threshold, update_membrane_potential
 
 
 def train_data(
@@ -92,49 +98,37 @@ def train_data(
     # Add input data before training for input neurons
     spikes[:, :N_input_neurons] = training_data
 
+    # Define update frequency for adaptive threshold
     update_freq = time // 100
 
-    # Loop through time and update membrane potential, spikes and weights
+    # Loop through time and update membrane potential, spikes and weights => infinite knowledge
     for t in tqdm(range(1, time), desc="Training network"):
-
-        #### EXCITATORY NEURONS ####
 
         # Update adaptive membrane potential threshold
         if t % update_freq == 0:
-            tot_spik = np.sum(
-                spikes[
-                    t - update_freq : t - 1,
-                    N_input_neurons : N_input_neurons + N_excit_neurons,
-                ]
-            )
-            per_spik = np.sum(
-                spikes[
-                    t - update_freq : t - 1,
-                    N_input_neurons : N_input_neurons + N_excit_neurons,
-                ],
-                axis=0,
-            )
-            ratio = np.where(tot_spik > 0, per_spik / tot_spik, 0.01)
-            V_th[:N_excit_neurons] = np.maximum(
-                V_reset + (V_th[:N_excit_neurons] - V_reset) * np.exp(-ratio), V_reset
+            V_th = adjust_membrane_threshold(
+                spikes,
+                t,
+                update_freq,
+                V_th,
+                V_reset,
+                N_input_neurons,
+                N_excit_neurons,
             )
 
         # Vectorized membrane potential update
-        I_in = (
-            np.dot(W_se[t - 1, :, :N_excit_neurons], spikes[t - 1, :N_input_neurons])
-            + np.dot(
-                W_ee[t - 1, :, :N_excit_neurons],
-                spikes[t - 1, N_input_neurons : N_input_neurons + N_excit_neurons],
-            )
-            + np.dot(
-                W_ie[t - 1, :, :N_excit_neurons].T,
-                spikes[t - 1, N_input_neurons + N_excit_neurons :],
-            )
+        MemPot[t] = update_membrane_potential(
+            MemPot[t - 1],
+            W_se[t - 1],
+            W_ee[t - 1],
+            W_ie[t - 1],
+            W_ei[t - 1],
+            spikes[t - 1],
+            t,
+            dt,
+            V_rest,
+            R,
         )
-        delta_MemPot = (
-            ((MemPot[t - 1, :N_excit_neurons] - V_rest) + R * I_in) / tau_mm * dt
-        )
-        MemPot[t, :N_excit_neurons] = MemPot[t - 1, :N_excit_neurons] - delta_MemPot
 
         # Update spikes based on mempot
         spike_mask = MemPot[t, :N_excit_neurons] > V_th[:N_excit_neurons]
@@ -146,6 +140,8 @@ def train_data(
         post_synaptic_trace[t, :N_excit_neurons] += (
             spikes[t, N_input_neurons : N_input_neurons + N_excit_neurons] * dt * 100
         )
+
+        #### EXCITATORY NEURONS ####
 
         # Update W_se ideal weights
         W_se_ideal += (
@@ -181,11 +177,6 @@ def train_data(
         post_spikes = spikes[t, N_input_neurons : N_input_neurons + N_excit_neurons]
         pre_spikes = spikes[t, :N_input_neurons]
 
-        # Print shapes to ensure compatibility
-        print(
-            f"Pre trace shape: {pre_trace.shape}, slow trace shape: {slow_trace.shape}, post trace shape: {post_trace.shape}, post spikes shape: {post_spikes.shape}, pre spikes shape: {pre_spikes.shape}, W_se shape: {W_se.shape}, W_se_ideal shape: {W_se_ideal.shape}"
-        )
-
         # Get learning components
         triplet_LTP = A * post_trace * slow_trace * pre_spikes
 
@@ -205,224 +196,177 @@ def train_data(
 
         W_se[t] = W_se[t - 1] + delta_w
 
-        # Update stimulation-excitation, excitation-excitation and inhibitory-excitatory synapsees
-        for n in range(0, N_excit_neurons):
+        # # Update stimulation-excitation, excitation-excitation and inhibitory-excitatory synapsees
+        # for n in range(0, N_excit_neurons):
 
-            # Check if pre_syn_indices is an empty list
-            if pre_syn_indices.size != 0:
+        #     # Get all pre-synaptic indices
+        #     pre_syn_indices = nonzero_ee_ws
 
-                # Loop through each synapse to update strength
-                for s in range(len(pre_syn_indices)):
+        #     # Check if pre_syn_indices is an empty list
+        #     if pre_syn_indices.size != 0:
 
-                    # Use the current trace values for STDP calculation
-                    pre_trace = round(pre_synaptic_trace[t, pre_syn_indices[s]], 4)
-                    post_trace = round(post_synaptic_trace[t, n], 4)
-                    slow_trace = round(
-                        slow_pre_synaptic_trace[t, pre_syn_indices[s]], 4
-                    )
+        #         # Loop through each synapse to update strength
+        #         for s in range(len(pre_syn_indices)):
 
-                    # Get learning components
-                    triplet_LTP = (
-                        A * pre_trace * spikes[t, pre_syn_indices[s]]
-                    )  # This value is either 0 or very small -> weakens learning
+        #             # Update ideal weight
+        #             W_ee_ideal[pre_syn_indices[s], n] += (
+        #                 dt
+        #                 * tau_const
+        #                 * (
+        #                     W_ee[t - 1, pre_syn_indices[s], n]
+        #                     - W_ee_ideal[pre_syn_indices[s], n]
+        #                     - P
+        #                     * W_ee_ideal[pre_syn_indices[s], n]
+        #                     * ((w_p / 2) - W_ee_ideal[pre_syn_indices[s], n])
+        #                     * (w_p - W_ee_ideal[pre_syn_indices[s], n])
+        #                 )
+        #             )
 
-                    doublet_LTD = (
-                        B[pre_syn_indices[s]]
-                        * post_trace
-                        * spikes[t, N_input_neurons + n]
-                    )
+        #             # Use the current trace values for STDP calculation
+        #             pre_trace = round(
+        #                 pre_synaptic_trace[t, N_input_neurons + pre_syn_indices[s]], 4
+        #             )
+        #             post_trace = round(post_synaptic_trace[t, n], 4)
+        #             slow_trace = round(
+        #                 slow_pre_synaptic_trace[
+        #                     t, N_input_neurons + pre_syn_indices[s]
+        #                 ],
+        #                 4,
+        #             )
 
-                    Hebb = round(triplet_LTP - doublet_LTD, 6)
+        #             # Update z_ht, C and B
+        #             if spikes[t, N_input_neurons + pre_syn_indices[s]] == 1:
+        #                 z_ht[N_input_neurons + pre_syn_indices[s]] += dt
+        #                 C[N_input_neurons + pre_syn_indices[s]] += (
+        #                     z_ht[N_input_neurons + pre_syn_indices[s]]
+        #                 ) ** 2
 
-                    Hetero = round(
-                        -beta
-                        * (
-                            W_se[t - 1, pre_syn_indices[s], n]
-                            - W_se_ideal[pre_syn_indices[s], n]
-                        )
-                        * (post_trace) ** 3
-                        * spikes[
-                            t, pre_syn_indices[s]
-                        ],  # There are never any spikes => this stays at 0
-                        5,
-                    )
+        #             if A * C[N_input_neurons + pre_syn_indices[s]] <= 1:
+        #                 B[N_input_neurons + pre_syn_indices[s]] = C[
+        #                     N_input_neurons + pre_syn_indices[s]
+        #                 ]
+        #             else:
+        #                 B[N_input_neurons + pre_syn_indices[s]] = A
 
-                    transmitter = delta * spikes[t, N_input_neurons + n]
-                    # Assemble components to update weight
-                    delta_w = Hebb + Hetero + transmitter
+        #             # Get learning components
+        #             triplet_LTP = (
+        #                 A * pre_trace * spikes[t, N_input_neurons + pre_syn_indices[s]]
+        #             )  # This value is either 0 or very small -> weakens learning
+        #             doublet_LTD = (
+        #                 B[pre_syn_indices[s]]
+        #                 * post_trace
+        #                 * spikes[t, N_input_neurons + n]
+        #             )
 
-                    W_se[t, pre_syn_indices[s], n] = (
-                        W_se[t - 1, pre_syn_indices[s], n] + delta_w
-                    )
+        #             Hebb = round(triplet_LTP - doublet_LTD, 5)
 
-            # Get all pre-synaptic indices
-            pre_syn_indices = nonzero_ee_ws
+        #             Hetero = round(
+        #                 -beta
+        #                 * (
+        #                     W_ee[t - 1, pre_syn_indices[s], n]
+        #                     - W_ee_ideal[pre_syn_indices[s], n]
+        #                 )
+        #                 * (post_trace) ** 3
+        #                 * spikes[
+        #                     t, N_input_neurons + pre_syn_indices[s]
+        #                 ],  # There are never any spikes => this stays at 0
+        #                 5,
+        #             )
 
-            # Check if pre_syn_indices is an empty list
-            if pre_syn_indices.size != 0:
+        #             transmitter = delta * spikes[t, N_input_neurons + n]
 
-                # Loop through each synapse to update strength
-                for s in range(len(pre_syn_indices)):
+        #             # Assemble components to update weight
+        #             delta_w = round(Hebb + Hetero + transmitter, 5)
 
-                    # Update ideal weight
-                    W_ee_ideal[pre_syn_indices[s], n] += (
-                        dt
-                        * tau_const
-                        * (
-                            W_ee[t - 1, pre_syn_indices[s], n]
-                            - W_ee_ideal[pre_syn_indices[s], n]
-                            - P
-                            * W_ee_ideal[pre_syn_indices[s], n]
-                            * ((w_p / 2) - W_ee_ideal[pre_syn_indices[s], n])
-                            * (w_p - W_ee_ideal[pre_syn_indices[s], n])
-                        )
-                    )
+        #             W_ee[t, pre_syn_indices[s], n] = (
+        #                 W_ee[t - 1, pre_syn_indices[s], n] + delta_w
+        #             )
 
-                    # Use the current trace values for STDP calculation
-                    pre_trace = round(
-                        pre_synaptic_trace[t, N_input_neurons + pre_syn_indices[s]], 4
-                    )
-                    post_trace = round(post_synaptic_trace[t, n], 4)
-                    slow_trace = round(
-                        slow_pre_synaptic_trace[
-                            t, N_input_neurons + pre_syn_indices[s]
-                        ],
-                        4,
-                    )
+        #     # Update weights based on ISP-function from Zenke between inhibitory and excitatory neurons
+        #     if nonzero_ie_ws.size != 0:
+        #         # Update H
+        #         H += (
+        #             -(H / tau_H) + sum(spikes[t, N_input_neurons + N_excit_neurons :])
+        #         ) * dt
+        #         G = H - gamma
+        #         z_istdp[n] += (
+        #             -z_istdp[n] / tau_stdp
+        #             + sum(spikes[t, N_input_neurons + N_excit_neurons :])
+        #         ) * dt
 
-                    # Update z_ht, C and B
-                    if spikes[t, N_input_neurons + pre_syn_indices[s]] == 1:
-                        z_ht[N_input_neurons + pre_syn_indices[s]] += dt
-                        C[N_input_neurons + pre_syn_indices[s]] += (
-                            z_ht[N_input_neurons + pre_syn_indices[s]]
-                        ) ** 2
+        #         for id, s in enumerate(nonzero_ie_ws):
 
-                    if A * C[N_input_neurons + pre_syn_indices[s]] <= 1:
-                        B[N_input_neurons + pre_syn_indices[s]] = C[
-                            N_input_neurons + pre_syn_indices[s]
-                        ]
-                    else:
-                        B[N_input_neurons + pre_syn_indices[s]] = A
+        #             # Get traces
+        #             pre_trace = pre_synaptic_trace[
+        #                 t, N_input_neurons + N_excit_neurons + s
+        #             ]
+        #             post_trace = post_synaptic_trace[t, n]
 
-                    # Get learning components
-                    triplet_LTP = (
-                        A * pre_trace * spikes[t, N_input_neurons + pre_syn_indices[s]]
-                    )  # This value is either 0 or very small -> weakens learning
-                    doublet_LTD = (
-                        B[pre_syn_indices[s]]
-                        * post_trace
-                        * spikes[t, N_input_neurons + n]
-                    )
+        #             # Calculate delta weights
+        #             delta_w = (
+        #                 learning_rate
+        #                 * G
+        #                 * (z_istdp[n] + 1)
+        #                 * spikes[t, N_input_neurons + N_excit_neurons + s]
+        #                 + post_trace * spikes[t, n]
+        #             )
 
-                    Hebb = round(triplet_LTP - doublet_LTD, 5)
+        #             # Update weights
+        #             W_ie[t, s, n] = W_ie[t - 1, s, n] + delta_w
+        #     if n == 0:
+        #         print(f"Current th: {V_th[n]}")
 
-                    Hetero = round(
-                        -beta
-                        * (
-                            W_ee[t - 1, pre_syn_indices[s], n]
-                            - W_ee_ideal[pre_syn_indices[s], n]
-                        )
-                        * (post_trace) ** 3
-                        * spikes[
-                            t, N_input_neurons + pre_syn_indices[s]
-                        ],  # There are never any spikes => this stays at 0
-                        5,
-                    )
+        # # Update excitatory-inhibitory mempot and spikes
+        # for n in range(0, N_inhib_neurons):
+        #     if t % update_freq == 0:
+        #         # Update membrane potential for each excitatory neuron
+        #         per_spik = np.sum(
+        #             spikes[
+        #                 t - update_freq : t - 1, N_input_neurons + N_excit_neurons + n
+        #             ]
+        #         )
 
-                    transmitter = delta * spikes[t, N_input_neurons + n]
+        #         if tot_spik > 0:
 
-                    # Assemble components to update weight
-                    delta_w = round(Hebb + Hetero + transmitter, 5)
+        #             ratio = per_spik / tot_spik
 
-                    W_ee[t, pre_syn_indices[s], n] = (
-                        W_ee[t - 1, pre_syn_indices[s], n] + delta_w
-                    )
+        #         else:
+        #             ratio = 0.01
 
-            # Update weights based on ISP-function from Zenke between inhibitory and excitatory neurons
-            if nonzero_ie_ws.size != 0:
-                # Update H
-                H += (
-                    -(H / tau_H) + sum(spikes[t, N_input_neurons + N_excit_neurons :])
-                ) * dt
-                G = H - gamma
-                z_istdp[n] += (
-                    -z_istdp[n] / tau_stdp
-                    + sum(spikes[t, N_input_neurons + N_excit_neurons :])
-                ) * dt
+        #         V_th[N_excit_neurons + n] = max(
+        #             V_reset + (V_th[N_excit_neurons + n] - V_reset) * math.exp(-ratio),
+        #             V_reset,
+        #         )
 
-                for id, s in enumerate(nonzero_ie_ws):
+        #         l += 1
 
-                    # Get traces
-                    pre_trace = pre_synaptic_trace[
-                        t, N_input_neurons + N_excit_neurons + s
-                    ]
-                    post_trace = post_synaptic_trace[t, n]
+        #     # Update incoming spikes as I_in
+        #     I_in = np.dot(
+        #         W_ei[t - 1, :, n],
+        #         spikes[t - 1, N_input_neurons : N_input_neurons + N_excit_neurons],
+        #     )
 
-                    # Calculate delta weights
-                    delta_w = (
-                        learning_rate
-                        * G
-                        * (z_istdp[n] + 1)
-                        * spikes[t, N_input_neurons + N_excit_neurons + s]
-                        + post_trace * spikes[t, n]
-                    )
+        #     I_in_sum.append(I_in)
 
-                    # Update weights
-                    W_ie[t, s, n] = W_ie[t - 1, s, n] + delta_w
-            if n == 0:
-                print(f"Current th: {V_th[n]}")
+        #     # Update membrane potential based on I_in
+        #     delta_MemPot = (
+        #         -((MemPot[t - 1, n + N_excit_neurons] - V_rest) + R * I_in) / tau_mm
+        #     ) * dt
+        #     MemPot[t, n + N_excit_neurons] = MemPot[t - 1, n + N_excit_neurons] - round(
+        #         delta_MemPot, 4
+        #     )
 
-        # Update excitatory-inhibitory mempot and spikes
-        for n in range(0, N_inhib_neurons):
-            if t % update_freq == 0:
-                # Update membrane potential for each excitatory neuron
-                per_spik = np.sum(
-                    spikes[
-                        t - update_freq : t - 1, N_input_neurons + N_excit_neurons + n
-                    ]
-                )
+        #     # Update spikes
+        #     if MemPot[t, n + N_excit_neurons] > V_th[n + N_excit_neurons]:
+        #         spikes[t, n + N_input_neurons + N_excit_neurons] = 1
+        #         post_synaptic_trace[t, n + N_excit_neurons] += dt
+        #         MemPot[t, n + N_excit_neurons] = V_reset
+        #         V_th[n + N_excit_neurons] += 1
+        #     else:
+        #         spikes[t, n + N_input_neurons + N_excit_neurons] = 0
 
-                if tot_spik > 0:
-
-                    ratio = per_spik / tot_spik
-
-                else:
-                    ratio = 0.01
-
-                V_th[N_excit_neurons + n] = max(
-                    V_reset + (V_th[N_excit_neurons + n] - V_reset) * math.exp(-ratio),
-                    V_reset,
-                )
-
-                l += 1
-
-            # Update incoming spikes as I_in
-            I_in = np.dot(
-                W_ei[t - 1, :, n],
-                spikes[t - 1, N_input_neurons : N_input_neurons + N_excit_neurons],
-            )
-
-            I_in_sum.append(I_in)
-
-            # Update membrane potential based on I_in
-            delta_MemPot = (
-                -((MemPot[t - 1, n + N_excit_neurons] - V_rest) + R * I_in) / tau_mm
-            ) * dt
-            MemPot[t, n + N_excit_neurons] = MemPot[t - 1, n + N_excit_neurons] - round(
-                delta_MemPot, 4
-            )
-
-            # Update spikes
-            if MemPot[t, n + N_excit_neurons] > V_th[n + N_excit_neurons]:
-                spikes[t, n + N_input_neurons + N_excit_neurons] = 1
-                post_synaptic_trace[t, n + N_excit_neurons] += dt
-                MemPot[t, n + N_excit_neurons] = V_reset
-                V_th[n + N_excit_neurons] += 1
-            else:
-                spikes[t, n + N_input_neurons + N_excit_neurons] = 0
-
-        # Ensure weights continue their value to the next time step
-        W_ei[t] = W_ei[t - 1]
+        # # Ensure weights continue their value to the next time step
+        # W_ei[t] = W_ei[t - 1]
 
     # print weights heatmapped
     draw_weights_layer(W_ei[-1], "W_ei", "Inhibitory Neurons", "Excitatory Neurons")
