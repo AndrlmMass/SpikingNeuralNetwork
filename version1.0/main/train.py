@@ -18,7 +18,7 @@ if os.path.exists(
         "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\tool"
     )
     sys.path.append(
-        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\train_funcs"
+        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\train_packages"
     )
 else:
     os.chdir(
@@ -31,12 +31,13 @@ else:
         "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\tool"
     )
     sys.path.append(
-        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\train_funcs"
+        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\train_packages"
     )
 
 from plot_training import *
 from plot_network import *
-from train_funcs import adjust_membrane_threshold, update_membrane_potential
+from membrane_potential import adjust_membrane_threshold, update_membrane_potential
+from weight_updating import exc_weight_update, inh_weight_update
 
 
 def train_data(
@@ -81,6 +82,7 @@ def train_data(
     save_model: bool,
     euler: int,
 ):
+    # Initiate relevant arrays and variables
     num_neurons = N_excit_neurons + N_inhib_neurons + N_input_neurons
     spikes = np.zeros((time, num_neurons))
     pre_synaptic_trace = np.zeros((time, num_neurons))
@@ -93,7 +95,6 @@ def train_data(
     V_th_ = float(V_th_)
     B = np.full(num_neurons - N_inhib_neurons, A)
     V_th = np.full(num_neurons - N_input_neurons, V_th_)
-    l = 1
 
     # Add input data before training for input neurons
     spikes[:, :N_input_neurons] = training_data
@@ -107,9 +108,7 @@ def train_data(
         # Update adaptive membrane potential threshold
         if t % update_freq == 0:
             V_th = adjust_membrane_threshold(
-                spikes[t],
-                t,
-                update_freq,
+                spikes[t - t_unit : t - 1],
                 V_th,
                 V_reset,
                 N_input_neurons,
@@ -124,7 +123,6 @@ def train_data(
             W_ie[t - 1],
             W_ei[t - 1],
             spikes[t - 1],
-            t,
             dt,
             N_excit_neurons,
             N_input_neurons,
@@ -141,7 +139,9 @@ def train_data(
 
         #### EXCITATORY NEURONS ####
 
-        # Update W_se ideal weights
+        ## W_se weights ##
+
+        # Update ideal weights
         W_se_ideal += (
             dt
             * tau_const
@@ -152,17 +152,24 @@ def train_data(
             )
         )
 
-        # Update synaptic traces
+        # Update spike variables
         t_unit = euler if t - euler >= 1 else 0
+        post_spikes = spikes[t, N_input_neurons : N_input_neurons + N_excit_neurons]
+        slow_spikes = spikes[t - t_unit, :N_input_neurons]
+        pre_spikes = spikes[t, :N_input_neurons]
+
+        # Update synaptic traces
         pre_synaptic_trace[t] = (
-            pre_synaptic_trace[t - 1] * np.exp(-dt / tau_plus) + spikes[t] * dt
+            pre_synaptic_trace[t - 1, :N_input_neurons] * np.exp(-dt / tau_plus)
+            + pre_spikes * dt
         )
-        post_synaptic_trace[t, :N_excit_neurons] = post_synaptic_trace[
-            t - 1, :N_excit_neurons
-        ] * np.exp(-dt / tau_minus)
+        post_synaptic_trace[t, :N_excit_neurons] = (
+            post_synaptic_trace[t - 1, :N_excit_neurons] * np.exp(-dt / tau_minus)
+            + post_spikes * dt
+        )
         slow_pre_synaptic_trace[t] = (
-            slow_pre_synaptic_trace[t - 1] * np.exp(-dt / tau_slow)
-            + spikes[t - t_unit] * dt
+            slow_pre_synaptic_trace[t - 1, :N_input_neurons] * np.exp(-dt / tau_slow)
+            + slow_spikes * dt
         )
         z_ht = z_ht * np.exp(-dt / tau_ht) + spikes[t] * dt
         C = C * np.exp(-dt / tau_hom) + z_ht**2
@@ -172,8 +179,6 @@ def train_data(
         pre_trace = pre_synaptic_trace[t, :N_input_neurons]
         slow_trace = slow_pre_synaptic_trace[t - t_unit, :N_input_neurons]
         post_trace = post_synaptic_trace[t, :N_excit_neurons]
-        post_spikes = spikes[t, N_input_neurons : N_input_neurons + N_excit_neurons]
-        pre_spikes = spikes[t, :N_input_neurons]
 
         # Get learning components
         triplet_LTP = A * post_trace * slow_trace * pre_spikes
@@ -184,7 +189,67 @@ def train_data(
 
         Hetero = np.round(
             -beta * (W_se[t - 1] - W_se_ideal) * (post_trace) ** 3 * pre_spikes,
-            5,
+            6,
+        )
+
+        transmitter = delta * post_spikes
+
+        # Assemble components to update weight
+        delta_w = Hebb + Hetero + transmitter
+
+        W_se[t] = W_se[t - 1] + delta_w
+
+        ## W_ee weights ##
+
+        # Update ideal weights
+        W_ee_ideal += (
+            dt
+            * tau_const
+            * (
+                W_ee[t - 1]
+                - W_ee_ideal
+                - P * W_ee_ideal * ((w_p / 2) - W_ee_ideal) * (w_p - W_ee_ideal)
+            )
+        )
+
+        # Update spike variables
+        t_unit = euler if t - euler >= 1 else 0
+        post_spikes = spikes[t, N_input_neurons : N_input_neurons + N_excit_neurons]
+        slow_spikes = spikes[t - t_unit, :N_input_neurons]
+        pre_spikes = spikes[t, :N_input_neurons]
+
+        # Update synaptic traces
+        pre_synaptic_trace[t] = (
+            pre_synaptic_trace[t - 1, :N_input_neurons] * np.exp(-dt / tau_plus)
+            + pre_spikes * dt
+        )
+        post_synaptic_trace[t, :N_excit_neurons] = (
+            post_synaptic_trace[t - 1, :N_excit_neurons] * np.exp(-dt / tau_minus)
+            + post_spikes * dt
+        )
+        slow_pre_synaptic_trace[t] = (
+            slow_pre_synaptic_trace[t - 1, :N_input_neurons] * np.exp(-dt / tau_slow)
+            + slow_spikes * dt
+        )
+        z_ht = z_ht * np.exp(-dt / tau_ht) + spikes[t] * dt
+        C = C * np.exp(-dt / tau_hom) + z_ht**2
+        B = np.where(A * C <= 1, C, A)
+
+        # Define pre, slow and post trace
+        pre_trace = pre_synaptic_trace[t, :N_input_neurons]
+        slow_trace = slow_pre_synaptic_trace[t - t_unit, :N_input_neurons]
+        post_trace = post_synaptic_trace[t, :N_excit_neurons]
+
+        # Get learning components
+        triplet_LTP = A * post_trace * slow_trace * pre_spikes
+
+        doublet_LTD = B[:N_input_neurons] * pre_trace * post_spikes
+
+        Hebb = np.round(triplet_LTP - doublet_LTD, 6)
+
+        Hetero = np.round(
+            -beta * (W_se[t - 1] - W_se_ideal) * (post_trace) ** 3 * pre_spikes,
+            6,
         )
 
         transmitter = delta * post_spikes
