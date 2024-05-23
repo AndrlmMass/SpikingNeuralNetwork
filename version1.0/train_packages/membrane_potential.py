@@ -2,9 +2,7 @@ import numpy as np
 
 
 # Create function that takes in spikes and indices and outputs an adjusted membrane potential
-def adjust_membrane_threshold(
-    spikes, t, update_freq, V_th, V_reset, N_input_neurons, N_excit_neurons
-):
+def adjust_membrane_threshold(spikes, V_th, V_reset, N_input_neurons, N_excit_neurons):
     ## Excitatory neurons ##
 
     # Calculate total spikes in the previous time interval
@@ -27,13 +25,11 @@ def adjust_membrane_threshold(
     ## Inhibitory neurons ##
 
     # Calculate total spikes in the previous time interval
-    tot_spik_i = np.sum(
-        spikes[t - update_freq : t - 1, N_input_neurons + N_excit_neurons :]
-    )
+    tot_spik_i = np.sum(spikes[0, N_input_neurons + N_excit_neurons :])
 
     # Calculate total spikes per neuron (axis=0) in the previous time interval
     per_spik_i = np.sum(
-        spikes[t - update_freq : t - 1, N_input_neurons + N_excit_neurons :],
+        spikes[0, N_input_neurons + N_excit_neurons :],
         axis=0,
     )
 
@@ -55,7 +51,6 @@ def update_membrane_potential(
     W_ie,
     W_ei,
     spikes,
-    t,
     dt,
     N_excit_neurons,
     N_input_neurons,
@@ -66,20 +61,20 @@ def update_membrane_potential(
 ):
     # Update I_in
     I_in_e = (
-        np.dot(W_se, spikes[:-1, :N_input_neurons])
+        np.dot(W_se, spikes[-1, :N_input_neurons])
         + np.dot(
             W_ee,
-            spikes[:-1, N_input_neurons:-N_inhib_neurons],
+            spikes[-1, N_input_neurons:-N_inhib_neurons],
         )
         + np.dot(
             W_ie.T,
-            spikes[:-1, N_input_neurons + N_excit_neurons :],
+            spikes[-1, N_input_neurons + N_excit_neurons :],
         )
     )
 
     I_in_i = np.dot(
         W_ei,
-        spikes[N_input_neurons:-N_inhib_neurons],
+        spikes[-1, N_input_neurons:-N_inhib_neurons],
     )
 
     # Update membrane potential based on I_in

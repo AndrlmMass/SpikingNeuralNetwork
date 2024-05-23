@@ -137,9 +137,42 @@ def train_data(
         MemPot[t][spike_mask] = V_reset
         V_th[spike_mask] += 1
 
-        #### EXCITATORY NEURONS ####
-
-        ## W_se weights ##
+        # Update excitatory weights
+        (
+            W_se[t],
+            W_se_ideal[t],
+            W_ee[t],
+            W_ee_ideal[t],
+            W_ie[t],
+            W_ie_ideal[t],
+            pre_synaptic_trace[t],
+            post_synaptic_trace[t],
+            slow_pre_synaptic_trace[t],
+        ) = exc_weight_update(
+            dt,
+            tau_const,
+            W_se[t - 1],
+            W_ee[t - 1],
+            W_se_ideal[t - 1],
+            W_ee_ideal[t - 1],
+            P,
+            w_p,
+            spikes[t - t_unit : t - 1],
+            N_input_neurons,
+            N_excit_neurons,
+            N_inhib_neurons,
+            pre_synaptic_trace,
+            post_synaptic_trace,
+            slow_pre_synaptic_trace,
+            tau_plus,
+            tau_minus,
+            tau_slow,
+            tau_ht,
+            tau_hom,
+            A,
+            beta,
+            delta,
+        )
 
         # Update ideal weights
         W_se_ideal += (
