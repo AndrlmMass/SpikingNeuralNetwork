@@ -46,8 +46,13 @@ def exc_weight_update(
     )
 
     # Update spike variables
-    post_spikes_se = spikes[N_input_neurons:-N_inhib_neurons]
-    pre_spikes_se = spikes[:N_input_neurons]
+    if spikes.shape[0] == 0:
+        spikes = spikes.reshape(-1, 1)
+        post_spikes_se = spikes[N_input_neurons:-N_inhib_neurons]
+        pre_spikes_se = spikes[:N_input_neurons]
+    else:
+        post_spikes_se = spikes[0, N_input_neurons:-N_inhib_neurons]
+        pre_spikes_se = spikes[0, :N_input_neurons]
     pre_synaptic_trace *= np.exp(-dt / tau_plus)
     post_synaptic_trace *= np.exp(-dt / tau_minus)
     slow_pre_synaptic_trace *= np.exp(-dt / tau_slow)
@@ -59,7 +64,7 @@ def exc_weight_update(
     slow_trace_se = slow_pre_synaptic_trace[:N_input_neurons] + pre_spikes_se * dt
 
     # Update z_th, C and B -> this is only done once for W_se and W_ee
-    z_ht = z_ht * np.exp(-dt / tau_ht) + spikes * dt
+    z_ht = z_ht * np.exp(-dt / tau_ht) + spikes[0] * dt
     C = C * np.exp(-dt / tau_hom) + z_ht**2
     B = np.where(A * C <= 1, C, A)
 
@@ -165,20 +170,19 @@ def inh_weight_update(
     # Update H
     H += (-(H / tau_H) + sum(spikes[N_input_neurons:-N_input_neurons])) * dt
     G = H - gamma
-    print(z_istdp.shape, post_spikes.shape, post_trace.shape, pre_spikes.shape)
 
     # Reshape arrays
-    z_istdp = z_istdp.reshape(-1, 1)
-    post_spikes = post_spikes.reshape(1, -1)
-    post_trace = post_trace.reshape(1, -1)
-    pre_spikes = pre_spikes.reshape(-1, 1)
+    z_istdp_reshaped = z_istdp.reshape(-1, 1)
+    post_spikes_reshaped = post_spikes.reshape(1, -1)
+    post_trace_reshaped = post_trace.reshape(1, -1)
+    pre_spikes_reshaped = pre_spikes.reshape(-1, 1)
 
     print(z_istdp.shape, post_spikes.shape, post_trace.shape, pre_spikes.shape)
 
     # Calculate delta weights
-    delta_w = learning_rate * G * np.dot((z_istdp + 1), post_spikes) + np.dot(
-        pre_spikes, post_trace
-    )
+    delta_w = learning_rate * G * np.dot(
+        (z_istdp_reshaped + 1), post_spikes_reshaped
+    ) + np.dot(pre_spikes_reshaped, post_trace_reshaped)
 
     # Update weights
     W_ie += delta_w

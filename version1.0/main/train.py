@@ -158,7 +158,7 @@ def train_data(
             W_ee_ideal,
             P,
             w_p,
-            spikes[t - 1],
+            spikes[t - t_unit : t - 1],
             N_input_neurons,
             N_excit_neurons,
             N_inhib_neurons,
@@ -178,19 +178,21 @@ def train_data(
         )
 
         # Update inhibitory weights
-        W_ie, z_istdp, H, post_synaptic_trace[t], inh_weight_update(
-            H,
-            dt,
-            W_ie[t - 1],
-            z_istdp,
-            tau_H,
-            gamma,
-            tau_stdp,
-            learning_rate,
-            spikes[t - 1],
-            N_input_neurons,
-            N_inhib_neurons,
-            post_synaptic_trace[t - 1],
+        W_ie[t], z_istdp, H, post_synaptic_trace[t, :-N_inhib_neurons] = (
+            inh_weight_update(
+                H,
+                dt,
+                W_ie[t - 1],
+                z_istdp,
+                tau_H,
+                gamma,
+                tau_stdp,
+                learning_rate,
+                spikes[t - 1],
+                N_input_neurons,
+                N_inhib_neurons,
+                post_synaptic_trace[t - 1],
+            )
         )
 
         # Ensure weights continue their value to the next time step
