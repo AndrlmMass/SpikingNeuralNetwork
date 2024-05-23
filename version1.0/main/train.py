@@ -88,7 +88,7 @@ def train_data(
     slow_pre_synaptic_trace = np.zeros((time, num_neurons))
     C = np.full(num_neurons, A)
     z_ht = np.ones((num_neurons))
-    z_istdp = np.zeros((N_excit_neurons))
+    z_istdp = np.zeros((N_inhib_neurons))
     H = 0
     V_th_ = float(V_th_)
     B = np.full(num_neurons - N_inhib_neurons, A)
@@ -141,27 +141,24 @@ def train_data(
         # Update excitatory weights
         (
             W_se[t],
-            W_se_ideal[t],
             W_ee[t],
-            W_ee_ideal[t],
-            W_ie[t],
-            W_ie_ideal[t],
+            W_se_ideal,
+            W_ee_ideal,
             pre_synaptic_trace[t],
             post_synaptic_trace[t],
             slow_pre_synaptic_trace[t],
             z_ht,
             C,
-            B,
         ) = exc_weight_update(
             dt,
             tau_const,
             W_se[t - 1],
             W_ee[t - 1],
-            W_se_ideal[t - 1],
-            W_ee_ideal[t - 1],
+            W_se_ideal,
+            W_ee_ideal,
             P,
             w_p,
-            spikes[t - t_unit : t - 1],
+            spikes[t - 1],
             N_input_neurons,
             N_excit_neurons,
             N_inhib_neurons,
@@ -181,7 +178,7 @@ def train_data(
         )
 
         # Update inhibitory weights
-        W_ei[t], W_ei_ideal[t] = inh_weight_update(
+        inh_weight_update(
             H,
             dt,
             W_ie[t - 1],
@@ -195,6 +192,7 @@ def train_data(
             N_inhib_neurons,
             post_synaptic_trace[t - 1],
         )
+        # post_synaptic_trace[t] = post_trace
 
         # Ensure weights continue their value to the next time step
         W_ei[t] = W_ei[t - 1]
