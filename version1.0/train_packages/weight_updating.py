@@ -167,8 +167,18 @@ def inh_weight_update(
     G = H - gamma
     print(z_istdp.shape, post_spikes.shape, post_trace.shape, pre_spikes.shape)
 
+    # Reshape arrays
+    z_istdp = z_istdp.reshape(-1, 1)
+    post_spikes = post_spikes.reshape(1, -1)
+    post_trace = post_trace.reshape(1, -1)
+    pre_spikes = pre_spikes.reshape(-1, 1)
+
+    print(z_istdp.shape, post_spikes.shape, post_trace.shape, pre_spikes.shape)
+
     # Calculate delta weights
-    delta_w = learning_rate * G * (z_istdp + 1) * post_spikes + post_trace * pre_spikes
+    delta_w = learning_rate * G * np.dot((z_istdp + 1), post_spikes) + np.dot(
+        pre_spikes, post_trace
+    )
 
     # Update weights
     W_ie += delta_w

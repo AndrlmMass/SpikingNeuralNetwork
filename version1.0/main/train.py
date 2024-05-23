@@ -178,7 +178,7 @@ def train_data(
         )
 
         # Update inhibitory weights
-        inh_weight_update(
+        W_ie, z_istdp, H, post_synaptic_trace[t], inh_weight_update(
             H,
             dt,
             W_ie[t - 1],
@@ -192,7 +192,6 @@ def train_data(
             N_inhib_neurons,
             post_synaptic_trace[t - 1],
         )
-        # post_synaptic_trace[t] = post_trace
 
         # Ensure weights continue their value to the next time step
         W_ei[t] = W_ei[t - 1]

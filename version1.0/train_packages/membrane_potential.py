@@ -16,6 +16,7 @@ def adjust_membrane_threshold(spikes, V_th, V_reset, N_input_neurons, N_excit_ne
 
     # Calculate the ratio between local and global spikes
     ratio_e = np.where(tot_spik_e > 0, per_spik_e / tot_spik_e, 0.01)
+    print(V_th[:N_excit_neurons].shape, V_reset)
 
     # Update the membrane potential threshold according to the radio_e
     V_th[:N_excit_neurons] = np.maximum(
