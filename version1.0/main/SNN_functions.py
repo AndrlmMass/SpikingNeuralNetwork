@@ -302,7 +302,6 @@ class SNN_STDP:
             tau_minus=self.tau_minus,
             tau_slow=self.tau_slow,
             tau_m=self.tau_m,
-            tau_mm=self.tau_mm,
             tau_ht=self.tau_ht,
             tau_hom=self.tau_hom,
             tau_stdp=self.tau_stdp,
@@ -326,7 +325,6 @@ class SNN_STDP:
             W_ie=self.W_ie,
             W_ie_ideal=self.W_ie_ideal,
             save_model=save_model,
-            euler=self.euler,
         )
 
         if retur:

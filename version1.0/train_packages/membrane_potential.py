@@ -57,31 +57,31 @@ def update_membrane_potential(
     N_inhib_neurons,
     V_rest,
     R,
-    tau_mm,
+    tau_m,
 ):
     # Update I_in
     I_in_e = (
-        np.dot(W_se, spikes[-1, :N_input_neurons])
+        np.dot(W_se, spikes[:N_input_neurons])
         + np.dot(
             W_ee,
-            spikes[-1, N_input_neurons:-N_inhib_neurons],
+            spikes[N_input_neurons:-N_inhib_neurons],
         )
         + np.dot(
             W_ie.T,
-            spikes[-1, N_input_neurons + N_excit_neurons :],
+            spikes[N_input_neurons + N_excit_neurons :],
         )
     )
 
     I_in_i = np.dot(
-        W_ei,
-        spikes[-1, N_input_neurons:-N_inhib_neurons],
+        W_ei.T,
+        spikes[N_input_neurons:-N_inhib_neurons],
     )
 
     # Update membrane potential based on I_in
-    delta_MemPot_e = (-((MemPot[:N_excit_neurons] - V_rest) + R * I_in_e) / tau_mm) * dt
-    MemPot[:N_excit_neurons] = MemPot[:N_excit_neurons] - round(delta_MemPot_e, 4)
+    delta_MemPot_e = (-((MemPot[:N_excit_neurons] - V_rest) + R * I_in_e) / tau_m) * dt
+    MemPot[:N_excit_neurons] = MemPot[:N_excit_neurons] - np.round(delta_MemPot_e, 4)
 
-    delta_MemPot_i = (-((MemPot[N_excit_neurons:] - V_rest) + R * I_in_i) / tau_mm) * dt
-    MemPot[N_excit_neurons:] = MemPot[N_excit_neurons:] - round(delta_MemPot_i, 4)
+    delta_MemPot_i = (-((MemPot[N_excit_neurons:] - V_rest) + R * I_in_i) / tau_m) * dt
+    MemPot[N_excit_neurons:] = MemPot[N_excit_neurons:] - np.round(delta_MemPot_i, 4)
 
     return MemPot
