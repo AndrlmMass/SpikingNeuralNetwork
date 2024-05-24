@@ -2,35 +2,22 @@ import numpy as np
 
 
 # Create function that takes in spikes and indices and outputs an adjusted membrane potential
-def adjust_membrane_threshold(spikes, V_th, V_reset, N_input_neurons, N_excit_neurons):
+def adjust_membrane_threshold(
+    spikes, V_th, V_reset, N_input_neurons, N_excit_neurons, N_inhib_neurons
+):
     ## Excitatory neurons ##
 
     # Calculate total spikes in the previous time interval
-    tot_spik_e = np.sum(
-        spikes[
-            :,
-            N_input_neurons : N_input_neurons + N_excit_neurons,
-        ]
-    )
+    tot_spik_e = np.sum(spikes[N_input_neurons:-N_inhib_neurons,])
 
     # Calculate total spikes per neuron (axis=0) in the previous time interval
     per_spik_e = np.sum(
-        spikes[
-            :,
-            N_input_neurons : N_input_neurons + N_excit_neurons,
-        ],
+        spikes[N_input_neurons:-N_inhib_neurons,],
         axis=0,
     )
 
     # Calculate the ratio between local and global spikes
     ratio_e = np.where(tot_spik_e > 0, per_spik_e / tot_spik_e, 0.01)
-    print(
-        V_th[:N_excit_neurons].shape,
-        V_reset,
-        ratio_e.shape,
-        tot_spik_e.shape,
-        per_spik_e.shape,
-    )
 
     # Update the membrane potential threshold according to the radio_e
     V_th[:N_excit_neurons] = np.maximum(
@@ -40,11 +27,11 @@ def adjust_membrane_threshold(spikes, V_th, V_reset, N_input_neurons, N_excit_ne
     ## Inhibitory neurons ##
 
     # Calculate total spikes in the previous time interval
-    tot_spik_i = np.sum(spikes[0, N_input_neurons + N_excit_neurons :])
+    tot_spik_i = np.sum(spikes[-N_inhib_neurons:])
 
     # Calculate total spikes per neuron (axis=0) in the previous time interval
     per_spik_i = np.sum(
-        spikes[0, N_input_neurons + N_excit_neurons :],
+        spikes[-N_inhib_neurons:],
         axis=0,
     )
 

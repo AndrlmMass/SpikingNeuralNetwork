@@ -102,17 +102,19 @@ def train_data(
 
     # Loop through time and update membrane potential, spikes and weights => infinite knowledge
     for t in tqdm(range(1, time), desc="Training network"):
-        # Update t_unit for slow traces
-        t_unit = t - update_freq if t - update_freq > 0 else 0
+
+        # Calculate euler time unit
+        euler_unit = t - update_freq if t - update_freq > 0 else 0
 
         # Update adaptive membrane potential threshold
         if t % update_freq == 0:
             V_th = adjust_membrane_threshold(
-                spikes[t - t_unit : t - 1],
+                spikes[t - 1],
                 V_th,
                 V_reset,
                 N_input_neurons,
                 N_excit_neurons,
+                N_inhib_neurons,
             )
 
         # Update membrane potential
@@ -158,13 +160,13 @@ def train_data(
             W_ee_ideal,
             P,
             w_p,
-            spikes[t - t_unit : t - 1],
+            spikes[t - 1],
             N_input_neurons,
             N_excit_neurons,
             N_inhib_neurons,
             pre_synaptic_trace[t - 1],
             post_synaptic_trace[t - 1],
-            slow_pre_synaptic_trace[t - t_unit],
+            slow_pre_synaptic_trace[euler_unit],
             tau_plus,
             tau_minus,
             tau_slow,

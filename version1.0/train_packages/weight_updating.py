@@ -34,7 +34,6 @@ def exc_weight_update(
     ## W_se weights ##
 
     # Update ideal weights
-    print(W_se_ideal.shape)
     W_se_ideal += (
         dt
         * tau_const
@@ -44,21 +43,14 @@ def exc_weight_update(
             - P * W_se_ideal * ((w_p / 2) - W_se_ideal) * (w_p - W_se_ideal)
         )
     )
-
     # Update spike variables
-    if spikes.shape[0] == 0:
-        spikes = spikes.reshape(-1, 1)
-        post_spikes_se = spikes[N_input_neurons:-N_inhib_neurons]
-        pre_spikes_se = spikes[:N_input_neurons]
-    else:
-        post_spikes_se = spikes[0, N_input_neurons:-N_inhib_neurons]
-        pre_spikes_se = spikes[0, :N_input_neurons]
+    post_spikes_se = spikes[N_input_neurons:-N_inhib_neurons]
+    pre_spikes_se = spikes[:N_input_neurons]
+
+    # Update synaptic traces
     pre_synaptic_trace *= np.exp(-dt / tau_plus)
     post_synaptic_trace *= np.exp(-dt / tau_minus)
     slow_pre_synaptic_trace *= np.exp(-dt / tau_slow)
-    print(pre_synaptic_trace.shape, pre_spikes_se.shape)
-
-    # Update synaptic traces
     pre_trace_se = pre_synaptic_trace[:N_input_neurons] + pre_spikes_se * dt
     post_trace_se = post_synaptic_trace[:N_excit_neurons] + post_spikes_se * dt
     slow_trace_se = slow_pre_synaptic_trace[:N_input_neurons] + pre_spikes_se * dt
@@ -176,8 +168,6 @@ def inh_weight_update(
     post_spikes_reshaped = post_spikes.reshape(1, -1)
     post_trace_reshaped = post_trace.reshape(1, -1)
     pre_spikes_reshaped = pre_spikes.reshape(-1, 1)
-
-    print(z_istdp.shape, post_spikes.shape, post_trace.shape, pre_spikes.shape)
 
     # Calculate delta weights
     delta_w = learning_rate * G * np.dot(
