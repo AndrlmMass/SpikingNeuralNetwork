@@ -1,6 +1,7 @@
 # Train network script
 import numpy as np
 from tqdm import tqdm
+from numba import njit
 import os
 import sys
 
@@ -19,7 +20,10 @@ sys.path.append(os.path.join(base_path, "train_packages"))
 
 from plot_training import *
 from plot_network import *
-from membrane_potential import adjust_membrane_threshold, update_membrane_potential
+from membrane_potential import (
+    adjust_membrane_threshold,
+    update_membrane_potential,
+)
 from weight_updating import exc_weight_update, inh_weight_update
 
 
@@ -62,6 +66,8 @@ def train_data(
     W_ie_ideal: np.ndarray,
     gamma: float | int,
     save_model: bool,
+    item_lim: int,
+    items: int,
 ):
     # Initiate relevant arrays and variables
     num_neurons = N_excit_neurons + N_inhib_neurons + N_input_neurons
@@ -74,7 +80,6 @@ def train_data(
     z_istdp = np.zeros((N_inhib_neurons))
     H = 0
     V_th_ = float(V_th_)
-    B = np.full(num_neurons - N_inhib_neurons, A)
     V_th = np.full(num_neurons - N_input_neurons, V_th_)
 
     # Add input data before training for input neurons
@@ -83,15 +88,30 @@ def train_data(
     # Define update frequency for adaptive threshold
     update_freq = time // 100
 
+    # Convert functions if njit is true
+    njit_ = int(items > item_lim)
+    if njit_:
+        adjust_membrane_threshold_func = njit(adjust_membrane_threshold)
+        update_membrane_potential_func = njit(update_membrane_potential)
+        exc_weight_update_func = njit(exc_weight_update)
+        inh_weight_update_func = njit(inh_weight_update)
+        print("running njit")
+    else:
+        adjust_membrane_threshold_func = adjust_membrane_threshold
+        update_membrane_potential_func = update_membrane_potential
+        exc_weight_update_func = exc_weight_update
+        inh_weight_update_func = inh_weight_update
+        print("running without njit")
+
     # Loop through time and update membrane potential, spikes and weights => infinite knowledge
     for t in tqdm(range(1, time), desc="Training network"):
 
         # Calculate euler time unit
-        euler_unit = t - update_freq if t - update_freq > 0 else 0
+        euler_unit = int(t - update_freq > 0) * (t - update_freq)
 
         # Update adaptive membrane potential threshold
         if t % update_freq == 0:
-            V_th = adjust_membrane_threshold(
+            V_th = adjust_membrane_threshold_func(
                 spikes[t - 1],
                 V_th,
                 V_reset,
@@ -101,7 +121,7 @@ def train_data(
             )
 
         # Update membrane potential
-        MemPot[t] = update_membrane_potential(
+        MemPot[t] = update_membrane_potential_func(
             MemPot[t - 1],
             W_se[t - 1],
             W_ee[t - 1],
@@ -121,7 +141,7 @@ def train_data(
         spike_mask = MemPot[t] > V_th
         spikes[t, N_input_neurons:] = spike_mask.astype(int)
         MemPot[t][spike_mask] = V_reset
-        V_th[spike_mask] += 1
+        V_th[spike_mask] = V_th_
 
         # Update excitatory weights
         (
@@ -134,7 +154,7 @@ def train_data(
             slow_pre_synaptic_trace[t],
             z_ht,
             C,
-        ) = exc_weight_update(
+        ) = exc_weight_update_func(
             dt,
             tau_const,
             W_se[t - 1],
@@ -166,7 +186,7 @@ def train_data(
 
         # Update inhibitory weights
         W_ie[t], z_istdp, H, post_synaptic_trace[t, :-N_inhib_neurons] = (
-            inh_weight_update(
+            inh_weight_update_func(
                 H,
                 dt,
                 W_ie[t - 1],

@@ -48,9 +48,10 @@ snn_params = {
     "tau_H": 10,
     "learning_rate": 0.001,
     "gamma": 0.1,
-    "num_items": 100,
+    "num_items": 16,
     "dt": 0.001,
     "T": 0.1,
+    "wp": 0.5,
     "V_rest": -60,
     "min_weight": 0,
     "max_weight": 5,
@@ -114,8 +115,8 @@ data, labels = snn.load_data(rand_lvl=0.05, retur=True)
     W_ie,
 ) = snn.train_data(
     retur=True,
-    w_p=0.5,
     save_model=True,
+    item_lim=24,
 )
 
 # Reload model

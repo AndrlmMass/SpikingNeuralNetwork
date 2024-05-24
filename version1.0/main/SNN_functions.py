@@ -84,6 +84,7 @@ class SNN_STDP:
         num_items: float,
         dt: float,
         T: int,
+        wp: float | int,
         V_rest: int,
         max_weight: float | int,
         min_weight: float | int,
@@ -111,6 +112,7 @@ class SNN_STDP:
         self.gamma = gamma
         self.learning_rate = learning_rate
         self.dt = dt
+        self.wp = wp
         self.T = T
         self.A = A
         self.P = P
@@ -265,9 +267,9 @@ class SNN_STDP:
 
     def train_data(
         self,
-        w_p: float | int,
         retur: bool,
         save_model: bool,
+        item_lim: int,
     ):
         (
             self.spikes,
@@ -288,7 +290,7 @@ class SNN_STDP:
             R=self.R,
             A=self.A,
             P=self.P,
-            w_p=w_p,  # Defines the upper stable point of weight convergence
+            w_p=self.wp,  # Defines the upper stable point of weight convergence
             beta=self.beta,
             delta=self.delta,
             time=self.time,
@@ -306,7 +308,7 @@ class SNN_STDP:
             tau_H=self.tau_H,
             learning_rate=self.learning_rate,
             gamma=self.gamma,
-            tau_const=self.tau_const,  # Defines the rate of convergence with ideal weights, e.g., 20 minutes
+            tau_const=self.tau_const,
             training_data=self.training_data,
             N_excit_neurons=self.N_excit_neurons,
             N_inhib_neurons=self.N_inhib_neurons,
@@ -323,6 +325,8 @@ class SNN_STDP:
             W_ie=self.W_ie,
             W_ie_ideal=self.W_ie_ideal,
             save_model=save_model,
+            item_lim=item_lim,
+            items=self.num_items,
         )
 
         if retur:

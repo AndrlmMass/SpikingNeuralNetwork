@@ -4,6 +4,7 @@
 import numpy as np
 import math
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 
 
 def plot_membrane_activity(
@@ -42,8 +43,6 @@ def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie):
     W_se = W_se.reshape(W_se.shape[0], -1)[:, ::500]
     W_ee = W_ee.reshape(W_ee.shape[0], -1)[:, ::500]
     W_ie = W_ie.reshape(W_ie.shape[0], -1)[:, ::500]
-
-    print(f"W_se: {W_se.shape}, W_ee: {W_ee.shape}, W_ie: {W_ie.shape}")
 
     # Define color and label mapping for plots
     weight_plots = {
@@ -148,14 +147,17 @@ def plot_clusters(spikes, labels, N_input_neurons, N_excit_neurons, N_inhib_neur
     ax[1].imshow(W_ie_colors, interpolation="nearest")
     ax[1].set_title("Class preference in inhibitory layer")
 
-    cax3 = ax[2].imshow(W_se_colors, interpolation="nearest")
+    ax[2].imshow(W_se_colors, interpolation="nearest")
     ax[2].set_title("Class preference in stimulation layer")
 
-    # Create a colorbar for the last subplot
-    cbar3 = fig.colorbar(cax3, ax=ax[2], orientation="vertical")
-    cbar3.set_ticks([0.25, 0.75, 1.25, 1.75])
-    cbar3.ax.set_yticklabels(["Class 0", "Class 1", "Class 2", "Class 3"])
-    cbar3.set_label("Class preference")
+    # Create a custom legend for the classes
+    class_labels = ["Triangle class", "Circle class", "Square class", "X class"]
+    class_colors = ["red", "green", "blue", "yellow"]
+    legend_patches = [
+        Patch(color=class_colors[i], label=class_labels[i]) for i in range(4)
+    ]
+
+    fig.legend(handles=legend_patches, loc="upper right", title="Class Legends")
 
     plt.show()
 
