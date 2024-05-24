@@ -4,7 +4,6 @@
 import numpy as np
 import math
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
 
 
 def plot_membrane_activity(
@@ -20,7 +19,7 @@ def plot_membrane_activity(
     plt.show()
 
 
-def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie, dt):
+def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie):
     # Create a figure and a set of subplots
     fig, axs = plt.subplots(2, 1, figsize=(12, 16))
 

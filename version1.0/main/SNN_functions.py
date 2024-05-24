@@ -361,7 +361,6 @@ class SNN_STDP:
                 W_se=self.W_se,
                 W_ee=self.W_ee,
                 W_ie=self.W_ie,
-                dt=self.dt,
             )
         if mv:
             plot_membrane_activity(

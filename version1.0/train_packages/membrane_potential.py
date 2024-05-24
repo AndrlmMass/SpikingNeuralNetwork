@@ -1,4 +1,5 @@
 import numpy as np
+from numba import njit
 
 
 # Create function that takes in spikes and indices and outputs an adjusted membrane potential
@@ -48,6 +49,7 @@ def adjust_membrane_threshold(
     return V_th
 
 
+@njit
 def update_membrane_potential(
     MemPot,
     W_se,

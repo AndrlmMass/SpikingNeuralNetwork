@@ -48,7 +48,7 @@ snn_params = {
     "tau_H": 10,
     "learning_rate": 0.001,
     "gamma": 0.1,
-    "num_items": 8,
+    "num_items": 100,
     "dt": 0.001,
     "T": 0.1,
     "V_rest": -60,

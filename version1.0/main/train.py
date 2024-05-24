@@ -4,35 +4,18 @@ from tqdm import tqdm
 import os
 import sys
 
-# Set current working directories and add relevant directories to path
+# Set the current directory based on the existence of a specific path
 if os.path.exists(
     "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
 ):
-    os.chdir(
-        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
-    )
-    sys.path.append(
-        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\plot"
-    )
-    sys.path.append(
-        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\tool"
-    )
-    sys.path.append(
-        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\train_packages"
-    )
+    base_path = "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
 else:
-    os.chdir(
-        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
-    )
-    sys.path.append(
-        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\plot"
-    )
-    sys.path.append(
-        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\tool"
-    )
-    sys.path.append(
-        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\train_packages"
-    )
+    base_path = "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
+
+os.chdir(base_path)
+sys.path.append(os.path.join(base_path, "plot"))
+sys.path.append(os.path.join(base_path, "tool"))
+sys.path.append(os.path.join(base_path, "train_packages"))
 
 from plot_training import *
 from plot_network import *
