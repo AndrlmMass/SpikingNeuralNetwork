@@ -6,7 +6,6 @@ import sys
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
-from PyQt5.QtWidgets import QApplication, QMainWindow
 
 # Set current working directories and add relevant directories to path
 if os.path.exists(
@@ -268,7 +267,6 @@ class SNN_STDP:
         self,
         w_p: float | int,
         retur: bool,
-        update_frequency: int,
         save_model: bool,
     ):
         (

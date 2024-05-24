@@ -134,7 +134,7 @@ def train_data(
             tau_m,
         )
 
-        # Update spikes based on mempot
+        # Update spikes based on membrane potential
         spike_mask = MemPot[t] > V_th
         spikes[t, N_input_neurons:] = spike_mask.astype(int)
         MemPot[t][spike_mask] = V_reset
@@ -159,6 +159,7 @@ def train_data(
             W_se_ideal,
             W_ee_ideal,
             P,
+            t,
             w_p,
             spikes[t - 1],
             N_input_neurons,
@@ -175,6 +176,7 @@ def train_data(
             A,
             beta,
             delta,
+            update_freq,
             z_ht,
             C,
         )
@@ -199,12 +201,6 @@ def train_data(
 
         # Ensure weights continue their value to the next time step
         W_ei[t] = W_ei[t - 1]
-
-    # print weights heatmapped
-    draw_weights_layer(W_ei[-1], "W_ei", "Inhibitory Neurons", "Excitatory Neurons")
-    draw_weights_layer(W_ie[-1], "W_ie", "Excitatory Neurons", "Inhibitory Neurons")
-    draw_weights_layer(W_se[-1], "W_se", "Input Neurons", "Excitatory Neurons")
-    draw_weights_layer(W_ee[-1], "W_ee", "Excitatory Neurons", "Excitatory Neurons")
 
     if save_model:
         # Create folder to save model

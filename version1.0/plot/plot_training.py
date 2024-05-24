@@ -87,7 +87,11 @@ def plot_clusters(spikes, labels, N_input_neurons, N_excit_neurons, N_inhib_neur
         # Append class-preference to list
         idx = np.argmax(total_class_spikes)
         class_preference[n] = idx
-        intensity[n] = total_class_spikes[idx] / np.sum(total_class_spikes)
+        total_spikes = np.sum(total_class_spikes)
+        if total_spikes > 0:
+            intensity[n] = total_class_spikes[idx] / total_spikes
+        else:
+            intensity[n] = 0
 
     # Define base colors for each class
     base_colors = np.array(

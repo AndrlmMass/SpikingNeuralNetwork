@@ -115,7 +115,6 @@ data, labels = snn.load_data(rand_lvl=0.05, retur=True)
 ) = snn.train_data(
     retur=True,
     w_p=0.5,
-    update_frequency=5,
     save_model=True,
 )
 
