@@ -2,6 +2,8 @@
 import numpy as np
 from tqdm import tqdm
 from numba import njit
+import time
+import threading
 import os
 import sys
 
@@ -30,6 +32,44 @@ from weight_updating import exc_weight_update, inh_weight_update
 import numpy as np
 import os
 from tqdm import tqdm
+
+def load_model(folder, stop_event):
+    W_se = np.load(f"model/{folder}/W_se.npy")
+    W_ee = np.load(f"model/{folder}/W_ee.npy")
+    W_ie = np.load(f"model/{folder}/W_ie.npy")
+    W_ei = np.load(f"model/{folder}/W_ei.npy")
+    spikes = np.load(f"model/{folder}/spikes.npy")
+    MemPot = np.load(f"model/{folder}/MemPot.npy")
+    pre_synaptic_trace = np.load(f"model/{folder}/pre_synaptic_trace.npy")
+    post_synaptic_trace = np.load(f"model/{folder}/post_synaptic_trace.npy")
+    slow_pre_synaptic_trace = np.load(f"model/{folder}/slow_pre_synaptic_trace.npy")
+    z_istdp = np.load(f"model/{folder}/z_istdp_trace.npy")
+    I_in_ls = np.load(f"model/{folder}/I_in_ls.npy")
+    
+    # Signal that loading is complete
+    stop_event.set()
+    
+    return (
+        W_se,
+        W_ee,
+        W_ie,
+        W_ei,
+        spikes,
+        MemPot,
+        pre_synaptic_trace,
+        post_synaptic_trace,
+        slow_pre_synaptic_trace,
+        z_istdp,
+        I_in_ls,
+    )
+
+def display_animation(stop_event):
+    waiting_animation = [".  ", ".. ", "...", ".. ", ".  ", "   "]
+    idx = 0
+    while not stop_event.is_set():
+        print(f"Reloading model{waiting_animation[idx]}", end="\r")
+        idx = (idx + 1) % len(waiting_animation)
+        time.sleep(0.2)  # Adjust the speed of the animation as needed
 
 def train_data(
     R: float | int,
@@ -91,7 +131,13 @@ def train_data(
         if os.path.exists(config_path):
             saved_config = np.load(config_path, allow_pickle=True).item()
             if filtered_locs == saved_config:
-                print("Reloading model...")
+                stop_event = threading.Event()
+                
+                # Start the animation in a separate thread
+                animation_thread = threading.Thread(target=display_animation, args=(stop_event,))
+                animation_thread.start()
+                
+                # Load the model (this will run in the main thread)
                 W_se = np.load(f"model/{folder}/W_se.npy")
                 W_ee = np.load(f"model/{folder}/W_ee.npy")
                 W_ie = np.load(f"model/{folder}/W_ie.npy")
@@ -103,22 +149,32 @@ def train_data(
                 slow_pre_synaptic_trace = np.load(f"model/{folder}/slow_pre_synaptic_trace.npy")
                 z_istdp = np.load(f"model/{folder}/z_istdp_trace.npy")
                 I_in_ls = np.load(f"model/{folder}/I_in_ls.npy")
-                return (
-                spikes,
-                MemPot,
-                W_se,
-                W_se_ideal,
-                W_ee,
-                W_ee_ideal,
-                W_ei,
-                W_ei_ideal,
-                W_ie,
-                W_ie_ideal,
-                pre_synaptic_trace,
-                post_synaptic_trace,
-                slow_pre_synaptic_trace,
-                I_in_ls,
-                )
+                
+                # Signal that loading is complete
+                stop_event.set()
+                
+                # Wait for the animation to finish
+                animation_thread.join()
+                
+                print("Model reloaded successfully.       ")  # Clear the animation line
+                
+                return (            
+                    spikes,
+                    MemPot,
+                    W_se,
+                    W_se_ideal,
+                    W_ee,
+                    W_ee_ideal,
+                    W_ei,
+                    W_ei_ideal,
+                    W_ie,
+                    W_ie_ideal,
+                    pre_synaptic_trace,
+                    post_synaptic_trace,
+                    slow_pre_synaptic_trace,
+                    z_istdp,
+                    I_in_ls,
+                    )
 
     # Initiate relevant arrays and variables
     num_neurons = N_excit_neurons + N_inhib_neurons + N_input_neurons
@@ -295,4 +351,5 @@ def train_data(
         post_synaptic_trace,
         slow_pre_synaptic_trace,
         z_istdp,
+        I_in_ls,
     )

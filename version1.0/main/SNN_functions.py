@@ -261,6 +261,7 @@ class SNN_STDP:
             self.pre_synaptic_trace,
             self.post_synaptic_trace,
             self.slow_synaptic_trace,
+            self.z_istdp,
             self.I_in_ls,
         ) = train_data(
             R=self.R,
