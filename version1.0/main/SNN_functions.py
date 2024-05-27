@@ -7,41 +7,19 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Set current working directories and add relevant directories to path
+# Set the current directory based on the existence of a specific path
 if os.path.exists(
-    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork"
+    "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\version1.0"
 ):
-    os.chdir(
-        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
-    )
-    sys.path.append(
-        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\gen"
-    )
-    sys.path.append(
-        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\main"
-    )
-    sys.path.append(
-        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\plot"
-    )
-    sys.path.append(
-        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\tool"
-    )
+    base_path = "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\version1.0"
 else:
-    os.chdir(
-        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
-    )
-    sys.path.append(
-        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\gen"
-    )
-    sys.path.append(
-        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\main"
-    )
-    sys.path.append(
-        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\plot"
-    )
-    sys.path.append(
-        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\tool"
-    )
+    base_path = "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
+
+os.chdir(base_path)
+sys.path.append(os.path.join(base_path, "gen"))
+sys.path.append(os.path.join(base_path, "main"))
+sys.path.append(os.path.join(base_path, "plot"))
+sys.path.append(os.path.join(base_path, "tool"))
 
 from plot_training import *
 from plot_network import *
@@ -50,7 +28,6 @@ from train_widget import *
 from gen_data import *
 from train import *
 
-
 # Create widget window class
 class MainWindow(QMainWindow):
     def __init__(self, main_widget):
@@ -58,7 +35,6 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(main_widget)
         self.setWindowTitle("Interactive Tool")
         self.setGeometry(100, 100, 800, 600)  # x, y, width, height
-
 
 # Initialize class variable
 class SNN_STDP:
@@ -339,17 +315,6 @@ class SNN_STDP:
                 self.W_ie,
             )
 
-    def reload_model(self):
-        self.W_se = np.load("model/W_se.npy")
-        self.W_ee = np.load("model/W_ee.npy")
-        self.W_ie = np.load("model/W_ie.npy")
-        self.W_ei = np.load("model/W_ei.npy")
-        self.spikes = np.load("model/spikes.npy")
-        self.MemPot = np.load("model/MemPot.npy")
-        self.pre_trace = np.load("model/pre_synaptic_trace.npy")
-        self.post_trace = np.load("model/post_synaptic_trace.npy")
-        self.slow_trace = np.load("model/slow_pre_synaptic_trace.npy")
-
     def plot_training(
         self,
         ws_nd_spikes: bool,
@@ -382,12 +347,12 @@ class SNN_STDP:
             )
         if traces:
             plot_traces(
-                pre_synaptic_trace=self.pre_trace,
-                post_synaptic_trace=self.post_trace,
-                slow_pre_synaptic_trace=self.slow_trace,
+                pre_synaptic_trace=self.pre_synaptic_trace,
+                post_synaptic_trace=self.post_synaptic_trace,
+                slow_pre_synaptic_trace=self.slow_synaptic_trace,
                 N_input_neurons=self.N_input_neurons,
             )
-
+ 
     def plot_I_in(self):
         d = np.arange(0, len(self.I_in_ls))
         plt.plot(d, self.I_in_ls)

@@ -4,29 +4,18 @@
 import os
 import sys
 
-# Set current working directories and add relevant directories to path
+# Set the current directory based on the existence of a specific path
 if os.path.exists(
-    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork"
+    "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\version1.0"
 ):
-    os.chdir(
-        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
-    )
-    sys.path.append(
-        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\gen"
-    )
-    sys.path.append(
-        "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0\\main"
-    )
+    base_path = "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\version1.0"
 else:
-    os.chdir(
-        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
-    )
-    sys.path.append(
-        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\gen"
-    )
-    sys.path.append(
-        "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0\\main"
-    )
+    base_path = "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
+
+os.chdir(base_path)
+sys.path.append(os.path.join(base_path, "gen"))
+sys.path.append(os.path.join(base_path, "main"))
+
 import SNN_functions
 from SNN_functions import SNN_STDP
 
@@ -87,6 +76,7 @@ snn = SNN_STDP(**snn_params)
     W_ee_prob=0.1,
     retur=True,
 )
+
 # Generate data
 snn.gen_data(
     N_classes=4,
@@ -118,9 +108,6 @@ data, labels = snn.load_data(rand_lvl=0.05, retur=True)
     save_model=True,
     item_lim=24,
 )
-
-# Reload model
-snn.reload_model()
 
 # Visualize training and testing results
 snn.plot_training(

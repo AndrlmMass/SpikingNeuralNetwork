@@ -7,13 +7,14 @@ import sys
 
 # Set the current directory based on the existence of a specific path
 if os.path.exists(
-    "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
+    "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\version1.0"
 ):
-    base_path = "C:\\Users\\andre\\OneDrive\\Documents\\NMBU_\\BONSAI\\SpikingNeuralNetwork\\version1.0"
+    base_path = "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\version1.0"
 else:
     base_path = "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
 
 os.chdir(base_path)
+sys.path.append(os.path.join(base_path, "main"))
 sys.path.append(os.path.join(base_path, "plot"))
 sys.path.append(os.path.join(base_path, "tool"))
 sys.path.append(os.path.join(base_path, "train_packages"))
@@ -26,6 +27,9 @@ from membrane_potential import (
 )
 from weight_updating import exc_weight_update, inh_weight_update
 
+import numpy as np
+import os
+from tqdm import tqdm
 
 def train_data(
     R: float | int,
@@ -69,6 +73,53 @@ def train_data(
     item_lim: int,
     items: int,
 ):
+    # Get all local variables
+    locs = locals()
+
+    # Define keys to exclude
+    exclude_keys = [
+        'training_data', 'MemPot', 'W_se', 'W_se_ideal', 'W_ee', 'W_ee_ideal',
+        'W_ei', 'W_ei_ideal', 'W_ie', 'W_ie_ideal'
+    ]
+    
+    # Filter out the large arrays
+    filtered_locs = {k: v for k, v in locs.items() if k not in exclude_keys}
+
+    # Check if model exists
+    for folder in os.listdir("model"):
+        config_path = f"model/{folder}/config.npy"
+        if os.path.exists(config_path):
+            saved_config = np.load(config_path, allow_pickle=True).item()
+            if filtered_locs == saved_config:
+                print("Reloading model...")
+                W_se = np.load(f"model/{folder}/W_se.npy")
+                W_ee = np.load(f"model/{folder}/W_ee.npy")
+                W_ie = np.load(f"model/{folder}/W_ie.npy")
+                W_ei = np.load(f"model/{folder}/W_ei.npy")
+                spikes = np.load(f"model/{folder}/spikes.npy")
+                MemPot = np.load(f"model/{folder}/MemPot.npy")
+                pre_synaptic_trace = np.load(f"model/{folder}/pre_synaptic_trace.npy")
+                post_synaptic_trace = np.load(f"model/{folder}/post_synaptic_trace.npy")
+                slow_pre_synaptic_trace = np.load(f"model/{folder}/slow_pre_synaptic_trace.npy")
+                z_istdp = np.load(f"model/{folder}/z_istdp_trace.npy")
+                I_in_ls = np.load(f"model/{folder}/I_in_ls.npy")
+                return (
+                spikes,
+                MemPot,
+                W_se,
+                W_se_ideal,
+                W_ee,
+                W_ee_ideal,
+                W_ei,
+                W_ei_ideal,
+                W_ie,
+                W_ie_ideal,
+                pre_synaptic_trace,
+                post_synaptic_trace,
+                slow_pre_synaptic_trace,
+                I_in_ls,
+                )
+
     # Initiate relevant arrays and variables
     num_neurons = N_excit_neurons + N_inhib_neurons + N_input_neurons
     spikes = np.zeros((time, num_neurons))
@@ -76,8 +127,8 @@ def train_data(
     post_synaptic_trace = np.zeros((time, num_neurons - N_input_neurons))
     slow_pre_synaptic_trace = np.zeros((time, num_neurons))
     C = np.full(num_neurons, A)
-    z_ht = np.ones((num_neurons))
-    z_istdp = np.zeros((N_inhib_neurons))
+    z_ht = np.ones(num_neurons)
+    z_istdp = np.zeros(N_inhib_neurons)
     H = 0
     V_th_ = float(V_th_)
     V_th = np.full(num_neurons - N_input_neurons, V_th_)
@@ -95,18 +146,18 @@ def train_data(
         update_membrane_potential_func = njit(update_membrane_potential)
         exc_weight_update_func = njit(exc_weight_update)
         inh_weight_update_func = njit(inh_weight_update)
-        print("running njit")
+        print("Running njit")
     else:
         adjust_membrane_threshold_func = adjust_membrane_threshold
         update_membrane_potential_func = update_membrane_potential
         exc_weight_update_func = exc_weight_update
         inh_weight_update_func = inh_weight_update
-        print("running without njit")
+        print("Running without njit")
 
-    # Loop through time and update membrane potential, spikes and weights => infinite knowledge
+    # Loop through time and update membrane potential, spikes, and weights
     for t in tqdm(range(1, time), desc="Training network"):
 
-        # Calculate euler time unit
+        # Calculate Euler time unit
         euler_unit = int(t - update_freq > 0) * (t - update_freq)
 
         # Update adaptive membrane potential threshold
@@ -206,21 +257,28 @@ def train_data(
         W_ei[t] = W_ei[t - 1]
 
     if save_model:
-        # Create folder to save model
-        if not os.path.exists("model"):
-            os.makedirs("model")
+        # Generate a random number for model folder
+        rand_num = np.random.randint(0, 1000)
 
-        # Save model weights, spikes and MemPot
-        np.save("model/W_se.npy", W_se)
-        np.save("model/W_ee.npy", W_ee)
-        np.save("model/W_ei.npy", W_ei)
-        np.save("model/W_ie.npy", W_ie)
-        np.save("model/spikes.npy", spikes)
-        np.save("model/MemPot.npy", MemPot)
-        np.save("model/pre_synaptic_trace.npy", pre_synaptic_trace)
-        np.save("model/post_synaptic_trace.npy", post_synaptic_trace)
-        np.save("model/slow_pre_synaptic_trace.npy", slow_pre_synaptic_trace)
-        np.save("model/z_istdp_trace.npy", z_istdp)
+        # Check if random number folder exists
+        while os.path.exists(f"model/model_{rand_num}"):
+            rand_num = np.random.randint(0, 1000)
+
+        os.makedirs(f"model/model_{rand_num}")
+
+        # Save model weights, spikes, and MemPot
+        np.save(f"model/model_{rand_num}/W_se.npy", W_se)
+        np.save(f"model/model_{rand_num}/W_ee.npy", W_ee)
+        np.save(f"model/model_{rand_num}/W_ie.npy", W_ie)
+        np.save(f"model/model_{rand_num}/W_ei.npy", W_ei)
+        np.save(f"model/model_{rand_num}/spikes.npy", spikes)
+        np.save(f"model/model_{rand_num}/MemPot.npy", MemPot)
+        np.save(f"model/model_{rand_num}/pre_synaptic_trace.npy", pre_synaptic_trace)
+        np.save(f"model/model_{rand_num}/post_synaptic_trace.npy", post_synaptic_trace)
+        np.save(f"model/model_{rand_num}/slow_pre_synaptic_trace.npy", slow_pre_synaptic_trace)
+        np.save(f"model/model_{rand_num}/z_istdp_trace.npy", z_istdp)
+        np.save(f"model/model_{rand_num}/config.npy", filtered_locs)
+        np.save(f"model/model_{rand_num}/I_in_ls.npy", training_data)
 
     return (
         spikes,
