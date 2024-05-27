@@ -5,7 +5,7 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
-
+from sklearn.manifold import TSNE
 
 def plot_membrane_activity(
     MemPot: np.ndarray,
@@ -179,3 +179,46 @@ def plot_traces(
     )
     plt.legend()
     plt.show()
+
+def t_SNE(N_classes, spikes, labels):
+    print(spikes.shape, labels.shape)
+    # Reshape labels to match spikes
+    labels = np.argmax(labels, axis=1)
+    print(labels.shape)
+
+    # Remove ISI
+    filler_mask = labels != N_classes
+    spikes = spikes[filler_mask]
+    labels = labels[filler_mask]
+
+    # Temporal binning to create features
+    n_neurons, n_time_steps = spikes.shape
+    n_bins = int(np.sqrt(n_time_steps))
+    bin_size = n_time_steps // n_bins
+    features = np.zeros((n_neurons, n_bins))
+    
+    for i in range(n_bins):
+        start = i * bin_size
+        end = (i + 1) * bin_size
+        features[:, i] = np.mean(spikes[:, start:end], axis=1)
+
+    # Apply t-SNE
+    tsne = TSNE(n_components=2, perplexity=30, n_iter=1000, random_state=42)
+    tsne_results = tsne.fit_transform(features)
+
+    # Label names
+    label_names = ["Triangle", "Circle", "Square", "X"]
+
+    # Visualize the results with labels
+    plt.figure(figsize=(10, 8))
+    for label in np.unique(labels):
+        indices = labels == label
+        plt.scatter(tsne_results[indices, 0], tsne_results[indices, 1], label=label_names[label])
+    plt.title('t-SNE results of SNN firing rates')
+    plt.xlabel('t-SNE dimension 1')
+    plt.ylabel('t-SNE dimension 2')
+    plt.legend()
+    plt.show()
+
+
+

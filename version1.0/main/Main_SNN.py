@@ -111,12 +111,13 @@ data, labels = snn.load_data(rand_lvl=0.05, retur=True)
 
 # Visualize training and testing results
 snn.plot_training(
-    ws_nd_spikes=True,
+    ws_nd_spikes=False,
     idx_start=484,
     idx_stop=600,
-    mv=True,
-    overlap=True,
-    traces=True,
+    mv=False,
+    overlap=False,
+    traces=False,
+    tsne=True,
 )
 
 snn.plot_I_in()

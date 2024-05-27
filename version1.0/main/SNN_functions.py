@@ -188,6 +188,7 @@ class SNN_STDP:
         save: bool,
         retur: bool,
     ):
+        self.N_classes = N_classes
         # Check if training data already exists
         files = os.listdir("data/training_data/")
         for rand in noise_rand_ls:
@@ -324,6 +325,7 @@ class SNN_STDP:
         mv: bool,
         overlap: bool,
         traces: bool,
+        tsne: bool,
     ):
         if ws_nd_spikes:
             plot_weights_and_spikes(
@@ -353,6 +355,12 @@ class SNN_STDP:
                 slow_pre_synaptic_trace=self.slow_synaptic_trace,
                 N_input_neurons=self.N_input_neurons,
             )
+        if tsne:
+            t_SNE(
+                self.N_classes,
+                self.spikes,
+                self.labels_train,
+                )
  
     def plot_I_in(self):
         d = np.arange(0, len(self.I_in_ls))
