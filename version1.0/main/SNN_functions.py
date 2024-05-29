@@ -25,8 +25,10 @@ from plot_training import *
 from plot_network import *
 from gen_weights import *
 from train_widget import *
+from plot_data import *
 from gen_data import *
 from train import *
+
 
 # Create widget window class
 class MainWindow(QMainWindow):
@@ -35,6 +37,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(main_widget)
         self.setWindowTitle("Interactive Tool")
         self.setGeometry(100, 100, 800, 600)  # x, y, width, height
+
 
 # Initialize class variable
 class SNN_STDP:
@@ -193,14 +196,14 @@ class SNN_STDP:
         files = os.listdir("data/training_data/")
         for rand in noise_rand_ls:
             if any(
-                f"training_data_{rand}_items_{self.num_items}_.pkl" in file
+                f"training_data_{rand}_items_{self.num_items}_.npy" in file
                 for file in files
             ):
                 return
 
         # Create training data since it does not exist already
         for j in range(len(noise_rand_ls)):
-            data, labels = gen_float_data_(
+            self.data, self.labels = gen_float_data_(
                 N_classes=N_classes,
                 N_input_neurons=self.N_input_neurons,
                 items=self.num_items,
@@ -208,11 +211,12 @@ class SNN_STDP:
                 noise_variance=noise_rand_ls[j],
                 mean=mean,
                 blank_variance=blank_variance,
+                save=save,
             )
 
             float_2_pos_spike(
-                data=data,
-                labels=labels,
+                data=self.data,
+                labels=self.labels,
                 time=self.time,
                 timesteps=self.num_timesteps,
                 dt=self.dt,
@@ -224,23 +228,25 @@ class SNN_STDP:
             )
 
     def load_data(self, rand_lvl: float | int, retur: bool):
-        cur_path = os.getcwd()
-        data_path = f"\\data\\training_data\\training_data_{rand_lvl}_items_{self.num_items}_.pkl"
-        data_dir = cur_path + data_path
-
-        with open(data_dir, "rb") as openfile:
-            self.training_data = pickle.load(openfile)
-
-        label_path = (
-            f"\\data\\labels_train\\labels_train_{rand_lvl}_items_{self.num_items}_.pkl"
+        self.training_data = np.load(
+            f"data\\training_data\\training_data_{rand_lvl}_items_{self.num_items}_.npy"
         )
-        label_dir = cur_path + label_path
-
-        with open(label_dir, "rb") as openfile:
-            self.labels_train = pickle.load(openfile)
+        self.data = np.load(
+            f"data\\training_data_float\\training_data_items_{self.num_items}_.npy"
+        )
+        self.labels_train = np.load(
+            f"data\\labels_train\\labels_train_{rand_lvl}_items_{self.num_items}_.npy"
+        )
+        self.labels = np.load(
+            f"data\\labels_train_float\\training_data_items_{self.items}_.npy"
+        )
 
         if retur:
-            return self.training_data, self.labels_train
+            return self.training_data, self.labels_train, self.data, self.labels
+
+    def visualize_data(self, run, save):
+        if run:
+            raster_plot(self.data, self.train, save)
 
     def train_data(
         self,
@@ -360,8 +366,8 @@ class SNN_STDP:
                 self.N_classes,
                 self.spikes,
                 self.labels_train,
-                )
- 
+            )
+
     def plot_I_in(self):
         d = np.arange(0, len(self.I_in_ls))
         plt.plot(d, self.I_in_ls)

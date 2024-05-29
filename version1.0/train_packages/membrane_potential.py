@@ -18,7 +18,7 @@ def adjust_membrane_threshold(
     )
 
     # Calculate the ratio between local and global spikes
-    tot_spik_e_safe = np.clip(tot_spik_e, 0.01, None)
+    tot_spik_e_safe = np.maximum(tot_spik_e, 0.01)
     ratio_e = per_spik_e / tot_spik_e_safe
 
     # Update the membrane potential threshold according to the radio_e
@@ -38,7 +38,7 @@ def adjust_membrane_threshold(
     )
 
     # Calculate ratio between local and global spikes
-    tot_spik_i_safe = np.clip(tot_spik_i, 0.01, None)
+    tot_spik_i_safe = np.maximum(tot_spik_i, 0.01)
     ratio_i = per_spik_i / tot_spik_i_safe
 
     # Update membrane potential threshold according to the ratio_i
@@ -49,7 +49,6 @@ def adjust_membrane_threshold(
     return V_th
 
 
-@njit
 def update_membrane_potential(
     MemPot,
     W_se,

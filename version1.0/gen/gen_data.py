@@ -27,6 +27,7 @@ def gen_float_data_(
     noise_variance: float | int,
     mean: int | float,
     blank_variance: int | float,
+    save: bool,
 ):
 
     # Check if n_classes and items are compatible
@@ -105,6 +106,11 @@ def gen_float_data_(
     # Reshape input_dims x input_dims to get time x input_dims**2
     input_space = np.reshape(input_space, (int(items), input_dims**2))
 
+    # Save data if save is true
+    if save:
+        np.save(f"data\\training_data\\training_data_items_{items}_.npy", input_space)
+        np.save(f"data\\labels_train_float\\training_data_items_{items}_.npy", labels)
+
     # return if true
     return input_space, labels
 
@@ -121,8 +127,6 @@ def float_2_pos_spike(
     retur: bool,
     rand_lvl: float,
 ):
-    # Data has shape items x neurons
-
     # Assert number of items
     N_input_neurons = data.shape[1]
 
@@ -151,17 +155,14 @@ def float_2_pos_spike(
         print(
             f"Saving training and testing data with labels for random level {rand_lvl}"
         )
-        with open(
-            f"data/training_data/training_data_{rand_lvl}_items_{items}_.pkl", "wb"
-        ) as file:
-            pickle.dump(poisson_input, file)
-        print("training data is saved in data folder")
-
-        with open(
-            f"data/labels_train/labels_train_{rand_lvl}_items_{items}_.pkl", "wb"
-        ) as file:
-            pickle.dump(labels, file)
-        print("training labels is saved in data folder")
+        np.save(
+            f"data\\training_data\\training_data_{rand_lvl}_items_{items}_.npy",
+            poisson_input,
+        )
+        np.save(
+            f"data\\labels_train\\labels_train_{rand_lvl}_items_{items}_.npy", labels
+        )
+        print("training & labels are saved in data folder")
 
     if retur:
         return poisson_input, labels

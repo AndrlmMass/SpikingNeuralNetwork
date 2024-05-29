@@ -1,9 +1,17 @@
 # define function to create a raster plot of the input data
 import matplotlib.pyplot as plt
 import numpy as np
+import os
+
+if os.path.exists(
+    "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\version1.0"
+):
+    base_path = "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\version1.0"
+else:
+    base_path = "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
 
 
-def raster_plot(data, labels):
+def raster_plot(data, labels, save):
     labels_name = ["t", "o", "s", "x", " "]
     indices = np.argmax(labels, axis=1)
 
@@ -47,6 +55,9 @@ def raster_plot(data, labels):
     plt.xlabel("Time (ms)")
     plt.ylabel("Neuron Index")
     plt.show()
+
+    if save:
+        plt.savefig(f"\\plot_files\\data_plots\\init_plot")
 
 
 # Plot input_data structure to ensure realistic creation
