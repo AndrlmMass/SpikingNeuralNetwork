@@ -108,8 +108,8 @@ def gen_float_data_(
 
     # Save data if save is true
     if save:
-        np.save(f"data\\training_data\\training_data_items_{items}_.npy", input_space)
-        np.save(f"data\\labels_train_float\\training_data_items_{items}_.npy", labels)
+        np.save(f"data\\training_data_float\\training_data_float_items_{items}_.npy", input_space)
+        np.save(f"data\\labels_train_float\\labels_train_float_items_{items}_.npy", labels)
 
     # return if true
     return input_space, labels

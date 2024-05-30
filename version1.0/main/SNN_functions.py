@@ -29,16 +29,6 @@ from plot_data import *
 from gen_data import *
 from train import *
 
-
-# Create widget window class
-class MainWindow(QMainWindow):
-    def __init__(self, main_widget):
-        super().__init__()
-        self.setCentralWidget(main_widget)
-        self.setWindowTitle("Interactive Tool")
-        self.setGeometry(100, 100, 800, 600)  # x, y, width, height
-
-
 # Initialize class variable
 class SNN_STDP:
     # Initialize neuron parameters
@@ -232,21 +222,21 @@ class SNN_STDP:
             f"data\\training_data\\training_data_{rand_lvl}_items_{self.num_items}_.npy"
         )
         self.data = np.load(
-            f"data\\training_data_float\\training_data_items_{self.num_items}_.npy"
+            f"data\\training_data_float\\training_data_float_items_{self.num_items}_.npy"
         )
         self.labels_train = np.load(
             f"data\\labels_train\\labels_train_{rand_lvl}_items_{self.num_items}_.npy"
         )
         self.labels = np.load(
-            f"data\\labels_train_float\\training_data_items_{self.items}_.npy"
+            f"data\\labels_train_float\\labels_train_float_items_{self.num_items}_.npy"
         )
 
         if retur:
-            return self.training_data, self.labels_train, self.data, self.labels
+            return self.training_data, self.labels_train,
 
-    def visualize_data(self, run, save):
+    def visualize_data(self, run):
         if run:
-            raster_plot(self.data, self.train, save)
+            input_space_plotted_single(self.data[0])
 
     def train_data(
         self,
@@ -365,7 +355,9 @@ class SNN_STDP:
             t_SNE(
                 self.N_classes,
                 self.spikes,
+                self.labels,
                 self.labels_train,
+                self.num_timesteps,
             )
 
     def plot_I_in(self):

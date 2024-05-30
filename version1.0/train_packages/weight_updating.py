@@ -5,7 +5,6 @@ import numpy as np
 from numba import njit
 
 
-@njit
 def exc_weight_update(
     dt,
     tau_const,
@@ -144,8 +143,6 @@ def exc_weight_update(
         C,
     )
 
-
-@njit
 def inh_weight_update(
     H,
     dt,

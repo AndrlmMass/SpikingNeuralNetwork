@@ -210,6 +210,9 @@ def train_data(
         inh_weight_update_func = inh_weight_update
         print("Running without njit")
 
+    # Initiate I_in list
+    I_in_ls = np.zeros((time))
+
     # Loop through time and update membrane potential, spikes, and weights
     for t in tqdm(range(1, time), desc="Training network"):
 
@@ -227,8 +230,7 @@ def train_data(
                 N_inhib_neurons,
             )
 
-        # Update membrane potential
-        MemPot[t] = update_membrane_potential_func(
+        MemPot[t], I_in_ls[t] = update_membrane_potential_func(
             MemPot[t - 1],
             W_se[t - 1],
             W_ee[t - 1],
@@ -334,7 +336,7 @@ def train_data(
         np.save(f"model/model_{rand_num}/slow_pre_synaptic_trace.npy", slow_pre_synaptic_trace)
         np.save(f"model/model_{rand_num}/z_istdp_trace.npy", z_istdp)
         np.save(f"model/model_{rand_num}/config.npy", filtered_locs)
-        np.save(f"model/model_{rand_num}/I_in_ls.npy", training_data)
+        np.save(f"model/model_{rand_num}/I_in_ls.npy", I_in_ls)
 
     return (
         spikes,

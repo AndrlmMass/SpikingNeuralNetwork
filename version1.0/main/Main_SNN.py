@@ -37,7 +37,7 @@ snn_params = {
     "tau_H": 10,
     "learning_rate": 0.001,
     "gamma": 0.1,
-    "num_items": 28,
+    "num_items": 64,
     "dt": 0.001,
     "T": 0.1,
     "wp": 0.5,
@@ -93,7 +93,7 @@ snn.gen_data(
 data, labels = snn.load_data(rand_lvl=0.05, retur=True)
 
 # Visualize data
-snn.visualize_data(run=True, save=True)
+snn.visualize_data(run=False)
 
 # Train network
 (
@@ -106,7 +106,7 @@ snn.visualize_data(run=True, save=True)
 ) = snn.train_data(
     retur=True,
     save_model=True,
-    item_lim=24,
+    item_lim=20,
 )
 
 # Visualize training and testing results

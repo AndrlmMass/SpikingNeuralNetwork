@@ -180,30 +180,30 @@ def plot_traces(
     plt.legend()
     plt.show()
 
-def t_SNE(N_classes, spikes, labels):
-    print(spikes.shape, labels.shape)
+def t_SNE(N_classes, spikes, labels, labels_spike, timesteps):
     # Reshape labels to match spikes
     labels = np.argmax(labels, axis=1)
-    print(labels.shape)
+    labels_spike = np.argmax(labels_spike, axis=1)
 
     # Remove ISI
-    filler_mask = labels != N_classes
+    filler_mask = labels_spike != N_classes
     spikes = spikes[filler_mask]
-    labels = labels[filler_mask]
+    labels_spike = labels_spike[filler_mask]
+    labels = labels[labels != N_classes]
 
     # Temporal binning to create features
-    n_neurons, n_time_steps = spikes.shape
-    n_bins = int(np.sqrt(n_time_steps))
-    bin_size = n_time_steps // n_bins
-    features = np.zeros((n_neurons, n_bins))
+    n_time_steps, n_neurons = spikes.shape
+    n_bins = n_time_steps // timesteps
+    bin_size = timesteps
+    features = np.zeros((n_bins, n_neurons))
     
     for i in range(n_bins):
         start = i * bin_size
         end = (i + 1) * bin_size
-        features[:, i] = np.mean(spikes[:, start:end], axis=1)
+        features[i, :] = np.mean(spikes[start:end, :], axis=0)
 
     # Apply t-SNE
-    tsne = TSNE(n_components=2, perplexity=30, n_iter=1000, random_state=42)
+    tsne = TSNE(n_components=2, perplexity=10, n_iter=1000, random_state=42)
     tsne_results = tsne.fit_transform(features)
 
     # Label names
