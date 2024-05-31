@@ -12,6 +12,8 @@ def exc_weight_update(
     W_ee,
     W_se_ideal,
     W_ee_ideal,
+    W_se_plt_idx,
+    W_ee_plt_idx,
     P,
     t,
     w_p,
@@ -85,6 +87,14 @@ def exc_weight_update(
 
     W_se += delta_w
 
+    # Convert 2D indices to 1D
+    raveled_indices = np.ravel_multi_index(
+        (W_se_plt_idx[:, 0], W_se_plt_idx[:, 1]), W_se.shape
+    )
+
+    # Use the 1D indices to assign the values to W_se_2d
+    W_se_2d = W_se.ravel()[raveled_indices][:10].reshape(1, -1)
+
     ## W_ee weights ##
 
     # Update ideal weights if t is divisble by euler
@@ -120,7 +130,7 @@ def exc_weight_update(
     Hebb = np.round(triplet_LTP - doublet_LTD, 6)
 
     Hetero = np.round(
-        -beta * (W_se - W_se_ideal) * (post_trace_ee) ** 3 * pre_spikes_ee,
+        -beta * (W_ee - W_ee_ideal) * (post_trace_ee) ** 3 * pre_spikes_ee,
         6,
     )
 
@@ -129,13 +139,23 @@ def exc_weight_update(
     # Assemble components to update weight
     delta_w = Hebb + Hetero + transmitter
 
-    W_se += delta_w
+    W_ee += delta_w
+
+    # Convert 2D indices to 1D
+    raveled_indices = np.ravel_multi_index(
+        (W_ee_plt_idx[:, 0], W_ee_plt_idx[:, 1]), W_ee.shape
+    )
+
+    # Use the 1D indices to assign the values to W_se_2d
+    W_ee_2d = W_ee.ravel()[raveled_indices][:10].reshape(1, -1)
 
     return (
         W_se,
         W_ee,
         W_se_ideal,
         W_ee_ideal,
+        W_ee_2d,
+        W_se_2d,
         pre_synaptic_trace,
         post_synaptic_trace,
         slow_pre_synaptic_trace,
@@ -143,10 +163,13 @@ def exc_weight_update(
         C,
     )
 
+
 def inh_weight_update(
     H,
     dt,
     W_ie,
+    W_ie_2d,
+    W_ie_plt_idx,
     z_istdp,
     tau_H,
     gamma,
@@ -184,4 +207,7 @@ def inh_weight_update(
     # Update weights
     W_ie += delta_w
 
-    return W_ie, z_istdp, H, post_trace
+    # Assign the selected indices to the first row of 'W_ie_2d'
+    W_ie_2d[0, :10] = W_ie[W_ie_plt_idx[:, 0], W_ie_plt_idx[:, 1]]
+
+    return W_ie, W_ie_2d, z_istdp, H, post_trace

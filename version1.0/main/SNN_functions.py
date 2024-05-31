@@ -29,6 +29,7 @@ from plot_data import *
 from gen_data import *
 from train import *
 
+
 # Initialize class variable
 class SNN_STDP:
     # Initialize neuron parameters
@@ -119,34 +120,33 @@ class SNN_STDP:
         # Generate weights
         gws = gen_weights()
 
-        self.W_se, self.W_se_ideal = gws.gen_SE(
+        self.W_se, self.W_se_ideal, self.W_se_2d, self.W_se_plt_idx = gws.gen_SE(
             radius=radius_,
             N_input_neurons=self.N_input_neurons,
             N_excit_neurons=self.N_excit_neurons,
             time=self.time,
             basenum=0.1,
         )
-        self.W_ee, self.W_ee_ideal = gws.gen_EE(
+        self.W_ee, self.W_ee_ideal, self.W_ee_2d, self.W_ee_plt_idx = gws.gen_EE(
             N_excit_neurons=self.N_excit_neurons,
             prob=W_ee_prob,
             time=self.time,
             basenum=0.1,
         )
-        self.W_ei, self.W_ei_ideal = gws.gen_EI(
+        self.W_ei, self.W_ei_ideal, self.W_ei_2d, self.W_ei_plt_idx = gws.gen_EI(
             N_excit_neurons=self.N_excit_neurons,
             N_inhib_neurons=self.N_inhib_neurons,
             time=self.time,
-            weight_val=0.2,
             prob=0.1,
         )
-        self.W_ie, self.W_ie_ideal = gws.gen_IE(
+        self.W_ie, self.W_ie_ideal, self.W_ie_2d, self.W_ie_plt_idx = gws.gen_IE(
             N_inhib_neurons=self.N_inhib_neurons,
             N_excit_neurons=self.N_excit_neurons,
             W_ei=self.W_ei,
+            radius=10,
             time=self.time,
             N_ws=4,
             weight_val=0.1,
-            radius=10,
         )
 
         # Generate membrane potential and spikes array
@@ -222,17 +222,20 @@ class SNN_STDP:
             f"data\\training_data\\training_data_{rand_lvl}_items_{self.num_items}_.npy"
         )
         self.data = np.load(
-            f"data\\training_data_float\\training_data_float_items_{self.num_items}_.npy"
+            f"data\\training_data_float\\training_data_items_{self.num_items}_.npy"
         )
         self.labels_train = np.load(
             f"data\\labels_train\\labels_train_{rand_lvl}_items_{self.num_items}_.npy"
         )
         self.labels = np.load(
-            f"data\\labels_train_float\\labels_train_float_items_{self.num_items}_.npy"
+            f"data\\labels_train_float\\labels_train_{self.num_items}_.npy"
         )
 
         if retur:
-            return self.training_data, self.labels_train,
+            return (
+                self.training_data,
+                self.labels_train,
+            )
 
     def visualize_data(self, run):
         if run:
@@ -247,13 +250,13 @@ class SNN_STDP:
         (
             self.spikes,
             self.MemPot,
-            self.W_se,
+            self.W_se_2d,
             self.W_se_ideal,
-            self.W_ee,
+            self.W_ee_2d,
             self.W_ee_ideal,
-            self.W_ei,
+            self.W_ei_2d,
             self.W_ei_ideal,
-            self.W_ie,
+            self.W_ie_2d,
             self.W_ie_ideal,
             self.pre_synaptic_trace,
             self.post_synaptic_trace,
@@ -292,12 +295,20 @@ class SNN_STDP:
             min_weight=self.min_weight,
             W_se=self.W_se,
             W_se_ideal=self.W_se_ideal,
+            W_se_2d=self.W_se_2d,
+            W_se_plt_idx=self.W_se_plt_idx,
             W_ee=self.W_ee,
             W_ee_ideal=self.W_ee_ideal,
+            W_ee_2d=self.W_ee_2d,
+            W_ee_plt_idx=self.W_ee_plt_idx,
             W_ei=self.W_ei,
             W_ei_ideal=self.W_ei_ideal,
+            W_ei_2d=self.W_ei_2d,
+            W_ei_plt_idx=self.W_ei_plt_idx,
             W_ie=self.W_ie,
             W_ie_ideal=self.W_ie_ideal,
+            W_ie_2d=self.W_ie_2d,
+            W_ie_plt_idx=self.W_ie_plt_idx,
             save_model=save_model,
             item_lim=item_lim,
             items=self.num_items,
@@ -307,10 +318,10 @@ class SNN_STDP:
             return (
                 self.spikes,
                 self.MemPot,
-                self.W_se,
-                self.W_ee,
-                self.W_ei,
-                self.W_ie,
+                self.W_se_2d,
+                self.W_ee_2d,
+                self.W_ei_2d,
+                self.W_ie_2d,
             )
 
     def plot_training(
@@ -326,9 +337,9 @@ class SNN_STDP:
         if ws_nd_spikes:
             plot_weights_and_spikes(
                 spikes=self.spikes,
-                W_se=self.W_se,
-                W_ee=self.W_ee,
-                W_ie=self.W_ie,
+                W_se=self.W_se_2d,
+                W_ee=self.W_ee_2d,
+                W_ie=self.W_ie_2d,
             )
         if mv:
             plot_membrane_activity(

@@ -33,6 +33,7 @@ import numpy as np
 import os
 from tqdm import tqdm
 
+
 def load_model(folder, stop_event):
     W_se = np.load(f"model/{folder}/W_se.npy")
     W_ee = np.load(f"model/{folder}/W_ee.npy")
@@ -45,10 +46,10 @@ def load_model(folder, stop_event):
     slow_pre_synaptic_trace = np.load(f"model/{folder}/slow_pre_synaptic_trace.npy")
     z_istdp = np.load(f"model/{folder}/z_istdp_trace.npy")
     I_in_ls = np.load(f"model/{folder}/I_in_ls.npy")
-    
+
     # Signal that loading is complete
     stop_event.set()
-    
+
     return (
         W_se,
         W_ee,
@@ -63,6 +64,7 @@ def load_model(folder, stop_event):
         I_in_ls,
     )
 
+
 def display_animation(stop_event):
     waiting_animation = [".  ", ".. ", "...", ".. ", ".  ", "   "]
     idx = 0
@@ -70,6 +72,7 @@ def display_animation(stop_event):
         print(f"Reloading model{waiting_animation[idx]}", end="\r")
         idx = (idx + 1) % len(waiting_animation)
         time.sleep(0.2)  # Adjust the speed of the animation as needed
+
 
 def train_data(
     R: float | int,
@@ -102,12 +105,20 @@ def train_data(
     min_weight: float | int,
     W_se: np.ndarray,
     W_se_ideal: np.ndarray,
+    W_se_2d: np.ndarray,
+    W_se_plt_idx: np.ndarray,
     W_ee: np.ndarray,
     W_ee_ideal: np.ndarray,
+    W_ee_2d: np.ndarray,
+    W_ee_plt_idx: np.ndarray,
     W_ei: np.ndarray,
     W_ei_ideal: np.ndarray,
+    W_ei_2d: np.ndarray,
+    W_ei_plt_idx: np.ndarray,
     W_ie: np.ndarray,
     W_ie_ideal: np.ndarray,
+    W_ie_2d: np.ndarray,
+    W_ie_plt_idx: np.ndarray,
     gamma: float | int,
     save_model: bool,
     item_lim: int,
@@ -118,10 +129,18 @@ def train_data(
 
     # Define keys to exclude
     exclude_keys = [
-        'training_data', 'MemPot', 'W_se', 'W_se_ideal', 'W_ee', 'W_ee_ideal',
-        'W_ei', 'W_ei_ideal', 'W_ie', 'W_ie_ideal'
+        "training_data",
+        "MemPot",
+        "W_se",
+        "W_se_ideal",
+        "W_ee",
+        "W_ee_ideal",
+        "W_ei",
+        "W_ei_ideal",
+        "W_ie",
+        "W_ie_ideal",
     ]
-    
+
     # Filter out the large arrays
     filtered_locs = {k: v for k, v in locs.items() if k not in exclude_keys}
 
@@ -132,49 +151,57 @@ def train_data(
             saved_config = np.load(config_path, allow_pickle=True).item()
             if filtered_locs == saved_config:
                 stop_event = threading.Event()
-                
+
                 # Start the animation in a separate thread
-                animation_thread = threading.Thread(target=display_animation, args=(stop_event,))
+                animation_thread = threading.Thread(
+                    target=display_animation, args=(stop_event,)
+                )
                 animation_thread.start()
-                
+
                 # Load the model (this will run in the main thread)
-                W_se = np.load(f"model/{folder}/W_se.npy")
-                W_ee = np.load(f"model/{folder}/W_ee.npy")
-                W_ie = np.load(f"model/{folder}/W_ie.npy")
-                W_ei = np.load(f"model/{folder}/W_ei.npy")
+                W_se_2d = np.load(f"model/{folder}/W_se.npy")
+                W_ee_2d = np.load(f"model/{folder}/W_ee.npy")
+                W_ie_2d = np.load(f"model/{folder}/W_ie.npy")
+                W_ei_2d = np.load(f"model/{folder}/W_ei.npy")
+                W_se_plt_idx = np.load(f"model/{folder}/W_se_plt_idx.npy")
+                W_ee_plt_idx = np.load(f"model/{folder}/W_ee_plt_idx.npy")
+                W_ie_plt_idx = np.load(f"model/{folder}/W_ie_plt_idx.npy")
+                W_ei_plt_idx = np.load(f"model/{folder}/W_ei_plt_idx.npy")
                 spikes = np.load(f"model/{folder}/spikes.npy")
                 MemPot = np.load(f"model/{folder}/MemPot.npy")
                 pre_synaptic_trace = np.load(f"model/{folder}/pre_synaptic_trace.npy")
                 post_synaptic_trace = np.load(f"model/{folder}/post_synaptic_trace.npy")
-                slow_pre_synaptic_trace = np.load(f"model/{folder}/slow_pre_synaptic_trace.npy")
+                slow_pre_synaptic_trace = np.load(
+                    f"model/{folder}/slow_pre_synaptic_trace.npy"
+                )
                 z_istdp = np.load(f"model/{folder}/z_istdp_trace.npy")
                 I_in_ls = np.load(f"model/{folder}/I_in_ls.npy")
-                
+
                 # Signal that loading is complete
                 stop_event.set()
-                
+
                 # Wait for the animation to finish
                 animation_thread.join()
-                
+
                 print("Model reloaded successfully.       ")  # Clear the animation line
-                
-                return (            
+
+                return (
                     spikes,
                     MemPot,
-                    W_se,
+                    W_se_2d,
                     W_se_ideal,
-                    W_ee,
+                    W_ee_2d,
                     W_ee_ideal,
-                    W_ei,
+                    W_ei_2d,
                     W_ei_ideal,
-                    W_ie,
+                    W_ie_2d,
                     W_ie_ideal,
                     pre_synaptic_trace,
                     post_synaptic_trace,
                     slow_pre_synaptic_trace,
                     z_istdp,
                     I_in_ls,
-                    )
+                )
 
     # Initiate relevant arrays and variables
     num_neurons = N_excit_neurons + N_inhib_neurons + N_input_neurons
@@ -232,10 +259,10 @@ def train_data(
 
         MemPot[t], I_in_ls[t] = update_membrane_potential_func(
             MemPot[t - 1],
-            W_se[t - 1],
-            W_ee[t - 1],
-            W_ie[t - 1],
-            W_ei[t - 1],
+            W_se,
+            W_ee,
+            W_ie,
+            W_ei,
             spikes[t - 1],
             dt,
             N_excit_neurons,
@@ -254,10 +281,12 @@ def train_data(
 
         # Update excitatory weights
         (
-            W_se[t],
-            W_ee[t],
+            W_se,
+            W_ee,
             W_se_ideal,
             W_ee_ideal,
+            W_se_2d[t],
+            W_ee_2d[t],
             pre_synaptic_trace[t],
             post_synaptic_trace[t],
             slow_pre_synaptic_trace[t],
@@ -266,10 +295,12 @@ def train_data(
         ) = exc_weight_update_func(
             dt,
             tau_const,
-            W_se[t - 1],
-            W_ee[t - 1],
+            W_se,
+            W_ee,
             W_se_ideal,
             W_ee_ideal,
+            W_se_plt_idx,
+            W_ee_plt_idx,
             P,
             t,
             w_p,
@@ -294,11 +325,13 @@ def train_data(
         )
 
         # Update inhibitory weights
-        W_ie[t], z_istdp, H, post_synaptic_trace[t, :-N_inhib_neurons] = (
+        W_ie, W_ie_2d, z_istdp, H, post_synaptic_trace[t, :-N_inhib_neurons] = (
             inh_weight_update_func(
                 H,
                 dt,
-                W_ie[t - 1],
+                W_ie,
+                W_ie_2d,
+                W_ie_plt_idx,
                 z_istdp,
                 tau_H,
                 gamma,
@@ -312,7 +345,7 @@ def train_data(
         )
 
         # Ensure weights continue their value to the next time step
-        W_ei[t] = W_ei[t - 1]
+        W_ei_2d[t] = W_ei_2d[t - 1]
 
     if save_model:
         # Generate a random number for model folder
@@ -325,15 +358,22 @@ def train_data(
         os.makedirs(f"model/model_{rand_num}")
 
         # Save model weights, spikes, and MemPot
-        np.save(f"model/model_{rand_num}/W_se.npy", W_se)
-        np.save(f"model/model_{rand_num}/W_ee.npy", W_ee)
-        np.save(f"model/model_{rand_num}/W_ie.npy", W_ie)
-        np.save(f"model/model_{rand_num}/W_ei.npy", W_ei)
+        np.save(f"model/model_{rand_num}/W_se.npy", W_se_2d)
+        np.save(f"model/model_{rand_num}/W_ee.npy", W_ee_2d)
+        np.save(f"model/model_{rand_num}/W_ie.npy", W_ie_2d)
+        np.save(f"model/model_{rand_num}/W_ei.npy", W_ei_2d)
+        np.save(f"model/model_{rand_num}/W_se_plt_idx.npy", W_se_plt_idx)
+        np.save(f"model/model_{rand_num}/W_ee_plt_idx.npy", W_ee_plt_idx)
+        np.save(f"model/model_{rand_num}/W_ie_plt_idx.npy", W_ie_plt_idx)
+        np.save(f"model/model_{rand_num}/W_ei_plt_idx.npy", W_ei_plt_idx)
         np.save(f"model/model_{rand_num}/spikes.npy", spikes)
         np.save(f"model/model_{rand_num}/MemPot.npy", MemPot)
         np.save(f"model/model_{rand_num}/pre_synaptic_trace.npy", pre_synaptic_trace)
         np.save(f"model/model_{rand_num}/post_synaptic_trace.npy", post_synaptic_trace)
-        np.save(f"model/model_{rand_num}/slow_pre_synaptic_trace.npy", slow_pre_synaptic_trace)
+        np.save(
+            f"model/model_{rand_num}/slow_pre_synaptic_trace.npy",
+            slow_pre_synaptic_trace,
+        )
         np.save(f"model/model_{rand_num}/z_istdp_trace.npy", z_istdp)
         np.save(f"model/model_{rand_num}/config.npy", filtered_locs)
         np.save(f"model/model_{rand_num}/I_in_ls.npy", I_in_ls)
@@ -341,13 +381,13 @@ def train_data(
     return (
         spikes,
         MemPot,
-        W_se,
+        W_se_2d,
         W_se_ideal,
-        W_ee,
+        W_ee_2d,
         W_ee_ideal,
-        W_ei,
+        W_ei_2d,
         W_ei_ideal,
-        W_ie,
+        W_ie_2d,
         W_ie_ideal,
         pre_synaptic_trace,
         post_synaptic_trace,

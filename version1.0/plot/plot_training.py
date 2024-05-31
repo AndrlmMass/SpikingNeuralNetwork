@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from sklearn.manifold import TSNE
 
+
 def plot_membrane_activity(
     MemPot: np.ndarray,
     idx_start: int,
@@ -38,11 +39,6 @@ def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie):
     axs[0].set_title("Spikes during training")
     axs[0].set_xlabel("Time (ms)")
     axs[0].set_ylabel("Neuron index")
-
-    # Reshape weight matrices
-    W_se = W_se.reshape(W_se.shape[0], -1)[:, ::500]
-    W_ee = W_ee.reshape(W_ee.shape[0], -1)[:, ::500]
-    W_ie = W_ie.reshape(W_ie.shape[0], -1)[:, ::500]
 
     # Define color and label mapping for plots
     weight_plots = {
@@ -180,6 +176,7 @@ def plot_traces(
     plt.legend()
     plt.show()
 
+
 def t_SNE(N_classes, spikes, labels, labels_spike, timesteps):
     # Reshape labels to match spikes
     labels = np.argmax(labels, axis=1)
@@ -196,7 +193,7 @@ def t_SNE(N_classes, spikes, labels, labels_spike, timesteps):
     n_bins = n_time_steps // timesteps
     bin_size = timesteps
     features = np.zeros((n_bins, n_neurons))
-    
+
     for i in range(n_bins):
         start = i * bin_size
         end = (i + 1) * bin_size
@@ -213,12 +210,11 @@ def t_SNE(N_classes, spikes, labels, labels_spike, timesteps):
     plt.figure(figsize=(10, 8))
     for label in np.unique(labels):
         indices = labels == label
-        plt.scatter(tsne_results[indices, 0], tsne_results[indices, 1], label=label_names[label])
-    plt.title('t-SNE results of SNN firing rates')
-    plt.xlabel('t-SNE dimension 1')
-    plt.ylabel('t-SNE dimension 2')
+        plt.scatter(
+            tsne_results[indices, 0], tsne_results[indices, 1], label=label_names[label]
+        )
+    plt.title("t-SNE results of SNN firing rates")
+    plt.xlabel("t-SNE dimension 1")
+    plt.ylabel("t-SNE dimension 2")
     plt.legend()
     plt.show()
-
-
-
