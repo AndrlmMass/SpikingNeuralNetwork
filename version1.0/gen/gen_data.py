@@ -1,10 +1,8 @@
 # Gen data according to y number of classes
 import os
 import sys
-from tqdm import tqdm
-import pickle
 import numpy as np
-import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 if os.path.exists(
     "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\version1.0"

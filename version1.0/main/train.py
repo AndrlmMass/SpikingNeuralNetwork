@@ -133,12 +133,20 @@ def train_data(
         "MemPot",
         "W_se",
         "W_se_ideal",
+        "W_se_plt_idx",
+        "W_se_2d",
         "W_ee",
         "W_ee_ideal",
+        "W_ee_plt_idx",
+        "W_ee_2d",
         "W_ei",
         "W_ei_ideal",
+        "W_ei_plt_idx",
+        "W_ei_2d",
         "W_ie",
         "W_ie_ideal",
+        "W_ie_plt_idx",
+        "W_ie_2d",
     ]
 
     # Filter out the large arrays
@@ -149,6 +157,9 @@ def train_data(
         config_path = f"model/{folder}/config.npy"
         if os.path.exists(config_path):
             saved_config = np.load(config_path, allow_pickle=True).item()
+            saved_config = {
+                k: v for k, v in saved_config.items() if k not in exclude_keys
+            }
             if filtered_locs == saved_config:
                 stop_event = threading.Event()
 
@@ -285,8 +296,6 @@ def train_data(
             W_ee,
             W_se_ideal,
             W_ee_ideal,
-            W_se_2d[t],
-            W_ee_2d[t],
             pre_synaptic_trace[t],
             post_synaptic_trace[t],
             slow_pre_synaptic_trace[t],
@@ -299,8 +308,6 @@ def train_data(
             W_ee,
             W_se_ideal,
             W_ee_ideal,
-            W_se_plt_idx,
-            W_ee_plt_idx,
             P,
             t,
             w_p,
@@ -325,13 +332,11 @@ def train_data(
         )
 
         # Update inhibitory weights
-        W_ie, W_ie_2d, z_istdp, H, post_synaptic_trace[t, :-N_inhib_neurons] = (
+        W_ie, z_istdp, H, post_synaptic_trace[t, :-N_inhib_neurons] = (
             inh_weight_update_func(
                 H,
                 dt,
                 W_ie,
-                W_ie_2d,
-                W_ie_plt_idx,
                 z_istdp,
                 tau_H,
                 gamma,
@@ -343,6 +348,11 @@ def train_data(
                 post_synaptic_trace[t - 1],
             )
         )
+
+        # Assign the selected indices to the first row
+        W_se_2d = W_se[W_se_plt_idx[:, 0], W_se_plt_idx[:, 1]]
+        W_ee_2d = W_ee[W_ee_plt_idx[:, 0], W_ee_plt_idx[:, 1]]
+        W_ie_2d = W_ie[W_ie_plt_idx[:, 0], W_ie_plt_idx[:, 1]]
 
         # Ensure weights continue their value to the next time step
         W_ei_2d[t] = W_ei_2d[t - 1]

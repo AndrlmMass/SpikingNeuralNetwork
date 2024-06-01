@@ -37,7 +37,7 @@ snn_params = {
     "tau_H": 10,
     "learning_rate": 0.1,
     "gamma": 0.1,
-    "num_items": 40,
+    "num_items": 200,
     "dt": 0.001,
     "T": 0.1,
     "wp": 0.5,
@@ -81,7 +81,7 @@ snn = SNN_STDP(**snn_params)
 snn.gen_data(
     N_classes=4,
     noise_rand=True,
-    noise_rand_ls=[0, 0.01, 0.03, 0.05],
+    noise_rand_ls=[0.05],
     mean=0,
     blank_variance=0.01,
     input_scaler=20,
@@ -111,7 +111,7 @@ snn.visualize_data(run=False)
 
 # Visualize training and testing results
 snn.plot_training(
-    ws_nd_spikes=False,
+    ws_nd_spikes=True,
     idx_start=484,
     idx_stop=600,
     mv=False,
