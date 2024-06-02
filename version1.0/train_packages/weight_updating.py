@@ -63,9 +63,13 @@ def exc_weight_update(
     slow_trace_se += dt * (-slow_trace_se / tau_slow + pre_spikes_se)
 
     # Update z_th, C and B -> this is only done once for W_se and W_ee
-    z_ht = z_ht * np.exp(-dt / tau_ht) + spikes[0] * dt
-    C = C * np.exp(-dt / tau_hom) + z_ht**2
-    B = np.where(A * C <= 1, C, A)
+    z_ht += dt * (-z_ht / tau_ht + current_spikes)
+
+    # Update C trace
+    C = C + dt * (-C / tau_hom + z_ht**2)
+
+    # Update B value based on C
+    B = np.where(C <= 1 / A, A * C, A)
 
     # Get learning components
     triplet_LTP = A * post_trace_se * slow_trace_se * pre_spikes_se
@@ -103,14 +107,15 @@ def exc_weight_update(
     post_spikes_ee = spikes[N_input_neurons:-N_inhib_neurons]
     pre_spikes_ee = spikes[N_input_neurons:-N_inhib_neurons]
 
+    # Initiate presynaptic and postsynaptic traces
+    pre_trace_ee = pre_synaptic_trace[N_input_neurons:-N_inhib_neurons]
+    post_trace_ee = post_synaptic_trace[N_input_neurons:-N_inhib_neurons]
+    slow_trace_ee = slow_pre_synaptic_trace[N_input_neurons:-N_inhib_neurons]
+
     # Update synaptic traces
-    pre_trace_ee = (
-        pre_synaptic_trace[N_input_neurons:-N_inhib_neurons] + pre_spikes_ee * dt
-    )
-    post_trace_ee = post_synaptic_trace[:-N_inhib_neurons] + post_spikes_ee * dt
-    slow_trace_ee = (
-        slow_pre_synaptic_trace[N_input_neurons:-N_inhib_neurons] + pre_spikes_se * dt
-    )
+    pre_trace_ee += dt * (-pre_trace_ee / tau_plus + pre_spikes_ee)
+    post_trace_ee += dt * (-post_trace_ee / tau_minus + post_spikes_ee)
+    slow_trace_ee += dt * (-slow_trace_ee / tau_slow + pre_spikes_ee)
 
     # Get learning components
     triplet_LTP = A * post_trace_ee * slow_trace_ee * pre_spikes_ee
@@ -181,5 +186,8 @@ def inh_weight_update(
     delta_w = learning_rate * G * np.dot(
         (z_istdp_reshaped + 1), post_spikes_reshaped
     ) + np.dot(pre_spikes_reshaped, post_trace_reshaped)
+
+    # Updat weights
+    W_ie += delta_w
 
     return W_ie, z_istdp, H, post_trace
