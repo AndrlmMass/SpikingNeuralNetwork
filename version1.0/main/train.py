@@ -302,11 +302,16 @@ def train_data(
             W_ee,
             W_se_ideal,
             W_ee_ideal,
-            pre_synaptic_trace[t],
-            post_synaptic_trace[t],
-            slow_pre_synaptic_trace[t],
-            z_ht,
-            C,
+            pre_synaptic_trace[t, :N_input_neurons],
+            post_synaptic_trace[t, N_input_neurons:-N_inhib_neurons],
+            slow_pre_synaptic_trace[t, :N_input_neurons],
+            z_ht[:N_input_neurons],
+            C[:N_input_neurons],
+            pre_synaptic_trace[t, N_input_neurons:-N_inhib_neurons],
+            post_synaptic_trace[t, N_input_neurons:-N_inhib_neurons],
+            slow_pre_synaptic_trace[t, N_input_neurons:-N_inhib_neurons],
+            z_ht[N_input_neurons:-N_inhib_neurons],
+            C[N_input_neurons:-N_inhib_neurons],
         ) = exc_weight_update_func(
             dt,
             tau_const,
@@ -319,7 +324,6 @@ def train_data(
             w_p,
             spikes[t - 1],
             N_input_neurons,
-            N_excit_neurons,
             N_inhib_neurons,
             pre_synaptic_trace[t - 1],
             post_synaptic_trace[t - 1],
@@ -338,21 +342,23 @@ def train_data(
         )
 
         # Update inhibitory weights
-        W_ie, z_istdp, H, post_synaptic_trace[t, :-N_inhib_neurons] = (
-            inh_weight_update_func(
-                H,
-                dt,
-                W_ie,
-                z_istdp,
-                tau_H,
-                gamma,
-                tau_stdp,
-                learning_rate,
-                spikes[t - 1],
-                N_input_neurons,
-                N_inhib_neurons,
-                post_synaptic_trace[t - 1],
-            )
+        (
+            W_ie,
+            z_istdp,
+            H,
+        ) = inh_weight_update_func(
+            H,
+            dt,
+            W_ie,
+            z_istdp,
+            tau_H,
+            gamma,
+            tau_stdp,
+            learning_rate,
+            spikes[t - 1],
+            N_input_neurons,
+            N_inhib_neurons,
+            post_synaptic_trace[t - 1],
         )
 
         # Assign the selected indices to the first row

@@ -39,7 +39,7 @@ snn_params = {
     "gamma": 0.1,
     "num_items": 24,
     "dt": 0.001,
-    "T": 0.1,
+    "T": 1,
     "wp": 0.5,
     "V_rest": -60,
     "min_weight": 0,
@@ -49,7 +49,7 @@ snn_params = {
     "A": 0.01,
     "beta": 0.05,
     "delta": 0.02,
-    "tau_const": 10,
+    "tau_const": 30 * 1000,  # 30 seconds until weight convergence
     "euler": 5,
 }
 

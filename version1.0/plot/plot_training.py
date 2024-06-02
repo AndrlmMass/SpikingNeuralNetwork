@@ -182,7 +182,7 @@ def plot_traces(
                 )  # Label only the first line of each type
             else:
                 plt.plot(weights, color=info["color"])
-    plt.legend()
+    plt.legend(pos="upper right")
     plt.show()
 
 
