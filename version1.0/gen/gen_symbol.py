@@ -9,7 +9,6 @@ def generate_normal_value(mean=0, variance=0.1):
     return value
 
 
-@njit
 def draw_line_high_res(high_res_grid, v0, v1, thickness, subgrid_resolution):
     dx = v1[0] - v0[0]
     dy = v1[1] - v0[1]
@@ -31,7 +30,6 @@ def draw_line_high_res(high_res_grid, v0, v1, thickness, subgrid_resolution):
                 high_res_grid[r, c] = 1
 
 
-@njit
 def draw_circle_with_thickness(
     high_res_grid, center, radius, thickness, subgrid_resolution
 ):
@@ -51,7 +49,6 @@ def draw_circle_with_thickness(
                 high_res_grid[rr[i], cc[i]] = 1
 
 
-@njit
 def add_noise(input_space, noise_rand, noise_variance):
     if noise_rand:
         for j in range(input_space.shape[0]):

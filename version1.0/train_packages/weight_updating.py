@@ -2,7 +2,6 @@
 
 # Import libraries
 import numpy as np
-from numba import njit
 
 
 def exc_weight_update(
@@ -12,8 +11,6 @@ def exc_weight_update(
     W_ee,
     W_se_ideal,
     W_ee_ideal,
-    W_se_plt_idx,
-    W_ee_plt_idx,
     P,
     t,
     w_p,
@@ -43,8 +40,7 @@ def exc_weight_update(
 
     # Update ideal weights if t is divisible by euler
     W_se_ideal += (
-        dt
-        * tau_const
+        (dt / tau_const)
         * (
             W_se
             - W_se_ideal
@@ -56,13 +52,15 @@ def exc_weight_update(
     post_spikes_se = spikes[N_input_neurons:-N_inhib_neurons]
     pre_spikes_se = spikes[:N_input_neurons]
 
+    # Initiate presynaptic and postsynaptic traces
+    pre_trace_se = pre_synaptic_trace[:-N_inhib_neurons]
+    post_trace_se = post_synaptic_trace[N_input_neurons:-N_inhib_neurons]
+    slow_trace_se = slow_pre_synaptic_trace[:-N_inhib_neurons]
+
     # Update synaptic traces
-    pre_synaptic_trace *= np.exp(-dt / tau_plus)
-    post_synaptic_trace *= np.exp(-dt / tau_minus)
-    slow_pre_synaptic_trace *= np.exp(-dt / tau_slow)
-    pre_trace_se = pre_synaptic_trace[:N_input_neurons] + pre_spikes_se * dt
-    post_trace_se = post_synaptic_trace[:N_excit_neurons] + post_spikes_se * dt
-    slow_trace_se = slow_pre_synaptic_trace[:N_input_neurons] + pre_spikes_se * dt
+    pre_trace_se += dt * (-pre_trace_se / tau_plus + pre_spikes_se)
+    post_spikes_ee += dt * (-post_trace_se / tau_minus + post_spikes_se)
+    slow_trace_se += dt * (-slow_trace_se / tau_slow + pre_spikes_se)
 
     # Update z_th, C and B -> this is only done once for W_se and W_ee
     z_ht = z_ht * np.exp(-dt / tau_ht) + spikes[0] * dt
@@ -86,14 +84,6 @@ def exc_weight_update(
     delta_w = Hebb + Hetero + transmitter
 
     W_se += delta_w
-
-    # Convert 2D indices to 1D
-    raveled_indices = np.ravel_multi_index(
-        (W_se_plt_idx[:, 0], W_se_plt_idx[:, 1]), W_se.shape
-    )
-
-    # Use the 1D indices to assign the values to W_se_2d
-    W_se_2d = W_se.ravel()[raveled_indices][:10].reshape(1, -1)
 
     ## W_ee weights ##
 
@@ -141,21 +131,11 @@ def exc_weight_update(
 
     W_ee += delta_w
 
-    # Convert 2D indices to 1D
-    raveled_indices = np.ravel_multi_index(
-        (W_ee_plt_idx[:, 0], W_ee_plt_idx[:, 1]), W_ee.shape
-    )
-
-    # Use the 1D indices to assign the values to W_se_2d
-    W_ee_2d = W_ee.ravel()[raveled_indices][:10].reshape(1, -1)
-
     return (
         W_se,
         W_ee,
         W_se_ideal,
         W_ee_ideal,
-        W_ee_2d,
-        W_se_2d,
         pre_synaptic_trace,
         post_synaptic_trace,
         slow_pre_synaptic_trace,
@@ -168,8 +148,6 @@ def inh_weight_update(
     H,
     dt,
     W_ie,
-    W_ie_2d,
-    W_ie_plt_idx,
     z_istdp,
     tau_H,
     gamma,
@@ -204,10 +182,4 @@ def inh_weight_update(
         (z_istdp_reshaped + 1), post_spikes_reshaped
     ) + np.dot(pre_spikes_reshaped, post_trace_reshaped)
 
-    # Update weights
-    W_ie += delta_w
-
-    # Assign the selected indices to the first row of 'W_ie_2d'
-    W_ie_2d[0, :10] = W_ie[W_ie_plt_idx[:, 0], W_ie_plt_idx[:, 1]]
-
-    return W_ie, W_ie_2d, z_istdp, H, post_trace
+    return W_ie, z_istdp, H, post_trace

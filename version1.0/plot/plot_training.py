@@ -10,10 +10,16 @@ from sklearn.manifold import TSNE
 
 def plot_membrane_activity(
     MemPot: np.ndarray,
+    MemPot_th: np.ndarray,
     idx_start: int,
     idx_stop: int,
+    time: int,
 ):
+    update_frequency = time // 100
+    MemPot_th = np.repeat(MemPot_th, update_frequency)
+
     plt.plot(MemPot[:, idx_start:idx_stop])
+    plt.plot(MemPot_th, color="grey", linestyle="dashed")
 
     plt.xlabel("ms")
     plt.ylabel("Membrane Potential")
@@ -161,18 +167,21 @@ def plot_clusters(spikes, labels, N_input_neurons, N_excit_neurons, N_inhib_neur
 def plot_traces(
     pre_synaptic_trace, post_synaptic_trace, slow_pre_synaptic_trace, N_input_neurons
 ):
-    # Draw traces
-    plt.plot(
-        pre_synaptic_trace[:, 40 : 60 + 20],
-        label="pre_synaptic_trace",
-        color="red",
-    )
-    plt.plot(post_synaptic_trace[:, :20], label="post_synaptic_trace", color="blue")
-    plt.plot(
-        slow_pre_synaptic_trace[:, N_input_neurons : N_input_neurons + 20],
-        label="slow_pre_synaptic_trace",
-        color="green",
-    )
+    trace_plots = {
+        "pre": {"data": pre_synaptic_trace, "color": "red"},
+        "post": {"data": post_synaptic_trace, "color": "blue"},
+        "slow": {"data": slow_pre_synaptic_trace, "color": "green"},
+    }
+
+    # Plot weights with different colors for each weight matrix
+    for key, info in trace_plots.items():
+        for i, weights in enumerate(info["data"].T):
+            if i == 0:
+                plt.plot(
+                    weights, color=info["color"], label=key
+                )  # Label only the first line of each type
+            else:
+                plt.plot(weights, color=info["color"])
     plt.legend()
     plt.show()
 

@@ -262,6 +262,7 @@ class SNN_STDP:
             self.slow_synaptic_trace,
             self.z_istdp,
             self.I_in_ls,
+            self.V_th_array,
         ) = train_data(
             R=self.R,
             A=self.A,
@@ -343,8 +344,10 @@ class SNN_STDP:
         if mv:
             plot_membrane_activity(
                 MemPot=self.MemPot,
+                MemPot_th=self.V_th_array,
                 idx_start=idx_start,
                 idx_stop=idx_stop,
+                time=self.time,
             )
         if overlap:
             plot_clusters(

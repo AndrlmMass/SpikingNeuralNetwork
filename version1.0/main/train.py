@@ -187,6 +187,7 @@ def train_data(
                 )
                 z_istdp = np.load(f"model/{folder}/z_istdp_trace.npy")
                 I_in_ls = np.load(f"model/{folder}/I_in_ls.npy")
+                V_th_array = np.load(f"model/{folder}/V_th_array.npy")
 
                 # Signal that loading is complete
                 stop_event.set()
@@ -212,6 +213,7 @@ def train_data(
                     slow_pre_synaptic_trace,
                     z_istdp,
                     I_in_ls,
+                    V_th_array,
                 )
 
     # Initiate relevant arrays and variables
@@ -226,6 +228,8 @@ def train_data(
     H = 0
     V_th_ = float(V_th_)
     V_th = np.full(num_neurons - N_input_neurons, V_th_)
+    V_th_array = np.zeros((100))
+    V_th_array[0] = V_th_
 
     # Add input data before training for input neurons
     spikes[:, :N_input_neurons] = training_data
@@ -235,6 +239,7 @@ def train_data(
 
     # Convert functions if njit is true
     njit_ = int(items > item_lim)
+
     if njit_:
         adjust_membrane_threshold_func = njit(adjust_membrane_threshold)
         update_membrane_potential_func = njit(update_membrane_potential)
@@ -267,6 +272,7 @@ def train_data(
                 N_excit_neurons,
                 N_inhib_neurons,
             )
+            V_th_array[t // update_freq] = np.mean(V_th)
 
         MemPot[t], I_in_ls[t] = update_membrane_potential_func(
             MemPot[t - 1],
@@ -350,9 +356,9 @@ def train_data(
         )
 
         # Assign the selected indices to the first row
-        W_se_2d = W_se[W_se_plt_idx[:, 0], W_se_plt_idx[:, 1]]
-        W_ee_2d = W_ee[W_ee_plt_idx[:, 0], W_ee_plt_idx[:, 1]]
-        W_ie_2d = W_ie[W_ie_plt_idx[:, 0], W_ie_plt_idx[:, 1]]
+        W_se_2d[t] = W_se[W_se_plt_idx[:, 0], W_se_plt_idx[:, 1]]
+        W_ee_2d[t] = W_ee[W_ee_plt_idx[:, 0], W_ee_plt_idx[:, 1]]
+        W_ie_2d[t] = W_ie[W_ie_plt_idx[:, 0], W_ie_plt_idx[:, 1]]
 
         # Ensure weights continue their value to the next time step
         W_ei_2d[t] = W_ei_2d[t - 1]
@@ -387,6 +393,7 @@ def train_data(
         np.save(f"model/model_{rand_num}/z_istdp_trace.npy", z_istdp)
         np.save(f"model/model_{rand_num}/config.npy", filtered_locs)
         np.save(f"model/model_{rand_num}/I_in_ls.npy", I_in_ls)
+        np.save(f"model/model_{rand_num}/V_th_array.npy", V_th_array)
 
     return (
         spikes,
@@ -404,4 +411,5 @@ def train_data(
         slow_pre_synaptic_trace,
         z_istdp,
         I_in_ls,
+        V_th_array,
     )

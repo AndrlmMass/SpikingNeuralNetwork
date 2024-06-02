@@ -90,7 +90,7 @@ class gen_weights:
         # Extract the values corresponding to the selected indices
         W_ee_2d[0] = W_ee[selected_indices[:, 0], selected_indices[:, 1]]
 
-        return W_ee, W_ee_ideal, W_ee, selected_indices
+        return W_ee, W_ee_ideal, W_ee_2d, selected_indices
 
     def gen_EI(self, N_excit_neurons, N_inhib_neurons, time, prob):
         # Create weight array for EI
