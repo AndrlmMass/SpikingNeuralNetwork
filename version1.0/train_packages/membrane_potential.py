@@ -3,47 +3,31 @@ import numpy as np
 
 # Create function that takes in spikes and indices and outputs an adjusted membrane potential
 def adjust_membrane_threshold(
-    spikes, V_th, V_reset, N_input_neurons, N_excit_neurons, N_inhib_neurons
+    spikes,
+    V_th,
+    N_input_neurons,
+    N_excit_neurons,
+    N_inhib_neurons,
+    dt,
+    tau_thr,
+    v_rest,
 ):
     ## Excitatory neurons ##
 
-    # Calculate total spikes in the previous time interval
-    tot_spik_e = np.sum(spikes[N_input_neurons:-N_inhib_neurons])
-
-    # Calculate total spikes per neuron (axis=0) in the previous time interval
-    per_spik_e = np.sum(
-        spikes[N_input_neurons:-N_inhib_neurons],
-        axis=0,
-    )
-
-    # Calculate the ratio between local and global spikes
-    tot_spik_e_safe = np.maximum(tot_spik_e, 0.01)
-    ratio_e = per_spik_e / tot_spik_e_safe
-
     # Update the membrane potential threshold according to the radio_e
-    V_th[:N_excit_neurons] = np.maximum(
-        V_reset + (V_th[:N_excit_neurons] - V_reset) * np.exp(-ratio_e), V_reset
-    )
+    # V_th[:N_excit_neurons] += (
+    #     (dt / tau_thr)
+    #     * (v_rest - V_th[:N_excit_neurons])
+    #     * spikes[N_input_neurons:-N_inhib_neurons]
+    # )
 
     ## Inhibitory neurons ##
 
-    # Calculate total spikes in the previous time interval
-    tot_spik_i = np.sum(spikes[-N_inhib_neurons:])
-
-    # Calculate total spikes per neuron (axis=0) in the previous time interval
-    per_spik_i = np.sum(
-        spikes[-N_inhib_neurons:],
-        axis=0,
-    )
-
-    # Calculate ratio between local and global spikes
-    tot_spik_i_safe = np.maximum(tot_spik_i, 0.01)
-    ratio_i = per_spik_i / tot_spik_i_safe
-
     # Update membrane potential threshold according to the ratio_i
-    V_th[N_excit_neurons:] = np.maximum(
-        V_reset + (V_th[N_excit_neurons:] - V_reset) * np.exp(-ratio_i), V_reset
-    )
+    # V_th[N_excit_neurons:] += (
+    #     V_th[N_excit_neurons:]
+    #     + (dt / tau_thr) * (v_rest - V_th[N_excit_neurons:]) * spikes[-N_inhib_neurons:]
+    # )
 
     return V_th
 

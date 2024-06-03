@@ -48,6 +48,7 @@ class SNN_STDP:
         tau_hom: float | int,
         tau_stdp: float | int,
         tau_H: float | int,
+        tau_thr: float | int,
         gamma: float | int,
         learning_rate: float | int,
         num_items: float,
@@ -78,6 +79,7 @@ class SNN_STDP:
         self.tau_hom = tau_hom
         self.tau_stdp = tau_stdp
         self.tau_H = tau_H
+        self.tau_thr = tau_thr
         self.gamma = gamma
         self.learning_rate = learning_rate
         self.dt = dt
@@ -283,6 +285,7 @@ class SNN_STDP:
             tau_hom=self.tau_hom,
             tau_stdp=self.tau_stdp,
             tau_H=self.tau_H,
+            tau_thr=self.tau_thr,
             learning_rate=self.learning_rate,
             gamma=self.gamma,
             tau_const=self.tau_const,

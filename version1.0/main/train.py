@@ -95,6 +95,7 @@ def train_data(
     tau_const: float | int,
     tau_H: float | int,
     tau_stdp: float | int,
+    tau_thr: float | int,
     learning_rate: float | int,
     training_data: np.ndarray,
     N_excit_neurons: int,
@@ -267,11 +268,14 @@ def train_data(
             V_th = adjust_membrane_threshold_func(
                 spikes[t - 1],
                 V_th,
-                V_reset,
                 N_input_neurons,
                 N_excit_neurons,
                 N_inhib_neurons,
+                dt,
+                tau_thr,
+                V_rest,
             )
+
             V_th_array[t // update_freq] = np.mean(V_th)
 
         MemPot[t], I_in_ls[t] = update_membrane_potential_func(
@@ -303,12 +307,12 @@ def train_data(
             W_se_ideal,
             W_ee_ideal,
             pre_synaptic_trace[t, :N_input_neurons],
-            post_synaptic_trace[t, N_input_neurons:-N_inhib_neurons],
+            post_synaptic_trace[t, :-N_inhib_neurons],
             slow_pre_synaptic_trace[t, :N_input_neurons],
             z_ht[:N_input_neurons],
             C[:N_input_neurons],
             pre_synaptic_trace[t, N_input_neurons:-N_inhib_neurons],
-            post_synaptic_trace[t, N_input_neurons:-N_inhib_neurons],
+            post_synaptic_trace[t, :-N_inhib_neurons],
             slow_pre_synaptic_trace[t, N_input_neurons:-N_inhib_neurons],
             z_ht[N_input_neurons:-N_inhib_neurons],
             C[N_input_neurons:-N_inhib_neurons],
@@ -355,10 +359,9 @@ def train_data(
             gamma,
             tau_stdp,
             learning_rate,
-            spikes[t - 1],
-            N_input_neurons,
-            N_inhib_neurons,
-            post_synaptic_trace[t - 1],
+            spikes[t - 1, -N_inhib_neurons:],
+            spikes[t - 1, N_input_neurons:-N_inhib_neurons],
+            post_synaptic_trace[t - 1, :-N_inhib_neurons],
         )
 
         # Assign the selected indices to the first row

@@ -53,7 +53,7 @@ def exc_weight_update(
 
     # Initiate presynaptic and postsynaptic traces
     pre_trace_se = pre_synaptic_trace[:N_input_neurons]
-    post_trace_se = post_synaptic_trace[N_input_neurons:-N_inhib_neurons]
+    post_trace_se = post_synaptic_trace[:-N_inhib_neurons]
     slow_trace_se = slow_pre_synaptic_trace[:N_input_neurons]
     z_ht_se = z_ht[:N_input_neurons]
     C_se = C[:N_input_neurons]
@@ -66,7 +66,7 @@ def exc_weight_update(
     # Update z_th, C and B variables
     z_ht_se += dt * (-z_ht_se / tau_ht + pre_spikes_se)
     C_se += dt * (-C_se / tau_hom + z_ht_se**2)
-    B_se = np.where(C <= 1 / A, A * C, A)
+    B_se = np.where(C_se <= 1 / A, A * C_se, A)
 
     # Get learning components
     A_z = A * pre_trace_se * slow_trace_se
@@ -110,7 +110,7 @@ def exc_weight_update(
     # Update z_th, C and B variables
     z_ht_ee += dt * (-z_ht_ee / tau_ht + pre_spikes_se)
     C_ee += dt * (-C_ee / tau_hom + z_ht_ee**2)
-    B_ee = np.where(C <= 1 / A, A * C, A)
+    B_ee = np.where(C_ee <= 1 / A, A * C_ee, A)
 
     # Get learning components
     A_z = A * pre_trace_ee * slow_trace_ee
@@ -150,28 +150,22 @@ def inh_weight_update(
     gamma,
     tau_stdp,
     learning_rate,
-    spikes,
-    N_input_neurons,
-    N_inhib_neurons,
-    post_synaptic_trace,
+    pre_spikes,
+    post_spikes,
+    post_trace,
 ):
-
-    # Define post and pre spikes
-    post_spikes = spikes[N_input_neurons:-N_inhib_neurons]
-    pre_spikes = spikes[-N_inhib_neurons:]
-
     # Update synaptic traces using Euler's method
     z_istdp += dt * (-z_istdp / tau_stdp + pre_spikes)
-    post_trace = post_synaptic_trace[N_input_neurons:-N_inhib_neurons]
 
     # Update H using Euler's method
-    H += dt * (-H / tau_H + np.sum(spikes[N_input_neurons:-N_inhib_neurons]))
+    H += dt * (-H / tau_H + np.sum(post_spikes))
     G = H - gamma
 
     # Reshape arrays for matrix operations
+    post_trace_reshaped = post_trace.reshape(-1, 1)
     z_istdp_reshaped = z_istdp.reshape(-1, 1)
     post_spikes_reshaped = post_spikes.reshape(1, -1)
-    pre_spikes_reshaped = pre_spikes.reshape(-1, 1)
+    pre_spikes_reshaped = pre_spikes.reshape(1, -1)
 
     # Calculate delta weights
     delta_w = (
@@ -179,15 +173,12 @@ def inh_weight_update(
         * learning_rate
         * G
         * (
-            (z_istdp_reshaped + 1) @ post_spikes_reshaped
-            + z_istdp_reshaped @ pre_spikes_reshaped.T
+            (z_istdp_reshaped + 1) * post_spikes_reshaped
+            + (post_trace_reshaped * pre_spikes_reshaped).T
         )
     )
 
     # Update weights with constraint
     W_ie += delta_w
-
-    # Clip weights to be between 0 and 5
-    W_ie = np.clip(W_ie, 0, 5)
 
     return W_ie, z_istdp, H
