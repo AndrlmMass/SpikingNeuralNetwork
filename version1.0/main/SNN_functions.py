@@ -171,6 +171,48 @@ class SNN_STDP:
                 self.W_ie_ideal,
             )
 
+    def vis_network(self, heatmap: bool, weight_layer: bool):
+        if heatmap:
+            plot_input_space(self.W_se)
+        if weight_layer:
+            W_se_ = np.sum(self.W_se, axis=1).reshape(
+                int(np.sqrt(self.N_input_neurons)), int(np.sqrt(self.N_input_neurons))
+            )
+            draw_weights_layer(
+                weights=W_se_,
+                title="Input space",
+                xlabel="Input Neurons",
+                ylabel="Input Neurons",
+            )
+            W_es_ = np.sum(self.W_se, axis=0).reshape(
+                int(np.sqrt(self.N_input_neurons)), int(np.sqrt(self.N_input_neurons))
+            )
+            draw_weights_layer(
+                weights=W_es_,
+                title="Excitatory space",
+                xlabel="Excitatory Neurons",
+                ylabel="Excitatory Neurons",
+            )
+            W_ee_ = np.sum(self.W_ee, axis=1).reshape(
+                int(np.sqrt(self.N_excit_neurons)), int(np.sqrt(self.N_excit_neurons))
+            )
+            draw_weights_layer(
+                weights=W_ee_,
+                title="Excitatory space",
+                xlabel="Excitatory neuron",
+                ylabel="Excitatory neuron",
+            )
+            W_ie_ = np.sum(self.W_ie, axis=0).reshape(
+                int(np.sqrt(self.N_excit_neurons)), int(np.sqrt(self.N_excit_neurons))
+            )
+            draw_weights_layer(
+                weights=W_ie_,
+                title="Excitatory space",
+                xlabel="Excitatory neuron",
+                ylabel="Excitatory neuron",
+            )
+            W_
+
     def gen_data(
         self,
         N_classes: int,
@@ -374,6 +416,7 @@ class SNN_STDP:
                 self.labels,
                 self.labels_train,
                 self.num_timesteps,
+                self.N_input_neurons,
             )
 
     def plot_I_in(self):

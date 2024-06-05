@@ -221,7 +221,7 @@ def train_data(
     num_neurons = N_excit_neurons + N_inhib_neurons + N_input_neurons
     spikes = np.zeros((time, num_neurons))
     pre_synaptic_trace = np.zeros((time, num_neurons))
-    post_synaptic_trace = np.zeros((time, num_neurons - N_input_neurons))
+    post_synaptic_trace = np.ones((time, N_excit_neurons))
     slow_pre_synaptic_trace = np.zeros((time, num_neurons))
     C = np.full(num_neurons, A)
     z_ht = np.ones(num_neurons)
@@ -242,13 +242,13 @@ def train_data(
     njit_ = int(items > item_lim)
 
     if njit_:
-        adjust_membrane_threshold_func = njit(adjust_membrane_threshold)
+        # adjust_membrane_threshold_func = njit(adjust_membrane_threshold)
         update_membrane_potential_func = njit(update_membrane_potential)
         exc_weight_update_func = njit(exc_weight_update)
         inh_weight_update_func = njit(inh_weight_update)
         print("Running njit")
     else:
-        adjust_membrane_threshold_func = adjust_membrane_threshold
+        # adjust_membrane_threshold_func = adjust_membrane_threshold
         update_membrane_potential_func = update_membrane_potential
         exc_weight_update_func = exc_weight_update
         inh_weight_update_func = inh_weight_update
@@ -265,20 +265,20 @@ def train_data(
 
         # Update adaptive membrane potential threshold
         if t % update_freq == 0:
-            V_th = adjust_membrane_threshold_func(
-                spikes[t - 1],
-                V_th,
-                N_input_neurons,
-                N_excit_neurons,
-                N_inhib_neurons,
-                dt,
-                tau_thr,
-                V_rest,
-            )
+            # V_th = adjust_membrane_threshold_func(
+            #     spikes[t - 1],
+            #     V_th,
+            #     N_input_neurons,
+            #     N_excit_neurons,
+            #     N_inhib_neurons,
+            #     dt,
+            #     tau_thr,
+            #     V_rest,
+            # )
 
             V_th_array[t // update_freq] = np.mean(V_th)
 
-        MemPot[t], I_in_ls[t] = update_membrane_potential_func(
+        MemPot[t], I_in_i, I_in_e = update_membrane_potential_func(
             MemPot[t - 1],
             W_se,
             W_ee,
@@ -293,12 +293,12 @@ def train_data(
             R,
             tau_m,
         )
+        I_in_ls[t] = np.mean(np.mean(I_in_e) + np.mean(I_in_i))
 
         # Update spikes based on membrane potential
         spike_mask = MemPot[t] > V_th
         spikes[t, N_input_neurons:] = spike_mask.astype(int)
         MemPot[t][spike_mask] = V_reset
-        V_th[spike_mask] = V_th_
 
         # Update excitatory weights
         (
@@ -307,12 +307,11 @@ def train_data(
             W_se_ideal,
             W_ee_ideal,
             pre_synaptic_trace[t, :N_input_neurons],
-            post_synaptic_trace[t, :-N_inhib_neurons],
+            post_synaptic_trace[t],
             slow_pre_synaptic_trace[t, :N_input_neurons],
             z_ht[:N_input_neurons],
             C[:N_input_neurons],
             pre_synaptic_trace[t, N_input_neurons:-N_inhib_neurons],
-            post_synaptic_trace[t, :-N_inhib_neurons],
             slow_pre_synaptic_trace[t, N_input_neurons:-N_inhib_neurons],
             z_ht[N_input_neurons:-N_inhib_neurons],
             C[N_input_neurons:-N_inhib_neurons],
@@ -361,7 +360,7 @@ def train_data(
             learning_rate,
             spikes[t - 1, -N_inhib_neurons:],
             spikes[t - 1, N_input_neurons:-N_inhib_neurons],
-            post_synaptic_trace[t - 1, :-N_inhib_neurons],
+            post_synaptic_trace[t],
         )
 
         # Assign the selected indices to the first row

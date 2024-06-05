@@ -25,9 +25,9 @@ snn_params = {
     "V_reset": -70,
     "P": 20,
     "C": 1,
-    "R": 10,
+    "R": 1000,
     "tau_plus": 0.05,
-    "tau_minus": 0.5,
+    "tau_minus": 0.05,
     "tau_slow": 0.01,
     "tau_m": 0.525,
     "tau_mm": 0.125,
@@ -38,7 +38,7 @@ snn_params = {
     "tau_thr": 0.1,
     "learning_rate": 0.1,
     "gamma": 0.1,
-    "num_items": 100,
+    "num_items": 104,
     "dt": 0.001,
     "T": 0.1,
     "wp": 0.5,
@@ -47,10 +47,10 @@ snn_params = {
     "max_weight": 5,
     "num_epochs": 1,
     "init_cals": 1,
-    "A": 0.01,
-    "beta": 0.05,
-    "delta": 0.02,
-    "tau_const": 30 * 1000,  # 30 seconds until weight convergence
+    "A": 10.0,
+    "beta": 50.0,
+    "delta": 0.002,
+    "tau_const": 1000,  # 30 seconds until weight convergence
     "euler": 5,
 }
 
@@ -77,6 +77,8 @@ snn = SNN_STDP(**snn_params)
     W_ee_prob=0.1,
     retur=True,
 )
+# Visualize network
+snn.vis_network(heatmap=False, weight_layer=True)
 
 # Generate data
 snn.gen_data(
@@ -94,7 +96,7 @@ snn.gen_data(
 data, labels = snn.load_data(rand_lvl=0.05, retur=True)
 
 # Visualize data
-snn.visualize_data(run=False)
+snn.visualize_data(run=True)
 
 # Train network
 (
@@ -115,9 +117,9 @@ snn.plot_training(
     ws_nd_spikes=True,
     idx_start=484,
     idx_stop=600,
-    mv=True,
-    overlap=False,
-    traces=True,
+    mv=False,
+    overlap=True,
+    traces=False,
     tsne=True,
 )
 

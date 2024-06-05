@@ -35,8 +35,6 @@ def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie):
     Firing_times = [np.where(spikes[:, n])[0] for n in range(spikes.shape[1])]
 
     # Add item and neuronal layer indicators
-    for i in range(0, spikes.shape[0], 100):  # Adjust for dt scaling
-        axs[0].axvline(x=i, color="black", linestyle="--")
     axs[0].axhline(y=484, color="red", linestyle="-")
     axs[0].axhline(y=968, color="red", linestyle="-")
 
@@ -186,7 +184,7 @@ def plot_traces(
     plt.show()
 
 
-def t_SNE(N_classes, spikes, labels, labels_spike, timesteps):
+def t_SNE(N_classes, spikes, labels, labels_spike, timesteps, N_input_neurons):
     # Reshape labels to match spikes
     labels = np.argmax(labels, axis=1)
     labels_spike = np.argmax(labels_spike, axis=1)
@@ -194,6 +192,7 @@ def t_SNE(N_classes, spikes, labels, labels_spike, timesteps):
     # Remove ISI
     filler_mask = labels_spike != N_classes
     spikes = spikes[filler_mask]
+    spikes = spikes[:, N_input_neurons:]
     labels_spike = labels_spike[filler_mask]
     labels = labels[labels != N_classes]
 
