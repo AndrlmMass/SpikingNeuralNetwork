@@ -1,6 +1,5 @@
 import numpy as np
 from skimage.draw import circle_perimeter, line
-from numba import njit
 
 
 def generate_normal_value(mean=0, variance=0.1):

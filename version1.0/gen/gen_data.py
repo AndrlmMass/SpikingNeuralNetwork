@@ -123,30 +123,35 @@ def float_2_pos_spike(
     time: int | float,
     timesteps: int,
     dt: float,
-    input_scaler: int | float,
     save: bool,
     retur: bool,
     rand_lvl: float,
+    avg_high_freq: float | int,
+    avg_low_freq: float | int,
+    var_high_freq: float | int,
+    var_low_freq: float | int,
 ):
     # Assert number of items
     N_input_neurons = data.shape[1]
 
     # Correct the dimensions for the 2D-array: time x neurons
     poisson_input = np.zeros((time, N_input_neurons))
-
+    count_greater_than_0_5 = np.count_nonzero(data > 0.5)
+    count_less_than_or_equal_0_5 = np.count_nonzero(data <= 0.5)
+    print(count_greater_than_0_5, count_less_than_or_equal_0_5)
     for i in range(items):  # Iterating over items
         for j in range(N_input_neurons):  # Iterating over neurons
-            # Calculate the mean spike count for the Poisson distribution
-            lambda_poisson = data[i, j] * dt * input_scaler
-
-            if lambda_poisson < 0 or np.isnan(lambda_poisson):
-                lambda_poisson = 0
-
-            # Generate spikes using Poisson distribution
+            if data[i, j] < 0.5:
+                lambda_poisson = np.random.normal(
+                    avg_low_freq, var_low_freq
+                )  # Average firing rate of 1 Hz (mu=1, delta=0.2)
+            else:
+                lambda_poisson = np.random.normal(
+                    avg_high_freq, var_high_freq
+                )  # Average firing rate of 10 Hz (mu=10, delta=0.2)
             for t in range(timesteps):
-                spike_count = np.random.poisson(lambda_poisson)
-                index = i * timesteps + t
-                poisson_input[index, j] = 1 if spike_count > 0 else 0
+                spike_count = np.random.poisson(lambda_poisson * dt)
+                poisson_input[t, j] = spike_count
 
     # Extend labels to match the poisson_input
     labels = np.repeat(labels, timesteps, axis=0)

@@ -175,9 +175,6 @@ class SNN_STDP:
         if heatmap:
             plot_input_space(self.W_se)
         if weight_layer:
-            W_se_ = np.sum(self.W_se, axis=1).reshape(
-                int(np.sqrt(self.N_input_neurons)), int(np.sqrt(self.N_input_neurons))
-            )
             draw_weights_layer(
                 weights=W_se_,
                 title="Input space",
@@ -211,7 +208,6 @@ class SNN_STDP:
                 xlabel="Excitatory neuron",
                 ylabel="Excitatory neuron",
             )
-            W_
 
     def gen_data(
         self,
@@ -220,9 +216,12 @@ class SNN_STDP:
         noise_rand_ls: float | int,
         mean: int | float,
         blank_variance: int | float,
-        input_scaler: int | float,
         save: bool,
         retur: bool,
+        avg_high_freq: float | int,
+        avg_low_freq: float | int,
+        var_high_freq: float | int,
+        var_low_freq: float | int,
     ):
         self.N_classes = N_classes
         # Check if training data already exists
@@ -253,11 +252,14 @@ class SNN_STDP:
                 time=self.time,
                 timesteps=self.num_timesteps,
                 dt=self.dt,
-                input_scaler=input_scaler,  # Should be set to 10
                 save=save,
                 retur=retur,
                 rand_lvl=noise_rand_ls[j],
                 items=self.num_items,
+                avg_high_freq=avg_high_freq,
+                avg_low_freq=avg_low_freq,
+                var_high_freq=var_high_freq,
+                var_low_freq=var_low_freq,
             )
 
     def load_data(self, rand_lvl: float | int, retur: bool):

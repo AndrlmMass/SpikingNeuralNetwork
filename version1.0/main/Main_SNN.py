@@ -78,7 +78,7 @@ snn = SNN_STDP(**snn_params)
     retur=True,
 )
 # Visualize network
-snn.vis_network(heatmap=False, weight_layer=True)
+snn.vis_network(heatmap=False, weight_layer=False)
 
 # Generate data
 snn.gen_data(
@@ -87,9 +87,12 @@ snn.gen_data(
     noise_rand_ls=[0.05],
     mean=0,
     blank_variance=0.01,
-    input_scaler=20,
     save=True,
     retur=False,
+    avg_high_freq=10,
+    avg_low_freq=1,
+    var_high_freq=0.05,
+    var_low_freq=0.05,
 )
 
 # Load data
