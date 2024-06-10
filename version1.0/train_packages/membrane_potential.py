@@ -73,31 +73,59 @@ def update_membrane_potential_conduct(
     tau_b,
     delta_a,
     delta_b,
+    g_nmda,
+    g_ampa,
+    g_gaba,
+    g_exc,
+    g_a,
+    g_b,
 ):
-    ### Update membrane potential for excitatory neurons ###
+    for i in range(2):
+        if i == 0:
+            # Update membrane potential for excitatory neurons
+            S_j = S.reshape((-1, 1))  # pre synaptic exc spikes
+            x_j = x.reshape((-1, 1))  # pre synaptic thingy
+            u_j = u.reshape((-1, 1))  # pre synaptic thingy
+            S_i = S[N_input_neurons:-N_inhib_neurons].reshape(
+                (1, -1)
+            )  # post synaptic spikes
+            x_j += dt * (((1 - x_j) / tau_d) - u_j * x_j * S_j)
+            u_j += dt * (((U - u_j) / tau_f) + U * (1 - u_j) * S_j) - 3
+            w_ij = W_exc  # weights
+            g_a += dt * (-(g_a / tau_a) + (delta_a * S_i))
+            g_b += dt * (-(g_b / tau_b) + (delta_b * S_i))
 
-    # Update synaptic variables
-    S_j = S.reshape((-1, 1))  # pre synaptic exc spikes
-    x_j = x.reshape((-1, 1))  # pre synaptic thingy
-    u_j = u.reshape((-1, 1))  # pre synaptic thingy
-    S_i = S[N_input_neurons:-N_inhib_neurons].reshape((1, -1))  # post synaptic spikes
-    x_j += dt * (((1 - x_j) / tau_d) - u_j * x_j * S_j)
-    u_j += dt * (((U - u_j) / tau_f) + U * (1 - u_j) * S_j) - 3
-    w_ij = W_exc  # weights
+        else:
+            # Update synaptic variables
+            S_j = S[N_input_neurons:-N_inhib_neurons].reshape(
+                (-1, 1)
+            )  # pre synaptic exc spikes
+            x_j = x[N_input_neurons:-N_inhib_neurons].reshape(
+                (-1, 1)
+            )  # pre synaptic thingy
+            u_j = u.reshape((-1, 1))  # pre synaptic thingy
+            S_i = S[-N_inhib_neurons].reshape((1, -1))  # post synaptic spikes
+            x_j += dt * (((1 - x_j) / tau_d) - u_j * x_j * S_j)
+            u_j += dt * (((U - u_j) / tau_f) + U * (1 - u_j) * S_j) - 3
+            w_ij = W_inh  # weights
+            g_a[-N_inhib_neurons] = 0
+            g_b[-N_inhib_neurons] = 0
 
-    g_ampa += dt * ((-g_ampa / tau_ampa) + (np.sum((w_ij * x_j) * (u_j * S_j.T))))
-    g_nmda += tau_nmda * dt * (-g_nmda + g_ampa)
-    g_exc += dt * (alpha * g_ampa + (1 - alpha) * g_nmda)
-    g_gaba += dt * (-(g_gaba / tau_gaba) + np.sum(w_ij * S_j))
-    g_a += dt * (-(g_a / tau_a) + delta_a * S_i)
-    g_b += dt * (-(g_b / tau_b) + (delta_b * S_i))
+        g_ampa += dt * (
+            (-g_ampa / tau_ampa) + np.sum(np.dot(w_ij.T, x_j) * np.dot(w_ij.T, S_j))
+        )
+        g_nmda += tau_nmda * dt * (-g_nmda + g_ampa)
+        g_exc += dt * (alpha * g_ampa + (1 - alpha) * g_nmda)
+        g_gaba += dt * (-(g_gaba / tau_gaba) + np.sum(w_ij * S_j))
 
-    # Update membrane potential
-    U += (
-        tau_m * dt * ((V_rest - U) + g_exc * (U_exc - U) + (g_gaba + g_a) * (U_inh - U))
-    )
+        # Update membrane potential
+        U += (
+            tau_m
+            * dt
+            * ((V_rest - U) + g_exc * (U_exc - U) + (g_gaba + g_a + g_b) * (U_inh - U))
+        )
 
-    # Update spiking threshold
-    V_th += tau_th * dt * (V_th_rest - V_th)
+        # Update spiking threshold
+        V_th += tau_th * dt * (V_th_rest - V_th)
 
     return U, V_th, g_ampa, g_nmda, g_exc, g_gaba, g_a
