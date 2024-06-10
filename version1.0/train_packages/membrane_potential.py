@@ -1,37 +1,6 @@
 import numpy as np
 
 
-# Create function that takes in spikes and indices and outputs an adjusted membrane potential
-def adjust_membrane_threshold(
-    spikes,
-    V_th,
-    N_input_neurons,
-    N_excit_neurons,
-    N_inhib_neurons,
-    dt,
-    tau_thr,
-    v_rest,
-):
-    ## Excitatory neurons ##
-
-    # Update the membrane potential threshold according to the radio_e
-    # V_th[:N_excit_neurons] += (
-    #     (dt / tau_thr)
-    #     * (v_rest - V_th[:N_excit_neurons])
-    #     * spikes[N_input_neurons:-N_inhib_neurons]
-    # )
-
-    ## Inhibitory neurons ##
-
-    # Update membrane potential threshold according to the ratio_i
-    # V_th[N_excit_neurons:] += (
-    #     V_th[N_excit_neurons:]
-    #     + (dt / tau_thr) * (v_rest - V_th[N_excit_neurons:]) * spikes[-N_inhib_neurons:]
-    # )
-
-    return V_th
-
-
 def update_membrane_potential(
     MemPot,
     W_se,
@@ -74,47 +43,70 @@ def update_membrane_potential(
 
     return MemPot, I_in_i, I_in_e
 
+
 def update_membrane_potential_conduct(
-                    U,
-                    U_inh,
-                    U_exc,
-                    W_se,
-                    W_ee,
-                    W_ie,
-                    W_ei,
-                    S,
-                    dt,
-                    N_excit_neurons,
-                    N_input_neurons,
-                    N_inhib_neurons,
-                    V_rest,
-                    tau_m,
-                    alpha,
-                    tau_ampa,
-                    tau_nmda,
-                    tau_gaba,
-                    tau_d,
-                    tau_f,
-                    tau_a,
-                    delta_a,
-                    ):
-    
-    # Update components for membrane change
-    S_j = S[:] # Add post_synaptic neuron spikes here -> sure which are post in this scenario since we are going through all the neurons?
-    
-    x = dt * (((1-x)/tau_d) - u*x*S_j)
-    u = dt * (((U-u)/tau_f)+U*(1-u)*S_j)
-    
-    g_ampa = dt * ((-g_ampa/tau_ampa) + (np.sum(x*u*w*S))) # It seems the weights are individualized for this updating, maybe this does not work?
-    g_nmda = tau_nmda * dt * (-g_nmda + g_ampa)
-    g_exc = dt * (alpha*g_ampa + (1-alpha)*g_nmda)
-    g_gaba = dt * (-(g_gaba/tau_gaba)+np.sum(w*S_j))
-    g_a = dt * (-(g_a/tau_a)+delta_a*S_j)
+    U,
+    U_inh,
+    U_exc,
+    V_th,
+    V_th_rest,
+    W_se,
+    W_ee,
+    W_ie,
+    W_ei,
+    S,
+    dt,
+    N_excit_neurons,
+    N_input_neurons,
+    N_inhib_neurons,
+    V_rest,
+    tau_m,
+    alpha,
+    tau_ampa,
+    tau_nmda,
+    tau_gaba,
+    tau_th,
+    tau_d,
+    tau_f,
+    tau_a,
+    tau_b,
+    delta_a,
+    delta_b,
+    num_layers,
+):
 
+    # Loop through each neuronal layer to assign S_j and S_i
+    indices = {
+        "excit": [
+            S,
+            S[N_input_neurons:-N_inhib_neurons],
+        ],
+        "inhib": [S[N_input_neurons:-N_inhib_neurons], S[-N_inhib_neurons]],
+    }
+    for val, key in enumerate(indices):
+        S_j = val[0]
+        S_i = val[1]
 
-    # Update membrane potential
-    U = tau_m * dt * ((V_rest - U) + g_exc*(U_exc-U)+(g_gaba + g_a)*(U_inh - U))
+        x += dt * (((1 - x) / tau_d) - u * x * S_j)
+        u += dt * (((U - u) / tau_f) + U * (1 - u) * S_j)
 
-    # Update spiking threshold
-    V_
-    
+        g_ampa += dt * (
+            (-g_ampa / tau_ampa) + (np.sum(x * u * w * S))
+        )  # It seems the weights are individualized for this updating, maybe this does not work?
+        g_nmda += tau_nmda * dt * (-g_nmda + g_ampa)
+        g_exc += dt * (alpha * g_ampa + (1 - alpha) * g_nmda)
+        g_gaba += dt * (-(g_gaba / tau_gaba) + np.sum(w * S_j))
+        g_a += dt * (-(g_a / tau_a) + delta_a * S_i)
+        g_b += dt * (-(g_b / tau_b) + (delta_b * S_i))
+
+        # Update membrane potential
+        U += (
+            tau_m
+            * dt
+            * ((V_rest - U) + g_exc * (U_exc - U) + (g_gaba + g_a) * (U_inh - U))
+        )
+
+        # Update spiking threshold
+        V_th += tau_th * dt * (V_th_rest - V_th)
+
+    return U, V_th, g_ampa, g_nmda, g_exc, g_gaba, g_a

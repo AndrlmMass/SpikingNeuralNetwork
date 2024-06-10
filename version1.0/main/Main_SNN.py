@@ -16,7 +16,6 @@ os.chdir(base_path)
 sys.path.append(os.path.join(base_path, "gen"))
 sys.path.append(os.path.join(base_path, "main"))
 
-import SNN_functions
 from SNN_functions import SNN_STDP
 
 # Store the parameters in a dictionary
@@ -50,7 +49,7 @@ snn_params = {
     "A": 10.0,
     "beta": 50.0,
     "delta": 0.002,
-    "tau_const": 1000,  # 30 seconds until weight convergence
+    "tau_const": 2000,  # 30 seconds until weight convergence
     "euler": 5,
 }
 

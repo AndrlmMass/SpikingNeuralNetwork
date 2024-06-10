@@ -150,6 +150,13 @@ class SNN_STDP:
             weight_val=0.1,
         )
 
+        # Concatenate excitatory weights
+        self.W_exc = np.concatenate((self.W_se, self.W_ee, self.W_ie), axis=1)
+        self.W_exc_ideal = np.concatenate(
+            (self.W_se_ideal, self.W_ee_ideal, self.W_ie_ideal), axis=1
+        )
+        self.W_inh = self.W_ei
+
         # Generate membrane potential and spikes array
         self.MemPot = np.zeros(
             (self.time, (self.N_excit_neurons + self.N_inhib_neurons))
@@ -340,7 +347,8 @@ class SNN_STDP:
             MemPot=self.MemPot,
             max_weight=self.max_weight,
             min_weight=self.min_weight,
-            W_se=self.W_se,
+            W_exc=self.W_exc,
+            W_inh=self.W_inh,
             W_se_ideal=self.W_se_ideal,
             W_se_2d=self.W_se_2d,
             W_se_plt_idx=self.W_se_plt_idx,

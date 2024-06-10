@@ -23,10 +23,8 @@ sys.path.append(os.path.join(base_path, "train_packages"))
 
 from plot_training import *
 from plot_network import *
-from membrane_potential import (
-    adjust_membrane_threshold,
-    update_membrane_potential,
-)
+from membrane_potential import update_membrane_potential
+
 from weight_updating import exc_weight_update, inh_weight_update
 
 import numpy as np
@@ -265,18 +263,7 @@ def train_data(
 
         # Update adaptive membrane potential threshold
         if t % update_freq == 0:
-            # V_th = adjust_membrane_threshold_func(
-            #     spikes[t - 1],
-            #     V_th,
-            #     N_input_neurons,
-            #     N_excit_neurons,
-            #     N_inhib_neurons,
-            #     dt,
-            #     tau_thr,
-            #     V_rest,
-            # )
-
-            V_th_array[t // update_freq] = np.mean(V_th)
+            V_th_array[t // update_freq] = V_th_
 
         MemPot[t], I_in_i, I_in_e = update_membrane_potential_func(
             MemPot[t - 1],
