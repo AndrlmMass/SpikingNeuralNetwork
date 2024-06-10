@@ -116,7 +116,7 @@ def update_membrane_potential_conduct(
         )
         g_nmda += tau_nmda * dt * (-g_nmda + g_ampa)
         g_exc += dt * (alpha * g_ampa + (1 - alpha) * g_nmda)
-        g_gaba += dt * (-(g_gaba / tau_gaba) + np.sum(w_ij * S_j))
+        g_gaba += dt * (-(g_gaba / tau_gaba) + np.sum(np.dot(w_ij.T, S_j)))
 
         # Update membrane potential
         U += (

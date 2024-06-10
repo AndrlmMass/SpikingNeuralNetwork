@@ -24,32 +24,48 @@ snn_params = {
     "V_reset": -70,
     "P": 20,
     "C": 1,
+    "U": 0.2,
     "R": 1000,
-    "tau_plus": 0.05,
-    "tau_minus": 0.05,
-    "tau_slow": 0.01,
+    "tau_plus": 20,
+    "tau_minus": 20,
+    "tau_slow": 100,
     "tau_m": 0.525,
     "tau_mm": 0.125,
-    "tau_ht": 0.15,
-    "tau_hom": 0.157,
-    "tau_stdp": 0.1,
+    "tau_ht": 100,
+    "tau_hom": 1.2 * 10**6,  # metaplasticity time constant
+    "tau_istdp": 20,
     "tau_H": 10,
-    "tau_thr": 0.1,
+    "tau_thr": 2,
+    "tau_ampa": 5,
+    "tau_nmda": 100,
+    "tau_gaba": 10,
+    "tau_a": 100,
+    "tau_b": 2 * 10**3,  # seconds
+    "tau_d": 200,
+    "tau_f": 600,
+    "tau_rest": -50,  # voltage
+    "delta_a": 0.1,  # decay unit
+    "delta_b": 5 * 10**-4,  # seconds
+    "U_exc": 0,
+    "U_inh": -80,
+    "alpha_exc": 0.2,
+    "alpha_inh": 0.3,
     "learning_rate": 0.1,
-    "gamma": 0.1,
+    "gamma": 4,
     "num_items": 104,
     "dt": 0.001,
     "T": 0.1,
     "wp": 0.5,
-    "V_rest": -60,
+    "V_rest": -40,
     "min_weight": 0,
     "max_weight": 5,
     "num_epochs": 1,
     "init_cals": 1,
-    "A": 10.0,
-    "beta": 50.0,
-    "delta": 0.002,
-    "tau_const": 2000,  # 30 seconds until weight convergence
+    "A": 1 * 10**-3,  # LTP rate
+    "B": 1 * 10**-3,  # LTD rate
+    "beta": 0.5,
+    "delta": 2 * 10**-5,
+    "tau_cons": 1.8 * 10**6,  # 30 minutes until weight convergence
     "euler": 5,
 }
 
@@ -88,11 +104,11 @@ snn.gen_data(
     blank_variance=0.01,
     save=True,
     retur=False,
-    avg_high_freq=10,
-    avg_low_freq=1,
+    avg_high_freq=35,
+    avg_low_freq=10,
     var_high_freq=0.05,
     var_low_freq=0.05,
-)
+)  # Need to add off/on period here
 
 # Load data
 data, labels = snn.load_data(rand_lvl=0.05, retur=True)

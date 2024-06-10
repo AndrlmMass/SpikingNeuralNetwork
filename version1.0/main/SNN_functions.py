@@ -335,7 +335,7 @@ class SNN_STDP:
             tau_hom=self.tau_hom,
             tau_stdp=self.tau_stdp,
             tau_H=self.tau_H,
-            tau_thr=self.tau_thr,
+            tau_th=self.tau_thr,
             learning_rate=self.learning_rate,
             gamma=self.gamma,
             tau_const=self.tau_const,

@@ -93,7 +93,18 @@ def train_data(
     tau_const: float | int,
     tau_H: float | int,
     tau_stdp: float | int,
-    tau_thr: float | int,
+    tau_ampa: float | int,
+    tau_nmda: float | int,
+    tau_gaba: float | int,
+    tau_th: float | int,
+    tau_d: float | int,
+    tau_f: float | int,
+    tau_a: float | int,
+    tau_b: float | int,
+    delta_a: float | int,
+    delta_b: float | int,
+    U_exc: float | int,
+    U_inh: float | int,
     learning_rate: float | int,
     training_data: np.ndarray,
     N_excit_neurons: int,
@@ -221,6 +232,8 @@ def train_data(
     C = np.full(num_neurons, A)
     z_ht = np.ones(num_neurons)
     z_istdp = np.zeros(N_inhib_neurons)
+    x = np.zeros(num_neurons)
+    u = np.zeros(num_neurons)
     H = 0
     V_th_ = float(V_th_)
     V_th = np.full(num_neurons - N_input_neurons, V_th_)
@@ -261,18 +274,33 @@ def train_data(
         # Update membrane potential
         MemPot[t], I_in_i, I_in_e = update_membrane_potential_conduct_func(
             MemPot[t - 1],
-            W_se,
-            W_ee,
-            W_ie,
-            W_ei,
+            U_inh,
+            U_exc,
+            V_th,
+            V_th_,
+            W_exc,
+            W_inh,
+            W_exc_ideal,
+            W_inh_ideal,
             spikes[t - 1],
+            u,
+            x,
             dt,
-            N_excit_neurons,
             N_input_neurons,
             N_inhib_neurons,
             V_rest,
-            R,
             tau_m,
+            alpha,
+            tau_ampa,
+            tau_nmda,
+            tau_gaba,
+            tau_th,
+            tau_d,
+            tau_f,
+            tau_a,
+            tau_b,
+            delta_a,
+            delta_b,
         )
         I_in_ls[t] = np.mean(np.mean(I_in_e) + np.mean(I_in_i))
 
