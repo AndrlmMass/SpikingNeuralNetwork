@@ -135,6 +135,9 @@ def float_2_pos_spike(
     N_input_neurons = data.shape[1]
 
     # Correct the dimensions for the 2D-array: time x neurons
+    poisson_input = np.zeros((time, N_input_neurons))
+
+    # Correct the dimensions for the 2D-array: time x neurons
     for i in range(items):  # Iterating over items
         for j in range(N_input_neurons):  # Iterating over neurons
             if data[i, j] < 0.5:
