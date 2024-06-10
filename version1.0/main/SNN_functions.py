@@ -38,69 +38,95 @@ class SNN_STDP:
         V_reset: float,
         P: int | float,
         C: int,
+        U: float | int,
         R: int,
         tau_plus: float | int,
         tau_minus: float | int,
         tau_slow: float | int,
         tau_m: float | int,
-        tau_mm: float | int,
         tau_ht: float | int,
         tau_hom: float | int,
-        tau_stdp: float | int,
+        tau_istdp: float | int,
         tau_H: float | int,
         tau_thr: float | int,
-        gamma: float | int,
+        tau_ampa: float | int,
+        tau_nmda: float | int,
+        tau_gaba: float | int,
+        tau_a: float | int,
+        tau_b: float | int,
+        tau_d: float | int,
+        tau_f: float | int,
+        delta_a: float | int,
+        delta_b: float | int,
+        U_exc: float | int,
+        U_inh: float | int,
+        alpha_exc: float | int,
+        alpha_inh: float | int,
         learning_rate: float | int,
+        gamma: float | int,
         num_items: float,
         dt: float,
         T: int,
         wp: float | int,
         V_rest: int,
-        max_weight: float | int,
         min_weight: float | int,
+        max_weight: float | int,
         num_epochs: int,
-        init_cals: int,
         A: float | int,
+        B: float | int,
         beta: float | int,
         delta: float | int,
-        tau_const: float | int,
+        tau_cons: float | int,
         euler: int,
     ):
         self.V_th = V_th
         self.V_reset = V_reset
+        self.P = P
         self.C = C
+        self.U = U
         self.R = R
+        self.A = A
+        self.B = B
+        self.T = T
         self.tau_plus = tau_plus
         self.tau_minus = tau_minus
         self.tau_slow = tau_slow
         self.tau_m = tau_m
-        self.tau_mm = tau_mm
         self.tau_ht = tau_ht
         self.tau_hom = tau_hom
-        self.tau_stdp = tau_stdp
+        self.tau_istdp = tau_istdp
         self.tau_H = tau_H
         self.tau_thr = tau_thr
-        self.gamma = gamma
+        self.tau_ampa = tau_ampa
+        self.tau_nmda = tau_nmda
+        self.tau_gaba = tau_gaba
+        self.tau_a = tau_a
+        self.tau_b = tau_b
+        self.tau_d = tau_d
+        self.tau_f = tau_f
+        self.delta_a = delta_a
+        self.delta_b = delta_b
+        self.U_exc = U_exc
+        self.U_inh = U_inh
+        self.alpha_exc = alpha_exc
+        self.alpha_inh = alpha_inh
         self.learning_rate = learning_rate
+        self.gamma = gamma
+        self.num_items = num_items
         self.dt = dt
         self.wp = wp
-        self.T = T
-        self.A = A
-        self.P = P
+        self.V_rest = V_rest
+        self.min_weight = min_weight
+        self.max_weight = max_weight
+        self.num_epochs = num_epochs
         self.beta = beta
         self.delta = delta
-        self.num_timesteps = int(T / dt)
-        self.num_items = num_items
-        self.time = self.num_timesteps * self.num_items
-        self.V_rest = V_rest
-        self.leakage_rate = 1 / self.R
-        self.tau_const = tau_const
-        self.init_cals = init_cals
-        self.max_weight = max_weight
-        self.min_weight = min_weight
-        self.num_epochs = num_epochs
-        self.max_spike_diff = int(self.num_timesteps * 0.1)
+        self.tau_cons = tau_cons
         self.euler = euler
+        self.num_timesteps = int(T / dt)
+        self.time = self.num_timesteps * self.num_items
+        self.leakage_rate = 1 / self.R
+        self.max_spike_diff = int(self.num_timesteps * 0.1) # what does this do?
 
     def initialize_network(
         self,

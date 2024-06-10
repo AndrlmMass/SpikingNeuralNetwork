@@ -29,41 +29,38 @@ snn_params = {
     "tau_plus": 20,
     "tau_minus": 20,
     "tau_slow": 100,
-    "tau_m": 0.525,
-    "tau_mm": 0.125,
+    "tau_m": 20,
     "tau_ht": 100,
     "tau_hom": 1.2 * 10**6,  # metaplasticity time constant
     "tau_istdp": 20,
-    "tau_H": 10,
-    "tau_thr": 2,
+    "tau_H": 6*10**2, # 10s
+    "tau_thr": 2, # 2ms
     "tau_ampa": 5,
     "tau_nmda": 100,
     "tau_gaba": 10,
-    "tau_a": 100,
-    "tau_b": 2 * 10**3,  # seconds
+    "tau_a": 100, # 100ms
+    "tau_b": 2 * 10**4,  # 20s
     "tau_d": 200,
     "tau_f": 600,
-    "tau_rest": -50,  # voltage
     "delta_a": 0.1,  # decay unit
     "delta_b": 5 * 10**-4,  # seconds
     "U_exc": 0,
     "U_inh": -80,
     "alpha_exc": 0.2,
     "alpha_inh": 0.3,
-    "learning_rate": 0.1,
+    "learning_rate": 2*10**-5,
     "gamma": 4,
     "num_items": 104,
     "dt": 0.001,
     "T": 0.1,
     "wp": 0.5,
-    "V_rest": -40,
+    "V_rest": -60,
     "min_weight": 0,
     "max_weight": 5,
     "num_epochs": 1,
-    "init_cals": 1,
     "A": 1 * 10**-3,  # LTP rate
     "B": 1 * 10**-3,  # LTD rate
-    "beta": 0.5,
+    "beta": 0.05,
     "delta": 2 * 10**-5,
     "tau_cons": 1.8 * 10**6,  # 30 minutes until weight convergence
     "euler": 5,
