@@ -23,7 +23,7 @@ sys.path.append(os.path.join(base_path, "train_packages"))
 
 from plot_training import *
 from plot_network import *
-from membrane_potential import update_membrane_potential
+from membrane_potential import update_membrane_potential_conduct
 
 from weight_updating import exc_weight_update, inh_weight_update
 
@@ -67,7 +67,7 @@ def display_animation(stop_event):
     waiting_animation = [".  ", ".. ", "...", ".. ", ".  ", "   "]
     idx = 0
     while not stop_event.is_set():
-        print(f"Reloading model{waiting_animation[idx]}", end="\r")
+        print(f"Found model. Reloading {waiting_animation[idx]}", end="\r")
         idx = (idx + 1) % len(waiting_animation)
         time.sleep(0.2)  # Adjust the speed of the animation as needed
 
@@ -102,20 +102,16 @@ def train_data(
     MemPot: np.ndarray,
     max_weight: float | int,
     min_weight: float | int,
-    W_se: np.ndarray,
-    W_se_ideal: np.ndarray,
+    W_exc: np.ndarray,
+    W_inh: np.ndarray,
+    W_exc_ideal: np.ndarray,
+    W_inh_ideal: np.ndarray,
     W_se_2d: np.ndarray,
     W_se_plt_idx: np.ndarray,
-    W_ee: np.ndarray,
-    W_ee_ideal: np.ndarray,
     W_ee_2d: np.ndarray,
     W_ee_plt_idx: np.ndarray,
-    W_ei: np.ndarray,
-    W_ei_ideal: np.ndarray,
     W_ei_2d: np.ndarray,
     W_ei_plt_idx: np.ndarray,
-    W_ie: np.ndarray,
-    W_ie_ideal: np.ndarray,
     W_ie_2d: np.ndarray,
     W_ie_plt_idx: np.ndarray,
     gamma: float | int,
@@ -154,6 +150,7 @@ def train_data(
     # Check if model exists
     for folder in os.listdir("model"):
         config_path = f"model/{folder}/config.npy"
+        print("Searching for existing model...", end="\r")
         if os.path.exists(config_path):
             saved_config = np.load(config_path, allow_pickle=True).item()
             saved_config = {
@@ -241,13 +238,13 @@ def train_data(
 
     if njit_:
         # adjust_membrane_threshold_func = njit(adjust_membrane_threshold)
-        update_membrane_potential_func = njit(update_membrane_potential)
+        update_membrane_potential_conduct_func = njit(update_membrane_potential_conduct)
         exc_weight_update_func = njit(exc_weight_update)
         inh_weight_update_func = njit(inh_weight_update)
         print("Running njit")
     else:
         # adjust_membrane_threshold_func = adjust_membrane_threshold
-        update_membrane_potential_func = update_membrane_potential
+        update_membrane_potential_conduct_func = update_membrane_potential_conduct
         exc_weight_update_func = exc_weight_update
         inh_weight_update_func = inh_weight_update
         print("Running without njit")
@@ -261,11 +258,8 @@ def train_data(
         # Calculate Euler time unit
         euler_unit = int(t - update_freq > 0) * (t - update_freq)
 
-        # Update adaptive membrane potential threshold
-        if t % update_freq == 0:
-            V_th_array[t // update_freq] = V_th_
-
-        MemPot[t], I_in_i, I_in_e = update_membrane_potential_func(
+        # Update membrane potential
+        MemPot[t], I_in_i, I_in_e = update_membrane_potential_conduct_func(
             MemPot[t - 1],
             W_se,
             W_ee,

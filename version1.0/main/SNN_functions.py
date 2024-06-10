@@ -134,7 +134,7 @@ class SNN_STDP:
             time=self.time,
             basenum=0.1,
         )
-        self.W_ei, self.W_ei_ideal, self.W_ei_2d, self.W_ei_plt_idx = gws.gen_EI(
+        self.W_inh, self.W_inh_ideal, self.W_ei_2d, self.W_ei_plt_idx = gws.gen_EI(
             N_excit_neurons=self.N_excit_neurons,
             N_inhib_neurons=self.N_inhib_neurons,
             time=self.time,
@@ -143,7 +143,7 @@ class SNN_STDP:
         self.W_ie, self.W_ie_ideal, self.W_ie_2d, self.W_ie_plt_idx = gws.gen_IE(
             N_inhib_neurons=self.N_inhib_neurons,
             N_excit_neurons=self.N_excit_neurons,
-            W_ei=self.W_ei,
+            W_ei=self.W_inh,
             radius=10,
             time=self.time,
             N_ws=4,
@@ -151,11 +151,10 @@ class SNN_STDP:
         )
 
         # Concatenate excitatory weights
-        self.W_exc = np.concatenate((self.W_se, self.W_ee, self.W_ie), axis=1)
+        self.W_exc = np.concatenate((self.W_se, self.W_ee, self.W_ie), axis=0)
         self.W_exc_ideal = np.concatenate(
-            (self.W_se_ideal, self.W_ee_ideal, self.W_ie_ideal), axis=1
+            (self.W_se_ideal, self.W_ee_ideal, self.W_ie_ideal), axis=0
         )
-        self.W_inh = self.W_ei
 
         # Generate membrane potential and spikes array
         self.MemPot = np.zeros(
@@ -170,11 +169,11 @@ class SNN_STDP:
                 self.spikes,
                 self.W_se,
                 self.W_ee,
-                self.W_ei,
+                self.W_inh,
                 self.W_ie,
                 self.W_se_ideal,
                 self.W_ee_ideal,
-                self.W_ei_ideal,
+                self.W_inh_ideal,
                 self.W_ie_ideal,
             )
 
@@ -320,7 +319,7 @@ class SNN_STDP:
             R=self.R,
             A=self.A,
             P=self.P,
-            w_p=self.wp,  # Defines the upper stable point of weight convergence
+            w_p=self.wp,
             beta=self.beta,
             delta=self.delta,
             time=self.time,
@@ -349,19 +348,14 @@ class SNN_STDP:
             min_weight=self.min_weight,
             W_exc=self.W_exc,
             W_inh=self.W_inh,
-            W_se_ideal=self.W_se_ideal,
+            W_exc_ideal=self.W_exc_ideal,
+            W_inh_ideal=self.W_inh_ideal,
             W_se_2d=self.W_se_2d,
             W_se_plt_idx=self.W_se_plt_idx,
-            W_ee=self.W_ee,
-            W_ee_ideal=self.W_ee_ideal,
             W_ee_2d=self.W_ee_2d,
             W_ee_plt_idx=self.W_ee_plt_idx,
-            W_ei=self.W_ei,
-            W_ei_ideal=self.W_ei_ideal,
             W_ei_2d=self.W_ei_2d,
             W_ei_plt_idx=self.W_ei_plt_idx,
-            W_ie=self.W_ie,
-            W_ie_ideal=self.W_ie_ideal,
             W_ie_2d=self.W_ie_2d,
             W_ie_plt_idx=self.W_ie_plt_idx,
             save_model=save_model,

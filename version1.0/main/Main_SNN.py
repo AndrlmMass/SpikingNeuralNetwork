@@ -98,7 +98,7 @@ snn.gen_data(
 data, labels = snn.load_data(rand_lvl=0.05, retur=True)
 
 # Visualize data
-snn.visualize_data(run=True)
+snn.visualize_data(run=False)
 
 # Train network
 (

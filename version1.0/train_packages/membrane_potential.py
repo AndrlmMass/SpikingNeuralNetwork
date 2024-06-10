@@ -50,13 +50,14 @@ def update_membrane_potential_conduct(
     U_exc,
     V_th,
     V_th_rest,
-    W_se,
-    W_ee,
-    W_ie,
-    W_ei,
+    W_exc,
+    W_inh,
+    W_exc_ideal,
+    W_inh_ideal,
     S,
+    u,
+    x,
     dt,
-    N_excit_neurons,
     N_input_neurons,
     N_inhib_neurons,
     V_rest,
@@ -72,41 +73,31 @@ def update_membrane_potential_conduct(
     tau_b,
     delta_a,
     delta_b,
-    num_layers,
 ):
+    ### Update membrane potential for excitatory neurons ###
 
-    # Loop through each neuronal layer to assign S_j and S_i
-    indices = {
-        "excit": [
-            S,
-            S[N_input_neurons:-N_inhib_neurons],
-        ],
-        "inhib": [S[N_input_neurons:-N_inhib_neurons], S[-N_inhib_neurons]],
-    }
-    for val, key in enumerate(indices):
-        S_j = val[0]
-        S_i = val[1]
+    # Update synaptic variables
+    S_j = S.reshape((-1, 1))  # pre synaptic exc spikes
+    x_j = x.reshape((-1, 1))  # pre synaptic thingy
+    u_j = u.reshape((-1, 1))  # pre synaptic thingy
+    S_i = S[N_input_neurons:-N_inhib_neurons].reshape((1, -1))  # post synaptic spikes
+    x_j += dt * (((1 - x_j) / tau_d) - u_j * x_j * S_j)
+    u_j += dt * (((U - u_j) / tau_f) + U * (1 - u_j) * S_j) - 3
+    w_ij = W_exc  # weights
 
-        x += dt * (((1 - x) / tau_d) - u * x * S_j)
-        u += dt * (((U - u) / tau_f) + U * (1 - u) * S_j)
+    g_ampa += dt * ((-g_ampa / tau_ampa) + (np.sum((w_ij * x_j) * (u_j * S_j.T))))
+    g_nmda += tau_nmda * dt * (-g_nmda + g_ampa)
+    g_exc += dt * (alpha * g_ampa + (1 - alpha) * g_nmda)
+    g_gaba += dt * (-(g_gaba / tau_gaba) + np.sum(w_ij * S_j))
+    g_a += dt * (-(g_a / tau_a) + delta_a * S_i)
+    g_b += dt * (-(g_b / tau_b) + (delta_b * S_i))
 
-        g_ampa += dt * (
-            (-g_ampa / tau_ampa) + (np.sum(x * u * w * S))
-        )  # It seems the weights are individualized for this updating, maybe this does not work?
-        g_nmda += tau_nmda * dt * (-g_nmda + g_ampa)
-        g_exc += dt * (alpha * g_ampa + (1 - alpha) * g_nmda)
-        g_gaba += dt * (-(g_gaba / tau_gaba) + np.sum(w * S_j))
-        g_a += dt * (-(g_a / tau_a) + delta_a * S_i)
-        g_b += dt * (-(g_b / tau_b) + (delta_b * S_i))
+    # Update membrane potential
+    U += (
+        tau_m * dt * ((V_rest - U) + g_exc * (U_exc - U) + (g_gaba + g_a) * (U_inh - U))
+    )
 
-        # Update membrane potential
-        U += (
-            tau_m
-            * dt
-            * ((V_rest - U) + g_exc * (U_exc - U) + (g_gaba + g_a) * (U_inh - U))
-        )
-
-        # Update spiking threshold
-        V_th += tau_th * dt * (V_th_rest - V_th)
+    # Update spiking threshold
+    V_th += tau_th * dt * (V_th_rest - V_th)
 
     return U, V_th, g_ampa, g_nmda, g_exc, g_gaba, g_a
