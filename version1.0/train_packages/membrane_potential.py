@@ -65,33 +65,48 @@ def update_membrane_potential_conduct(
     tau_d,
     tau_f,
     tau_a,
+    tau_b,
     delta_a,
+    delta_b,
+    g_ampa,
+    g_nmda,
+    g_gaba,
+    alpha_e,
+    alpha_i,
     ):
-    
-    
-    for i in range(2):
-        if i == 0:
-            S_j_exc = S[:-N_inhib_neurons] # presynaptic exc spikes
-            S_j_inh = S[-N_inhib_neurons] # presynaptic inh spikes
-            S_i = S[N_input_neurons:-N_inhib_neurons] # postsynaptic spikes
-            w_ij_exc = W_exc[:-N_inhib_neurons] # exc weights
-            w_ij_inh = W_exc[-N_inhib_neurons] # inh weights
-            g_a
-            g_b
+    ### Update excitatory membrane potential ###
 
-    x = dt * (((1-x)/tau_d) - u*x*S_j)
-    u = dt * (((U-u)/tau_f)+U*(1-u)*S_j)
+    # Update post and pre spikes
+    S_j_exc = S[:-N_inhib_neurons].reshape(-1,1) # presynaptic exc spikes
+    S_j_inh = S[-N_inhib_neurons].reshape(-1,1) # presynaptic inh spikes
+    S_i = S[N_input_neurons:-N_inhib_neurons].reshape(-1,1) # postsynaptic spikes
     
-    g_ampa += dt * ((-g_ampa/tau_ampa) + (np.sum(np.dot(x*u*w*S))) # It seems the weights are individualized for this updating, maybe this does not work?
-    g_nmda += tau_nmda * dt * (-g_nmda + g_ampa)
-    g_exc += dt * (alpha*g_ampa + (1-alpha)*g_nmda)
-    g_gaba += dt * (-(g_gaba/tau_gaba)+np.sum(w_ij_inh*S_j_inh))
-    g_a += dt * (-(g_a/tau_a)+delta_a*S_j_exc)
-    g_b 
+    # Update weight indices
+    w_ij_exc = W_exc[:-N_inhib_neurons] # exc weights
+    w_ij_inh = W_exc[-N_inhib_neurons] # inh weights
+    
+    # Update traces indices
+    g_a = g_a[:-N_inhib_neurons].reshape(-1,1)
+    g_b = g_b[:-N_inhib_neurons].reshape(-1,1)
+    x_exc = x[:-N_inhib_neurons].reshape(-1,1) # Need to be initiated with extra dim, not added for every time step
+    u_exc = u[:-N_inhib_neurons].reshape(-1,1)
+    
+    # Update traces
+    g_a += dt * (-(g_a/tau_a)+delta_a*S_i) # shape:(605, 1)
+    g_b += dt * (-(g_b/tau_b)+delta_b*S_i) # shape:(605, 1)
+    u_exc += dt * (((U-u_exc)/tau_f)+U*(1-u_exc)*S_j_exc) # shape:(605, 1)
+    x_exc += dt * (((1-x_exc)/tau_d) - u_exc*x_exc*S_j_exc) # shape:(605, 1) 
+    
+    # Update transmitter channels
+    g_ampa += dt * (-(g_ampa/tau_ampa)+np.sum(np.dot(w_ij_exc.T,u_exc)*np.dot(x_exc, S_j_exc))) 
+    g_nmda += tau_nmda * dt * (g_ampa-g_nmda)
+    g_exc += alpha_e*
+    g_gaba
+    
 
 
     # Update membrane potential
-    U = tau_m * dt * ((V_rest - U) + g_exc*(U_exc-U)+(g_gaba + g_a)*(U_inh - U))
+    U = tau_m * dt * ((V_rest - U) + g_exc*(U_exc-U)+(g_gaba + g_a + g_b)*(U_inh - U))
 
     # Update spiking threshold
     V_th
