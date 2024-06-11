@@ -6,7 +6,7 @@ import numpy as np
 
 def exc_weight_update(
     dt,
-    tau_const,
+    tau_cons,
     W_se,
     W_ee,
     W_se_ideal,
@@ -39,7 +39,8 @@ def exc_weight_update(
 
     # Update ideal weights if t is divisible by euler
     W_se_ideal += (
-        (dt / tau_const)
+        tau_cons
+        * dt
         * (
             W_se
             - W_se_ideal
@@ -84,7 +85,8 @@ def exc_weight_update(
 
     # Update ideal weights if t is divisble by euler
     W_ee_ideal += (
-        (dt / tau_const)
+        tau_cons
+        * dt
         * (
             W_ee
             - W_ee_ideal

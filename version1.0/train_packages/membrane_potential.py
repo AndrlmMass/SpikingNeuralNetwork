@@ -90,7 +90,7 @@ def update_membrane_potential_conduct(
 
     # Update weight indices
     w_ij_exc = W_exc[:-N_inhib_neurons]  # excitatory weights
-    w_ij_inh = W_exc[-N_inhib_neurons:]  # inhibitory weights
+    w_ij_inh = W_inh  # inhibitory weights
 
     # Update membrane potential indices
     U_e = np.expand_dims(U[:-N_inhib_neurons], axis=1)
@@ -114,7 +114,7 @@ def update_membrane_potential_conduct(
     )
     g_nmda_exc += tau_nmda * dt * (g_ampa_exc - g_nmda_exc)  # DONE
     g_exc = alpha_exc * g_ampa_exc + (1 - alpha_exc) * g_nmda_exc  # DONE
-    g_gaba_exc += dt * (-(g_gaba_exc / tau_gaba) + np.dot(w_ij_inh.T, S_j_inh))  # DONE
+    g_gaba_exc += dt * (-(g_gaba_exc / tau_gaba) + np.dot(w_ij_inh, S_j_inh))  # DONE
 
     # Update membrane potential
     delta_U_ex = (
@@ -139,8 +139,8 @@ def update_membrane_potential_conduct(
 
     # Update membrane potential indices
     U_i = np.expand_dims(U[-N_inhib_neurons:], axis=1)
-    u_i = np.expand_dims(u[N_input_neurons:], axis=1)
-    x_i = np.expand_dims(x[N_input_neurons:], axis=1)
+    u_i = u[N_input_neurons:]
+    x_i = x[N_input_neurons:]
 
     # Update traces indices
     g_a_inh = g_a[-N_inhib_neurons:]
@@ -158,7 +158,7 @@ def update_membrane_potential_conduct(
 
     # Update transmitter channels
     g_ampa_inh += dt * (
-        -(g_ampa_inh / tau_ampa) + (np.dot(w_ij_inh.T, u_i * x_i * S_j_inh))
+        -(g_ampa_inh / tau_ampa) + (np.dot(w_ij_inh, u_i * x_i * S_j_inh))
     )
     g_nmda_inh += tau_nmda * dt * (g_ampa_inh - g_nmda_inh)  # DONE
     g_inh = alpha_inh * g_ampa_inh + (1 - alpha_inh) * g_nmda_inh  # DONE
@@ -170,4 +170,4 @@ def update_membrane_potential_conduct(
     # Update spiking threshold decay for excitatory neurons
     V_th += tau_thr * dt * (V_th_ - V_th)
 
-    return U, V_th, g_ampa, g_nmda, g_gaba, g_exc, g_a_exc, g_b_exc, x, u
+    return U, V_th, g_ampa, g_nmda, g_gaba, x, u
