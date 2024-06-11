@@ -25,7 +25,6 @@ snn_params = {
     "P": 20,
     "C": 1,
     "U": 0.2,
-    "R": 1000,
     "tau_plus": 20,
     "tau_minus": 20,
     "tau_slow": 100,
@@ -33,12 +32,12 @@ snn_params = {
     "tau_ht": 100,
     "tau_hom": 1.2 * 10**6,  # metaplasticity time constant
     "tau_istdp": 20,
-    "tau_H": 6*10**2, # 10s
-    "tau_thr": 2, # 2ms
+    "tau_H": 6 * 10**2,  # 10s
+    "tau_thr": 2,  # 2ms
     "tau_ampa": 5,
     "tau_nmda": 100,
     "tau_gaba": 10,
-    "tau_a": 100, # 100ms
+    "tau_a": 100,  # 100ms
     "tau_b": 2 * 10**4,  # 20s
     "tau_d": 200,
     "tau_f": 600,
@@ -48,7 +47,7 @@ snn_params = {
     "U_inh": -80,
     "alpha_exc": 0.2,
     "alpha_inh": 0.3,
-    "learning_rate": 2*10**-5,
+    "learning_rate": 2 * 10**-5,
     "gamma": 4,
     "num_items": 104,
     "dt": 0.001,
@@ -64,6 +63,7 @@ snn_params = {
     "delta": 2 * 10**-5,
     "tau_cons": 1.8 * 10**6,  # 30 minutes until weight convergence
     "euler": 5,
+    "U_cons": 0.2,
 }
 
 # Initiate SNN object

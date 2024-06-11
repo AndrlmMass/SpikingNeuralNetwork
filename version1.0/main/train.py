@@ -73,7 +73,6 @@ def display_animation(stop_event):
 
 
 def train_data(
-    R: float | int,
     A: float | int,
     P: float | int,
     w_p: float | int,
@@ -96,7 +95,7 @@ def train_data(
     tau_ampa: float | int,
     tau_nmda: float | int,
     tau_gaba: float | int,
-    tau_th: float | int,
+    tau_thr: float | int,
     tau_d: float | int,
     tau_f: float | int,
     tau_a: float | int,
@@ -131,6 +130,7 @@ def train_data(
     save_model: bool,
     item_lim: int,
     items: int,
+    U_cons: float | int,
 ):
     # Get all local variables
     locs = locals()
@@ -234,13 +234,18 @@ def train_data(
     C = np.full(num_neurons, A)
     z_ht = np.ones(num_neurons)
     z_istdp = np.zeros(N_inhib_neurons)
-    x = np.zeros(num_neurons)
-    u = np.zeros(num_neurons)
+    x = np.zeros((num_neurons - N_inhib_neurons, 1))
+    u = np.zeros((num_neurons - N_inhib_neurons, 1))
     H = 0
     V_th_ = float(V_th_)
     V_th = np.full(num_neurons - N_input_neurons, V_th_)
     V_th_array = np.zeros((100))
     V_th_array[0] = V_th_
+    g_nmda = np.zeros((num_neurons - N_input_neurons, 1))
+    g_ampa = np.zeros((num_neurons - N_input_neurons, 1))
+    g_gaba = np.zeros((N_excit_neurons, 1))
+    g_a = np.zeros((num_neurons - N_input_neurons, 1))
+    g_b = np.zeros((num_neurons - N_input_neurons, 1))
 
     # Add input data before training for input neurons
     spikes[:, :N_input_neurons] = training_data
@@ -253,19 +258,16 @@ def train_data(
 
     if njit_:
         # adjust_membrane_threshold_func = njit(adjust_membrane_threshold)
-        update_membrane_potential_conduct_func = njit(update_membrane_potential_conduct)
+        update_membrane_potential_conduct_func = update_membrane_potential_conduct
         exc_weight_update_func = njit(exc_weight_update)
         inh_weight_update_func = njit(inh_weight_update)
-        print("Running njit")
+        print("Running njit\t")
     else:
         # adjust_membrane_threshold_func = adjust_membrane_threshold
         update_membrane_potential_conduct_func = update_membrane_potential_conduct
         exc_weight_update_func = exc_weight_update
         inh_weight_update_func = inh_weight_update
-        print("Running without njit")
-
-    # Initiate I_in list
-    I_in_ls = np.zeros((time))
+        print("Running without njit\t")
 
     # Loop through time and update membrane potential, spikes, and weights
     for t in tqdm(range(1, time), desc="Training network"):
@@ -274,7 +276,7 @@ def train_data(
         euler_unit = int(t - update_freq > 0) * (t - update_freq)
 
         # Update membrane potential
-        MemPot[t], I_in_i, I_in_e = update_membrane_potential_conduct_func(
+        MemPot[t] = update_membrane_potential_conduct_func(
             MemPot[t - 1],
             U_inh,
             U_exc,
@@ -282,8 +284,6 @@ def train_data(
             V_th_,
             W_exc,
             W_inh,
-            W_exc_ideal,
-            W_inh_ideal,
             spikes[t - 1],
             u,
             x,
@@ -297,15 +297,20 @@ def train_data(
             tau_ampa,
             tau_nmda,
             tau_gaba,
-            tau_th,
+            tau_thr,
             tau_d,
             tau_f,
             tau_a,
             tau_b,
             delta_a,
             delta_b,
+            g_ampa,
+            g_nmda,
+            g_gaba,
+            g_a,
+            g_b,
+            U_cons,
         )
-        I_in_ls[t] = np.mean(np.mean(I_in_e) + np.mean(I_in_i))
 
         # Update spikes based on membrane potential
         spike_mask = MemPot[t] > V_th

@@ -39,7 +39,6 @@ class SNN_STDP:
         P: int | float,
         C: int,
         U: float | int,
-        R: int,
         tau_plus: float | int,
         tau_minus: float | int,
         tau_slow: float | int,
@@ -78,13 +77,13 @@ class SNN_STDP:
         delta: float | int,
         tau_cons: float | int,
         euler: int,
+        U_cons: float | int,
     ):
         self.V_th = V_th
         self.V_reset = V_reset
         self.P = P
         self.C = C
         self.U = U
-        self.R = R
         self.A = A
         self.B = B
         self.T = T
@@ -125,8 +124,8 @@ class SNN_STDP:
         self.euler = euler
         self.num_timesteps = int(T / dt)
         self.time = self.num_timesteps * self.num_items
-        self.leakage_rate = 1 / self.R
-        self.max_spike_diff = int(self.num_timesteps * 0.1) # what does this do?
+        self.max_spike_diff = int(self.num_timesteps * 0.1)  # what does this do?
+        self.U_cons = U_cons
 
     def initialize_network(
         self,
@@ -342,7 +341,6 @@ class SNN_STDP:
             self.I_in_ls,
             self.V_th_array,
         ) = train_data(
-            R=self.R,
             A=self.A,
             P=self.P,
             w_p=self.wp,
@@ -365,7 +363,7 @@ class SNN_STDP:
             tau_ampa=self.tau_ampa,
             tau_nmda=self.tau_nmda,
             tau_gaba=self.tau_gaba,
-            tau_th=self.tau_thr,
+            tau_thr=self.tau_thr,
             tau_d=self.tau_d,
             tau_f=self.tau_f,
             tau_a=self.tau_a,
@@ -400,6 +398,7 @@ class SNN_STDP:
             save_model=save_model,
             item_lim=item_lim,
             items=self.num_items,
+            U_cons=self.U_cons,
         )
 
         if retur:
@@ -461,8 +460,3 @@ class SNN_STDP:
                 self.num_timesteps,
                 self.N_input_neurons,
             )
-
-    def plot_I_in(self):
-        d = np.arange(0, len(self.I_in_ls))
-        plt.plot(d, self.I_in_ls)
-        plt.show()
