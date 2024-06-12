@@ -149,8 +149,8 @@ def update_membrane_potential_conduct(
     g_nmda_inh = g_nmda[-N_inhib_neurons:]
 
     # Update traces
-    g_a_inh += dt * (-(g_a_inh / tau_a) + delta_a * S_i)  # shape:(121, 1)
-    g_b_inh += dt * (-(g_b_inh / tau_b) + delta_b * S_i)  # shape:(121, 1)
+    g_a_inh += dt * (-(g_a_inh / tau_a) + delta_a * S_i)  # set to 0?
+    g_b_inh += dt * (-(g_b_inh / tau_b) + delta_b * S_i)  # set to 0?
     u_i += dt * (
         ((U_cons - u_i) / tau_f) + (U_cons * (1 - u_i) * S_j_inh)
     )  # shape:(121, 1)

@@ -140,7 +140,7 @@ def float_2_pos_spike(
     # Correct the dimensions for the 2D-array: time x neurons
     for i in range(items):  # Iterating over items
         for j in range(N_input_neurons):  # Iterating over neurons
-            if data[i, j] < 0.5:
+            if data[i, j] < 0.5: # Arbitrary limit, might need better reasoning
                 lambda_poisson = np.random.normal(
                     avg_low_freq, var_low_freq
                 )  # Average firing rate of 1 Hz (mu=1, delta=0.2)

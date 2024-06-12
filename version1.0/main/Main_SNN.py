@@ -73,14 +73,9 @@ snn = SNN_STDP(**snn_params)
 (
     MemPot,
     spikes,
-    W_se,
-    W_ee,
-    W_ei,
-    W_ie,
-    W_se_ideal,
-    W_ee_ideal,
-    W_ei_ideal,
-    W_ie_ideal,
+    W_exc,
+    W_inh,
+    W_exc_ideal,
 ) = snn.initialize_network(
     N_input_neurons=484,
     N_excit_neurons=484,
@@ -117,10 +112,7 @@ snn.visualize_data(run=False)
 (
     spikes,
     MemPot,
-    W_se,
-    W_ee,
-    W_ei,
-    W_ie,
+    W_exc,
 ) = snn.train_data(
     retur=True,
     save_model=True,
@@ -138,4 +130,3 @@ snn.plot_training(
     tsne=True,
 )
 
-snn.plot_I_in()

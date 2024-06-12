@@ -159,7 +159,7 @@ class SNN_STDP:
             time=self.time,
             basenum=0.1,
         )
-        self.W_inh, self.W_inh_ideal, self.W_ei_2d, self.W_ei_plt_idx = gws.gen_EI(
+        self.W_inh = gws.gen_EI(
             N_excit_neurons=self.N_excit_neurons,
             N_inhib_neurons=self.N_inhib_neurons,
             time=self.time,
@@ -180,6 +180,10 @@ class SNN_STDP:
         self.W_exc_ideal = np.concatenate(
             (self.W_se_ideal, self.W_ee_ideal, self.W_ie_ideal), axis=0
         )
+        self.W_exc_2d = np.concatenate((self.W_se_2d, self.W_ee_2d, self.W_ie_2d), axis=1)
+        self.W_exc_plt_idx = np.concatenate(
+            (self.W_se_plt_idx, self.W_ee_plt_idx, self.W_ie_plt_idx), axis=0
+        )
 
         # Generate membrane potential and spikes array
         self.MemPot = np.zeros(
@@ -192,14 +196,9 @@ class SNN_STDP:
             return (
                 self.MemPot,
                 self.spikes,
-                self.W_se,
-                self.W_ee,
+                self.W_exc,
                 self.W_inh,
-                self.W_ie,
-                self.W_se_ideal,
-                self.W_ee_ideal,
-                self.W_inh_ideal,
-                self.W_ie_ideal,
+                self.W_exc_ideal,
             )
 
     def vis_network(self, heatmap: bool, weight_layer: bool):
@@ -326,19 +325,11 @@ class SNN_STDP:
         (
             self.spikes,
             self.MemPot,
-            self.W_se_2d,
-            self.W_se_ideal,
-            self.W_ee_2d,
-            self.W_ee_ideal,
-            self.W_ei_2d,
-            self.W_ei_ideal,
-            self.W_ie_2d,
-            self.W_ie_ideal,
+            self.W_exc_2d,
             self.pre_synaptic_trace,
             self.post_synaptic_trace,
             self.slow_synaptic_trace,
             self.z_istdp,
-            self.I_in_ls,
             self.V_th_array,
         ) = train_data(
             A=self.A,
@@ -383,15 +374,8 @@ class SNN_STDP:
             W_exc=self.W_exc,
             W_inh=self.W_inh,
             W_exc_ideal=self.W_exc_ideal,
-            W_inh_ideal=self.W_inh_ideal,
-            W_se_2d=self.W_se_2d,
-            W_se_plt_idx=self.W_se_plt_idx,
-            W_ee_2d=self.W_ee_2d,
-            W_ee_plt_idx=self.W_ee_plt_idx,
-            W_ei_2d=self.W_ei_2d,
-            W_ei_plt_idx=self.W_ei_plt_idx,
-            W_ie_2d=self.W_ie_2d,
-            W_ie_plt_idx=self.W_ie_plt_idx,
+            W_exc_2d=self.W_exc_2d,
+            W_exc_plt_idx=self.W_exc_plt_idx,
             gamma=self.gamma,
             alpha_exc=self.alpha_exc,
             alpha_inh=self.alpha_inh,
@@ -405,10 +389,7 @@ class SNN_STDP:
             return (
                 self.spikes,
                 self.MemPot,
-                self.W_se_2d,
-                self.W_ee_2d,
-                self.W_ei_2d,
-                self.W_ie_2d,
+                self.W_exc_2d,
             )
 
     def plot_training(
@@ -424,9 +405,9 @@ class SNN_STDP:
         if ws_nd_spikes:
             plot_weights_and_spikes(
                 spikes=self.spikes,
-                W_se=self.W_se_2d,
-                W_ee=self.W_ee_2d,
-                W_ie=self.W_ie_2d,
+                W_se=self.W_exc_2d[:self.N_input_neurons],
+                W_ee=self.W_exc_2d[self.N_input_neurons : -self.N_inhib_neurons],
+                W_ie=self.W_exc_2d[-self.N_inhib_neurons :],
             )
         if mv:
             plot_membrane_activity(

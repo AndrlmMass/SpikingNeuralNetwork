@@ -100,24 +100,7 @@ class gen_weights:
         W_ei = np.random.rand(N_excit_neurons, N_inhib_neurons)
         W_ei *= np.random.rand(N_excit_neurons, N_inhib_neurons) < prob
 
-        # Create ideal weights array
-        W_ei_ideal = np.full((N_excit_neurons, N_inhib_neurons), 0)
-
-        # Create a representative 2D array of the weights for visualization
-        W_ei_2d = np.zeros((time, 10))
-
-        # Find non-zero indices in 'W_se'
-        non_zero_indices = np.transpose(np.nonzero(W_ei))
-
-        # Select 10 random non-zero indices
-        selected_indices = non_zero_indices[
-            np.random.choice(len(non_zero_indices), 10, replace=False)
-        ]
-
-        # Extract the values corresponding to the selected indices
-        W_ei_2d[0] = W_ei[selected_indices[:, 0], selected_indices[:, 1]]
-
-        return W_ei, W_ei_ideal, W_ei_2d, selected_indices
+        return W_ei
 
     def gen_IE(
         self, N_inhib_neurons, N_excit_neurons, W_ei, radius, time, N_ws, weight_val

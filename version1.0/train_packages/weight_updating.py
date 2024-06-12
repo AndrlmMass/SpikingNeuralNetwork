@@ -148,7 +148,7 @@ def exc_weight_update(
 def inh_weight_update(
     H,
     dt,
-    W_ie,
+    W_inh,
     z_istdp,
     tau_H,
     gamma,
@@ -166,10 +166,10 @@ def inh_weight_update(
     G = H - gamma
 
     # Reshape arrays for matrix operations
-    post_trace_reshaped = post_trace.reshape(-1, 1)
-    z_istdp_reshaped = z_istdp.reshape(-1, 1)
-    post_spikes_reshaped = post_spikes.reshape(1, -1)
-    pre_spikes_reshaped = pre_spikes.reshape(1, -1)
+    post_trace_reshaped = np.expand_dims(post_trace, axis=1) 
+    z_istdp_reshaped = np.expand_dims(z_istdp, axis=1)
+    post_spikes_reshaped = np.expand_dims(post_spikes, axis=1)
+    pre_spikes_reshaped = np.expand_dims(pre_spikes, axis=1)
 
     # Calculate delta weights
     delta_w = (
@@ -177,12 +177,11 @@ def inh_weight_update(
         * learning_rate
         * G
         * (
-            (z_istdp_reshaped + 1) * post_spikes_reshaped
-            + (post_trace_reshaped * pre_spikes_reshaped).T
+            np.dot(post_spikes_reshaped, (z_istdp_reshaped + 1).T)
+            + np.dot(post_trace_reshaped, pre_spikes_reshaped.T)
         )
     )
-
     # Update weights with constraint
-    W_ie += delta_w
+    W_inh += delta_w
 
-    return W_ie, z_istdp, H
+    return W_inh, z_istdp, H
