@@ -121,7 +121,6 @@ def train_data(
 ):
     # Get all local variables
     locs = locals()
-    print(locs)
 
     # Define keys to exclude
     exclude_keys = [
@@ -347,7 +346,11 @@ def train_data(
         )
 
         # Assign the selected indices to the first row
-        #W_exc_2d[t] = W_exc[W_exc_plt_idx[:, 0], W_exc_plt_idx[:, 1]]
+        W_exc_2d[t] = W_exc[W_exc_plt_idx[:, 0], W_exc_plt_idx[:, 1]]
+
+        # Clip weights between min and max weight
+        W_exc = np.minimum(np.maximum(W_exc, min_weight), max_weight)
+        W_inh = np.minimum(np.maximum(W_inh, min_weight), max_weight) # should i clip inhibitory weights too?
 
     if save_model:
         # Generate a random number for model folder
