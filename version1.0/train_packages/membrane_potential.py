@@ -78,6 +78,7 @@ def update_membrane_potential_conduct(
     g_a,
     g_b,
     U_cons,
+    t,
 ):
     ### Update excitatory membrane potential ###
 
@@ -126,6 +127,7 @@ def update_membrane_potential_conduct(
             + (g_gaba_exc + g_a_exc + g_b_exc) * (U_inh - U_e)
         )
     )
+
     U[:-N_inhib_neurons] = np.squeeze(U_e + delta_U_ex)
 
     ### Update inhibitory membrane potential ###
@@ -170,4 +172,4 @@ def update_membrane_potential_conduct(
     # Update spiking threshold decay for excitatory neurons
     V_th += tau_thr * dt * (V_th_ - V_th)
 
-    return U, V_th, g_ampa, g_nmda, g_gaba, x, u
+    return U, V_th, g_ampa, g_nmda, g_gaba, x, u, g_a, g_b

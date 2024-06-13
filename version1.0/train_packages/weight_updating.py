@@ -39,12 +39,15 @@ def exc_weight_update(
 
     # Update ideal weights if t is divisible by euler
     W_se_ideal += (
-        tau_cons
-        * dt
-        * (
-            W_se
-            - W_se_ideal
-            - P * W_se_ideal * ((w_p / 2) - W_se_ideal) * (w_p - W_se_ideal)
+        np.round(
+            tau_cons
+            * dt
+            * (
+                W_se
+                - W_se_ideal
+                - P * W_se_ideal * ((w_p / 2) - W_se_ideal) * (w_p - W_se_ideal)
+            ),
+            4,
         )
         * update_bin
     )
@@ -84,15 +87,19 @@ def exc_weight_update(
     ## W_ee weights ##
 
     # Update ideal weights if t is divisble by euler
-    W_ee_ideal += (
-        tau_cons
-        * dt
-        * (
-            W_ee
-            - W_ee_ideal
-            - P * W_ee_ideal * ((w_p / 2) - W_ee_ideal) * (w_p - W_ee_ideal)
+    W_ee_ideal += np.round(
+        (
+            tau_cons
+            * dt
+            * (
+                W_ee
+                - W_ee_ideal
+                - P * W_ee_ideal * ((w_p / 2) - W_ee_ideal) * (w_p - W_ee_ideal)
+            ),
+            4,
         )
-        * update_bin
+        * update_bin,
+        4,
     )
 
     # Update spike variables
@@ -126,7 +133,7 @@ def exc_weight_update(
     delta_w_ee = dt * (A_z_ee - Beta_z_ee - B_z_ee + transmitter_ee)
 
     # Update the weights
-    W_ee += delta_w_ee
+    W_ee += np.round(delta_w_ee, 4)
 
     return (
         W_se,
@@ -166,7 +173,7 @@ def inh_weight_update(
     G = H - gamma
 
     # Reshape arrays for matrix operations
-    post_trace_reshaped = np.expand_dims(post_trace, axis=1) 
+    post_trace_reshaped = np.expand_dims(post_trace, axis=1)
     z_istdp_reshaped = np.expand_dims(z_istdp, axis=1)
     post_spikes_reshaped = np.expand_dims(post_spikes, axis=1)
     pre_spikes_reshaped = np.expand_dims(pre_spikes, axis=1)
