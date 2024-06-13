@@ -180,7 +180,9 @@ class SNN_STDP:
         self.W_exc_ideal = np.concatenate(
             (self.W_se_ideal, self.W_ee_ideal, self.W_ie_ideal), axis=0
         )
-        self.W_exc_2d = np.concatenate((self.W_se_2d, self.W_ee_2d, self.W_ie_2d), axis=1)
+        self.W_exc_2d = np.concatenate(
+            (self.W_se_2d, self.W_ee_2d, self.W_ie_2d), axis=1
+        )
         self.W_exc_plt_idx = np.concatenate(
             (self.W_se_plt_idx, self.W_ee_plt_idx, self.W_ie_plt_idx), axis=0
         )
@@ -306,6 +308,13 @@ class SNN_STDP:
             f"data\\labels_train_float\\labels_train_{self.num_items}_.npy"
         )
 
+        spikes_indices = [
+            np.where(self.training_data[:, n])[0]
+            for n in range(self.training_data.shape[1])
+        ]
+        plt.eventplot(spikes_indices, linelengths=0.5)
+        plt.show()
+
         if retur:
             return (
                 self.training_data,
@@ -405,9 +414,9 @@ class SNN_STDP:
         if ws_nd_spikes:
             plot_weights_and_spikes(
                 spikes=self.spikes,
-                W_se=self.W_exc_2d[:self.N_input_neurons],
-                W_ee=self.W_exc_2d[self.N_input_neurons : -self.N_inhib_neurons],
-                W_ie=self.W_exc_2d[-self.N_inhib_neurons :],
+                W_se=self.W_exc_2d[:, :10],
+                W_ee=self.W_exc_2d[:, 10:-10],
+                W_ie=self.W_exc_2d[:, -10:],
             )
         if mv:
             plot_membrane_activity(

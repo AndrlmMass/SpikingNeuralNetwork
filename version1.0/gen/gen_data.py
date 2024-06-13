@@ -90,11 +90,11 @@ def gen_float_data_(
     for item in tqdm(range(0, items, 2), ncols=100):
 
         # Execute the lambda function for the current class_index and assign its output
-        input_space[item] = functions[t]()
+        input_space[item] = np.clip(functions[t](), a_min=0, a_max=1)
         labels[item, t] = 1
 
         # Assign blank part after symbol-input
-        input_space[item + 1] = functions[4]()
+        input_space[item + 1] = np.clip(functions[4](), a_min=0, a_max=1)
         labels[item + 1, 4] = 1
 
         if t == N_classes - 1:
@@ -140,7 +140,7 @@ def float_2_pos_spike(
     # Correct the dimensions for the 2D-array: time x neurons
     for i in range(items):  # Iterating over items
         for j in range(N_input_neurons):  # Iterating over neurons
-            if data[i, j] < 0.5: # Arbitrary limit, might need better reasoning
+            if data[i, j] < 0.3:  # Arbitrary limit, might need better reasoning
                 lambda_poisson = np.random.normal(
                     avg_low_freq, var_low_freq
                 )  # Average firing rate of 1 Hz (mu=1, delta=0.2)
@@ -150,7 +150,7 @@ def float_2_pos_spike(
                 )  # Average firing rate of 10 Hz (mu=10, delta=0.2)
             for t in range(timesteps):
                 spike_count = np.random.poisson(lambda_poisson * dt)
-                poisson_input[t, j] = spike_count
+                poisson_input[t + i * timesteps, j] = spike_count
 
     # Extend labels to match the poisson_input
     labels = np.repeat(labels, timesteps, axis=0)

@@ -111,7 +111,7 @@ def train_data(
     W_exc_ideal: np.ndarray,
     W_exc_2d: np.ndarray,
     W_exc_plt_idx: np.ndarray,
-    gamma: float | int, # Where is gamma used?
+    gamma: float | int,  # Where is gamma used?
     alpha_exc: float | int,
     alpha_inh: float | int,
     save_model: bool,
@@ -180,7 +180,6 @@ def train_data(
                     spikes,
                     MemPot,
                     W_exc_2d,
-                    W_exc_ideal,
                     pre_synaptic_trace,
                     post_synaptic_trace,
                     slow_pre_synaptic_trace,
@@ -192,7 +191,7 @@ def train_data(
     num_neurons = N_excit_neurons + N_inhib_neurons + N_input_neurons
     spikes = np.zeros((time, num_neurons))
     pre_synaptic_trace = np.zeros((time, num_neurons))
-    post_synaptic_trace = np.ones((time, N_excit_neurons))
+    post_synaptic_trace = np.zeros((time, N_excit_neurons))
     slow_pre_synaptic_trace = np.zeros((time, num_neurons))
     C = np.full(num_neurons, A)
     z_ht = np.ones(num_neurons)
@@ -202,7 +201,7 @@ def train_data(
     H = 0
     V_th_ = float(V_th_)
     V_th = np.full(num_neurons - N_input_neurons, V_th_)
-    V_th_array = np.zeros((100)) # for plotting
+    V_th_array = np.zeros((100))  # for plotting
     V_th_array[0] = V_th_
     g_nmda = np.zeros((num_neurons - N_input_neurons, 1))
     g_ampa = np.zeros((num_neurons - N_input_neurons, 1))
@@ -239,7 +238,7 @@ def train_data(
         euler_unit = int(t - update_freq > 0) * (t - update_freq)
 
         # Update membrane potential
-        MemPot[t], V_th, g_ampa, g_nmda, g_gaba, x, u = (
+        MemPot[t], V_th, g_ampa, g_nmda, g_gaba, x, u, g_a, g_b = (
             update_membrane_potential_conduct_func(
                 MemPot[t - 1],
                 U_inh,
@@ -274,6 +273,7 @@ def train_data(
                 g_a,
                 g_b,
                 U_cons,
+                t,
             )
         )
 
@@ -349,8 +349,10 @@ def train_data(
         W_exc_2d[t] = W_exc[W_exc_plt_idx[:, 0], W_exc_plt_idx[:, 1]]
 
         # Clip weights between min and max weight
-        W_exc = np.minimum(np.maximum(W_exc, min_weight), max_weight)
-        W_inh = np.minimum(np.maximum(W_inh, min_weight), max_weight) # should i clip inhibitory weights too?
+        # W_exc = np.minimum(np.maximum(W_exc, min_weight), max_weight)
+        # W_inh = np.minimum(
+        #     np.maximum(W_inh, min_weight), max_weight
+        # )  # should i clip inhibitory weights too?
 
     if save_model:
         # Generate a random number for model folder

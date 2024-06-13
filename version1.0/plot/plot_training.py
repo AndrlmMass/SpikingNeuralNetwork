@@ -60,7 +60,6 @@ def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie):
                 )  # Label only the first line of each type
             else:
                 axs[1].plot(weights, color=info["color"])
-
     axs[1].set_title("Weight Matrix Changes")
     axs[1].set_xlabel("Time (ms)")
     axs[1].set_ylabel("Weight Value")
@@ -227,19 +226,23 @@ def t_SNE(N_classes, spikes, labels, labels_spike, timesteps, N_input_neurons):
     plt.legend()
     plt.show()
 
+
 def plot_cluster_activity(spikes, labels, freq_threshold):
     # Compute average spiking activity per neuron per class for training period
-    cluster_spikes = {"triangle_class":[], "square_class":[], "circle_class":[], "X_class":[]}
-    
-    for n,(key,value) in enumerate(cluster_spikes): # Does it start from 1 or 0?
-        firing_freq = np.sum(spikes[1000][labels == n], axis=1)/np.count_nonzero(int(labels==n)) # Need to set '1000' to something more meaningful 
+    cluster_spikes = {
+        "triangle_class": [],
+        "square_class": [],
+        "circle_class": [],
+        "X_class": [],
+    }
+
+    for n, (key, value) in enumerate(cluster_spikes):  # Does it start from 1 or 0?
+        firing_freq = np.sum(spikes[1000][labels == n], axis=1) / np.count_nonzero(
+            int(labels == n)
+        )  # Need to set '1000' to something more meaningful
         indices = np.where(firing_freq >= freq_threshold)
 
         # Store cluster spikes
         cluster_spikes[key] = np.sum(spikes[:, indices], axis=0)
 
-    # 
-
-
-
-    
+    #

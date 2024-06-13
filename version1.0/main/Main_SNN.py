@@ -41,7 +41,7 @@ snn_params = {
     "tau_b": 2 * 10**4,  # 20s
     "tau_d": 200,
     "tau_f": 600,
-    "delta_a": 0.1,  # decay unit
+    "delta_a": 0.112,  # decay unit
     "delta_b": 5 * 10**-4,  # seconds
     "U_exc": 0,
     "U_inh": -80,
@@ -49,9 +49,9 @@ snn_params = {
     "alpha_inh": 0.3,
     "learning_rate": 2 * 10**-5,
     "gamma": 4,
-    "num_items": 104,
+    "num_items": 116,
     "dt": 0.001,
-    "T": 0.1,
+    "T": 1,
     "wp": 0.5,
     "V_rest": -60,
     "min_weight": 0,
@@ -96,7 +96,7 @@ snn.gen_data(
     blank_variance=0.01,
     save=True,
     retur=False,
-    avg_high_freq=35,
+    avg_high_freq=45,
     avg_low_freq=10,
     var_high_freq=0.05,
     var_low_freq=0.05,
@@ -124,9 +124,8 @@ snn.plot_training(
     ws_nd_spikes=True,
     idx_start=484,
     idx_stop=600,
-    mv=False,
-    overlap=True,
-    traces=False,
+    mv=True,
+    overlap=False,
+    traces=True,
     tsne=True,
 )
-
