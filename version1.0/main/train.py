@@ -195,9 +195,9 @@ def train_data(
     slow_pre_synaptic_trace = np.zeros((time, num_neurons))
     C = np.full(num_neurons, A)
     z_ht = np.ones(num_neurons)
-    z_istdp = np.zeros(N_inhib_neurons)
-    x = np.zeros((num_neurons - N_inhib_neurons, 1))
-    u = np.zeros((num_neurons - N_inhib_neurons, 1))
+    z_istdp = np.ones(N_inhib_neurons)
+    x = np.ones((N_input_neurons + N_excit_neurons, 1))
+    u = np.ones((N_input_neurons + N_excit_neurons, 1))
     H = 0
     V_th_ = float(V_th_)
     V_th = np.full(num_neurons - N_input_neurons, V_th_)
@@ -206,8 +206,8 @@ def train_data(
     g_nmda = np.zeros((num_neurons - N_input_neurons, 1))
     g_ampa = np.zeros((num_neurons - N_input_neurons, 1))
     g_gaba = np.zeros((N_excit_neurons, 1))
-    g_a = np.zeros((num_neurons - N_input_neurons, 1))
-    g_b = np.zeros((num_neurons - N_input_neurons, 1))
+    g_a = np.zeros((N_excit_neurons, 1))
+    g_b = np.zeros((N_excit_neurons, 1))
 
     # Add input data before training for input neurons
     spikes[:, :N_input_neurons] = training_data
@@ -220,7 +220,7 @@ def train_data(
 
     if njit_:
         # adjust_membrane_threshold_func = njit(adjust_membrane_threshold)
-        update_membrane_potential_conduct_func = update_membrane_potential_conduct
+        update_membrane_potential_conduct_func = njit(update_membrane_potential_conduct)
         exc_weight_update_func = njit(exc_weight_update)
         inh_weight_update_func = njit(inh_weight_update)
         print("Running njit")

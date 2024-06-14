@@ -49,7 +49,7 @@ snn_params = {
     "alpha_inh": 0.3,
     "learning_rate": 2 * 10**-5,
     "gamma": 4,
-    "num_items": 12,
+    "num_items": 16,
     "dt": 0.001,
     "T": 1,
     "wp": 0.5,

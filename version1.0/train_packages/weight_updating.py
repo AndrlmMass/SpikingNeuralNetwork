@@ -34,23 +34,13 @@ def exc_weight_update(
 ):
     ## W_se weights ##
 
-    # Check if ideal weight needs to be updated
-    update_bin = int(t % euler == 0)
-
     # Update ideal weights if t is divisible by euler
-    W_se_ideal += (
-        np.round(
-            tau_cons
-            * dt
-            * (
-                W_se
-                - W_se_ideal
-                - P * W_se_ideal * ((w_p / 2) - W_se_ideal) * (w_p - W_se_ideal)
-            ),
-            4,
-        )
-        * update_bin
+    W_se_ideal += (dt / tau_cons) * (
+        W_se
+        - W_se_ideal
+        - P * W_se_ideal * ((w_p / 2) - W_se_ideal) * (w_p - W_se_ideal)
     )
+
     # Update spike variables
     post_spikes_se = spikes[N_input_neurons:-N_inhib_neurons]
     pre_spikes_se = spikes[:N_input_neurons]
@@ -87,19 +77,10 @@ def exc_weight_update(
     ## W_ee weights ##
 
     # Update ideal weights if t is divisble by euler
-    W_ee_ideal += np.round(
-        (
-            tau_cons
-            * dt
-            * (
-                W_ee
-                - W_ee_ideal
-                - P * W_ee_ideal * ((w_p / 2) - W_ee_ideal) * (w_p - W_ee_ideal)
-            ),
-            4,
-        )
-        * update_bin,
-        4,
+    W_ee_ideal += (dt / tau_cons) * (
+        W_ee
+        - W_ee_ideal
+        - P * W_ee_ideal * ((w_p / 2) - W_ee_ideal) * (w_p - W_ee_ideal)
     )
 
     # Update spike variables

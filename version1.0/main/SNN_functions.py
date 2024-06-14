@@ -308,13 +308,6 @@ class SNN_STDP:
             f"data\\labels_train_float\\labels_train_{self.num_items}_.npy"
         )
 
-        spikes_indices = [
-            np.where(self.training_data[:, n])[0]
-            for n in range(self.training_data.shape[1])
-        ]
-        plt.eventplot(spikes_indices, linelengths=0.5)
-        plt.show()
-
         if retur:
             return (
                 self.training_data,
