@@ -53,9 +53,9 @@ def exc_weight_update(
     C_se = C[:N_input_neurons]
 
     # Update synaptic traces
-    pre_trace_se += dt * (-pre_trace_se / tau_plus + pre_spikes_se)
-    post_trace_se += dt * (-post_trace_se / tau_minus + post_spikes_se)
-    slow_trace_se += dt * (-slow_trace_se / tau_slow + post_spikes_se)
+    pre_trace_se += dt * ((-pre_trace_se / tau_plus) + pre_spikes_se)
+    post_trace_se += dt * ((-post_trace_se / tau_minus) + post_spikes_se)
+    slow_trace_se += dt * ((-slow_trace_se / tau_slow) + post_spikes_se)
 
     # Update z_th, C and B variables
     z_ht_se += dt * (-z_ht_se / tau_ht + post_spikes_se)

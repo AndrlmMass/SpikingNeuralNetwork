@@ -49,9 +49,9 @@ snn_params = {
     "alpha_inh": 0.3,
     "learning_rate": 2 * 10**-5,
     "gamma": 4,
-    "num_items": 16,
+    "num_items": 36,
     "dt": 0.001,
-    "T": 1,
+    "T": 0.1,
     "wp": 0.5,
     "V_rest": -60,
     "min_weight": 0,
@@ -69,6 +69,8 @@ snn_params = {
 # Initiate SNN object
 snn = SNN_STDP(**snn_params)
 
+locs = locals()
+print(locs)
 # Initialize & visualize pre-trained network
 (
     MemPot,

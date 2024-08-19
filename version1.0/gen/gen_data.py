@@ -160,13 +160,18 @@ def float_2_pos_spike(
         print(
             f"Saving training and testing data with labels for random level {rand_lvl}"
         )
-        np.save(
-            f"data\\training_data\\training_data_{rand_lvl}_items_{items}_.npy",
-            poisson_input,
-        )
-        np.save(
-            f"data\\labels_train\\labels_train_{rand_lvl}_items_{items}_.npy", labels
-        )
+        rand_nums = np.random.randint(low=0, high=9, size=5)
+
+        # Check if name is taken
+        while rand_nums in os.listdir("data"):
+            rand_nums = np.random.randint(low=0, high=9, size=5)
+
+        # Create folder to store data
+        os.makedirs(f"data\\{rand_nums}")
+
+        # Save training data and labels
+        np.save(f"data\\{rand_nums}\\data_bin.npy", poisson_input)
+        np.save(f"data\\{rand_nums}\\labels_bin.npy", labels)
         print("training & labels are saved in data folder")
 
     if retur:

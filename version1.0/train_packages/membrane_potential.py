@@ -40,7 +40,8 @@ def update_membrane_potential(
 
     delta_MemPot_i = (-((MemPot[N_excit_neurons:] - V_rest) + R * I_in_i) / tau_m) * dt
     MemPot[N_excit_neurons:] = MemPot[N_excit_neurons:] - np.round(delta_MemPot_i, 4)
-
+    print(f"exc mean: {np.mean(MemPot[:N_excit_neurons])}")
+    print(f"inh mean: {np.mean(MemPot[N_excit_neurons:])}")
     return MemPot, I_in_i, I_in_e
 
 
@@ -117,8 +118,8 @@ def update_membrane_potential_conduct(
 
     # Update membrane potential
     delta_U_ex = (
-        tau_m
-        * dt
+        dt
+        / tau_m
         * (
             (V_rest - U_e)
             + (g_exc * (U_exc - U_e))
@@ -126,7 +127,7 @@ def update_membrane_potential_conduct(
         )
     )
 
-    U[:-N_inhib_neurons] = np.squeeze(U_e + delta_U_ex)
+    U[:-N_inhib_neurons] = (U_e + delta_U_ex).flatten()
 
     ### Update inhibitory membrane potential ###
 
@@ -146,15 +147,15 @@ def update_membrane_potential_conduct(
 
     # Update transmitter channels
     g_ampa_inh += dt * (-(g_ampa_inh / tau_ampa) + (np.dot(w_ij_inh, S_j_inh)))
-    g_nmda_inh += tau_nmda * dt * (g_ampa_inh - g_nmda_inh)  # DONE
+    g_nmda_inh += dt / tau_nmda * (g_ampa_inh - g_nmda_inh)  # DONE
     g_inh = alpha_inh * g_ampa_inh + (1 - alpha_inh) * g_nmda_inh  # DONE
 
     # Update membrane potential
-    delta_U_in = tau_m * dt * ((V_rest - U_i) + (g_inh * (U_inh - U_i)))
-    U[-N_inhib_neurons:] = np.squeeze(U_i + delta_U_in)
+    delta_U_in = dt / tau_m * ((V_rest - U_i) + (g_inh * (U_inh - U_i)))
+    U[-N_inhib_neurons:] = (U_i + delta_U_in).flatten()
 
     # Update spiking threshold decay for excitatory neurons
-    V_th += tau_thr * dt * (V_th_ - V_th)
+    V_th += dt / tau_thr * (V_th_ - V_th)
 
     # Update transmitter levels
     g_ampa = np.concatenate((g_ampa_exc, g_ampa_inh), axis=0)

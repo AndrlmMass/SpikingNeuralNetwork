@@ -4,7 +4,7 @@
 import os
 import sys
 import numpy as np
-import matplotlib.pyplot as plt
+import pickle as pkl
 
 # Set the current directory based on the existence of a specific path
 if os.path.exists(
@@ -23,7 +23,6 @@ sys.path.append(os.path.join(base_path, "tool"))
 from plot_training import *
 from plot_network import *
 from gen_weights import *
-from train_widget import *
 from plot_data import *
 from gen_data import *
 from train import *
@@ -78,6 +77,7 @@ class SNN_STDP:
         tau_cons: float | int,
         euler: int,
         U_cons: float | int,
+        param_dict: dict,
     ):
         self.V_th = V_th
         self.V_reset = V_reset
@@ -126,6 +126,7 @@ class SNN_STDP:
         self.time = self.num_timesteps * self.num_items
         self.max_spike_diff = int(self.num_timesteps * 0.1)  # what does this do?
         self.U_cons = U_cons
+        self.param_dict = param_dict
 
     def initialize_network(
         self,
@@ -208,7 +209,7 @@ class SNN_STDP:
             plot_input_space(self.W_se)
         if weight_layer:
             draw_weights_layer(
-                weights=W_se_,
+                weights=self.W_se_2d,
                 title="Input space",
                 xlabel="Input Neurons",
                 ylabel="Input Neurons",
@@ -245,7 +246,7 @@ class SNN_STDP:
         self,
         N_classes: int,
         noise_rand: bool,
-        noise_rand_ls: float | int,
+        noise_variance: float | int,
         mean: int | float,
         blank_variance: int | float,
         save: bool,
@@ -257,55 +258,57 @@ class SNN_STDP:
     ):
         self.N_classes = N_classes
         # Check if training data already exists
-        files = os.listdir("data/training_data/")
-        for rand in noise_rand_ls:
-            if any(
-                f"training_data_{rand}_items_{self.num_items}_.npy" in file
-                for file in files
-            ):
-                return
+        folders = os.listdir("data")
+
+        # Remove unnecessary arguements
+        args = [
+            "N_classes",
+            "N_input_neurons",
+            "num_items",
+            "noise_rand",
+            "nois_variance",
+            "blank variance",
+        ]
+
+        # Filter out the large arrays
+        curr_params = {k: v for k, v in locs.items() if k in args}
+
+        # Search for existing data gens
+        if len(folders) > 0:
+            for folder in folders:
+                ex_params = np.open(f"data\\{folder}\\parameters.npy")
+                # Check if parameters are the same as the current ones
+                if ex_params == curr_params:
+                    self.training_data = np.load(f"data\\{folder}\\data_bin.npy")
+                    self.labels_train = np.load(f"data\\{folder}\\labels_bin.npy")
+                    return
 
         # Create training data since it does not exist already
-        for j in range(len(noise_rand_ls)):
-            self.data, self.labels = gen_float_data_(
-                N_classes=N_classes,
-                N_input_neurons=self.N_input_neurons,
-                items=self.num_items,
-                noise_rand=noise_rand,
-                noise_variance=noise_rand_ls[j],
-                mean=mean,
-                blank_variance=blank_variance,
-                save=save,
-            )
+        self.data, self.labels = gen_float_data_(
+            N_classes=N_classes,
+            N_input_neurons=self.N_input_neurons,
+            items=self.num_items,
+            noise_rand=noise_rand,
+            noise_variance=noise_variance,
+            mean=mean,
+            blank_variance=blank_variance,
+            save=save,
+        )
 
-            float_2_pos_spike(
-                data=self.data,
-                labels=self.labels,
-                time=self.time,
-                timesteps=self.num_timesteps,
-                dt=self.dt,
-                save=save,
-                retur=retur,
-                rand_lvl=noise_rand_ls[j],
-                items=self.num_items,
-                avg_high_freq=avg_high_freq,
-                avg_low_freq=avg_low_freq,
-                var_high_freq=var_high_freq,
-                var_low_freq=var_low_freq,
-            )
-
-    def load_data(self, rand_lvl: float | int, retur: bool):
-        self.training_data = np.load(
-            f"data\\training_data\\training_data_{rand_lvl}_items_{self.num_items}_.npy"
-        )
-        self.data = np.load(
-            f"data\\training_data_float\\training_data_items_{self.num_items}_.npy"
-        )
-        self.labels_train = np.load(
-            f"data\\labels_train\\labels_train_{rand_lvl}_items_{self.num_items}_.npy"
-        )
-        self.labels = np.load(
-            f"data\\labels_train_float\\labels_train_{self.num_items}_.npy"
+        self.training_data, self.labels_train = float_2_pos_spike(
+            data=self.data,
+            labels=self.labels,
+            time=self.time,
+            timesteps=self.num_timesteps,
+            dt=self.dt,
+            save=save,
+            retur=retur,
+            rand_lvl=noise_variance,
+            items=self.num_items,
+            avg_high_freq=avg_high_freq,
+            avg_low_freq=avg_low_freq,
+            var_high_freq=var_high_freq,
+            var_low_freq=var_low_freq,
         )
 
         if retur:

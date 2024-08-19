@@ -24,7 +24,6 @@ sys.path.append(os.path.join(base_path, "train_packages"))
 from plot_training import *
 from plot_network import *
 from membrane_potential import update_membrane_potential_conduct
-
 from weight_updating import exc_weight_update, inh_weight_update
 
 import numpy as np
@@ -187,7 +186,7 @@ def train_data(
                     V_th_array,
                 )
 
-    # Initiate relevant arrays and variables
+    # Initiate relevant traces and variables
     num_neurons = N_excit_neurons + N_inhib_neurons + N_input_neurons
     spikes = np.zeros((time, num_neurons))
     pre_synaptic_trace = np.zeros((time, num_neurons))
@@ -208,6 +207,7 @@ def train_data(
     g_gaba = np.zeros((N_excit_neurons, 1))
     g_a = np.zeros((N_excit_neurons, 1))
     g_b = np.zeros((N_excit_neurons, 1))
+    print(spikes.shape, training_data.shape)
 
     # Add input data before training for input neurons
     spikes[:, :N_input_neurons] = training_data
@@ -230,6 +230,7 @@ def train_data(
         exc_weight_update_func = exc_weight_update
         inh_weight_update_func = inh_weight_update
         print("Running without njit")
+    up = time // 100
 
     # Loop through time and update membrane potential, spikes, and weights
     for t in tqdm(range(1, time), desc="Training network"):
@@ -353,6 +354,9 @@ def train_data(
         # W_inh = np.minimum(
         #     np.maximum(W_inh, min_weight), max_weight
         # )  # should i clip inhibitory weights too?
+        if t % up == 0:
+            t_unit = t // up
+            V_th_array[t_unit] = np.mean(V_th)
 
     if save_model:
         # Generate a random number for model folder
