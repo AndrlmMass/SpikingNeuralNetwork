@@ -1,1 +1,4 @@
-Just testing the test
+# Ignore all data and model files
+data/
+model/
+plot_files/
