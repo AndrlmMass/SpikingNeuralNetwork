@@ -117,74 +117,82 @@ def train_data(
     item_lim: int,
     items: int,
     U_cons: float | int,
+    train_guarantee: bool,
 ):
-    # Get all local variables
-    locs = locals()
+    if not train_guarantee:
+        # Get all local variables
+        locs = locals()
 
-    # Define keys to exclude
-    exclude_keys = [
-        "training_data",
-        "MemPot",
-        "W_exc",
-        "W_inh",
-        "W_exc_ideal",
-        "W_exc_plt_idx",
-        "W_exc_2d",
-        "save_model",
-        "locs",
-    ]
+        # Define keys to exclude
+        exclude_keys = [
+            "training_data",
+            "MemPot",
+            "W_exc",
+            "W_inh",
+            "W_exc_ideal",
+            "W_exc_plt_idx",
+            "W_exc_2d",
+            "save_model",
+            "locs",
+        ]
 
-    # Filter out the large arrays
-    filtered_locs = {k: v for k, v in locs.items() if k not in exclude_keys}
+        # Filter out the large arrays
+        filtered_locs = {k: v for k, v in locs.items() if k not in exclude_keys}
 
-    # Check if model exists
-    for folder in os.listdir("model"):
-        config_path = f"model/{folder}/config.npy"
-        print("Searching for existing model...", end="\r")
-        if os.path.exists(config_path):
-            saved_config = np.load(config_path, allow_pickle=True).item()
-            saved_config = {
-                k: v for k, v in saved_config.items() if k not in exclude_keys
-            }
-            if filtered_locs == saved_config:
-                stop_event = threading.Event()
+        # Check if model exists
+        for folder in os.listdir("model"):
+            config_path = f"model/{folder}/config.npy"
+            print("Searching for existing model...", end="\r")
+            if os.path.exists(config_path):
+                saved_config = np.load(config_path, allow_pickle=True).item()
+                saved_config = {
+                    k: v for k, v in saved_config.items() if k not in exclude_keys
+                }
+                if filtered_locs == saved_config:
+                    stop_event = threading.Event()
 
-                # Start the animation in a separate thread
-                animation_thread = threading.Thread(
-                    target=display_animation, args=(stop_event,)
-                )
-                animation_thread.start()
+                    # Start the animation in a separate thread
+                    animation_thread = threading.Thread(
+                        target=display_animation, args=(stop_event,)
+                    )
+                    animation_thread.start()
 
-                # Load the model (this will run in the main thread)
-                W_exc_2d = np.load(f"model/{folder}/W_exc_2d.npy")
-                spikes = np.load(f"model/{folder}/spikes.npy")
-                MemPot = np.load(f"model/{folder}/MemPot.npy")
-                pre_synaptic_trace = np.load(f"model/{folder}/pre_synaptic_trace.npy")
-                post_synaptic_trace = np.load(f"model/{folder}/post_synaptic_trace.npy")
-                slow_pre_synaptic_trace = np.load(
-                    f"model/{folder}/slow_pre_synaptic_trace.npy"
-                )
-                z_istdp = np.load(f"model/{folder}/z_istdp_trace.npy")
-                V_th_array = np.load(f"model/{folder}/V_th_array.npy")
+                    # Load the model (this will run in the main thread)
+                    W_exc_2d = np.load(f"model/{folder}/W_exc_2d.npy")
+                    spikes = np.load(f"model/{folder}/spikes.npy")
+                    MemPot = np.load(f"model/{folder}/MemPot.npy")
+                    pre_synaptic_trace = np.load(
+                        f"model/{folder}/pre_synaptic_trace.npy"
+                    )
+                    post_synaptic_trace = np.load(
+                        f"model/{folder}/post_synaptic_trace.npy"
+                    )
+                    slow_pre_synaptic_trace = np.load(
+                        f"model/{folder}/slow_pre_synaptic_trace.npy"
+                    )
+                    z_istdp = np.load(f"model/{folder}/z_istdp_trace.npy")
+                    V_th_array = np.load(f"model/{folder}/V_th_array.npy")
 
-                # Signal that loading is complete
-                stop_event.set()
+                    # Signal that loading is complete
+                    stop_event.set()
 
-                # Wait for the animation to finish
-                animation_thread.join()
+                    # Wait for the animation to finish
+                    animation_thread.join()
 
-                print("Model reloaded successfully.       ")  # Clear the animation line
+                    print(
+                        "Model reloaded successfully.       "
+                    )  # Clear the animation line
 
-                return (
-                    spikes,
-                    MemPot,
-                    W_exc_2d,
-                    pre_synaptic_trace,
-                    post_synaptic_trace,
-                    slow_pre_synaptic_trace,
-                    z_istdp,
-                    V_th_array,
-                )
+                    return (
+                        spikes,
+                        MemPot,
+                        W_exc_2d,
+                        pre_synaptic_trace,
+                        post_synaptic_trace,
+                        slow_pre_synaptic_trace,
+                        z_istdp,
+                        V_th_array,
+                    )
 
     # Initiate relevant traces and variables
     num_neurons = N_excit_neurons + N_inhib_neurons + N_input_neurons
@@ -207,7 +215,6 @@ def train_data(
     g_gaba = np.zeros((N_excit_neurons, 1))
     g_a = np.zeros((N_excit_neurons, 1))
     g_b = np.zeros((N_excit_neurons, 1))
-    print(spikes.shape, training_data.shape)
 
     # Add input data before training for input neurons
     spikes[:, :N_input_neurons] = training_data
@@ -274,9 +281,11 @@ def train_data(
                 g_a,
                 g_b,
                 U_cons,
-                t,
             )
         )
+        if t % int(time * 0.1):
+            print(np.mean(spikes[t, :N_input_neurons]))
+            print(np.mean(MemPot[t]))
 
         # Update spikes based on membrane potential
         spike_mask = MemPot[t] > V_th
@@ -349,11 +358,7 @@ def train_data(
         # Assign the selected indices to the first row
         W_exc_2d[t] = W_exc[W_exc_plt_idx[:, 0], W_exc_plt_idx[:, 1]]
 
-        # Clip weights between min and max weight
-        # W_exc = np.minimum(np.maximum(W_exc, min_weight), max_weight)
-        # W_inh = np.minimum(
-        #     np.maximum(W_inh, min_weight), max_weight
-        # )  # should i clip inhibitory weights too?
+        # Get mean membrane threshold to track for plotting
         if t % up == 0:
             t_unit = t // up
             V_th_array[t_unit] = np.mean(V_th)

@@ -21,14 +21,14 @@ from SNN_functions import SNN_STDP
 # Store the parameters in a dictionary
 snn_params = {
     "V_th": -50,
-    "V_reset": -70,
+    "V_reset": -80,
     "P": 20,
     "C": 1,
     "U": 0.2,
     "tau_plus": 20,
     "tau_minus": 20,
     "tau_slow": 100,
-    "tau_m": 20,
+    "tau_m": 0.05,
     "tau_ht": 100,
     "tau_hom": 1.2 * 10**6,  # metaplasticity time constant
     "tau_istdp": 20,
@@ -41,7 +41,7 @@ snn_params = {
     "tau_b": 2 * 10**4,  # 20s
     "tau_d": 200,
     "tau_f": 600,
-    "delta_a": 0.112,  # decay unit
+    "delta_a": 0.1,  # decay unit
     "delta_b": 5 * 10**-4,  # seconds
     "U_exc": 0,
     "U_inh": -80,
@@ -67,10 +67,10 @@ snn_params = {
 }
 
 # Initiate SNN object
-snn = SNN_STDP(**snn_params)
+snn = SNN_STDP(**snn_params, param_dict=snn_params)
 
 locs = locals()
-print(locs)
+
 # Initialize & visualize pre-trained network
 (
     MemPot,
@@ -93,19 +93,16 @@ snn.vis_network(heatmap=False, weight_layer=False)
 snn.gen_data(
     N_classes=4,
     noise_rand=True,
-    noise_rand_ls=[0.05],
+    noise_variance=0.05,
     mean=0,
     blank_variance=0.01,
     save=True,
-    retur=False,
+    retur=True,
     avg_high_freq=45,
     avg_low_freq=10,
     var_high_freq=0.05,
     var_low_freq=0.05,
-)  # Need to add off/on period here
-
-# Load data
-data, labels = snn.load_data(rand_lvl=0.05, retur=True)
+)  # Need to add on/off period here
 
 # Visualize data
 snn.visualize_data(run=False)
@@ -119,6 +116,7 @@ snn.visualize_data(run=False)
     retur=True,
     save_model=True,
     item_lim=20,
+    train_guarantee=True,
 )
 
 # Visualize training and testing results

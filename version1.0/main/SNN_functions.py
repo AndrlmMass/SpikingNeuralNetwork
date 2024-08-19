@@ -4,7 +4,6 @@
 import os
 import sys
 import numpy as np
-import pickle as pkl
 
 # Set the current directory based on the existence of a specific path
 if os.path.exists(
@@ -271,12 +270,14 @@ class SNN_STDP:
         ]
 
         # Filter out the large arrays
-        curr_params = {k: v for k, v in locs.items() if k in args}
+        curr_params = {k: v for k, v in self.param_dict.items() if k in args}
 
         # Search for existing data gens
         if len(folders) > 0:
             for folder in folders:
-                ex_params = np.open(f"data\\{folder}\\parameters.npy")
+                ex_params = np.load(
+                    f"data\\{folder}\\parameters.npy", allow_pickle=True
+                )
                 # Check if parameters are the same as the current ones
                 if ex_params == curr_params:
                     self.training_data = np.load(f"data\\{folder}\\data_bin.npy")
@@ -292,7 +293,6 @@ class SNN_STDP:
             noise_variance=noise_variance,
             mean=mean,
             blank_variance=blank_variance,
-            save=save,
         )
 
         self.training_data, self.labels_train = float_2_pos_spike(
@@ -309,6 +309,7 @@ class SNN_STDP:
             avg_low_freq=avg_low_freq,
             var_high_freq=var_high_freq,
             var_low_freq=var_low_freq,
+            params_dict=curr_params,
         )
 
         if retur:
@@ -326,6 +327,7 @@ class SNN_STDP:
         retur: bool,
         save_model: bool,
         item_lim: int,
+        train_guarantee: bool,
     ):
         (
             self.spikes,
@@ -388,6 +390,7 @@ class SNN_STDP:
             item_lim=item_lim,
             items=self.num_items,
             U_cons=self.U_cons,
+            train_guarantee=train_guarantee,
         )
 
         if retur:

@@ -25,7 +25,6 @@ def gen_float_data_(
     noise_variance: float | int,
     mean: int | float,
     blank_variance: int | float,
-    save: bool,
 ):
     # Add print statement to show funct
 
@@ -105,13 +104,6 @@ def gen_float_data_(
     # Reshape input_dims x input_dims to get time x input_dims**2
     input_space = np.reshape(input_space, (int(items), input_dims**2))
 
-    # Save data if save is true
-    if save:
-        np.save(
-            f"data\\training_data_float\\training_data_items_{items}_.npy", input_space
-        )
-        np.save(f"data\\labels_train_float\\labels_train_{items}_.npy", labels)
-
     # return if true
     return input_space, labels
 
@@ -130,6 +122,7 @@ def float_2_pos_spike(
     avg_low_freq: float | int,
     var_high_freq: float | int,
     var_low_freq: float | int,
+    params_dict: dict,
 ):
     # Assert number of items
     N_input_neurons = data.shape[1]
@@ -158,7 +151,8 @@ def float_2_pos_spike(
     # save data if true
     if save:
         print(
-            f"Saving training and testing data with labels for random level {rand_lvl}"
+            f"Saving training and testing data with labels for random level {rand_lvl}",
+            sep="\r",
         )
         rand_nums = np.random.randint(low=0, high=9, size=5)
 
@@ -172,6 +166,7 @@ def float_2_pos_spike(
         # Save training data and labels
         np.save(f"data\\{rand_nums}\\data_bin.npy", poisson_input)
         np.save(f"data\\{rand_nums}\\labels_bin.npy", labels)
+        np.save(f"data\\{rand_nums}\\parameters.npy", params_dict)
         print("training & labels are saved in data folder")
 
     if retur:
