@@ -21,14 +21,14 @@ from SNN_functions import SNN_STDP
 # Store the parameters in a dictionary
 snn_params = {
     "V_th": -50,
-    "V_reset": -80,
+    "V_reset": -60,
     "P": 20,
     "C": 1,
     "U": 0.2,
     "tau_plus": 20,
     "tau_minus": 20,
     "tau_slow": 100,
-    "tau_m": 0.05,
+    "tau_m": 1,
     "tau_ht": 100,
     "tau_hom": 1.2 * 10**6,  # metaplasticity time constant
     "tau_istdp": 20,
@@ -49,9 +49,9 @@ snn_params = {
     "alpha_inh": 0.3,
     "learning_rate": 2 * 10**-5,
     "gamma": 4,
-    "num_items": 36,
+    "num_items": 264,
     "dt": 0.001,
-    "T": 0.1,
+    "T": 1,
     "wp": 0.5,
     "V_rest": -60,
     "min_weight": 0,
@@ -122,8 +122,8 @@ snn.visualize_data(run=False)
 # Visualize training and testing results
 snn.plot_training(
     ws_nd_spikes=True,
-    idx_start=484,
-    idx_stop=600,
+    idx_start=0,
+    idx_stop=484,
     mv=True,
     overlap=False,
     traces=True,

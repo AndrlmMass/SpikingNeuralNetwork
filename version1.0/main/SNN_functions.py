@@ -255,22 +255,11 @@ class SNN_STDP:
         var_high_freq: float | int,
         var_low_freq: float | int,
     ):
-        self.N_classes = N_classes
         # Check if training data already exists
         folders = os.listdir("data")
 
-        # Remove unnecessary arguements
-        args = [
-            "N_classes",
-            "N_input_neurons",
-            "num_items",
-            "noise_rand",
-            "nois_variance",
-            "blank variance",
-        ]
-
         # Filter out the large arrays
-        curr_params = {k: v for k, v in self.param_dict.items() if k in args}
+        curr_params = self.param_dict.values()
 
         # Search for existing data gens
         if len(folders) > 0:

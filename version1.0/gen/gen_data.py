@@ -157,7 +157,7 @@ def float_2_pos_spike(
         rand_nums = np.random.randint(low=0, high=9, size=5)
 
         # Check if name is taken
-        while rand_nums in os.listdir("data"):
+        while any(item in os.listdir("data") for item in rand_nums):
             rand_nums = np.random.randint(low=0, high=9, size=5)
 
         # Create folder to store data

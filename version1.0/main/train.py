@@ -119,26 +119,26 @@ def train_data(
     U_cons: float | int,
     train_guarantee: bool,
 ):
+    # Get all local variables
+    locs = locals()
+
+    # Define keys to exclude
+    exclude_keys = [
+        "training_data",
+        "MemPot",
+        "W_exc",
+        "W_inh",
+        "W_exc_ideal",
+        "W_exc_plt_idx",
+        "W_exc_2d",
+        "save_model",
+        "locs",
+    ]
+
+    # Filter out the large arrays
+    filtered_locs = {k: v for k, v in locs.items() if k not in exclude_keys}
+
     if not train_guarantee:
-        # Get all local variables
-        locs = locals()
-
-        # Define keys to exclude
-        exclude_keys = [
-            "training_data",
-            "MemPot",
-            "W_exc",
-            "W_inh",
-            "W_exc_ideal",
-            "W_exc_plt_idx",
-            "W_exc_2d",
-            "save_model",
-            "locs",
-        ]
-
-        # Filter out the large arrays
-        filtered_locs = {k: v for k, v in locs.items() if k not in exclude_keys}
-
         # Check if model exists
         for folder in os.listdir("model"):
             config_path = f"model/{folder}/config.npy"
@@ -283,9 +283,6 @@ def train_data(
                 U_cons,
             )
         )
-        if t % int(time * 0.1):
-            print(np.mean(spikes[t, :N_input_neurons]))
-            print(np.mean(MemPot[t]))
 
         # Update spikes based on membrane potential
         spike_mask = MemPot[t] > V_th
