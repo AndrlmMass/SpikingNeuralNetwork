@@ -4,6 +4,7 @@
 import os
 import sys
 import numpy as np
+import json
 
 # Set the current directory based on the existence of a specific path
 if os.path.exists(
@@ -255,20 +256,38 @@ class SNN_STDP:
         var_high_freq: float | int,
         var_low_freq: float | int,
     ):
+        self.N_classes = N_classes
         # Check if training data already exists
         folders = os.listdir("data")
 
-        # Filter out the large arrays
-        curr_params = self.param_dict.values()
+        # Compile dict of all relevant arguments for generating data
+        data_args = {**locals()}
+
+        # Remove irrelevant keys
+        del data_args["self"]
+        del data_args["folders"]
+        del data_args["save"]
+        del data_args["retur"]
+
+        # Add other keys
+        other_args = {
+            "N_input_neurons": self.N_input_neurons,
+            "items": self.num_items,
+            "time": self.time,
+            "num_timesteps": self.num_timesteps,
+            "dt": self.dt,
+        }
+
+        # Update dictionary
+        data_args.update(other_args)
 
         # Search for existing data gens
         if len(folders) > 0:
             for folder in folders:
-                ex_params = np.load(
-                    f"data\\{folder}\\parameters.npy", allow_pickle=True
-                )
+                ex_params = json.load(open(f"data\\{folder}\\parameters.json"))
+
                 # Check if parameters are the same as the current ones
-                if ex_params == curr_params:
+                if ex_params == data_args:
                     self.training_data = np.load(f"data\\{folder}\\data_bin.npy")
                     self.labels_train = np.load(f"data\\{folder}\\labels_bin.npy")
                     return
@@ -290,7 +309,6 @@ class SNN_STDP:
             time=self.time,
             timesteps=self.num_timesteps,
             dt=self.dt,
-            save=save,
             retur=retur,
             rand_lvl=noise_variance,
             items=self.num_items,
@@ -298,14 +316,30 @@ class SNN_STDP:
             avg_low_freq=avg_low_freq,
             var_high_freq=var_high_freq,
             var_low_freq=var_low_freq,
-            params_dict=curr_params,
         )
-
-        if retur:
-            return (
-                self.training_data,
-                self.labels_train,
+        if save:
+            print(
+                f"Saving training and testing data with labels for random level {noise_rand}",
+                sep="\r",
             )
+            rand_nums = np.random.randint(low=0, high=9, size=5)
+
+            # Check if name is taken
+            while any(item in os.listdir("data") for item in rand_nums):
+                rand_nums = np.random.randint(low=0, high=9, size=5)
+
+            # Create folder to store data
+            os.makedirs(f"data\\{rand_nums}")
+
+            # Save training data and labels
+            np.save(f"data\\{rand_nums}\\data_bin.npy", self.training_data)
+            np.save(f"data\\{rand_nums}\\labels_bin.npy", self.labels_train)
+            filepath = f"data\\{rand_nums}\\parameters.json"
+
+            with open(filepath, "w") as outfile:
+                json.dump(data_args, outfile)
+
+            print("training & labels are saved in data folder")
 
     def visualize_data(self, run):
         if run:

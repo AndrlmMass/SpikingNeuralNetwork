@@ -150,7 +150,8 @@ def update_membrane_potential_conduct(
     g_inh = alpha_inh * g_ampa_inh + (1 - alpha_inh) * g_nmda_inh  # DONE
 
     # Update membrane potential
-    delta_U_in = dt / tau_m * ((V_rest - U_i) + (g_inh * (U_inh - U_i)))
+    delta_U_in = dt / tau_m * ((V_rest - U_i) + (g_inh * (U_exc - U_i)) + (U_inh - U_i))
+
     U[-N_inhib_neurons:] = np.round(U_i + delta_U_in, decimals=3).flatten()
 
     # Update spiking threshold decay for excitatory neurons

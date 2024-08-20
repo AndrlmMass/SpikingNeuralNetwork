@@ -283,6 +283,12 @@ def train_data(
                 U_cons,
             )
         )
+        if t % 100 == 0:
+            print(
+                MemPot[t, 500],
+                g_ampa[500],
+                g_nmda[500],
+            )
 
         # Update spikes based on membrane potential
         spike_mask = MemPot[t] > V_th

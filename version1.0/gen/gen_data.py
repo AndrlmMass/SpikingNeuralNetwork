@@ -3,6 +3,7 @@ import os
 import sys
 import numpy as np
 from tqdm import tqdm
+import json
 
 if os.path.exists(
     "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\version1.0"
@@ -115,14 +116,12 @@ def float_2_pos_spike(
     time: int | float,
     timesteps: int,
     dt: float,
-    save: bool,
     retur: bool,
     rand_lvl: float,
     avg_high_freq: float | int,
     avg_low_freq: float | int,
     var_high_freq: float | int,
     var_low_freq: float | int,
-    params_dict: dict,
 ):
     # Assert number of items
     N_input_neurons = data.shape[1]
@@ -147,27 +146,6 @@ def float_2_pos_spike(
 
     # Extend labels to match the poisson_input
     labels = np.repeat(labels, timesteps, axis=0)
-
-    # save data if true
-    if save:
-        print(
-            f"Saving training and testing data with labels for random level {rand_lvl}",
-            sep="\r",
-        )
-        rand_nums = np.random.randint(low=0, high=9, size=5)
-
-        # Check if name is taken
-        while any(item in os.listdir("data") for item in rand_nums):
-            rand_nums = np.random.randint(low=0, high=9, size=5)
-
-        # Create folder to store data
-        os.makedirs(f"data\\{rand_nums}")
-
-        # Save training data and labels
-        np.save(f"data\\{rand_nums}\\data_bin.npy", poisson_input)
-        np.save(f"data\\{rand_nums}\\labels_bin.npy", labels)
-        np.save(f"data\\{rand_nums}\\parameters.npy", params_dict)
-        print("training & labels are saved in data folder")
 
     if retur:
         return poisson_input, labels

@@ -21,7 +21,7 @@ from SNN_functions import SNN_STDP
 # Store the parameters in a dictionary
 snn_params = {
     "V_th": -50,
-    "V_reset": -60,
+    "V_reset": -70,
     "P": 20,
     "C": 1,
     "U": 0.2,
@@ -49,9 +49,9 @@ snn_params = {
     "alpha_inh": 0.3,
     "learning_rate": 2 * 10**-5,
     "gamma": 4,
-    "num_items": 264,
+    "num_items": 104,
     "dt": 0.001,
-    "T": 1,
+    "T": 0.1,
     "wp": 0.5,
     "V_rest": -60,
     "min_weight": 0,
@@ -68,8 +68,6 @@ snn_params = {
 
 # Initiate SNN object
 snn = SNN_STDP(**snn_params, param_dict=snn_params)
-
-locs = locals()
 
 # Initialize & visualize pre-trained network
 (
