@@ -77,7 +77,6 @@ class SNN_STDP:
         tau_cons: float | int,
         euler: int,
         U_cons: float | int,
-        param_dict: dict,
     ):
         self.V_th = V_th
         self.V_reset = V_reset
@@ -126,7 +125,6 @@ class SNN_STDP:
         self.time = self.num_timesteps * self.num_items
         self.max_spike_diff = int(self.num_timesteps * 0.1)  # what does this do?
         self.U_cons = U_cons
-        self.param_dict = param_dict
 
     def initialize_network(
         self,
@@ -350,7 +348,7 @@ class SNN_STDP:
         retur: bool,
         save_model: bool,
         item_lim: int,
-        train_guarantee: bool,
+        force_retrain: bool,
     ):
         (
             self.spikes,
@@ -413,7 +411,7 @@ class SNN_STDP:
             item_lim=item_lim,
             items=self.num_items,
             U_cons=self.U_cons,
-            train_guarantee=train_guarantee,
+            force_retrain=force_retrain,
         )
 
         if retur:

@@ -18,6 +18,13 @@ sys.path.append(os.path.join(base_path, "main"))
 
 from SNN_functions import SNN_STDP
 
+
+def restart_program():
+    """Restarts the current program."""
+    python = sys.executable
+    os.execl(python, python, *sys.argv)
+
+
 # Store the parameters in a dictionary
 snn_params = {
     "V_th": -50,
@@ -67,7 +74,7 @@ snn_params = {
 }
 
 # Initiate SNN object
-snn = SNN_STDP(**snn_params, param_dict=snn_params)
+snn = SNN_STDP(**snn_params)
 
 # Initialize & visualize pre-trained network
 (
@@ -114,16 +121,16 @@ snn.visualize_data(run=False)
     retur=True,
     save_model=True,
     item_lim=20,
-    train_guarantee=True,
+    force_retrain=True,
 )
 
 # Visualize training and testing results
 snn.plot_training(
     ws_nd_spikes=True,
-    idx_start=0,
-    idx_stop=484,
+    idx_start=484,
+    idx_stop=605,
     mv=True,
-    overlap=False,
+    overlap=True,
     traces=True,
     tsne=True,
 )

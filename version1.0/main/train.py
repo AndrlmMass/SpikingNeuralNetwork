@@ -117,7 +117,7 @@ def train_data(
     item_lim: int,
     items: int,
     U_cons: float | int,
-    train_guarantee: bool,
+    force_retrain: bool,
 ):
     # Get all local variables
     locs = locals()
@@ -138,7 +138,7 @@ def train_data(
     # Filter out the large arrays
     filtered_locs = {k: v for k, v in locs.items() if k not in exclude_keys}
 
-    if not train_guarantee:
+    if not force_retrain:
         # Check if model exists
         for folder in os.listdir("model"):
             config_path = f"model/{folder}/config.npy"
@@ -283,12 +283,12 @@ def train_data(
                 U_cons,
             )
         )
-        if t % 100 == 0:
-            print(
-                MemPot[t, 500],
-                g_ampa[500],
-                g_nmda[500],
-            )
+        # if t % 100 == 0:
+        #     print(
+        #         MemPot[t, 500],
+        #         g_ampa[500],
+        #         g_nmda[500],
+        #     )
 
         # Update spikes based on membrane potential
         spike_mask = MemPot[t] > V_th
