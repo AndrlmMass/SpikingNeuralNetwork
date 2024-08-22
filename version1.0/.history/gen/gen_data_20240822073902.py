@@ -182,4 +182,4 @@ def float_2_pos_spike(
         print("Saving complete")
 
     if retur:
-        return poisson_input, labels_bin, data, labels
+        return poisson_input, labels

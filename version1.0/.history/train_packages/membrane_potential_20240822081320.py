@@ -14,13 +14,16 @@ def update_membrane_potential(
     dt,
     V_rest,
 ):
+    print(W_exc[:-N_inhib_neurons].shape, S[:-N_inhib_neurons].shape)
+
     # Update I_in
-    exc_e = np.dot(W_exc[:-N_inhib_neurons].T, S[:-N_inhib_neurons])
-    exc_i = np.dot(W_exc[-N_inhib_neurons:].T, S[-N_inhib_neurons:])
-    I_in_e = exc_e - exc_i
+    I_in_e = np.dot(W_exc[:-N_inhib_neurons], S[:-N_inhib_neurons])
+    I_in_e_inh = np.dot(W_exc[-N_inhib_neurons:], S[-N_inhib_neurons:])
+    print(I_in_e.shape)
+    print(I_in_e_inh.shape)
 
     I_in_i = np.dot(
-        W_inh.T,
+        W_inh,
         S[N_input_neurons:-N_inhib_neurons],
     )
 

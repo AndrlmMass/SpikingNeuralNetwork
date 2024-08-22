@@ -3,25 +3,35 @@ import numpy as np
 
 def update_membrane_potential(
     MemPot,
-    W_exc,
-    W_inh,
-    S,
+    W_se,
+    W_ee,
+    W_ie,
+    W_ei,
+    spikes,
+    dt,
+    N_excit_neurons,
     N_input_neurons,
     N_inhib_neurons,
-    N_excit_neurons,
-    tau_m,
-    R,
-    dt,
     V_rest,
+    R,
+    tau_m,
 ):
     # Update I_in
-    exc_e = np.dot(W_exc[:-N_inhib_neurons].T, S[:-N_inhib_neurons])
-    exc_i = np.dot(W_exc[-N_inhib_neurons:].T, S[-N_inhib_neurons:])
-    I_in_e = exc_e - exc_i
+    I_in_e = (
+        np.dot(W_se, spikes[:N_input_neurons])
+        + np.dot(
+            W_ee,
+            spikes[N_input_neurons:-N_inhib_neurons],
+        )
+        - np.dot(
+            W_ie.T,
+            spikes[-N_inhib_neurons:],
+        )
+    )
 
     I_in_i = np.dot(
-        W_inh.T,
-        S[N_input_neurons:-N_inhib_neurons],
+        W_ei.T,
+        spikes[N_input_neurons:-N_inhib_neurons],
     )
 
     # Update membrane potential based on I_in
@@ -88,7 +98,7 @@ def update_membrane_potential_conduct(
     # Update traces indices
     g_ampa_exc = g_ampa[:-N_inhib_neurons]  # shape: (484, 1)
     g_nmda_exc = g_nmda[:-N_inhib_neurons]  # shape: (484, 1)
-    g_gaba_exc = g_gaba  # shape: (121, 1)
+    g_gaba_exc = g_gaba
 
     # Update traces
     g_a += dt * (-(g_a / tau_a) + delta_a * S_i)  # shape:(484, 1)

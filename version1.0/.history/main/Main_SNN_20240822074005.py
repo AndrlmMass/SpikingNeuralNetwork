@@ -18,7 +18,6 @@ sys.path.append(os.path.join(base_path, "main"))
 
 from SNN_functions import SNN_STDP
 
-
 # Store the parameters in a dictionary
 snn_params = {
     "V_th": -50,
@@ -29,7 +28,7 @@ snn_params = {
     "tau_plus": 20,
     "tau_minus": 20,
     "tau_slow": 100,
-    "tau_m": 1,
+    "tau_m": 20,
     "tau_ht": 100,
     "tau_hom": 1.2 * 10**6,  # metaplasticity time constant
     "tau_istdp": 20,
@@ -42,7 +41,7 @@ snn_params = {
     "tau_b": 2 * 10**4,  # 20s
     "tau_d": 200,
     "tau_f": 600,
-    "delta_a": 0.1,  # decay unit
+    "delta_a": 0.112,  # decay unit
     "delta_b": 5 * 10**-4,  # seconds
     "U_exc": 0,
     "U_inh": -80,
@@ -50,7 +49,7 @@ snn_params = {
     "alpha_inh": 0.3,
     "learning_rate": 2 * 10**-5,
     "gamma": 4,
-    "num_items": 104,
+    "num_items": 36,
     "dt": 0.001,
     "T": 0.1,
     "wp": 0.5,
@@ -69,6 +68,8 @@ snn_params = {
 
 # Initiate SNN object
 snn = SNN_STDP(**snn_params)
+
+locs = locals()
 
 # Initialize & visualize pre-trained network
 (
@@ -92,16 +93,19 @@ snn.vis_network(heatmap=False, weight_layer=False)
 snn.gen_data(
     N_classes=4,
     noise_rand=True,
-    noise_variance=0.05,
+    noise_rand_ls=[0.05],
     mean=0,
     blank_variance=0.01,
     save=True,
-    retur=True,
+    retur=False,
     avg_high_freq=45,
     avg_low_freq=10,
     var_high_freq=0.05,
     var_low_freq=0.05,
-)  # Need to add on/off period here
+)  # Need to add off/on period here
+
+# Load data
+data, labels = snn.load_data(rand_lvl=0.05, retur=True)
 
 # Visualize data
 snn.visualize_data(run=False)
@@ -115,16 +119,15 @@ snn.visualize_data(run=False)
     retur=True,
     save_model=True,
     item_lim=20,
-    force_retrain=True,
 )
 
 # Visualize training and testing results
 snn.plot_training(
     ws_nd_spikes=True,
     idx_start=484,
-    idx_stop=605,
+    idx_stop=600,
     mv=True,
-    overlap=True,
+    overlap=False,
     traces=True,
     tsne=True,
 )

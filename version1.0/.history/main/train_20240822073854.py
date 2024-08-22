@@ -215,7 +215,6 @@ def train_data(
     g_gaba = np.zeros((N_excit_neurons, 1))
     g_a = np.zeros((N_excit_neurons, 1))
     g_b = np.zeros((N_excit_neurons, 1))
-    R = 1
 
     # Add input data before training for input neurons
     spikes[:, :N_input_neurons] = training_data
@@ -234,7 +233,7 @@ def train_data(
         print("Running njit")
     else:
         # adjust_membrane_threshold_func = adjust_membrane_threshold
-        update_membrane_potential_conduct_func = update_membrane_potential
+        update_membrane_potential_conduct_func = update_membrane_potential_conduct
         exc_weight_update_func = exc_weight_update
         inh_weight_update_func = inh_weight_update
         print("Running without njit")
@@ -249,16 +248,38 @@ def train_data(
         # Update membrane potential
         MemPot[t] = update_membrane_potential_conduct_func(
             MemPot[t - 1],
+            U_inh,
+            U_exc,
+            V_th,
+            V_th_,
             W_exc,
             W_inh,
             spikes[t - 1],
+            u,
+            x,
+            dt,
             N_input_neurons,
             N_inhib_neurons,
-            N_excit_neurons,
-            tau_m,
-            R,
-            dt,
             V_rest,
+            tau_m,
+            alpha_exc,
+            alpha_inh,
+            tau_ampa,
+            tau_nmda,
+            tau_gaba,
+            tau_thr,
+            tau_d,
+            tau_f,
+            tau_a,
+            tau_b,
+            delta_a,
+            delta_b,
+            g_ampa,
+            g_nmda,
+            g_gaba,
+            g_a,
+            g_b,
+            U_cons,
         )
         # if t % 100 == 0:
         #     print(

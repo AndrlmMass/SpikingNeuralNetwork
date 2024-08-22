@@ -3,25 +3,30 @@ import numpy as np
 
 def update_membrane_potential(
     MemPot,
+    U_inh,
+    U_exc,
+    V_th,
+    V_th_,
     W_exc,
-    W_inh,
+    W_ing,
     S,
     N_input_neurons,
     N_inhib_neurons,
-    N_excit_neurons,
     tau_m,
     R,
     dt,
     V_rest,
 ):
+
     # Update I_in
-    exc_e = np.dot(W_exc[:-N_inhib_neurons].T, S[:-N_inhib_neurons])
-    exc_i = np.dot(W_exc[-N_inhib_neurons:].T, S[-N_inhib_neurons:])
-    I_in_e = exc_e - exc_i
+    I_in_e = np.dot(W_exc[:-N_inhib_neurons], S[:-N_inhib_neurons]) - np.dot(
+        W_exc[:N_input_neurons],
+        S[-N_inhib_neurons:],
+    )
 
     I_in_i = np.dot(
-        W_inh.T,
-        S[N_input_neurons:-N_inhib_neurons],
+        W_ei.T,
+        spikes[N_input_neurons:-N_inhib_neurons],
     )
 
     # Update membrane potential based on I_in
