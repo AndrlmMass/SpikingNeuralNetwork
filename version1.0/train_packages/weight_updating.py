@@ -32,8 +32,6 @@ def exc_weight_update(
     z_ht,
     C,
 ):
-    ## W_se weights ##
-
     # Update ideal weights if t is divisible by euler
     W_se_ideal += (dt / tau_cons) * (
         W_se
@@ -115,6 +113,21 @@ def exc_weight_update(
 
     # Update the weights
     W_ee += np.round(delta_w_ee, 4)
+
+    ## W_se weights ##
+    sum_spikes = np.sum(spikes)
+    z_ht_sum = np.sum(z_ht)
+    C_sum = np.sum(C)
+    sum_w_se = np.sum(W_se)
+    sum_w_ee = np.sum(W_ee)
+    sum_w_se_ideal = np.sum(W_se_ideal)
+    sum_w_ee_ideal = np.sum(W_ee_ideal)
+    sum_post_trace_se = np.sum(post_trace_se)
+    sum_post_trace_ee = np.sum(post_trace_ee)
+    sum_pre_trace_se = np.sum(pre_trace_se)
+    sum_pre_trace_ee = np.sum(pre_trace_ee)
+
+    # print(sum_post_trace_ee, sum_post_trace_se, sum_pre_trace_ee, sum_pre_trace_se)
 
     return (
         W_se,

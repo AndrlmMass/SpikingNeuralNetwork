@@ -26,17 +26,17 @@ snn_params = {
     "P": 20,
     "C": 1,
     "U": 0.2,
-    "tau_plus": 20,
-    "tau_minus": 20,
-    "tau_slow": 100,
-    "tau_m": 1,
+    "tau_plus": 5,
+    "tau_minus": 10,
+    "tau_slow": 10,
+    "tau_m": 0.01,
     "tau_ht": 100,
     "tau_hom": 1.2 * 10**6,  # metaplasticity time constant
     "tau_istdp": 20,
     "tau_H": 6 * 10**2,  # 10s
     "tau_thr": 2,  # 2ms
-    "tau_ampa": 5,
-    "tau_nmda": 100,
+    "tau_ampa": 0.005,
+    "tau_nmda": 0.005,
     "tau_gaba": 10,
     "tau_a": 100,  # 100ms
     "tau_b": 2 * 10**4,  # 20s
@@ -48,7 +48,7 @@ snn_params = {
     "U_inh": -80,
     "alpha_exc": 0.2,
     "alpha_inh": 0.3,
-    "learning_rate": 2 * 10**-5,
+    "learning_rate": 2 * 10**-3,
     "gamma": 4,
     "num_items": 104,
     "dt": 0.001,
