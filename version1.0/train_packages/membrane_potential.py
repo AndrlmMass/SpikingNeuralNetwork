@@ -69,6 +69,19 @@ def update_membrane_potential_conduct(
     g_b,
     U_cons,
 ):
+    """
+    Overview over variables:
+
+    -> Dynamic (i.e., changing for each step)
+        U, V_th, g_ampa, g_nmda, g_gaba, x, u, g_a, g_b, W_exc, W_inh, S
+
+    -> Static (i.e., not changing)
+        U_inh, U_exc, V_th_, tau_m, dt, N_input_neurons, N_inhib_neurons,
+        V_rest, alpha_exc, alpha_inh, tau_ampa, tau_nmda, tau_gaba, tau_thr,
+        tau_d, tau_f, tau_a, tau_b, delta_a, delta_b, U_cons
+
+    """
+
     ### Update excitatory membrane potential ###
 
     # Update spike indices
@@ -114,7 +127,6 @@ def update_membrane_potential_conduct(
             + (g_gaba_exc + g_a + g_b) * (U_inh - U_e)
         )
     )
-    print("U_e", U_e[0], "delta_U_ex", delta_U_ex[0])
 
     U[:-N_inhib_neurons] = (U_e + delta_U_ex).reshape(-1)
 

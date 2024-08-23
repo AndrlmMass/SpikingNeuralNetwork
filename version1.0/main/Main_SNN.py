@@ -27,9 +27,9 @@ snn_params = {
     "C": 1,
     "U": 0.2,
     "tau_plus": 5,
-    "tau_minus": 10,
-    "tau_slow": 10,
-    "tau_m": 0.01,
+    "tau_minus": 5,
+    "tau_slow": 20,
+    "tau_m": 0.5,
     "tau_ht": 100,
     "tau_hom": 1.2 * 10**6,  # metaplasticity time constant
     "tau_istdp": 20,
