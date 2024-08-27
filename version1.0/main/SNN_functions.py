@@ -24,7 +24,7 @@ from plot_training import *
 from plot_network import *
 from gen_weights import *
 from plot_data import *
-from gen_data import *
+from gen_data import gen_data_cl
 from train import *
 
 
@@ -41,7 +41,6 @@ class SNN_STDP:
         tau_plus: float | int,
         tau_minus: float | int,
         tau_slow: float | int,
-        tau_m: float | int,
         tau_ht: float | int,
         tau_hom: float | int,
         tau_istdp: float | int,
@@ -89,7 +88,7 @@ class SNN_STDP:
         self.tau_plus = tau_plus
         self.tau_minus = tau_minus
         self.tau_slow = tau_slow
-        self.tau_m = tau_m
+        self.tau_m = dt
         self.tau_ht = tau_ht
         self.tau_hom = tau_hom
         self.tau_istdp = tau_istdp
@@ -290,8 +289,8 @@ class SNN_STDP:
                     self.labels_train = np.load(f"data\\{folder}\\labels_bin.npy")
                     return
 
-        # Create training data since it does not exist alreadyasddadada2
-        self.data, self.labels, self.basic_data, self.labels_seq = gen_float_data_(
+        # Create training data since it does not exist already
+        gd = gen_data_cl(
             N_classes=N_classes,
             N_input_neurons=self.N_input_neurons,
             items=self.num_items,
@@ -299,22 +298,23 @@ class SNN_STDP:
             noise_variance=noise_variance,
             mean=mean,
             blank_variance=blank_variance,
-        )
-
-        self.training_data, self.labels_train = float_2_pos_spike(
-            data=self.data,
-            labels=self.labels,
             time=self.time,
             timesteps=self.num_timesteps,
             dt=self.dt,
             retur=retur,
-            rand_lvl=noise_variance,
-            items=self.num_items,
             avg_high_freq=avg_high_freq,
             avg_low_freq=avg_low_freq,
             var_high_freq=var_high_freq,
             var_low_freq=var_low_freq,
+            params_dict=data_args,
         )
+
+        gd.gen_float_data_()
+
+        self.training_data, self.labels_train, self.basic_data, self.labels_seq = (
+            gd.float_2_pos_spike()
+        )
+
         if save:
             print(
                 f"Saving training and testing data with labels for random level {noise_rand}",
