@@ -339,13 +339,11 @@ class SNN_STDP:
 
             print("training & labels are saved in data folder")
 
-    def visualize_data(self, single_data, raster_plot_, alt_raster_plot):
+    def visualize_data(self, single_data, raster_plot_):
         if single_data:
             input_space_plotted_single(self.training_data[0])
         if raster_plot_:
             raster_plot(self.training_data)
-        if alt_raster_plot:
-            raster_plot_other(self.training_data, self.labels_train, False)
 
     def train_data(
         self,

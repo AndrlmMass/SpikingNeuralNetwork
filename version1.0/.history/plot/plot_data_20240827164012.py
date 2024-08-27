@@ -80,13 +80,19 @@ def input_space_plotted_single(data):
 
 
 def raster_plot(spikes):
+    fig, axs = plt.subplots(1, 1, figsize=(12, 16))
+
     # Get firing times for each neuron
     Firing_times = [np.where(spikes[:, n])[0] for n in range(spikes.shape[1])]
 
+    # Add item and neuronal layer indicators
+    axs.axhline(y=484, color="red", linestyle="-")
+    axs.axhline(y=968, color="red", linestyle="-")
+
     # Plot spike raster
-    plt.eventplot(Firing_times, colors="black")
-    plt.title("Spikes during training")
-    plt.xlabel("Time (ms)")
-    plt.ylabel("Neuron index")
+    axs.eventplot(Firing_times, colors="black")
+    axs.set_title("Spikes during training")
+    axs.set_xlabel("Time (ms)")
+    axs.set_ylabel("Neuron index")
 
     plt.show()

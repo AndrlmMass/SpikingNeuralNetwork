@@ -85,7 +85,7 @@ snn = SNN_STDP(**snn_params)
     retur=True,
 )
 # Visualize network
-snn.vis_network(heatmap=False, weight_layer=False)
+snn.vis_network(heatmap=True, weight_layer=True)
 
 # Generate data
 snn.gen_data(
@@ -103,7 +103,7 @@ snn.gen_data(
 )  # Need to add on/off period here
 
 # Visualize data
-snn.visualize_data(single_data=False, raster_plot_=False, alt_raster_plot=True)
+snn.visualize_data(run=False)
 
 # Train network
 (

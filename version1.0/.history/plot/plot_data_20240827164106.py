@@ -83,6 +83,10 @@ def raster_plot(spikes):
     # Get firing times for each neuron
     Firing_times = [np.where(spikes[:, n])[0] for n in range(spikes.shape[1])]
 
+    # Add item and neuronal layer indicators
+    plt.axhline(y=484, color="red", linestyle="-")
+    plt.axhline(y=968, color="red", linestyle="-")
+
     # Plot spike raster
     plt.eventplot(Firing_times, colors="black")
     plt.title("Spikes during training")

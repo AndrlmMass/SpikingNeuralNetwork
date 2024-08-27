@@ -11,7 +11,7 @@ else:
     base_path = "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
 
 
-def raster_plot_other(data, labels, save):
+def raster_plot(data, labels, save):
     labels_name = ["t", "o", "s", "x", " "]
     indices = np.argmax(labels, axis=1)
 
@@ -79,14 +79,21 @@ def input_space_plotted_single(data):
     plt.show()
 
 
-def raster_plot(spikes):
+def plot_weights_and_spikes(spikes):
+    # Create a figure and a set of subplots
+    fig, axs = plt.subplots(2, 1, figsize=(12, 16))
+
     # Get firing times for each neuron
     Firing_times = [np.where(spikes[:, n])[0] for n in range(spikes.shape[1])]
 
+    # Add item and neuronal layer indicators
+    axs[0].axhline(y=484, color="red", linestyle="-")
+    axs[0].axhline(y=968, color="red", linestyle="-")
+
     # Plot spike raster
-    plt.eventplot(Firing_times, colors="black")
-    plt.title("Spikes during training")
-    plt.xlabel("Time (ms)")
-    plt.ylabel("Neuron index")
+    axs[0].eventplot(Firing_times, colors="black")
+    axs[0].set_title("Spikes during training")
+    axs[0].set_xlabel("Time (ms)")
+    axs[0].set_ylabel("Neuron index")
 
     plt.show()
