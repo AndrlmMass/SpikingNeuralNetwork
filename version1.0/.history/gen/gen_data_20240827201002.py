@@ -148,7 +148,13 @@ class gen_data_cl:
         # Correct the dimensions for the 2D-array: time x neurons
         for i in range(self.items):  # Iterating over items
             for j in range(self.N_input_neurons):  # Iterating over neurons
-
+                print(
+                    len(
+                        poisson_input[
+                            i * self.timesteps : i * self.timesteps + self.timesteps, j
+                        ]
+                    )
+                )
                 spike_sequence = target_rate_code(
                     num_steps=self.timesteps, rate=self.data[i, j]
                 )[0]

@@ -96,7 +96,7 @@ snn.gen_data(
     blank_variance=0.01,
     save=True,
     retur=True,
-    avg_high_freq=30,
+    avg_high_freq=45,
     avg_low_freq=10,
     var_high_freq=0.05,
     var_low_freq=0.05,

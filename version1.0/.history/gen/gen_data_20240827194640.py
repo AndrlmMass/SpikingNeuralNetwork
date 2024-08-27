@@ -148,14 +148,25 @@ class gen_data_cl:
         # Correct the dimensions for the 2D-array: time x neurons
         for i in range(self.items):  # Iterating over items
             for j in range(self.N_input_neurons):  # Iterating over neurons
-
-                spike_sequence = target_rate_code(
+                poisson_input[t + i * self.timesteps, j] = target_rate_code(
                     num_steps=self.timesteps, rate=self.data[i, j]
-                )[0]
+                )
 
-                poisson_input[
-                    i * self.timesteps : i * self.timesteps + self.timesteps, j
-                ] = spike_sequence
+                if (
+                    self.data[i, j] < 0.3
+                ):  # Arbitrary limit, might need better reasoning
+                    lambda_poisson = np.random.normal(
+                        self.avg_low_freq, self.var_low_freq
+                    )  # Average firing rate of 10 Hz (mu=1, delta=0.2)
+
+                else:
+                    lambda_poisson = np.random.normal(
+                        self.avg_high_freq, self.var_high_freq
+                    )  # Average firing rate of 30 Hz (mu=10, delta=0.2)
+
+                for t in range(self.timesteps):
+                    spike_count = np.random.poisson(lambda_poisson * self.dt)
+                    poisson_input[t + i * self.timesteps, j] = spike_count
 
         # Extend labels to match the poisson_input
         labels_bin = np.repeat(self.labels, self.timesteps, axis=0)
