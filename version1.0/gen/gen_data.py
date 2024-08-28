@@ -156,9 +156,16 @@ class gen_data_cl:
 
         # Correct the dimensions for the 2D-array: time x neurons
         for i in range(self.items):  # Iterating over items
-            # Categorize neurons as signal or noise
-            # signal_neurons = self.data[i] >
-            ...
+            for n in range(self.N_input_neurons):
+                if self.data[i, n] > 0.3:
+                    rate = self.avg_high_freq/self.timesteps
+                else:
+                    rate = self.avg_low_freq/self.timesteps
+                # Calculate 
+                target_rate_code(num_steps=self.timesteps, rate=, firing_pattern="poisson")
+
+                poisson_input[i*self.timesteps:i*self.timesteps+self.timesteps, n] = 
+
 
         # Extend labels to match the poisson_input
         labels_bin = np.repeat(self.labels, self.timesteps, axis=0)
