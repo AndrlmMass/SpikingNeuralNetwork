@@ -3,7 +3,7 @@ This project aims to develop AGI-inspired SNN models that can perform online lea
 ### Disclaimer: 
 Currently, the study is in its initial phase, developing a basic SNN model which will serve as the foundation of the model. 
 
-#### Install repository
+### Install repository
 
   $ git clone  https://github.com/AndrlmMass/SpikingNeuralNetwork.git
 
