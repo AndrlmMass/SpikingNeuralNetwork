@@ -18,7 +18,6 @@ sys.path.append(os.path.join(base_path, "gen"))
 sys.path.append(os.path.join(base_path, "main"))
 
 from gen_symbol import *
-from train import display_animation
 
 
 class gen_data_cl:
