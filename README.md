@@ -17,8 +17,8 @@ Install the `conda` environment:
 
 Activate the `conda` environment:
 
-    conda activate SNN_env
+    conda activate SNN_env_simpl
 
 Update the `environment.yml` with existing env by:
 
-    conda env update --name neuroai-dev --file environment.yml --prune'
+    conda env update --name SNN_env_simpl --file environment.yml --prune'
