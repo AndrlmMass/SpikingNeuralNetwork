@@ -5,7 +5,7 @@ Currently, the study is in its initial phase, developing a basic SNN model which
 
 ### Install repository
 
-  $ git clone  https://github.com/AndrlmMass/SpikingNeuralNetwork.git
+    $ git clone  https://github.com/AndrlmMass/SpikingNeuralNetwork.git
 
 ### Set up development environment
 
