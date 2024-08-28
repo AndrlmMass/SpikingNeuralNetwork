@@ -140,7 +140,7 @@ class gen_data_cl:
 
         # Reshape input_dims x input_dims to get time x input_dims**2
         self.data = np.reshape(input_space, (int(self.items), input_dims**2))
-        print(self.data.shape)
+        print(self.data.shape())
 
     def float_2_pos_spike(self):
         """

@@ -140,16 +140,17 @@ class gen_data_cl:
 
         # Reshape input_dims x input_dims to get time x input_dims**2
         self.data = np.reshape(input_space, (int(self.items), input_dims**2))
-        print(self.data.shape)
+        print(self.data.shape())
 
     def float_2_pos_spike(self):
-        """
+        '''
         To get the desired spiking frequency for the signal neurons
         we just assign it to a probability that matches desired freq
         over 1000 ms. The Hz unit is in seconds, so we set the total
         amount of spikes to 30 for that interval and distribute them
         according to a poisson distribution
-        """
+        '''
+
 
         # Correct the dimensions for the 2D-array: time x neurons
         poisson_input = np.zeros((self.time, self.N_input_neurons))
@@ -157,8 +158,9 @@ class gen_data_cl:
         # Correct the dimensions for the 2D-array: time x neurons
         for i in range(self.items):  # Iterating over items
             # Categorize neurons as signal or noise
-            # signal_neurons = self.data[i] >
-            ...
+            signal_neurons = self.data[i] > 
+
+                
 
         # Extend labels to match the poisson_input
         labels_bin = np.repeat(self.labels, self.timesteps, axis=0)
