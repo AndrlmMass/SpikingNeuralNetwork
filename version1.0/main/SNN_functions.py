@@ -24,7 +24,7 @@ from plot_training import *
 from plot_network import *
 from gen_weights import *
 from plot_data import *
-from gen_data import gen_data_cl
+from gen_data import *
 from train import *
 
 

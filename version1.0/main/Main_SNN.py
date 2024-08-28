@@ -103,7 +103,7 @@ snn.gen_data(
 )  # Need to add on/off period here -> based on article
 
 # Visualize data
-snn.visualize_data(single_data=False, raster_plot_=False, alt_raster_plot=True)
+snn.visualize_data(single_data=False, raster_plot_=True, alt_raster_plot=False)
 
 # Train network
 (

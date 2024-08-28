@@ -157,14 +157,17 @@ class gen_data_cl:
         for i in range(self.items):  # Iterating over items
             for n in range(self.N_input_neurons):
                 if self.data[i, n] > 0.3:
-                    rate = self.avg_high_freq/self.timesteps
+                    rate = self.avg_high_freq / self.timesteps
                 else:
-                    rate = self.avg_low_freq/self.timesteps
-                # Calculate 
-                target_rate_code(num_steps=self.timesteps, rate=, firing_pattern="poisson")
+                    rate = self.avg_low_freq / self.timesteps
+                # Calculate spike sequence
+                spike_sequence = target_rate_code(
+                    num_steps=self.timesteps, rate=rate, firing_pattern="poisson"
+                )[0].numpy()
 
-                poisson_input[i*self.timesteps:i*self.timesteps+self.timesteps, n] = 
-
+                poisson_input[
+                    i * self.timesteps : i * self.timesteps + self.timesteps, n
+                ] = spike_sequence
 
         # Extend labels to match the poisson_input
         labels_bin = np.repeat(self.labels, self.timesteps, axis=0)
