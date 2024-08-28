@@ -5,7 +5,7 @@ Currently, the study is in its initial phase, developing a basic SNN model which
 
 ### Install repository
 
-    $ git clone  https://github.com/AndrlmMass/SpikingNeuralNetwork.git
+    git clone  https://github.com/AndrlmMass/SpikingNeuralNetwork.git
 
 ### Set up development environment
 
@@ -13,16 +13,12 @@ We have an `environment.yml` file that contains all packages to build and work w
 
 Install the `conda` environment:
 
-    $ conda env create --file environment.yml
+    conda env create --file environment.yml
 
 Activate the `conda` environment:
 
-    $ conda activate neuroai-dev
+    conda activate SNN_env
 
-If the contents of the `environment.yml` are updated, update an existing environment with:
+Update the `environment.yml` with existing env by:
 
-    $ conda env update --name neuroai-dev --file environment.yml --prune
-
-Optionally, the dependencies can be installed independent of `conda` by using `pip` directly:
-
-    $ python3 -m pip install -r requirements.txt
+    conda env update --name neuroai-dev --file environment.yml --prune
