@@ -127,13 +127,7 @@ def update_membrane_potential_conduct(
             + (g_gaba_exc + g_a + g_b) * (U_inh - U_e)
         )
     )
-    print(
-        "g_ampa",
-        np.round(np.mean(g_ampa_exc), 4),
-        "g_gaba",
-        np.mean(g_gaba_exc),
-        "spikes",
-    )
+    print(np.mean(U[:-N_inhib_neurons]))
     U[:-N_inhib_neurons] = (U_e + delta_U_ex).reshape(-1)
 
     ### Update inhibitory membrane potential ###

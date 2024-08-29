@@ -110,6 +110,8 @@ def train_data(
     alpha_exc: float | int,
     alpha_inh: float | int,
     save_model: bool,
+    item_lim: int,
+    items: int,
     U_cons: float | int,
     force_retrain: bool,
 ):
@@ -209,6 +211,7 @@ def train_data(
     g_gaba = np.zeros((N_excit_neurons, 1))
     g_a = np.zeros((N_excit_neurons, 1))
     g_b = np.zeros((N_excit_neurons, 1))
+    R = 1
 
     # Add input data before training for input neurons
     spikes[:, :N_input_neurons] = training_data
@@ -217,7 +220,7 @@ def train_data(
     update_freq = time // 100
 
     # Convert functions if njit is true
-    njit_ = True
+    njit_ = False
 
     if njit_:
         # adjust_membrane_threshold_func = njit(adjust_membrane_threshold)

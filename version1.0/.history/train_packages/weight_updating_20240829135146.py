@@ -65,7 +65,6 @@ def exc_weight_update(
     doublet_LTD = B_se * post_trace_se * pre_spikes_se
     heterosynaptic = beta * (W_se - W_se_ideal) * (post_trace_se**3) * post_spikes_se
     transmitter = delta * pre_spikes_se
-
     mean_triplet_LTP = np.mean(triplet_LTP)
     mean_doublet_LTD = np.mean(doublet_LTD)
     mean_heterosynaptic = np.mean(heterosynaptic)
@@ -131,17 +130,6 @@ def exc_weight_update(
     mean_post_trace_ee = np.mean(post_trace_ee)
     mean_pre_trace_se = np.mean(pre_trace_se)
     mean_pre_trace_ee = np.mean(pre_trace_ee)
-
-    # print(
-    #     "W_ee_ideal",
-    #     np.mean(W_ee_ideal),
-    #     "W_se_ideal",
-    #     np.mean(W_se_ideal),
-    #     "W_ee",
-    #     np.mean(W_ee),
-    #     "W_se",
-    #     np.mean(W_se),
-    # )
 
     # print(sum_post_trace_ee, sum_post_trace_se, sum_pre_trace_ee, sum_pre_trace_se)
 

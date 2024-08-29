@@ -132,16 +132,16 @@ def exc_weight_update(
     mean_pre_trace_se = np.mean(pre_trace_se)
     mean_pre_trace_ee = np.mean(pre_trace_ee)
 
-    # print(
-    #     "W_ee_ideal",
-    #     np.mean(W_ee_ideal),
-    #     "W_se_ideal",
-    #     np.mean(W_se_ideal),
-    #     "W_ee",
-    #     np.mean(W_ee),
-    #     "W_se",
-    #     np.mean(W_se),
-    # )
+    print(
+        "W_ee_ideal",
+        np.mean(W_ee_ideal),
+        "W_se_ideal",
+        np.mean(W_se_ideal),
+        "W_ee",
+        np.mean(W_ee),
+        "W_se",
+        np.mean(W_se),
+    )
 
     # print(sum_post_trace_ee, sum_post_trace_se, sum_pre_trace_ee, sum_pre_trace_se)
 

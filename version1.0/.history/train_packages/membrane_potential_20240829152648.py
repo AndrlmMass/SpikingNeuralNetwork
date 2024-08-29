@@ -128,11 +128,14 @@ def update_membrane_potential_conduct(
         )
     )
     print(
+        "Mempot exc",
+        np.round(np.mean(U[:-N_inhib_neurons]), 4),
+        "g_nmda",
+        np.round(np.mean(g_nmda_exc), 4),
         "g_ampa",
         np.round(np.mean(g_ampa_exc), 4),
         "g_gaba",
         np.mean(g_gaba_exc),
-        "spikes",
     )
     U[:-N_inhib_neurons] = (U_e + delta_U_ex).reshape(-1)
 
