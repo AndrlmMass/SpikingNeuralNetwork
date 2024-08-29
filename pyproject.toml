@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "snn-stdp-conduct"
+version = "1.0"
+description = "Created a conductance based SNN_model inspired by Zenke et al.'s 2015 article in Nature Communications: https://www.nature.com/articles/ncomms7922"
+authors = ["Andreas Lie Massey"]
+license = "Apache license 2.0"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.12"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
