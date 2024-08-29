@@ -1,7 +1,7 @@
 # SpikingNeuralNetwork PhD project
-This project aims to develop AGI-inspired SNN models that can perform online learning without labelling of data. It is based on a predictive coding inspired framework of the mind, and is the flagship project of the BONXAI group at NMBU.
-Disclaimer: 
-Currently, the study is in its initial phase, developing a basic SNN model which will serve as the foundation of the model. 
+This project aims to replicate and expand the model developed in [Zenke et al.'s 2015 article](https://www.nature.com/articles/ncomms7922).
+
+**Disclaimer**: Currently, the study is in its initial phase, developing a basic SNN model which will serve as the foundation of the model. 
 
 ### Install repository
 
