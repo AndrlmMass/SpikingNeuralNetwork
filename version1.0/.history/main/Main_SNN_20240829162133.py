@@ -26,9 +26,9 @@ snn_params = {
     "P": 20,  # Potential strength
     "C": 1,  # Where does it say that this should be 1?
     "U": 0.2,  # Initial release probability parameter
-    "tau_plus": 20,  # presynaptic excitatory synapse
-    "tau_minus": 20,  # postsynaptic excitatory synapse
-    "tau_slow": 100,  # slowsynaptic excitatory synapse
+    "tau_plus": 20,
+    "tau_minus": 20,
+    "tau_slow": 100,
     "tau_ht": 100,
     "tau_m": 20,  # membrane time constant
     "tau_hom": 1.2 * 10**6,  # metaplasticity time constant (20 minutes)
@@ -50,7 +50,7 @@ snn_params = {
     "alpha_inh": 0.3,
     "learning_rate": 2 * 10**-5,
     "gamma": 4,  # Target population rate in Hz (this might be wrong)
-    "num_items": 64,  # Num of items
+    "num_items": 16,
     "dt": 1,  # time unit for modelling
     "T": 1000,  # total time each item will appear
     "wp": 0.5,
