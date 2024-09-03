@@ -61,18 +61,13 @@ def exc_weight_update(
     B_se = np.where(C_se <= 1 / A, A * C_se, A)
 
     # Get learning components
-    triplet_LTP = A * pre_trace_se * slow_trace_se * post_spikes_se
-    doublet_LTD = B_se * post_trace_se * pre_spikes_se
-    heterosynaptic = beta * (W_se - W_se_ideal) * (post_trace_se**3) * post_spikes_se
+    A_z = A * pre_trace_se * slow_trace_se * post_spikes_se
+    B_z = B_se * post_trace_se * pre_spikes_se
+    Beta_z = beta * (W_se - W_se_ideal) * (post_trace_se**3) * post_spikes_se
     transmitter = delta * pre_spikes_se
 
-    mean_triplet_LTP = np.mean(triplet_LTP)
-    mean_doublet_LTD = np.mean(doublet_LTD)
-    mean_heterosynaptic = np.mean(heterosynaptic)
-    mean_transmitter = np.mean(transmitter)
-
     # Compute the differential update for weights using Euler's method
-    delta_w_se = dt * (triplet_LTP - doublet_LTD - heterosynaptic + transmitter)
+    delta_w_se = dt * (A_z - Beta_z - B_z + transmitter)
 
     # Update the weights
     W_se += delta_w_se
@@ -120,28 +115,17 @@ def exc_weight_update(
     W_ee += np.round(delta_w_ee, 4)
 
     ## W_se weights ##
-    mean_spikes = np.mean(spikes)
-    z_ht_mean = np.mean(z_ht)
-    C_mean = np.mean(C)
-    mean_w_se = np.mean(W_se)
-    mean_w_ee = np.mean(W_ee)
-    mean_w_se_ideal = np.mean(W_se_ideal)
-    mean_w_ee_ideal = np.mean(W_ee_ideal)
-    mean_post_trace_se = np.mean(post_trace_se)
-    mean_post_trace_ee = np.mean(post_trace_ee)
-    mean_pre_trace_se = np.mean(pre_trace_se)
-    mean_pre_trace_ee = np.mean(pre_trace_ee)
-
-    # print(
-    #     "W_ee_ideal",
-    #     np.mean(W_ee_ideal),
-    #     "W_se_ideal",
-    #     np.mean(W_se_ideal),
-    #     "W_ee",
-    #     np.mean(W_ee),
-    #     "W_se",
-    #     np.mean(W_se),
-    # )
+    sum_spikes = np.mean(spikes)
+    z_ht_sum = np.mean(z_ht)
+    C_sum = np.mean(C)
+    sum_w_se = np.mean(W_se)
+    sum_w_ee = np.mean(W_ee)
+    sum_w_se_ideal = np.mean(W_se_ideal)
+    sum_w_ee_ideal = np.mean(W_ee_ideal)
+    sum_post_trace_se = np.mean(post_trace_se)
+    sum_post_trace_ee = np.mean(post_trace_ee)
+    sum_pre_trace_se = np.mean(pre_trace_se)
+    sum_pre_trace_ee = np.mean(pre_trace_ee)
 
     # print(sum_post_trace_ee, sum_post_trace_se, sum_pre_trace_ee, sum_pre_trace_se)
 

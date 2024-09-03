@@ -42,7 +42,6 @@ class SNN_STDP:
         tau_minus: float | int,
         tau_slow: float | int,
         tau_ht: float | int,
-        tau_m: float | int,
         tau_hom: float | int,
         tau_istdp: float | int,
         tau_H: float | int,
@@ -89,7 +88,7 @@ class SNN_STDP:
         self.tau_plus = tau_plus
         self.tau_minus = tau_minus
         self.tau_slow = tau_slow
-        self.tau_m = tau_m
+        self.tau_m = dt
         self.tau_ht = tau_ht
         self.tau_hom = tau_hom
         self.tau_istdp = tau_istdp

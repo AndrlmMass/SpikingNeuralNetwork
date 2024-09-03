@@ -217,7 +217,7 @@ def train_data(
     update_freq = time // 100
 
     # Convert functions if njit is true
-    njit_ = True
+    njit_ = False
 
     if njit_:
         # adjust_membrane_threshold_func = njit(adjust_membrane_threshold)

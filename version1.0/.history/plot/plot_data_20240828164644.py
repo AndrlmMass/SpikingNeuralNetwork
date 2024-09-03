@@ -12,6 +12,9 @@ else:
 
 
 def raster_plot_other(data, labels, save):
+    labels_name = ["t", "o", "s", "x", " "]
+    indices = np.argmax(labels, axis=1)
+
     # Create raster plot with dots
     plt.figure(figsize=(10, 6))
     for neuron_index in range(data.shape[1]):
