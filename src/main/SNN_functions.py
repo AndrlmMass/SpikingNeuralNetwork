@@ -8,11 +8,11 @@ import json
 
 # Set the current directory based on the existence of a specific path
 if os.path.exists(
-    "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\version1.0"
+    "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\src"
 ):
-    base_path = "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\version1.0"
+    base_path = "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\src"
 else:
-    base_path = "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
+    base_path = "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\src"
 
 os.chdir(base_path)
 sys.path.append(os.path.join(base_path, "gen"))
@@ -356,14 +356,28 @@ class SNN_STDP:
         force_retrain: bool,
     ):
         (
+            self.W_exc_2d,
             self.spikes,
             self.MemPot,
-            self.W_exc_2d,
-            self.pre_synaptic_trace,
             self.post_synaptic_trace,
-            self.slow_synaptic_trace,
-            self.z_istdp,
+            self.slow_pre_synaptic_trace,
+            self.C,
+            self.z_ht,
+            self.x,
+            self.u,
+            self.H,
+            self.z_i,
+            self.z_j,
+            self.filtered_locs,
             self.V_th_array,
+            self.W_exc,
+            self.W_inh,
+            self.V_th,
+            self.g_nmda,
+            self.g_ampa,
+            self.g_gaba,
+            self.g_a,
+            self.g_b,
         ) = train_data(
             A=self.A,
             P=self.P,
@@ -419,9 +433,28 @@ class SNN_STDP:
 
         if retur:
             return (
+                self.W_exc_2d,
                 self.spikes,
                 self.MemPot,
-                self.W_exc_2d,
+                self.post_synaptic_trace,
+                self.slow_pre_synaptic_trace,
+                self.C,
+                self.z_ht,
+                self.x,
+                self.u,
+                self.H,
+                self.z_i,
+                self.z_j,
+                self.filtered_locs,
+                self.V_th_array,
+                self.W_exc,
+                self.W_inh,
+                self.V_th,
+                self.g_nmda,
+                self.g_ampa,
+                self.g_gaba,
+                self.g_a,
+                self.g_b,
             )
 
     def plot_training(

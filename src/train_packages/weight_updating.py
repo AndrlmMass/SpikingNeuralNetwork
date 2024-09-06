@@ -166,25 +166,26 @@ def inh_weight_update(
     H,
     dt,
     W_inh,
-    z_istdp,
+    z_i,
+    z_j,
     tau_H,
     gamma,
     tau_stdp,
     learning_rate,
     pre_spikes,
     post_spikes,
-    post_trace,
 ):
     # Update synaptic traces using Euler's method
-    z_istdp += dt * (-z_istdp / tau_stdp + pre_spikes)
+    z_i += dt * (-z_i / tau_stdp + post_spikes)
+    z_j += dt * (-z_j / tau_stdp + pre_spikes)
 
     # Update H using Euler's method
     H += dt * (-H / tau_H + np.sum(post_spikes))
     G = H - gamma
 
     # Reshape arrays for matrix operations
-    post_trace_reshaped = np.expand_dims(post_trace, axis=1)
-    z_istdp_reshaped = np.expand_dims(z_istdp, axis=1)
+    z_i_reshaped = np.expand_dims(z_i, axis=1)
+    z_j_reshaped = np.expand_dims(z_j, axis=1)
     post_spikes_reshaped = np.expand_dims(post_spikes, axis=1)
     pre_spikes_reshaped = np.expand_dims(pre_spikes, axis=1)
 
@@ -194,11 +195,11 @@ def inh_weight_update(
         * learning_rate
         * G
         * (
-            np.dot(post_spikes_reshaped, (z_istdp_reshaped + 1).T)
-            + np.dot(post_trace_reshaped, pre_spikes_reshaped.T)
+            np.dot(z_i_reshaped + 1, pre_spikes_reshaped.T)
+            + np.dot(post_spikes_reshaped, z_j_reshaped.T)
         )
     )
     # Update weights with constraint
     W_inh += delta_w
 
-    return W_inh, z_istdp, H
+    return W_inh, z_i, z_j, H

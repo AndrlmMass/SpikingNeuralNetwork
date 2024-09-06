@@ -9,11 +9,11 @@ import sys
 
 # Set the current directory based on the existence of a specific path
 if os.path.exists(
-    "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\version1.0"
+    "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\src"
 ):
-    base_path = "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\version1.0"
+    base_path = "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\src"
 else:
-    base_path = "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
+    base_path = "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\src"
 
 os.chdir(base_path)
 sys.path.append(os.path.join(base_path, "main"))
@@ -136,12 +136,16 @@ def train_data(
         # Check if model exists
         for folder in os.listdir("model"):
             config_path = f"model/{folder}/config.npy"
-            print("Searching for existing model...", end="\r")
             if os.path.exists(config_path):
                 saved_config = np.load(config_path, allow_pickle=True).item()
                 saved_config = {
                     k: v for k, v in saved_config.items() if k not in exclude_keys
                 }
+                print("saved config: ", saved_config, "filtered config", filtered_locs)
+                d = input("Should we continue?")
+                if d == "n":
+                    print("Training cancelled. Errors detected")
+                    break
                 if filtered_locs == saved_config:
                     stop_event = threading.Event()
 
@@ -151,21 +155,37 @@ def train_data(
                     )
                     animation_thread.start()
 
+                    # Create dict of variable names and values
+
                     # Load the model (this will run in the main thread)
-                    W_exc_2d = np.load(f"model/{folder}/W_exc_2d.npy")
-                    spikes = np.load(f"model/{folder}/spikes.npy")
-                    MemPot = np.load(f"model/{folder}/MemPot.npy")
-                    pre_synaptic_trace = np.load(
-                        f"model/{folder}/pre_synaptic_trace.npy"
-                    )
-                    post_synaptic_trace = np.load(
-                        f"model/{folder}/post_synaptic_trace.npy"
-                    )
+                    save_path = f"model/model_{folder}"
+
+                    # Now you can access the variables like this:
+                    W_exc_2d = np.load(save_path + "/W_exc_2d")
+                    spikes = np.load(save_path + "/spikes")
+                    MemPot = np.load(save_path + "/MemPot")
+                    pre_synaptic_trace = np.load(save_path + "/pre_synaptic_trace")
+                    post_synaptic_trace = np.load(save_path + "/post_synaptic_trace")
                     slow_pre_synaptic_trace = np.load(
-                        f"model/{folder}/slow_pre_synaptic_trace.npy"
+                        save_path + "/slow_pre_synaptic_trace"
                     )
-                    z_istdp = np.load(f"model/{folder}/z_istdp_trace.npy")
-                    V_th_array = np.load(f"model/{folder}/V_th_array.npy")
+                    C = np.load(save_path + "/C")
+                    z_ht = np.load(save_path + "/z_ht")
+                    x = np.load(save_path + "/x")
+                    u = np.load(save_path + "/u")
+                    H = np.load(save_path + "/H")
+                    z_i = np.load(save_path + "/z_i")
+                    z_j = np.load(save_path + "/z_j")
+                    filtered_locs = np.load(save_path + "/config")
+                    V_th_array = np.load(save_path + "/V_th_array")
+                    W_exc = np.load(save_path + "/W_exc")
+                    W_inh = np.load(save_path + "/W_inh")
+                    V_th = np.load(save_path + "/V_th")
+                    g_nmda = np.load(save_path + "/g_nmda")
+                    g_ampa = np.load(save_path + "/g_ampa")
+                    g_gaba = np.load(save_path + "/g_gaba")
+                    g_a = np.load(save_path + "/g_a")
+                    g_b = np.load(save_path + "/g_b")
 
                     # Signal that loading is complete
                     stop_event.set()
@@ -178,14 +198,28 @@ def train_data(
                     )  # Clear the animation line
 
                     return (
+                        W_exc_2d,
                         spikes,
                         MemPot,
-                        W_exc_2d,
-                        pre_synaptic_trace,
                         post_synaptic_trace,
                         slow_pre_synaptic_trace,
-                        z_istdp,
+                        C,
+                        z_ht,
+                        x,
+                        u,
+                        H,
+                        z_i,
+                        z_j,
+                        filtered_locs,
                         V_th_array,
+                        W_exc,
+                        W_inh,
+                        V_th,
+                        g_nmda,
+                        g_ampa,
+                        g_gaba,
+                        g_a,
+                        g_b,
                     )
 
     # Initiate relevant traces and variables
@@ -195,8 +229,9 @@ def train_data(
     post_synaptic_trace = np.zeros((time, N_excit_neurons))
     slow_pre_synaptic_trace = np.zeros((time, num_neurons))
     C = np.full(num_neurons, A)
+    z_i = np.zeros(N_excit_neurons)
+    z_j = np.zeros(N_inhib_neurons)
     z_ht = np.ones(num_neurons)
-    z_istdp = np.ones(N_inhib_neurons)
     x = np.ones((N_input_neurons + N_excit_neurons, 1))
     u = np.ones((N_input_neurons + N_excit_neurons, 1))
     H = 0
@@ -217,16 +252,14 @@ def train_data(
     update_freq = time // 100
 
     # Convert functions if njit is true
-    njit_ = True
+    njit_ = False
 
     if njit_:
-        # adjust_membrane_threshold_func = njit(adjust_membrane_threshold)
         update_membrane_potential_conduct_func = njit(update_membrane_potential_conduct)
         exc_weight_update_func = njit(exc_weight_update)
         inh_weight_update_func = njit(inh_weight_update)
         print("Running njit")
     else:
-        # adjust_membrane_threshold_func = adjust_membrane_threshold
         update_membrane_potential_conduct_func = update_membrane_potential_conduct
         exc_weight_update_func = exc_weight_update
         inh_weight_update_func = inh_weight_update
@@ -330,29 +363,25 @@ def train_data(
         # Update inhibitory weights
         (
             W_inh,
-            z_istdp,
+            z_i,
+            z_j,
             H,
         ) = inh_weight_update_func(
             H,
             dt,
             W_inh,
-            z_istdp,
+            z_i,
+            z_j,
             tau_H,
             gamma,
             tau_istdp,
             learning_rate,
             spikes[t - 1, -N_inhib_neurons:],
             spikes[t - 1, N_input_neurons:-N_inhib_neurons],
-            post_synaptic_trace[t],
         )
 
         # Assign the selected indices to the first row
         W_exc_2d[t] = W_exc[W_exc_plt_idx[:, 0], W_exc_plt_idx[:, 1]]
-
-        # Get mean membrane threshold to track for plotting
-        if t % up == 0:
-            t_unit = t // up
-            V_th_array[t_unit] = np.mean(V_th)
 
     if save_model:
         # Generate a random number for model folder
@@ -364,27 +393,61 @@ def train_data(
 
         os.makedirs(f"model/model_{rand_num}")
 
-        # Save model weights, spikes, and MemPot
-        np.save(f"model/model_{rand_num}/W_exc_2d.npy", W_exc_2d)
-        np.save(f"model/model_{rand_num}/spikes.npy", spikes)
-        np.save(f"model/model_{rand_num}/MemPot.npy", MemPot)
-        np.save(f"model/model_{rand_num}/pre_synaptic_trace.npy", pre_synaptic_trace)
-        np.save(f"model/model_{rand_num}/post_synaptic_trace.npy", post_synaptic_trace)
-        np.save(
-            f"model/model_{rand_num}/slow_pre_synaptic_trace.npy",
-            slow_pre_synaptic_trace,
-        )
-        np.save(f"model/model_{rand_num}/z_istdp_trace.npy", z_istdp)
-        np.save(f"model/model_{rand_num}/config.npy", filtered_locs)
-        np.save(f"model/model_{rand_num}/V_th_array.npy", V_th_array)
+        # Save main path
+        save_path = f"model/model_{rand_num}"
+
+        # Create a dictionary of file names and variables
+        data_to_save = {
+            "W_exc_2d": W_exc_2d,
+            "spikes": spikes,
+            "MemPot": MemPot,
+            "pre_synaptic_trace": pre_synaptic_trace,
+            "post_synaptic_trace": post_synaptic_trace,
+            "slow_pre_synaptic_trace": slow_pre_synaptic_trace,
+            "C": C,
+            "z_ht": z_ht,
+            "x": x,
+            "u": u,
+            "H": H,
+            "z_i": z_i,
+            "z_j": z_j,
+            "config": filtered_locs,
+            "V_th_array": V_th_array,
+            "exc_weights": W_exc,
+            "inh_weights": W_inh,
+            "V_th": V_th,
+            "g_nmda": g_nmda,
+            "g_ampa": g_ampa,
+            "g_gaba": g_gaba,
+            "g_a": g_a,
+            "g_b": g_b,
+        }
+
+        # Loop through the dictionary and save each variable
+        for filename, data in data_to_save.items():
+            np.save(f"{save_path}/{filename}.npy", data)
 
     return (
+        W_exc_2d,
         spikes,
         MemPot,
-        W_exc_2d,
-        pre_synaptic_trace,
         post_synaptic_trace,
         slow_pre_synaptic_trace,
-        z_istdp,
+        C,
+        z_ht,
+        x,
+        u,
+        H,
+        z_i,
+        z_j,
+        filtered_locs,
         V_th_array,
+        W_exc,
+        W_inh,
+        V_th,
+        g_nmda,
+        g_ampa,
+        g_gaba,
+        g_a,
+        g_b,
     )

@@ -6,11 +6,11 @@ import sys
 
 # Set the current directory based on the existence of a specific path
 if os.path.exists(
-    "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\version1.0"
+    "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\src"
 ):
-    base_path = "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\version1.0"
+    base_path = "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\src"
 else:
-    base_path = "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\version1.0"
+    base_path = "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\src"
 
 os.chdir(base_path)
 sys.path.append(os.path.join(base_path, "gen"))
@@ -50,7 +50,7 @@ snn_params = {
     "alpha_inh": 0.3,
     "learning_rate": 2 * 10**-5,
     "gamma": 4,  # Target population rate in Hz (this might be wrong)
-    "num_items": 64,  # Num of items
+    "num_items": 4,  # Num of items
     "dt": 1,  # time unit for modelling
     "T": 1000,  # total time each item will appear
     "wp": 0.5,
@@ -108,9 +108,28 @@ snn.visualize_data(single_data=False, raster_plot_=False, alt_raster_plot=False)
 
 # Train network
 (
+    W_exc_2d,
     spikes,
     MemPot,
+    post_synaptic_trace,
+    slow_pre_synaptic_trace,
+    C,
+    z_ht,
+    x,
+    u,
+    H,
+    z_i,
+    z_j,
+    filtered_locs,
+    V_th_array,
     W_exc,
+    W_inh,
+    V_th,
+    g_nmda,
+    g_ampa,
+    g_gaba,
+    g_a,
+    g_b,
 ) = snn.train_data(
     retur=True,
     save_model=True,
