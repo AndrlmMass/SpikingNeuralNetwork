@@ -151,18 +151,6 @@ class SNN_STDP:
 
         ########## model save or load ##########
         if model:
-            print(args)
-
-            output = input("Should we continue?")
-            if output != "y":
-                raise ValueError("ur mama fat")
-
-            # Remove irrelevant parameters from args dict
-            del args["some_key"] # Fill in here
-
-            # Update dictionary
-            args.update()
-
             if save:
                 # Generate a random number for model folder
                 rand_num = np.random.randint(0, 1000)
@@ -177,7 +165,7 @@ class SNN_STDP:
                 save_path = f"model/model_{rand_num}"
 
                 # Create a dictionary of file names and variables
-                vars_to_save = {
+                data_to_save = {
                     "W_exc_2d": self.W_exc_2d,
                     "spikes": self.spikes,
                     "MemPot": self.MemPot,
@@ -204,8 +192,8 @@ class SNN_STDP:
                 }
 
                 # Loop through the dictionary and save each variable
-                for filename, var in vars_to_save.items():
-                    np.save(f"{save_path}/{filename}.npy", var)
+                for filename, data in data_to_save.items():
+                    np.save(f"{save_path}/{filename}.npy", data)
 
                 # Save model parameters
                 filepath = f"model\\{rand_nums}\\model_parameters.json"
@@ -217,18 +205,12 @@ class SNN_STDP:
                 return
 
             if load:
-                print(args)
-
-                output = input("Should we continue?")
-                if output != "y":
-                    raise ValueError("ur mama fat")
-
                 folders = os.listdir("model")
 
-                # Search for existing models
+                # Search for existing data gens
                 if len(folders) > 0:
                     for folder in folders:
-                        ex_params = json.load(open(f"model\\{folder}\\model_parameters.json"))
+                        ex_params = json.load(open(f"model\\{folder}\\parameters.json"))
 
                         # Check if parameters are the same as the current ones
                         if ex_params == args:
@@ -267,8 +249,7 @@ class SNN_STDP:
                             self.g_b = np.load(save_path + "/g_b")
                             self.model_params = ex_params
                             print("model loaded", end="\r")
-                            return 1
-                return 0
+                        return
 
         ########## data save or load ##########
         if data:
@@ -283,7 +264,7 @@ class SNN_STDP:
                 os.makedirs(f"data\\{rand_nums}")
 
                 # Save training data and labels
-                np.save(f"data\\{rand_nums}\\data_bin.npy", self.training_data)
+                np.save(f"\\{rand_nums}\\data_bin.npy", self.training_data)
                 np.save(f"data\\{rand_nums}\\labels_bin.npy", self.labels_train)
                 filepath = f"data\\{rand_nums}\\data_parameters.json"
 
@@ -291,7 +272,7 @@ class SNN_STDP:
                     json.dump(args, outfile)
 
                 print("data saved", end="\r")
-                return 1
+                return
 
             if load:
                 # Define folder to load data
@@ -463,17 +444,14 @@ class SNN_STDP:
             avg_low_freq=avg_low_freq,
             var_high_freq=var_high_freq,
             var_low_freq=var_low_freq,
+            params_dict=data_args,
         )
 
         gd.gen_float_data_()
 
-        # Convert to binary poisson sequences
         self.training_data, self.labels_train, self.basic_data, self.labels_seq = (
             gd.float_2_pos_spike()
         )
-
-        # Save data
-        self.process(data=True, args=)
 
     def visualize_data(self, single_data, raster_plot_, alt_raster_plot):
         if single_data:

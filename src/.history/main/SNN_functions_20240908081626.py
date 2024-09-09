@@ -126,195 +126,57 @@ class SNN_STDP:
         self.max_spike_diff = int(self.num_timesteps * 0.1)  # what does this do?
         self.U_cons = U_cons
 
-    def process(
-        self,
-        data: bool = False,
-        model: bool = False,
-        args: dict = None,
-        load: bool = False,
-        save: bool = False,
+    def loader(self, data: bool, model: bool):
+
+        ########## Check if model has already been created ##########
+
+        ########## Check data has already been generated ##########
+
+        folders = os.listdir("data")
+
+        # Compile dict of all relevant arguments for generating data
+        data_args = {**locals()}
+
+        # Remove irrelevant keys
+        del data_args["self"]
+        del data_args["folders"]
+        del data_args["save"]
+        del data_args["retur"]
+
+        # Add other keys
+        other_args = {
+            "N_input_neurons": self.N_input_neurons,
+            "items": self.num_items,
+            "time": self.time,
+            "num_timesteps": self.num_timesteps,
+            "dt": self.dt,
+        }
+
+        # Update dictionary
+        data_args.update(other_args)
+
+        # Search for existing data gens
+        if len(folders) > 0:
+            for folder in folders:
+                ex_params = json.load(open(f"data\\{folder}\\parameters.json"))
+
+                # Check if parameters are the same as the current ones
+                if ex_params == data_args:
+                    self.training_data = np.load(f"data\\{folder}\\data_bin.npy")
+                    self.labels_train = np.load(f"data\\{folder}\\labels_bin.npy")
+                    return
+
+    def loader(
+        data: bool = True,
+        model: bool = True,
+        directory: str = "somth",
     ):
-
-        # Add checks
-        if model and data:
-            raise ValueError("model and data variables cannot both be True")
-
-        if not args or args == None:
-            raise ValueError(
-                "args argument needs to be a dictionary with values. Current variable is either an empty dict or a none-value"
-            )
-
-        if not data and not model and not load and not save:
-            raise UserWarning(
-                "All boolean variables are False and no operations will be performed."
-            )
-
-        ########## model save or load ##########
-        if model:
-            print(args)
-
-            output = input("Should we continue?")
-            if output != "y":
-                raise ValueError("ur mama fat")
-
-            # Remove irrelevant parameters from args dict
-            del args["some_key"] # Fill in here
-
-            # Update dictionary
-            args.update()
-
-            if save:
-                # Generate a random number for model folder
-                rand_num = np.random.randint(0, 1000)
-
-                # Check if random number folder exists
-                while os.path.exists(f"model/model_{rand_num}"):
-                    rand_num = np.random.randint(0, 1000)
-
-                os.makedirs(f"model/model_{rand_num}")
-
-                # Save main path
-                save_path = f"model/model_{rand_num}"
-
-                # Create a dictionary of file names and variables
-                vars_to_save = {
-                    "W_exc_2d": self.W_exc_2d,
-                    "spikes": self.spikes,
-                    "MemPot": self.MemPot,
-                    "pre_synaptic_trace": self.pre_synaptic_trace,  # why is this not a variable?
-                    "post_synaptic_trace": self.post_synaptic_trace,
-                    "slow_pre_synaptic_trace": self.slow_pre_synaptic_trace,
-                    "C": self.C,
-                    "z_ht": self.z_ht,
-                    "x": self.x,
-                    "u": self.u,
-                    "H": self.H,
-                    "z_i": self.z_i,
-                    "z_j": self.z_j,
-                    "config": self.filtered_locs,
-                    "V_th_array": self.V_th_array,
-                    "exc_weights": self.W_exc,
-                    "inh_weights": self.W_inh,
-                    "V_th": self.V_th,
-                    "g_nmda": self.g_nmda,
-                    "g_ampa": self.g_ampa,
-                    "g_gaba": self.g_gaba,
-                    "g_a": self.g_a,
-                    "g_b": self.g_b,
-                }
-
-                # Loop through the dictionary and save each variable
-                for filename, var in vars_to_save.items():
-                    np.save(f"{save_path}/{filename}.npy", var)
-
-                # Save model parameters
-                filepath = f"model\\{rand_nums}\\model_parameters.json"
-
-                with open(filepath, "w") as outfile:
-                    json.dump(args, outfile)
-
-                print("model saved", end="\r")
-                return
-
-            if load:
-                print(args)
-
-                output = input("Should we continue?")
-                if output != "y":
-                    raise ValueError("ur mama fat")
-
-                folders = os.listdir("model")
-
-                # Search for existing models
-                if len(folders) > 0:
-                    for folder in folders:
-                        ex_params = json.load(open(f"model\\{folder}\\model_parameters.json"))
-
-                        # Check if parameters are the same as the current ones
-                        if ex_params == args:
-                            # Load the model (this will run in the main thread)
-                            save_path = f"model/model_{folder}"
-
-                            # Now you can access the variables like this:
-                            self.W_exc_2d = np.load(save_path + "/W_exc_2d")
-                            self.spikes = np.load(save_path + "/spikes")
-                            self.MemPot = np.load(save_path + "/MemPot")
-                            self.pre_synaptic_trace = np.load(
-                                save_path + "/pre_synaptic_trace"
-                            )
-                            self.post_synaptic_trace = np.load(
-                                save_path + "/post_synaptic_trace"
-                            )
-                            self.slow_pre_synaptic_trace = np.load(
-                                save_path + "/slow_pre_synaptic_trace"
-                            )
-                            self.C = np.load(save_path + "/C")
-                            self.z_ht = np.load(save_path + "/z_ht")
-                            self.x = np.load(save_path + "/x")
-                            self.u = np.load(save_path + "/u")
-                            self.H = np.load(save_path + "/H")
-                            self.z_i = np.load(save_path + "/z_i")
-                            self.z_j = np.load(save_path + "/z_j")
-                            self.filtered_locs = np.load(save_path + "/config")
-                            self.V_th_array = np.load(save_path + "/V_th_array")
-                            self.W_exc = np.load(save_path + "/W_exc")
-                            self.W_inh = np.load(save_path + "/W_inh")
-                            self.V_th = np.load(save_path + "/V_th")
-                            self.g_nmda = np.load(save_path + "/g_nmda")
-                            self.g_ampa = np.load(save_path + "/g_ampa")
-                            self.g_gaba = np.load(save_path + "/g_gaba")
-                            self.g_a = np.load(save_path + "/g_a")
-                            self.g_b = np.load(save_path + "/g_b")
-                            self.model_params = ex_params
-                            print("model loaded", end="\r")
-                            return 1
-                return 0
-
-        ########## data save or load ##########
         if data:
-            if save:
-                rand_nums = np.random.randint(low=0, high=9, size=5)
+            # Check if
+            ...
+        if model:
 
-                # Check if name is taken
-                while any(item in os.listdir("data") for item in rand_nums):
-                    rand_nums = np.random.randint(low=0, high=9, size=5)
-
-                # Create folder to store data
-                os.makedirs(f"data\\{rand_nums}")
-
-                # Save training data and labels
-                np.save(f"data\\{rand_nums}\\data_bin.npy", self.training_data)
-                np.save(f"data\\{rand_nums}\\labels_bin.npy", self.labels_train)
-                filepath = f"data\\{rand_nums}\\data_parameters.json"
-
-                with open(filepath, "w") as outfile:
-                    json.dump(args, outfile)
-
-                print("data saved", end="\r")
-                return 1
-
-            if load:
-                # Define folder to load data
-                folders = os.listdir("data")
-
-                # Search for existing data gens
-                if len(folders) > 0:
-                    for folder in folders:
-                        ex_params = json.load(
-                            open(f"data\\{folder}\\data_parameters.json")
-                        )
-
-                        # Check if parameters are the same as the current ones
-                        if ex_params == args:
-                            self.training_data = np.load(
-                                f"data\\{folder}\\data_bin.npy"
-                            )
-                            self.labels_train = np.load(
-                                f"data\\{folder}\\labels_bin.npy"
-                            )
-                            self.data_params = ex_params
-                            print("data loaded", end="\r")
-                            return
+            ...
 
     def initialize_network(
         self,
@@ -463,17 +325,38 @@ class SNN_STDP:
             avg_low_freq=avg_low_freq,
             var_high_freq=var_high_freq,
             var_low_freq=var_low_freq,
+            params_dict=data_args,
         )
 
         gd.gen_float_data_()
 
-        # Convert to binary poisson sequences
         self.training_data, self.labels_train, self.basic_data, self.labels_seq = (
             gd.float_2_pos_spike()
         )
 
-        # Save data
-        self.process(data=True, args=)
+        if save:
+            print(
+                f"Saving training and testing data with labels for random level {noise_rand}",
+                sep="\r",
+            )
+            rand_nums = np.random.randint(low=0, high=9, size=5)
+
+            # Check if name is taken
+            while any(item in os.listdir("data") for item in rand_nums):
+                rand_nums = np.random.randint(low=0, high=9, size=5)
+
+            # Create folder to store data
+            os.makedirs(f"data\\{rand_nums}")
+
+            # Save training data and labels
+            np.save(f"data\\{rand_nums}\\data_bin.npy", self.training_data)
+            np.save(f"data\\{rand_nums}\\labels_bin.npy", self.labels_train)
+            filepath = f"data\\{rand_nums}\\parameters.json"
+
+            with open(filepath, "w") as outfile:
+                json.dump(data_args, outfile)
+
+            print("training & labels are saved in data folder")
 
     def visualize_data(self, single_data, raster_plot_, alt_raster_plot):
         if single_data:
@@ -487,6 +370,7 @@ class SNN_STDP:
         self,
         retur: bool,
         save_model: bool,
+        item_lim: int,
         force_retrain: bool,
     ):
         (
