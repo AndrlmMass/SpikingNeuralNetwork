@@ -463,6 +463,7 @@ class SNN_STDP:
         # Create data parameter variable
         self.data_parameters = {**locals()}
 
+        # Remove unnecessary arguments from data_parameters
         d = 1
 
         # Check if training data exists and load if it does
