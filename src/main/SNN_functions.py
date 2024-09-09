@@ -136,30 +136,29 @@ class SNN_STDP:
     ):
 
         # Add checks
-        if (model and data) or (not model and not data):
+        if model and data:
             raise ValueError("model and data variables cannot both be True")
+
+        if not model and not data:
+            raise UserWarning(
+                "No processing will occur. model and data variables are False."
+            )
+
+        if load and save:
+            raise ValueError("load and save variables cannot both be True")
+
+        if not load and not save:
+            raise UserWarning(
+                "No processing will occur. load and save variables are False."
+            )
 
         if not args or args == None:
             raise ValueError(
                 "args argument needs to be a dictionary with values. Current variable is either an empty dict or a none-value"
             )
 
-        if not data and not save:
-            raise UserWarning(
-                "All boolean variables are False and no operations will be performed."
-            )
-        if load and save:
-            raise ValueError("load and save variables cannot both be True")
-
-        ########## model save or load ##########
+        ########## load or save model ##########
         if model:
-
-            # Remove irrelevant parameters from args dict
-            del args["self"]  # Fill in here
-
-            # Update dictionary
-            args.update()
-
             if save:
                 # Generate a random number for model folder
                 rand_num = np.random.randint(0, 1000)
@@ -214,8 +213,6 @@ class SNN_STDP:
                 return
 
             if load:
-                print(args)
-
                 folders = os.listdir("model")
 
                 # Search for existing models
@@ -262,21 +259,12 @@ class SNN_STDP:
                             self.g_b = np.load(save_path + "/g_b")
                             self.model_params = ex_params
                             print("model loaded", end="\r")
-                            return 1
-                return 0
+                            self.model_loaded = True
+                            return
+                return
 
-        ########## data save or load ##########
+        ########## load or save data ##########
         if data:
-
-            print(args)
-
-            # Remove irrelevant parameters from args dict
-            del args["self"]
-            del args["gd"]
-
-            # Update dictionary
-            args.update()
-
             if save:
                 rand_nums = np.random.randint(low=0, high=9, size=5)
 
@@ -318,18 +306,40 @@ class SNN_STDP:
                                 f"data\\{folder}\\labels_bin.npy"
                             )
                             self.data_params = ex_params
+                            self.data_loaded = True
                             print("data loaded", end="\r")
+
                             return
 
     def initialize_network(
         self,
-        N_input_neurons: int,
-        N_excit_neurons: int,
-        N_inhib_neurons: int,
-        radius_: int,
-        W_ee_prob: float | int,
-        retur: bool,
+        N_input_neurons: int = 484,
+        N_excit_neurons: int = 484,
+        N_inhib_neurons: int = 121,
+        radius_: int = 4,
+        W_ee_prob: float | int = 0.8,
+        retur: bool = False,
+        load_model_if_available: bool = True,
     ):
+        if load_model_if_available:
+            # Get current variables in use
+            self.model_parameters = {**locals()}
+
+            # Copy and remove class element to dict
+            self_dict = self.__dict__.copy()
+            self.model_parameters.pop("self")
+
+            # Combine dicts and update
+            self.model_parameters.update(self_dict)
+
+            # Remove irrelevant arguments
+            del self.model_parameters["retur"]
+            del self.model_parameters["load_model_if_available"]
+
+            # Load model if possible
+            self.process(model=True, args=self.model_parameters, load=True)
+            return
+
         self.N_input_neurons = N_input_neurons
         self.N_excit_neurons = N_excit_neurons
         self.N_inhib_neurons = N_inhib_neurons
@@ -437,19 +447,25 @@ class SNN_STDP:
 
     def gen_data(
         self,
-        N_classes: int,
-        noise_rand: bool,
-        noise_variance: float | int,
-        mean: int | float,
-        blank_variance: int | float,
-        save: bool,
-        retur: bool,
-        avg_high_freq: float | int,
-        avg_low_freq: float | int,
-        var_high_freq: float | int,
-        var_low_freq: float | int,
+        N_classes: int = 4,
+        noise_rand: bool = True,
+        noise_variance: float | int = 0.05,
+        mean: int | float = 0,
+        blank_variance: int | float = 0.01,
+        save: bool = True,
+        avg_high_freq: float | int = 30,
+        avg_low_freq: float | int = 10,
+        var_high_freq: float | int = 0.05,
+        var_low_freq: float | int = 0.05,
     ):
         self.N_classes = N_classes
+        self.data_loaded = False
+
+        # Check if training data exists and load if it does
+        self.process(data=True, args=dict, load=True)
+
+        if self.create_data == False:
+            return
 
         # Create training data since it does not exist already
         gd = gen_data_cl(
@@ -479,9 +495,20 @@ class SNN_STDP:
 
         # Save data
         if save:
+            locs = {**locals()}
+            del locs["self"]
+            del locs["filepath"]
+            del locs["gd"]
+            del locs["len()"]
+
             self.process(data=True, args={**locals()}, save=save)
 
-    def visualize_data(self, single_data, raster_plot_, alt_raster_plot):
+    def visualize_data(
+        self,
+        single_data: bool = False,
+        raster_plot_: bool = True,
+        alt_raster_plot: bool = False,
+    ):
         if single_data:
             input_space_plotted_single(self.training_data[0])
         if raster_plot_:
@@ -489,93 +516,18 @@ class SNN_STDP:
         if alt_raster_plot:
             raster_plot_other(self.training_data, self.labels_train, False)
 
-    def train_data(
+    def train_(
         self,
-        retur: bool,
         save_model: bool,
         force_retrain: bool,
     ):
-        (
-            self.W_exc_2d,
-            self.spikes,
-            self.MemPot,
-            self.post_synaptic_trace,
-            self.slow_pre_synaptic_trace,
-            self.C,
-            self.z_ht,
-            self.x,
-            self.u,
-            self.H,
-            self.z_i,
-            self.z_j,
-            self.filtered_locs,
-            self.V_th_array,
-            self.W_exc,
-            self.W_inh,
-            self.V_th,
-            self.g_nmda,
-            self.g_ampa,
-            self.g_gaba,
-            self.g_a,
-            self.g_b,
-        ) = train_data(
-            A=self.A,
-            P=self.P,
-            w_p=self.wp,
-            beta=self.beta,
-            delta=self.delta,
-            time=self.time,
-            V_th_=self.V_th,
-            V_rest=self.V_rest,
-            V_reset=self.V_reset,
-            dt=self.dt,
-            tau_plus=self.tau_plus,
-            tau_minus=self.tau_minus,
-            tau_slow=self.tau_slow,
-            tau_m=self.tau_m,
-            tau_ht=self.tau_ht,
-            tau_hom=self.tau_hom,
-            tau_cons=self.tau_cons,
-            tau_H=self.tau_H,
-            tau_istdp=self.tau_istdp,
-            tau_ampa=self.tau_ampa,
-            tau_nmda=self.tau_nmda,
-            tau_gaba=self.tau_gaba,
-            tau_thr=self.tau_thr,
-            tau_d=self.tau_d,
-            tau_f=self.tau_f,
-            tau_a=self.tau_a,
-            tau_b=self.tau_b,
-            delta_a=self.delta_a,
-            delta_b=self.delta_b,
-            U_exc=self.U_exc,
-            U_inh=self.U_inh,
-            learning_rate=self.learning_rate,
-            training_data=self.training_data,
-            N_excit_neurons=self.N_excit_neurons,
-            N_inhib_neurons=self.N_inhib_neurons,
-            N_input_neurons=self.N_input_neurons,
-            MemPot=self.MemPot,
-            max_weight=self.max_weight,
-            min_weight=self.min_weight,
-            W_exc=self.W_exc,
-            W_inh=self.W_inh,
-            W_exc_ideal=self.W_exc_ideal,
-            W_exc_2d=self.W_exc_2d,
-            W_exc_plt_idx=self.W_exc_plt_idx,
-            gamma=self.gamma,
-            alpha_exc=self.alpha_exc,
-            alpha_inh=self.alpha_inh,
-            save_model=save_model,
-            U_cons=self.U_cons,
-            force_retrain=force_retrain,
-        )
+        if force_retrain or self.model_loaded == False:
 
-        if retur:
-            return (
+            (
                 self.W_exc_2d,
                 self.spikes,
                 self.MemPot,
+                self.pre_synaptic_trace,
                 self.post_synaptic_trace,
                 self.slow_pre_synaptic_trace,
                 self.C,
@@ -585,7 +537,6 @@ class SNN_STDP:
                 self.H,
                 self.z_i,
                 self.z_j,
-                self.filtered_locs,
                 self.V_th_array,
                 self.W_exc,
                 self.W_inh,
@@ -595,7 +546,63 @@ class SNN_STDP:
                 self.g_gaba,
                 self.g_a,
                 self.g_b,
+            ) = train_model(
+                A=self.A,
+                P=self.P,
+                w_p=self.wp,
+                beta=self.beta,
+                delta=self.delta,
+                time=self.time,
+                V_th_=self.V_th,
+                V_rest=self.V_rest,
+                V_reset=self.V_reset,
+                dt=self.dt,
+                tau_plus=self.tau_plus,
+                tau_minus=self.tau_minus,
+                tau_slow=self.tau_slow,
+                tau_m=self.tau_m,
+                tau_ht=self.tau_ht,
+                tau_hom=self.tau_hom,
+                tau_cons=self.tau_cons,
+                tau_H=self.tau_H,
+                tau_istdp=self.tau_istdp,
+                tau_ampa=self.tau_ampa,
+                tau_nmda=self.tau_nmda,
+                tau_gaba=self.tau_gaba,
+                tau_thr=self.tau_thr,
+                tau_d=self.tau_d,
+                tau_f=self.tau_f,
+                tau_a=self.tau_a,
+                tau_b=self.tau_b,
+                delta_a=self.delta_a,
+                delta_b=self.delta_b,
+                U_exc=self.U_exc,
+                U_inh=self.U_inh,
+                learning_rate=self.learning_rate,
+                training_data=self.training_data,
+                N_excit_neurons=self.N_excit_neurons,
+                N_inhib_neurons=self.N_inhib_neurons,
+                N_input_neurons=self.N_input_neurons,
+                MemPot=self.MemPot,
+                max_weight=self.max_weight,
+                min_weight=self.min_weight,
+                W_exc=self.W_exc,
+                W_inh=self.W_inh,
+                W_exc_ideal=self.W_exc_ideal,
+                W_exc_2d=self.W_exc_2d,
+                W_exc_plt_idx=self.W_exc_plt_idx,
+                gamma=self.gamma,
+                alpha_exc=self.alpha_exc,
+                alpha_inh=self.alpha_inh,
+                save_model=save_model,
+                U_cons=self.U_cons,
+                force_retrain=force_retrain,
             )
+            if save_model:
+                process(
+                    model=True,
+                    args={**locals},
+                )
 
     def plot_training(
         self,

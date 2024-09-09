@@ -70,14 +70,8 @@ snn_params = {
 # Initiate SNN object
 snn = SNN_STDP(**snn_params)
 
-# Initialize & visualize pre-trained network
-(
-    MemPot,
-    spikes,
-    W_exc,
-    W_inh,
-    W_exc_ideal,
-) = snn.initialize_network(
+# Initialize network
+snn.initialize_network(
     N_input_neurons=484,
     N_excit_neurons=484,
     N_inhib_neurons=121,
@@ -107,30 +101,7 @@ snn.gen_data(
 snn.visualize_data(single_data=False, raster_plot_=False, alt_raster_plot=False)
 
 # Train network
-(
-    W_exc_2d,
-    spikes,
-    MemPot,
-    post_synaptic_trace,
-    slow_pre_synaptic_trace,
-    C,
-    z_ht,
-    x,
-    u,
-    H,
-    z_i,
-    z_j,
-    filtered_locs,
-    V_th_array,
-    W_exc,
-    W_inh,
-    V_th,
-    g_nmda,
-    g_ampa,
-    g_gaba,
-    g_a,
-    g_b,
-) = snn.train_data(
+snn.train_(
     retur=True,
     save_model=True,
     force_retrain=True,
