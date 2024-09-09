@@ -33,50 +33,50 @@ class SNN_STDP:
     # Initialize neuron parameters
     def __init__(
         self,
-        V_th: float,
-        V_reset: float,
-        P: int | float,
-        C: int,
-        U: float | int,
-        tau_plus: float | int,
-        tau_minus: float | int,
-        tau_slow: float | int,
-        tau_ht: float | int,
-        tau_m: float | int,
-        tau_hom: float | int,
-        tau_istdp: float | int,
-        tau_H: float | int,
-        tau_thr: float | int,
-        tau_ampa: float | int,
-        tau_nmda: float | int,
-        tau_gaba: float | int,
-        tau_a: float | int,
-        tau_b: float | int,
-        tau_d: float | int,
-        tau_f: float | int,
-        delta_a: float | int,
-        delta_b: float | int,
-        U_exc: float | int,
-        U_inh: float | int,
-        alpha_exc: float | int,
-        alpha_inh: float | int,
-        learning_rate: float | int,
-        gamma: float | int,
-        num_items: float,
-        dt: float,
-        T: int,
-        wp: float | int,
-        V_rest: int,
-        min_weight: float | int,
-        max_weight: float | int,
-        num_epochs: int,
-        A: float | int,
-        B: float | int,
-        beta: float | int,
-        delta: float | int,
-        tau_cons: float | int,
-        euler: int,
-        U_cons: float | int,
+        V_th: int = -50,  # Spiking threshold
+        V_rest: int = -60,  # Resting potential
+        V_reset: int = -70,  # Reset potential
+        P: int | float = 20,  # Potential strength
+        C: int | int = 1,  # Where does it say that this should be 1?
+        U: float | int = 0.2,  # Initial release probability parameter
+        tau_plus: float | int = 20,  # presynaptic excitatory synapse
+        tau_minus: float | int = 20,  # postsynaptic excitatory synapse
+        tau_slow: float | int = 100,  # slowsynaptic excitatory synapse
+        tau_ht: float | int = 100,
+        tau_m: float | int = 20,  # membrane time constant
+        tau_hom: float | int = 1.2 * 10**6,  # metaplasticity time constant (20 minutes)
+        tau_istdp: float | int = 20,
+        tau_H: float | int = 1 * 10**4,  # 10s
+        tau_thr: float | int = 2,  # 2ms
+        tau_ampa: float | int = 5,
+        tau_nmda: float | int = 100,
+        tau_gaba: float | int = 10,
+        tau_a: float | int = 100,  # 100ms
+        tau_b: float | int = 20 * 10**3,  # 20s
+        tau_d: float | int = 200,
+        tau_f: float | int = 600,
+        delta_a: float | int = 0.1,  # decay unit
+        delta_b: float | int = 5 * 10**-4,  # seconds,
+        U_exc: float | int = 0,
+        U_inh: float | int = -80,
+        alpha_exc: float | int = 0.2,
+        alpha_inh: float | int = 0.3,
+        learning_rate: float | int = 2 * 10**-5,
+        gamma: float | int = 4,  # Target population rate in Hz (this might be wrong),
+        num_items: float = 4,  # Num of items,
+        dt: float = 1,  # time unit for modelling,
+        T: int = 1000,  # total time each item will appear
+        wp: float | int = 0.5,
+        min_weight: float | int = 0,  # minimum allowed weight
+        max_weight: float | int = 5,  # maximum allowed weight
+        num_epochs: int = 1,  # number of epochs -> not currently in use
+        A: float | int = 1 * 10**-3,  # LTP rate,
+        B: float | int = 1 * 10**-3,  # LTD rate,
+        beta: float | int = 0.05,
+        delta: float | int = 2 * 10**-5,  # Transmitter triggered plasticity
+        tau_cons: float | int = 1.8 * 10**6,  # 30 minutes until weight convergence
+        euler: int = 5,
+        U_cons: float | int = 0.2,
     ):
         self.V_th = V_th
         self.V_reset = V_reset
@@ -123,7 +123,6 @@ class SNN_STDP:
         self.euler = euler
         self.num_timesteps = int(T / dt)
         self.time = self.num_timesteps * self.num_items
-        self.max_spike_diff = int(self.num_timesteps * 0.1)  # what does this do?
         self.U_cons = U_cons
 
     def process(
@@ -518,8 +517,8 @@ class SNN_STDP:
 
     def train_(
         self,
-        save_model: bool,
-        force_retrain: bool,
+        save_model: bool = True,
+        force_retrain: bool = False,
     ):
         if force_retrain or self.model_loaded == False:
 
@@ -606,13 +605,13 @@ class SNN_STDP:
 
     def plot_training(
         self,
-        ws_nd_spikes: bool,
-        idx_start: int,
-        idx_stop: int,
-        mv: bool,
-        overlap: bool,
-        traces: bool,
-        tsne: bool,
+        ws_nd_spikes: bool = True,
+        idx_start: int = 0,
+        idx_stop: int = 968,
+        mv: bool = True,
+        overlap: bool = True,
+        traces: bool = True,
+        tsne: bool = True,
     ):
         if ws_nd_spikes:
             plot_weights_and_spikes(
