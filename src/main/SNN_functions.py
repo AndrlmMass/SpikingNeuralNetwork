@@ -136,7 +136,7 @@ class SNN_STDP:
     ):
 
         # Add checks
-        if model and data:
+        if (model and data) or (not model and not data):
             raise ValueError("model and data variables cannot both be True")
 
         if not args or args == None:
@@ -144,21 +144,18 @@ class SNN_STDP:
                 "args argument needs to be a dictionary with values. Current variable is either an empty dict or a none-value"
             )
 
-        if not data and not model and not load and not save:
+        if not data and not save:
             raise UserWarning(
                 "All boolean variables are False and no operations will be performed."
             )
+        if load and save:
+            raise ValueError("load and save variables cannot both be True")
 
         ########## model save or load ##########
         if model:
-            print(args)
-
-            output = input("Should we continue?")
-            if output != "y":
-                raise ValueError("ur mama fat")
 
             # Remove irrelevant parameters from args dict
-            del args["some_key"] # Fill in here
+            del args["self"]  # Fill in here
 
             # Update dictionary
             args.update()
@@ -219,16 +216,14 @@ class SNN_STDP:
             if load:
                 print(args)
 
-                output = input("Should we continue?")
-                if output != "y":
-                    raise ValueError("ur mama fat")
-
                 folders = os.listdir("model")
 
                 # Search for existing models
                 if len(folders) > 0:
                     for folder in folders:
-                        ex_params = json.load(open(f"model\\{folder}\\model_parameters.json"))
+                        ex_params = json.load(
+                            open(f"model\\{folder}\\model_parameters.json")
+                        )
 
                         # Check if parameters are the same as the current ones
                         if ex_params == args:
@@ -272,6 +267,16 @@ class SNN_STDP:
 
         ########## data save or load ##########
         if data:
+
+            print(args)
+
+            # Remove irrelevant parameters from args dict
+            del args["self"]
+            del args["gd"]
+
+            # Update dictionary
+            args.update()
+
             if save:
                 rand_nums = np.random.randint(low=0, high=9, size=5)
 
@@ -473,7 +478,8 @@ class SNN_STDP:
         )
 
         # Save data
-        self.process(data=True, args=)
+        if save:
+            self.process(data=True, args={**locals()}, save=save)
 
     def visualize_data(self, single_data, raster_plot_, alt_raster_plot):
         if single_data:

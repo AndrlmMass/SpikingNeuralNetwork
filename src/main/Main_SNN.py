@@ -133,7 +133,6 @@ snn.visualize_data(single_data=False, raster_plot_=False, alt_raster_plot=False)
 ) = snn.train_data(
     retur=True,
     save_model=True,
-    item_lim=20,
     force_retrain=True,
 )
 
