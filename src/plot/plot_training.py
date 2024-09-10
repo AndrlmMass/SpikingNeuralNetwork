@@ -14,11 +14,13 @@ def plot_membrane_activity(
     idx_start: int,
     idx_stop: int,
     time: int,
+    t_start: int,
+    t_stop: int,
 ):
     update_frequency = time // 100
     MemPot_th = np.repeat(MemPot_th, update_frequency)
 
-    plt.plot(MemPot[:, idx_start:idx_stop])
+    plt.plot(MemPot[t_start:t_stop, idx_start:idx_stop])
     plt.plot(MemPot_th, color="grey", linestyle="dashed")
 
     plt.xlabel("ms")
@@ -27,12 +29,14 @@ def plot_membrane_activity(
     plt.show()
 
 
-def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie):
+def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie, t_start, t_stop):
     # Create a figure and a set of subplots
     fig, axs = plt.subplots(2, 1, figsize=(12, 16))
 
     # Get firing times for each neuron
-    Firing_times = [np.where(spikes[:, n])[0] for n in range(spikes.shape[1])]
+    Firing_times = [
+        np.where(spikes[t_start:t_stop, n])[0] for n in range(spikes.shape[1])
+    ]
 
     # Add item and neuronal layer indicators
     axs[0].axhline(y=484, color="red", linestyle="-")
@@ -185,11 +189,10 @@ def plot_traces(
 
 def t_SNE(N_classes, spikes, labels, labels_spike, timesteps, N_input_neurons):
     # Reshape labels to match spikes
-    labels = np.argmax(labels, axis=1)
-    labels_spike = np.argmax(labels_spike, axis=1)
+    labels_spike_simpl = np.argmax(labels_spike, axis=1)
 
     # Remove ISI
-    filler_mask = labels_spike != N_classes
+    filler_mask = labels_spike_simpl != N_classes
     spikes = spikes[filler_mask]
     spikes = spikes[:, N_input_neurons:]
     labels_spike = labels_spike[filler_mask]

@@ -63,7 +63,7 @@ class SNN:
         alpha_inh: float | int = 0.3,
         learning_rate: float | int = 2 * 10**-5,
         gamma: float | int = 4,  # Target population rate in Hz (this might be wrong),
-        num_items: float = 4,  # Num of items,
+        num_items: float = 224,  # Num of items,
         dt: float = 1,  # time unit for modelling,
         T: int = 1000,  # total time each item will appear
         wp: float | int = 0.5,
@@ -282,9 +282,10 @@ class SNN:
                 # Search for existing data gens
                 if len(folders) > 0:
                     for folder in folders:
-                        ex_params = json.load(
-                            open(f"data\\{folder}\\data_parameters.json")
-                        )
+                        json_file_path = f"data\\{folder}\\data_parameters.json"
+
+                        with open(json_file_path, "r") as j:
+                            ex_params = json.loads(j.read())
 
                         # Check if parameters are the same as the current ones
                         if ex_params == self.data_parameters:
@@ -464,11 +465,6 @@ class SNN:
 
         self.data_parameters.update()
 
-        # Create data parameter variable
-        self.data_parameters = {**locals()}
-
-        d = 1
-
         # Check if training data exists and load if it does
         self.process(data=True, load=True)
 
@@ -602,20 +598,34 @@ class SNN:
 
     def plot_training(
         self,
+        t_stop: int = None,
+        t_start: int = None,
+        items: int = 4000,
         ws_nd_spikes: bool = True,
         idx_start: int = 0,
-        idx_stop: int = 968,
+        idx_stop: int = None,
         mv: bool = True,
-        overlap: bool = True,
-        traces: bool = True,
+        overlap: bool = False,
+        traces: bool = False,
         tsne: bool = True,
     ):
+        if t_stop == None:
+            t_stop = self.time
+
+        if t_start == None:
+            t_start = int(self.time - self.num_timesteps * 2 * items)
+
+        if idx_stop == None:
+            idx_stop = self.num_neurons
+
         if ws_nd_spikes:
             plot_weights_and_spikes(
                 spikes=self.spikes,
                 W_se=self.W_exc_2d[:, :10],
                 W_ee=self.W_exc_2d[:, 10:-10],
                 W_ie=self.W_exc_2d[:, -10:],
+                t_start=t_start,
+                t_stop=t_stop,
             )
         if mv:
             plot_membrane_activity(
