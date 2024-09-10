@@ -34,7 +34,6 @@ class gen_data_cl:
         time: int | float,
         timesteps: int,
         dt: float,
-        retur: bool,
         avg_high_freq: float | int,
         avg_low_freq: float | int,
         var_high_freq: float | int,
@@ -51,7 +50,6 @@ class gen_data_cl:
         self.time = time
         self.timesteps = timesteps
         self.dt = dt
-        self.retur = retur
         self.avg_high_freq = avg_high_freq
         self.avg_low_freq = avg_low_freq
         self.var_high_freq = var_high_freq
@@ -169,5 +167,4 @@ class gen_data_cl:
         # Extend labels to match the poisson_input
         labels_bin = np.repeat(self.labels, self.timesteps, axis=0)
 
-        if self.retur:
-            return poisson_input, labels_bin, self.data, self.labels
+        return poisson_input, labels_bin, self.data, self.labels

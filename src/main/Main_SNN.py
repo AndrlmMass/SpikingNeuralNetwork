@@ -1,27 +1,11 @@
 # Main SNN execution file
-
-# Set cw
-import os
-import sys
-
-# Set the current directory based on the existence of a specific path
-if os.path.exists(
-    "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\src"
-):
-    base_path = "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\src"
-else:
-    base_path = "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\src"
-
-os.chdir(base_path)
-sys.path.append(os.path.join(base_path, "main"))
-
-from SNN_functions import SNN_STDP
+from SNN_functions import SNN
 
 # Initiate SNN object
-snn = SNN_STDP()
+snn = SNN()
 
 # Initialize network
-snn.initialize_network()
+snn.build()
 
 # Generate data
 snn.gen_data()

@@ -72,6 +72,7 @@ def train_model(
     alpha_exc: float | int,
     alpha_inh: float | int,
     U_cons: float | int,
+    run_njit: bool,
 ):
     # Initiate relevant traces and variables
     num_neurons = N_excit_neurons + N_inhib_neurons + N_input_neurons
@@ -103,7 +104,7 @@ def train_model(
     update_freq = time // 100
 
     # Convert functions if njit is true
-    njit_ = False
+    njit_ = run_njit
 
     if njit_:
         update_membrane_potential_conduct_func = njit(update_membrane_potential_conduct)

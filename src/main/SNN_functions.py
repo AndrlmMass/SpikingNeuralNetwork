@@ -29,7 +29,7 @@ from train import *
 
 
 # Initialize class variable
-class SNN_STDP:
+class SNN:
     # Initialize neuron parameters
     def __init__(
         self,
@@ -67,8 +67,6 @@ class SNN_STDP:
         dt: float = 1,  # time unit for modelling,
         T: int = 1000,  # total time each item will appear
         wp: float | int = 0.5,
-        min_weight: float | int = 0,  # minimum allowed weight
-        max_weight: float | int = 5,  # maximum allowed weight
         num_epochs: int = 1,  # number of epochs -> not currently in use
         A: float | int = 1 * 10**-3,  # LTP rate,
         B: float | int = 1 * 10**-3,  # LTD rate,
@@ -114,8 +112,6 @@ class SNN_STDP:
         self.dt = dt
         self.wp = wp
         self.V_rest = V_rest
-        self.min_weight = min_weight
-        self.max_weight = max_weight
         self.num_epochs = num_epochs
         self.beta = beta
         self.delta = delta
@@ -124,12 +120,13 @@ class SNN_STDP:
         self.num_timesteps = int(T / dt)
         self.time = self.num_timesteps * self.num_items
         self.U_cons = U_cons
+        self.data_loaded = False
+        self.model_loaded = False
 
     def process(
         self,
         data: bool = False,
         model: bool = False,
-        args: dict = None,
         load: bool = False,
         save: bool = False,
     ):
@@ -142,18 +139,12 @@ class SNN_STDP:
             raise UserWarning(
                 "No processing will occur. model and data variables are False."
             )
-
         if load and save:
             raise ValueError("load and save variables cannot both be True")
 
         if not load and not save:
             raise UserWarning(
                 "No processing will occur. load and save variables are False."
-            )
-
-        if not args or args == None:
-            raise ValueError(
-                "args argument needs to be a dictionary with values. Current variable is either an empty dict or a none-value"
             )
 
         ########## load or save model ##########
@@ -186,7 +177,6 @@ class SNN_STDP:
                     "H": self.H,
                     "z_i": self.z_i,
                     "z_j": self.z_j,
-                    "config": self.filtered_locs,
                     "V_th_array": self.V_th_array,
                     "exc_weights": self.W_exc,
                     "inh_weights": self.W_inh,
@@ -203,10 +193,10 @@ class SNN_STDP:
                     np.save(f"{save_path}/{filename}.npy", var)
 
                 # Save model parameters
-                filepath = f"model\\{rand_nums}\\model_parameters.json"
+                filepath = f"{save_path}/model_parameters.json"
 
                 with open(filepath, "w") as outfile:
-                    json.dump(args, outfile)
+                    json.dump(self.model_parameters, outfile)
 
                 print("model saved", end="\r")
                 return
@@ -222,41 +212,39 @@ class SNN_STDP:
                         )
 
                         # Check if parameters are the same as the current ones
-                        if ex_params == args:
-                            # Load the model (this will run in the main thread)
-                            save_path = f"model/model_{folder}"
+                        if ex_params == self.model_parameters:
+                            # Load the model
+                            save_path = f"model/{folder}"
 
                             # Now you can access the variables like this:
-                            self.W_exc_2d = np.load(save_path + "/W_exc_2d")
-                            self.spikes = np.load(save_path + "/spikes")
-                            self.MemPot = np.load(save_path + "/MemPot")
+                            self.W_exc_2d = np.load(save_path + "/W_exc_2d.npy")
+                            self.spikes = np.load(save_path + "/spikes.npy")
+                            self.MemPot = np.load(save_path + "/MemPot.npy")
                             self.pre_synaptic_trace = np.load(
-                                save_path + "/pre_synaptic_trace"
+                                save_path + "/pre_synaptic_trace.npy"
                             )
                             self.post_synaptic_trace = np.load(
-                                save_path + "/post_synaptic_trace"
+                                save_path + "/post_synaptic_trace.npy"
                             )
                             self.slow_pre_synaptic_trace = np.load(
-                                save_path + "/slow_pre_synaptic_trace"
+                                save_path + "/slow_pre_synaptic_trace.npy"
                             )
-                            self.C = np.load(save_path + "/C")
-                            self.z_ht = np.load(save_path + "/z_ht")
-                            self.x = np.load(save_path + "/x")
-                            self.u = np.load(save_path + "/u")
-                            self.H = np.load(save_path + "/H")
-                            self.z_i = np.load(save_path + "/z_i")
-                            self.z_j = np.load(save_path + "/z_j")
-                            self.filtered_locs = np.load(save_path + "/config")
-                            self.V_th_array = np.load(save_path + "/V_th_array")
-                            self.W_exc = np.load(save_path + "/W_exc")
-                            self.W_inh = np.load(save_path + "/W_inh")
-                            self.V_th = np.load(save_path + "/V_th")
-                            self.g_nmda = np.load(save_path + "/g_nmda")
-                            self.g_ampa = np.load(save_path + "/g_ampa")
-                            self.g_gaba = np.load(save_path + "/g_gaba")
-                            self.g_a = np.load(save_path + "/g_a")
-                            self.g_b = np.load(save_path + "/g_b")
-                            self.model_params = ex_params
+                            self.C = np.load(save_path + "/C.npy")
+                            self.z_ht = np.load(save_path + "/z_ht.npy")
+                            self.x = np.load(save_path + "/x.npy")
+                            self.u = np.load(save_path + "/u.npy")
+                            self.H = np.load(save_path + "/H.npy")
+                            self.z_i = np.load(save_path + "/z_i.npy")
+                            self.z_j = np.load(save_path + "/z_j.npy")
+                            self.V_th_array = np.load(save_path + "/V_th_array.npy")
+                            self.W_exc = np.load(save_path + "/exc_weights.npy")
+                            self.W_inh = np.load(save_path + "/inh_weights.npy")
+                            self.V_th = np.load(save_path + "/V_th.npy")
+                            self.g_nmda = np.load(save_path + "/g_nmda.npy")
+                            self.g_ampa = np.load(save_path + "/g_ampa.npy")
+                            self.g_gaba = np.load(save_path + "/g_gaba.npy")
+                            self.g_a = np.load(save_path + "/g_a.npy")
+                            self.g_b = np.load(save_path + "/g_b.npy")
                             print("model loaded", end="\r")
                             self.model_loaded = True
                             return
@@ -277,13 +265,15 @@ class SNN_STDP:
                 # Save training data and labels
                 np.save(f"data\\{rand_nums}\\data_bin.npy", self.training_data)
                 np.save(f"data\\{rand_nums}\\labels_bin.npy", self.labels_train)
+                np.save(f"data\\{rand_nums}\\basic_data.npy", self.basic_data)
+                np.save(f"data\\{rand_nums}\\labels_seq.npy", self.labels_seq)
                 filepath = f"data\\{rand_nums}\\data_parameters.json"
 
                 with open(filepath, "w") as outfile:
-                    json.dump(args, outfile)
+                    json.dump(self.data_parameters, outfile)
 
                 print("data saved", end="\r")
-                return 1
+                return
 
             if load:
                 # Define folder to load data
@@ -297,20 +287,23 @@ class SNN_STDP:
                         )
 
                         # Check if parameters are the same as the current ones
-                        if ex_params == args:
+                        if ex_params == self.data_parameters:
                             self.training_data = np.load(
                                 f"data\\{folder}\\data_bin.npy"
                             )
                             self.labels_train = np.load(
                                 f"data\\{folder}\\labels_bin.npy"
                             )
-                            self.data_params = ex_params
+                            self.basic_data = np.load(f"data\\{folder}\\basic_data.npy")
+                            self.labels_seq = np.load(f"data\\{folder}\\labels_seq.npy")
+
                             self.data_loaded = True
+
                             print("data loaded", end="\r")
 
                             return
 
-    def initialize_network(
+    def build(
         self,
         N_input_neurons: int = 484,
         N_excit_neurons: int = 484,
@@ -320,31 +313,37 @@ class SNN_STDP:
         retur: bool = False,
         load_model_if_available: bool = True,
     ):
-        if load_model_if_available:
-            # Get current variables in use
-            self.model_parameters = {**locals()}
-
-            # Copy and remove class element to dict
-            self_dict = self.__dict__.copy()
-            self.model_parameters.pop("self")
-
-            # Combine dicts and update
-            self.model_parameters.update(self_dict)
-
-            # Remove irrelevant arguments
-            del self.model_parameters["retur"]
-            del self.model_parameters["load_model_if_available"]
-
-            # Load model if possible
-            self.process(model=True, args=self.model_parameters, load=True)
-            return
-
         self.N_input_neurons = N_input_neurons
         self.N_excit_neurons = N_excit_neurons
         self.N_inhib_neurons = N_inhib_neurons
         self.num_neurons = (
             self.N_excit_neurons + self.N_inhib_neurons + self.N_input_neurons
         )
+
+        if load_model_if_available:
+            # Get current variables in use
+            self.model_parameters = {**locals()}
+
+            # Copy and remove class element to dict
+            self_dict = self.__dict__.copy()
+            del self.model_parameters["self"]
+
+            # Combine dicts and update
+            self.model_parameters.update(self_dict)
+
+            # Remove irrelevant arguments
+            del self.model_parameters["retur"]
+            del self.model_parameters["model_parameters"]
+            del self.model_parameters["load_model_if_available"]
+
+            # Update model
+            self.model_parameters.update()
+
+            # Load model if possible
+            self.process(model=True, load=True)
+
+            if self.model_loaded == True:
+                return
 
         # Generate weights
         gws = gen_weights()
@@ -458,12 +457,17 @@ class SNN_STDP:
         var_low_freq: float | int = 0.05,
     ):
         self.N_classes = N_classes
-        self.data_loaded = False
+
+        self.data_parameters = {**locals()}
+        del self.data_parameters["self"]
+        del self.data_parameters["save"]
+
+        self.data_parameters.update()
 
         # Check if training data exists and load if it does
-        self.process(data=True, args=dict, load=True)
+        self.process(data=True, load=True)
 
-        if self.create_data == False:
+        if self.data_loaded == True:
             return
 
         # Create training data since it does not exist already
@@ -478,7 +482,6 @@ class SNN_STDP:
             time=self.time,
             timesteps=self.num_timesteps,
             dt=self.dt,
-            retur=retur,
             avg_high_freq=avg_high_freq,
             avg_low_freq=avg_low_freq,
             var_high_freq=var_high_freq,
@@ -494,13 +497,7 @@ class SNN_STDP:
 
         # Save data
         if save:
-            locs = {**locals()}
-            del locs["self"]
-            del locs["filepath"]
-            del locs["gd"]
-            del locs["len()"]
-
-            self.process(data=True, args={**locals()}, save=save)
+            self.process(data=True, save=save)
 
     def visualize_data(
         self,
@@ -517,6 +514,7 @@ class SNN_STDP:
 
     def train_(
         self,
+        run_njit: bool = True,
         save_model: bool = True,
         force_retrain: bool = False,
     ):
@@ -583,8 +581,6 @@ class SNN_STDP:
                 N_inhib_neurons=self.N_inhib_neurons,
                 N_input_neurons=self.N_input_neurons,
                 MemPot=self.MemPot,
-                max_weight=self.max_weight,
-                min_weight=self.min_weight,
                 W_exc=self.W_exc,
                 W_inh=self.W_inh,
                 W_exc_ideal=self.W_exc_ideal,
@@ -593,15 +589,11 @@ class SNN_STDP:
                 gamma=self.gamma,
                 alpha_exc=self.alpha_exc,
                 alpha_inh=self.alpha_inh,
-                save_model=save_model,
                 U_cons=self.U_cons,
-                force_retrain=force_retrain,
+                run_njit=run_njit,
             )
             if save_model:
-                process(
-                    model=True,
-                    args={**locals},
-                )
+                self.process(model=True, save=True)
 
     def plot_training(
         self,
@@ -640,14 +632,14 @@ class SNN_STDP:
             plot_traces(
                 pre_synaptic_trace=self.pre_synaptic_trace,
                 post_synaptic_trace=self.post_synaptic_trace,
-                slow_pre_synaptic_trace=self.slow_synaptic_trace,
+                slow_pre_synaptic_trace=self.slow_pre_synaptic_trace,
                 N_input_neurons=self.N_input_neurons,
             )
         if tsne:
             t_SNE(
                 self.N_classes,
                 self.spikes,
-                self.labels,
+                self.labels_train,
                 self.labels_seq,
                 self.num_timesteps,
                 self.N_input_neurons,
