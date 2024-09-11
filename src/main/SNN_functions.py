@@ -63,7 +63,7 @@ class SNN:
         alpha_inh: float | int = 0.3,
         learning_rate: float | int = 2 * 10**-5,
         gamma: float | int = 4,  # Target population rate in Hz (this might be wrong),
-        num_items: float = 224,  # Num of items,
+        num_items: float = 20,  # Num of items,
         dt: float = 1,  # time unit for modelling,
         T: int = 1000,  # total time each item will appear
         wp: float | int = 0.5,
@@ -458,12 +458,17 @@ class SNN:
         var_low_freq: float | int = 0.05,
     ):
         self.N_classes = N_classes
-
         self.data_parameters = {**locals()}
+
+        self_dict = self.__dict__.copy()
         del self.data_parameters["self"]
         del self.data_parameters["save"]
 
-        self.data_parameters.update()
+        # Add relevant parameters
+        self.data_parameters["num_epochs"] = self_dict["num_epochs"]
+        self.data_parameters["num_timesteps"] = self_dict["num_timesteps"]
+        self.data_parameters["num_items"] = self_dict["num_items"]
+        self.data_parameters["time"] = self_dict["time"]
 
         # Check if training data exists and load if it does
         self.process(data=True, load=True)
@@ -600,7 +605,7 @@ class SNN:
         self,
         t_stop: int = None,
         t_start: int = None,
-        items: int = 4000,
+        items: int = 4,
         ws_nd_spikes: bool = True,
         idx_start: int = 0,
         idx_stop: int = None,
@@ -613,7 +618,7 @@ class SNN:
             t_stop = self.time
 
         if t_start == None:
-            t_start = int(self.time - self.num_timesteps * 2 * items)
+            t_start = int(self.time - (self.num_timesteps * 2 * items))
 
         if idx_stop == None:
             idx_stop = self.num_neurons
@@ -631,9 +636,9 @@ class SNN:
             plot_membrane_activity(
                 MemPot=self.MemPot,
                 MemPot_th=self.V_th_array,
-                idx_start=idx_start,
-                idx_stop=idx_stop,
                 time=self.time,
+                t_start=t_start,
+                t_stop=t_stop,
             )
         if overlap:
             plot_clusters(

@@ -11,7 +11,7 @@ snn.build()
 snn.gen_data()
 
 # Train network
-snn.train_()
+snn.train_(run_njit=False)
 
 # Plot training
-snn.plot_training()
+snn.plot_training(t_start=0, t_stop=2000)

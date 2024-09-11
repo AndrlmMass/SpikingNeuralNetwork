@@ -230,6 +230,14 @@ def train_model(
             spikes[t - 1, -N_inhib_neurons:],
             spikes[t - 1, N_input_neurons:-N_inhib_neurons],
         )
+        print(
+            "MemPot",
+            np.round(np.mean(MemPot[t]), 4),
+            "W_exc",
+            np.round(np.mean(W_exc), 4),
+            "W_inh",
+            np.round(np.mean(W_inh), 4),
+        )
 
         # Assign the selected indices to the first row
         W_exc_2d[t] = W_exc[W_exc_plt_idx[:, 0], W_exc_plt_idx[:, 1]]

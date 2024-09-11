@@ -11,8 +11,6 @@ from sklearn.manifold import TSNE
 def plot_membrane_activity(
     MemPot: np.ndarray,
     MemPot_th: np.ndarray,
-    idx_start: int,
-    idx_stop: int,
     time: int,
     t_start: int,
     t_stop: int,
@@ -20,7 +18,7 @@ def plot_membrane_activity(
     update_frequency = time // 100
     MemPot_th = np.repeat(MemPot_th, update_frequency)
 
-    plt.plot(MemPot[t_start:t_stop, idx_start:idx_stop])
+    plt.plot(MemPot[t_start:t_stop, :484])
     plt.plot(MemPot_th, color="grey", linestyle="dashed")
 
     plt.xlabel("ms")
@@ -30,6 +28,8 @@ def plot_membrane_activity(
 
 
 def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie, t_start, t_stop):
+    print(t_stop)
+    print(t_start)
     # Create a figure and a set of subplots
     fig, axs = plt.subplots(2, 1, figsize=(12, 16))
 
