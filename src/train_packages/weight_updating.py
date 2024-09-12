@@ -67,10 +67,12 @@ def exc_weight_update(
     transmitter = delta * pre_spikes_se
 
     # Compute the differential update for weights using Euler's method
-    delta_w_se = dt * (triplet_LTP - doublet_LTD + transmitter)
+    delta_w_se = dt * (triplet_LTP - doublet_LTD - heterosynaptic + transmitter)
 
     # Update the weights
     W_se += delta_w_se
+
+    W_se = np.clip(W_se, 0.1, 5)
 
     ## W_ee weights ##
 
@@ -109,12 +111,14 @@ def exc_weight_update(
     transmitter = delta * pre_spikes_ee
 
     # Compute the differential update for weights using Euler's method
-    delta_w_ee = dt * (triplet_LTP - doublet_LTD + transmitter)
-
-    # print(np.mean(delta_w_ee))
+    delta_w_ee = dt * (triplet_LTP - doublet_LTD - heterosynaptic + transmitter)
+    if np.sum(post_spikes_ee) > 0:
+        print(np.sum(post_spikes_ee))
 
     # Update the weights
     W_ee += delta_w_ee
+
+    W_ee = np.clip(W_ee, 0.1, 5.0)
 
     ## W_se weights ##
     # mean_spikes = np.mean(spikes)
@@ -198,5 +202,7 @@ def inh_weight_update(
     )
     # Update weights with constraint
     W_inh += delta_w
+
+    W_inh = np.clip(W_inh, 0.1, 5.0)
 
     return W_inh, z_i, z_j, H

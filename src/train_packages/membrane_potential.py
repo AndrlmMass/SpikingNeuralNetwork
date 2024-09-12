@@ -127,6 +127,7 @@ def update_membrane_potential_conduct(
             + (g_gaba_exc + g_a + g_b) * (U_inh - U_e)
         )
     )
+
     U[:-N_inhib_neurons] = (U_e + delta_U_ex).reshape(-1)
 
     ### Update inhibitory membrane potential ###
@@ -161,5 +162,8 @@ def update_membrane_potential_conduct(
     g_ampa = np.concatenate((g_ampa_exc, g_ampa_inh), axis=0)
     g_nmda = np.concatenate((g_nmda_exc, g_nmda_inh), axis=0)
     g_gaba = g_gaba_exc
+
+    if np.sum(U) > -50 or np.sum(U) < -70:
+        print
 
     return U, V_th, g_ampa, g_nmda, g_gaba, x, u, g_a, g_b
