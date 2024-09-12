@@ -5,13 +5,13 @@ from SNN_functions import SNN
 snn = SNN()
 
 # Initialize network
-snn.build()
+snn.build(load_model_if_available=False)
 
 # Generate data
 snn.gen_data()
 
 # Train network
-snn.train_(run_njit=False)
+snn.train_()
 
 # Plot training
-snn.plot_training(t_start=0, t_stop=2000)
+snn.plot_training(t_start=0)

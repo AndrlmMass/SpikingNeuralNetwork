@@ -187,7 +187,7 @@ def plot_traces(
     plt.show()
 
 
-def t_SNE(N_classes, spikes, labels, labels_spike, timesteps, N_input_neurons):
+def t_SNE(N_classes, spikes, labels_spike, labels, timesteps, N_input_neurons):
     # Reshape labels to match spikes
     labels_spike_simpl = np.argmax(labels_spike, axis=1)
 

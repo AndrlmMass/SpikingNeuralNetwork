@@ -42,11 +42,11 @@ class SNN:
         tau_plus: float | int = 20,  # presynaptic excitatory synapse
         tau_minus: float | int = 20,  # postsynaptic excitatory synapse
         tau_slow: float | int = 100,  # slowsynaptic excitatory synapse
-        tau_ht: float | int = 100,
-        tau_m: float | int = 20,  # membrane time constant
+        tau_ht: float | int = 100,  # Spiking threshold time constant
+        tau_m: float | int = 20,  # Membrane time constant
         tau_hom: float | int = 1.2 * 10**6,  # metaplasticity time constant (20 minutes)
-        tau_istdp: float | int = 20,
-        tau_H: float | int = 1 * 10**4,  # 10s
+        tau_istdp: float | int = 20,  # Inhibitory weight update constant
+        tau_H: float | int = 1 * 10**4,  #
         tau_thr: float | int = 2,  # 2ms
         tau_ampa: float | int = 5,
         tau_nmda: float | int = 100,
@@ -321,24 +321,25 @@ class SNN:
             self.N_excit_neurons + self.N_inhib_neurons + self.N_input_neurons
         )
 
+        # Get current variables in use
+        self.model_parameters = {**locals()}
+
+        # Copy and remove class element to dict
+        self_dict = self.__dict__.copy()
+        del self.model_parameters["self"]
+
+        # Combine dicts and update
+        self.model_parameters.update(self_dict)
+
+        # Remove irrelevant arguments
+        del self.model_parameters["retur"]
+        del self.model_parameters["model_parameters"]
+        del self.model_parameters["load_model_if_available"]
+
+        # Update model
+        self.model_parameters.update()
+
         if load_model_if_available:
-            # Get current variables in use
-            self.model_parameters = {**locals()}
-
-            # Copy and remove class element to dict
-            self_dict = self.__dict__.copy()
-            del self.model_parameters["self"]
-
-            # Combine dicts and update
-            self.model_parameters.update(self_dict)
-
-            # Remove irrelevant arguments
-            del self.model_parameters["retur"]
-            del self.model_parameters["model_parameters"]
-            del self.model_parameters["load_model_if_available"]
-
-            # Update model
-            self.model_parameters.update()
 
             # Load model if possible
             self.process(model=True, load=True)
@@ -522,9 +523,8 @@ class SNN:
         self,
         run_njit: bool = True,
         save_model: bool = True,
-        force_retrain: bool = False,
     ):
-        if force_retrain or self.model_loaded == False:
+        if self.model_loaded == False:
 
             (
                 self.W_exc_2d,
@@ -610,8 +610,8 @@ class SNN:
         idx_start: int = 0,
         idx_stop: int = None,
         mv: bool = True,
-        overlap: bool = False,
-        traces: bool = False,
+        overlap: bool = True,
+        traces: bool = True,
         tsne: bool = True,
     ):
         if t_stop == None:
