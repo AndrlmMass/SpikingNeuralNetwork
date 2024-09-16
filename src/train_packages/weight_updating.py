@@ -61,13 +61,12 @@ def exc_weight_update(
     B_se = np.where(C_se <= 1 / A, A * C_se, A)
 
     # Get learning components
-    triplet_LTP = A * pre_trace_se * slow_trace_se * post_spikes_se
-    doublet_LTD = B_se * post_trace_se * pre_spikes_se
-    heterosynaptic = beta * (W_se - W_se_ideal) * (post_trace_se**3) * post_spikes_se
-    transmitter = delta * pre_spikes_se
+    triplet_LTP = A * pre_trace_se * slow_trace_se
+    heterosynaptic = beta * post_trace_se**3 * (W_se - W_se_ideal)
+    transmitter = pre_spikes_se * (B_se * post_trace_se - delta)
 
     # Compute the differential update for weights using Euler's method
-    delta_w_se = dt * (triplet_LTP - doublet_LTD - heterosynaptic + transmitter)
+    delta_w_se = dt * (post_spikes_se * (triplet_LTP - heterosynaptic) - transmitter)
 
     # Update the weights
     W_se += delta_w_se
@@ -105,15 +104,12 @@ def exc_weight_update(
     B_ee = np.where(C_ee <= 1 / A, A * C_ee, A)
 
     # Get learning components
-    triplet_LTP = A * pre_trace_ee * slow_trace_ee * post_spikes_ee
-    doublet_LTD = B_ee * post_trace_ee * pre_spikes_ee
-    heterosynaptic = beta * (W_ee - W_ee_ideal) * (post_trace_ee**3) * post_spikes_ee
-    transmitter = delta * pre_spikes_ee
+    triplet_LTP = A * pre_trace_ee * slow_trace_ee
+    heterosynaptic = beta * post_trace_ee**3 * (W_ee - W_ee_ideal)
+    transmitter = pre_spikes_ee * (B_ee * post_trace_ee - delta)
 
     # Compute the differential update for weights using Euler's method
-    delta_w_ee = dt * (triplet_LTP - doublet_LTD - heterosynaptic + transmitter)
-    if np.sum(post_spikes_ee) > 0:
-        print(np.sum(post_spikes_ee))
+    delta_w_ee = dt * (post_spikes_ee * (triplet_LTP - heterosynaptic) - transmitter)
 
     # Update the weights
     W_ee += delta_w_ee

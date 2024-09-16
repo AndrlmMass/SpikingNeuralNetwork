@@ -635,10 +635,10 @@ class SNN:
         if mv:
             plot_membrane_activity(
                 MemPot=self.MemPot,
-                MemPot_th=self.V_th_array,
-                time=self.time,
+                MemPot_th=self.V_th,
                 t_start=t_start,
                 t_stop=t_stop,
+                N_excit_neurons=self.N_excit_neurons,
             )
         if overlap:
             plot_clusters(

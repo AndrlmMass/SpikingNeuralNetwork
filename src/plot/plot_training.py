@@ -10,26 +10,31 @@ from sklearn.manifold import TSNE
 
 def plot_membrane_activity(
     MemPot: np.ndarray,
-    MemPot_th: np.ndarray,
-    time: int,
+    MemPot_th: int,
     t_start: int,
     t_stop: int,
+    N_excit_neurons: int,
 ):
-    update_frequency = time // 100
-    MemPot_th = np.repeat(MemPot_th, update_frequency)
+    MemPot_th = np.repeat(MemPot_th, t_stop - t_start)
 
-    plt.plot(MemPot[t_start:t_stop, :484])
+    # Get average membrane potantial by neuron group
+    exc_mempot = np.mean(MemPot[t_start:t_stop, :N_excit_neurons], axis=1)
+    inh_mempot = np.mean(MemPot[t_start:t_stop, N_excit_neurons:], axis=1)
+
+    plt.plot(exc_mempot, color="red")
+    plt.plot(inh_mempot, color="blue")
     plt.plot(MemPot_th, color="grey", linestyle="dashed")
 
     plt.xlabel("ms")
     plt.ylabel("Membrane Potential")
     plt.title("Membrane Potential Changes Over Time")
+
     plt.show()
 
 
 def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie, t_start, t_stop):
-    print(t_stop)
-    print(t_start)
+    print(t_stop, t_start)
+
     # Create a figure and a set of subplots
     fig, axs = plt.subplots(2, 1, figsize=(12, 16))
 

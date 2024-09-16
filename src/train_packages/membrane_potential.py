@@ -163,7 +163,4 @@ def update_membrane_potential_conduct(
     g_nmda = np.concatenate((g_nmda_exc, g_nmda_inh), axis=0)
     g_gaba = g_gaba_exc
 
-    if np.sum(U) > -50 or np.sum(U) < -70:
-        print
-
     return U, V_th, g_ampa, g_nmda, g_gaba, x, u, g_a, g_b

@@ -5,7 +5,7 @@ from SNN_functions import SNN
 snn = SNN()
 
 # Initialize network
-snn.build(load_model_if_available=False)
+snn.build(load_model_if_available=True)
 
 # Generate data
 snn.gen_data()
@@ -14,4 +14,4 @@ snn.gen_data()
 snn.train_()
 
 # Plot training
-snn.plot_training(t_start=0)
+snn.plot_training(ws_nd_spikes=False)
