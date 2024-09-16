@@ -251,7 +251,7 @@ def train_model(
         V_th_array,
         W_exc,
         W_inh,
-        V_th,
+        V_th_,
         g_nmda,
         g_ampa,
         g_gaba,

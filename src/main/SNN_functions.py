@@ -63,7 +63,7 @@ class SNN:
         alpha_inh: float | int = 0.3,
         learning_rate: float | int = 2 * 10**-5,
         gamma: float | int = 4,  # Target population rate in Hz (this might be wrong),
-        num_items: float = 20,  # Num of items,
+        num_items: float = 4,  # Num of items,
         dt: float = 1,  # time unit for modelling,
         T: int = 1000,  # total time each item will appear
         wp: float | int = 0.5,
@@ -604,8 +604,8 @@ class SNN:
     def plot_training(
         self,
         t_stop: int = None,
-        t_start: int = None,
-        items: int = 4,
+        t_start: int = 0,
+        items: int = None,
         ws_nd_spikes: bool = True,
         idx_start: int = 0,
         idx_stop: int = None,
@@ -617,8 +617,12 @@ class SNN:
         if t_stop == None:
             t_stop = self.time
 
+        if items == None:
+            items = self.num_items
+
         if t_start == None:
-            t_start = int(self.time - (self.num_timesteps * 2 * items))
+            t_start = abs(int(self.time - (self.num_timesteps * 2 * items)))
+        print(t_start)
 
         if idx_stop == None:
             idx_stop = self.num_neurons
@@ -633,6 +637,7 @@ class SNN:
                 t_stop=t_stop,
             )
         if mv:
+            print(self.V_th)
             plot_membrane_activity(
                 MemPot=self.MemPot,
                 MemPot_th=self.V_th,
