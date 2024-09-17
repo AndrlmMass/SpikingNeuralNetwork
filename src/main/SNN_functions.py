@@ -62,7 +62,7 @@ class SNN:
         alpha_exc: float | int = 0.2,
         alpha_inh: float | int = 0.3,
         learning_rate: float | int = 2 * 10**-5,
-        gamma: float | int = 4,  # Target population rate in Hz (this might be wrong),
+        gamma: float | int = 4 * 10**-3,  # Target population rate in Hz
         num_items: float = 4,  # Num of items,
         dt: float = 1,  # time unit for modelling,
         T: int = 1000,  # total time each item will appear

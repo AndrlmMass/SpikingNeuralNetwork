@@ -2,7 +2,7 @@
 from SNN_functions import SNN
 
 # Initiate SNN object
-snn = SNN()
+snn = SNN(num_items=60)
 
 # Initialize network
 snn.build()
@@ -14,4 +14,4 @@ snn.gen_data()
 snn.train_()
 
 # Plot training
-snn.plot_training(ws_nd_spikes=False, overlap=False, traces=False, tsne=False)
+snn.plot_training(overlap=False, traces=False, tsne=False)
