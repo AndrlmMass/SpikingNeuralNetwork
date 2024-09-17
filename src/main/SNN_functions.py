@@ -604,7 +604,7 @@ class SNN:
     def plot_training(
         self,
         t_stop: int = None,
-        t_start: int = 0,
+        t_start: int = None,
         items: int = None,
         ws_nd_spikes: bool = True,
         idx_start: int = 0,
@@ -621,8 +621,8 @@ class SNN:
             items = self.num_items
 
         if t_start == None:
-            t_start = abs(int(self.time - (self.num_timesteps * 2 * items)))
-        print(t_start)
+            t_start = self.time - int(self.time * 0.2)
+        print("t_start:", t_start, "t_stop:", t_stop)
 
         if idx_stop == None:
             idx_stop = self.num_neurons
@@ -630,9 +630,7 @@ class SNN:
         if ws_nd_spikes:
             plot_weights_and_spikes(
                 spikes=self.spikes,
-                W_se=self.W_exc_2d[:, :10],
-                W_ee=self.W_exc_2d[:, 10:-10],
-                W_ie=self.W_exc_2d[:, -10:],
+                weights=self.W_exc_2d,
                 t_start=t_start,
                 t_stop=t_stop,
             )

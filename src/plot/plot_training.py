@@ -52,8 +52,7 @@ def plot_membrane_activity(
     plt.show()
 
 
-def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie, t_start, t_stop):
-    print(t_stop, t_start)
+def plot_weights_and_spikes(spikes, weights, t_start, t_stop):
 
     # Create a figure and a set of subplots
     fig, axs = plt.subplots(2, 1, figsize=(12, 16))
@@ -73,11 +72,22 @@ def plot_weights_and_spikes(spikes, W_se, W_ee, W_ie, t_start, t_stop):
     axs[0].set_xlabel("Time (ms)")
     axs[0].set_ylabel("Neuron index")
 
+    # Define se, ee and ie indices for weights
+    w_se_start, w_se_stop = 0, 9
+    w_ee_start, w_ee_stop = 10, 19
+    w_ie_start, w_ie_stop = 20, 29
+
     # Define color and label mapping for plots
     weight_plots = {
-        "W_se": {"data": W_se, "color": "red"},
-        "W_ee": {"data": W_ee, "color": "blue"},
-        "W_ie": {"data": W_ie, "color": "green"},
+        "W_se": {"data": weights[t_start:t_stop, w_se_start:w_se_stop], "color": "red"},
+        "W_ee": {
+            "data": weights[t_start:t_stop, w_ee_start:w_ee_stop],
+            "color": "blue",
+        },
+        "W_ie": {
+            "data": weights[t_start:t_stop, w_ie_start:w_ie_stop],
+            "color": "green",
+        },
     }
 
     # Plot weights with different colors for each weight matrix

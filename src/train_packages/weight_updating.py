@@ -71,7 +71,7 @@ def exc_weight_update(
     # Update the weights
     W_se += delta_w_se
 
-    W_se = np.clip(W_se, 0.1, 5)
+    W_se = np.clip(W_se, 0.0, 5)
 
     ## W_ee weights ##
 
@@ -116,7 +116,7 @@ def exc_weight_update(
     # Update the weights
     W_ee += delta_w_ee
 
-    W_ee = np.clip(W_ee, 0.1, 5.0)
+    W_ee = np.clip(W_ee, 0.0, 5.0)
 
     ## W_se weights ##
     # mean_spikes = np.mean(spikes)
@@ -201,6 +201,6 @@ def inh_weight_update(
     # Update weights with constraint
     W_inh += delta_w
 
-    W_inh = np.clip(W_inh, 0.1, 5.0)
+    W_inh = np.clip(W_inh, 0.0, 5.0)
 
     return W_inh, z_i, z_j, H
