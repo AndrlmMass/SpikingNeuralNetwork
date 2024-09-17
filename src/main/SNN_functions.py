@@ -309,8 +309,16 @@ class SNN:
         N_input_neurons: int = 484,
         N_excit_neurons: int = 484,
         N_inhib_neurons: int = 121,
-        radius_: int = 4,
-        W_ee_prob: float | int = 0.8,
+        w_prob_se: float | int = 0.05,
+        w_prob_ee: float | int = 0.1,
+        w_prob_ei: float | int = 0.1,
+        w_prob_ii: float | int = 0.1,
+        w_prob_ie: float | int = 0.1,
+        w_val_se: float | int = 0.2,
+        w_val_ee: float | int = 0.1,
+        w_val_ei: float | int = 0.2,
+        w_val_ii: float | int = 0.2,
+        w_val_ie: float | int = 0.1,
         retur: bool = False,
         load_model_if_available: bool = True,
     ):
@@ -344,6 +352,7 @@ class SNN:
             # Load model if possible
             self.process(model=True, load=True)
 
+            # Check if previous model has been loaded
             if self.model_loaded == True:
                 return
 
@@ -351,32 +360,39 @@ class SNN:
         gws = gen_weights()
 
         self.W_se, self.W_se_ideal, self.W_se_2d, self.W_se_plt_idx = gws.gen_SE(
-            radius=radius_,
             N_input_neurons=self.N_input_neurons,
             N_excit_neurons=self.N_excit_neurons,
             time=self.time,
-            basenum=0.1,
+            w_prob=w_prob_se,
+            w_val=w_val_se,
         )
         self.W_ee, self.W_ee_ideal, self.W_ee_2d, self.W_ee_plt_idx = gws.gen_EE(
             N_excit_neurons=self.N_excit_neurons,
-            prob=W_ee_prob,
             time=self.time,
-            basenum=0.1,
+            w_prob=w_prob_ee,
+            w_val=w_val_ee,
         )
-        self.W_inh = gws.gen_EI(
+        self.W_ei = gws.gen_EI(
             N_excit_neurons=self.N_excit_neurons,
             N_inhib_neurons=self.N_inhib_neurons,
             time=self.time,
-            prob=0.1,
+            w_prob=w_prob_ei,
+            w_val=w_val_ei,
         )
+
+        self.W_ii, self.W_ii_2d, self.W_ii_plt_idx = gws.gen_IE(
+            N_inhib_neurons=self.N_inhib_neurons,
+            time=self.time,
+            w_prob=w_prob_ii,
+            w_val=w_val_ii,
+        )
+
         self.W_ie, self.W_ie_ideal, self.W_ie_2d, self.W_ie_plt_idx = gws.gen_IE(
             N_inhib_neurons=self.N_inhib_neurons,
             N_excit_neurons=self.N_excit_neurons,
-            W_ei=self.W_inh,
-            radius=10,
             time=self.time,
-            N_ws=4,
-            weight_val=0.1,
+            w_prob=w_prob_ie,
+            w_val=w_val_ie,
         )
 
         # Concatenate excitatory weights
@@ -390,6 +406,9 @@ class SNN:
         self.W_exc_plt_idx = np.concatenate(
             (self.W_se_plt_idx, self.W_ee_plt_idx, self.W_ie_plt_idx), axis=0
         )
+        # Concatenate inhibitory weights
+        self.W_inh = np.concatenate((self.W_ii, self.W_ie), axis=0)
+        self.W_inh_2d = np.concatenate((self.W_ii_2d, self.W_ie_2d), axis=0)
 
         # Generate membrane potential and spikes array
         self.MemPot = np.zeros(
