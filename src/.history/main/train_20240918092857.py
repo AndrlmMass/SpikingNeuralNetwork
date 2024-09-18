@@ -90,9 +90,9 @@ def train_model(
     V_th = np.full(num_neurons - N_input_neurons, V_th_)
     V_th_array = np.zeros((100))  # for plotting
     V_th_array[0] = V_th_
-    g_nmda = np.zeros((N_excit_neurons + N_inhib_neurons, 1))
-    g_ampa = np.zeros((N_excit_neurons + N_inhib_neurons, 1))
-    g_gaba = np.zeros((N_excit_neurons + N_inhib_neurons, 1))
+    g_nmda = np.zeros((num_neurons - N_input_neurons, 1))
+    g_ampa = np.zeros((num_neurons - N_input_neurons, 1))
+    g_gaba = np.zeros((N_excit_neurons, 1))
     g_a = np.zeros((N_excit_neurons, 1))
     g_b = np.zeros((N_excit_neurons, 1))
     # Generate membrane potential and spikes array
@@ -175,7 +175,7 @@ def train_model(
             W_plastic[:N_input_neurons],
             W_plastic[N_input_neurons:-N_inhib_neurons],
             W_plastic_ideal[:N_input_neurons],
-            W_plastic_ideal[N_input_neurons:],
+            W_plastic_ideal[N_input_neurons:-N_inhib_neurons],
             pre_synaptic_trace[t, :N_input_neurons],
             post_synaptic_trace[t],
             slow_pre_synaptic_trace[t, :N_input_neurons],
@@ -191,8 +191,9 @@ def train_model(
             W_plastic[:N_input_neurons],
             W_plastic[N_input_neurons:-N_inhib_neurons],
             W_plastic_ideal[:N_input_neurons],
-            W_plastic_ideal[N_input_neurons:],
+            W_plastic_ideal[N_input_neurons:-N_inhib_neurons],
             P,
+            t,
             w_p,
             spikes[t - 1],
             N_input_neurons,
@@ -208,20 +209,21 @@ def train_model(
             A,
             beta,
             delta,
+            update_freq,
             z_ht,
             C,
         )
 
         # Update inhibitory weights
         (
-            W_plastic[-N_inhib_neurons:],
+            W_plastic,
             z_i,
             z_j,
             H,
         ) = inh_weight_update_func(
             H,
             dt,
-            W_plastic[-N_inhib_neurons:],
+            W_plastic,
             z_i,
             z_j,
             tau_H,

@@ -192,8 +192,8 @@ def inh_weight_update(
         * learning_rate
         * G
         * (
-            np.dot(pre_spikes_reshaped, z_i_reshaped.T + 1)
-            + np.dot(z_j_reshaped, post_spikes_reshaped.T)
+            np.dot(z_i_reshaped + 1, pre_spikes_reshaped.T)
+            + np.dot(post_spikes_reshaped, z_j_reshaped.T)
         )
     )
     # Update weights with constraint

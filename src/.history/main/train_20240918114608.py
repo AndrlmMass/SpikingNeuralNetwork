@@ -214,14 +214,14 @@ def train_model(
 
         # Update inhibitory weights
         (
-            W_plastic[-N_inhib_neurons:],
+            W_plastic,
             z_i,
             z_j,
             H,
         ) = inh_weight_update_func(
             H,
             dt,
-            W_plastic[-N_inhib_neurons:],
+            W_plastic,
             z_i,
             z_j,
             tau_H,

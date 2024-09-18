@@ -526,7 +526,7 @@ class SNN:
             return
 
         (
-            self.W_plastic_2d,
+            self.W_exc_2d,
             self.spikes,
             self.MemPot,
             self.pre_synaptic_trace,
@@ -540,8 +540,8 @@ class SNN:
             self.z_i,
             self.z_j,
             self.V_th_array,
-            self.W_plastic,
-            self.W_static,
+            self.W_exc,
+            self.W_inh,
             self.V_th,
             self.g_nmda,
             self.g_ampa,
@@ -605,6 +605,8 @@ class SNN:
         t_start: int = None,
         items: int = None,
         ws_nd_spikes: bool = True,
+        idx_start: int = 0,
+        idx_stop: int = None,
         mv: bool = True,
         overlap: bool = True,
         traces: bool = True,
@@ -620,10 +622,13 @@ class SNN:
             t_start = self.time - int(self.time * 0.2)
         print("t_start:", t_start, "t_stop:", t_stop)
 
+        if idx_stop == None:
+            idx_stop = self.num_neurons
+
         if ws_nd_spikes:
             plot_weights_and_spikes(
                 spikes=self.spikes,
-                weights=self.W_plastic_2d,
+                weights=self.W_exc_2d,
                 t_start=t_start,
                 t_stop=t_stop,
             )

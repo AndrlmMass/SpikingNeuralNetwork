@@ -153,6 +153,8 @@ def update_membrane_potential_conduct(
     g_i = alpha_inh * g_ampa_i + (1 - alpha_inh) * g_nmda_i
     g_gaba_i += dt * (-(g_gaba_i / tau_gaba) + np.dot(w_ij_inh.T, S_j_inh))
 
+    print(g_i.shape, g_gaba_i.shape, g_nmda_i.shape, g_ampa_i.shape)
+
     # Update membrane potential
     delta_U_in = (
         dt

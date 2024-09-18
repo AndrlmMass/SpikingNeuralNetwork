@@ -191,7 +191,7 @@ def train_model(
             W_plastic[:N_input_neurons],
             W_plastic[N_input_neurons:-N_inhib_neurons],
             W_plastic_ideal[:N_input_neurons],
-            W_plastic_ideal[N_input_neurons:],
+            W_plastic_ideal[N_input_neurons:-N_inhib_neurons],
             P,
             w_p,
             spikes[t - 1],
@@ -214,14 +214,14 @@ def train_model(
 
         # Update inhibitory weights
         (
-            W_plastic[-N_inhib_neurons:],
+            W_plastic,
             z_i,
             z_j,
             H,
         ) = inh_weight_update_func(
             H,
             dt,
-            W_plastic[-N_inhib_neurons:],
+            W_plastic,
             z_i,
             z_j,
             tau_H,

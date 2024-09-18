@@ -73,7 +73,7 @@ def update_membrane_potential_conduct(
     Overview over variables:
 
     -> Dynamic (i.e., changing for each step)
-        U, V_th, g_ampa, g_nmda, g_gaba, x, u, g_a, g_b, W_plastic, W_static, S
+        U, V_th, g_ampa, g_nmda, g_gaba, x, u, g_a, g_b, W_exc, W_inh, S
 
     -> Static (i.e., not changing)
         U_inh, U_exc, V_th_, tau_m, dt, N_input_neurons, N_inhib_neurons,
@@ -87,9 +87,7 @@ def update_membrane_potential_conduct(
     # Update spike indices
     S_j_exc = np.expand_dims(S[:-N_inhib_neurons], axis=1)  # presynaptic exc spikes
     S_j_inh = np.expand_dims(S[-N_inhib_neurons:], axis=1)  # presynaptic inh spikes
-    S_i = np.expand_dims(
-        S[N_input_neurons:-N_inhib_neurons], axis=1
-    )  # postsynaptic spikes
+    S_i = np.expand_dims(S[N_input_neurons:-N_inhib_neurons], axis=1)
 
     # Update weight indices
     w_ij_exc = W_plastic[:-N_inhib_neurons]  # plastic excitatory weights
@@ -160,7 +158,7 @@ def update_membrane_potential_conduct(
         * ((V_rest - U_i) + (g_i * (U_exc - U_i)) + (g_gaba_i) * (U_inh - U_i))
     )
 
-    U[-N_inhib_neurons:] = (U_i + delta_U_in).reshape(-1)
+    U[:-N_inhib_neurons] = (U_i + delta_U_in).reshape(-1)
 
     # Update spiking threshold decay for excitatory neurons
     V_th += dt / tau_thr * (V_th_ - V_th)

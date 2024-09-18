@@ -13,7 +13,7 @@ class gen_weights:
         W_se[mask] = w_val
 
         # Define the ideal weights for stimulation-excitation
-        W_se_ideal = np.zeros(shape=(N_input_neurons, N_excit_neurons))
+        W_se_ideal = np.zeros(size=(N_input_neurons, N_excit_neurons))
 
         # Create a representative 2D array of the weights for visualization
         W_se_2d = np.zeros((time, 10))
@@ -40,7 +40,7 @@ class gen_weights:
         W_ee[mask] = w_val
 
         # Define the ideal weights for stimulation-excitation
-        W_ee_ideal = np.zeros(shape=(N_excit_neurons, N_excit_neurons))
+        W_ee_ideal = np.zeros(size=(N_excit_neurons, N_excit_neurons))
 
         # Create a representative 2D array of the weights for visualization
         W_ee_2d = np.zeros((time, 10))

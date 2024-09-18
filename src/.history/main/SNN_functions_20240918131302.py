@@ -620,6 +620,9 @@ class SNN:
             t_start = self.time - int(self.time * 0.2)
         print("t_start:", t_start, "t_stop:", t_stop)
 
+        if idx_stop == None:
+            idx_stop = self.num_neurons
+
         if ws_nd_spikes:
             plot_weights_and_spikes(
                 spikes=self.spikes,

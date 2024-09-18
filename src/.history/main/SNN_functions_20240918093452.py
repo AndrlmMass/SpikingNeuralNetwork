@@ -164,7 +164,7 @@ class SNN:
 
                 # Create a dictionary of file names and variables
                 vars_to_save = {
-                    "W_plastic_2d": self.W_plastic_2d,
+                    "W_exc_2d": self.W_exc_2d,
                     "spikes": self.spikes,
                     "MemPot": self.MemPot,
                     "pre_synaptic_trace": self.pre_synaptic_trace,  # why is this not a variable?
@@ -178,8 +178,8 @@ class SNN:
                     "z_i": self.z_i,
                     "z_j": self.z_j,
                     "V_th_array": self.V_th_array,
-                    "plastic_weights": self.W_plastic,
-                    "static_weights": self.W_static,
+                    "exc_weights": self.W_exc,
+                    "inh_weights": self.W_inh,
                     "V_th": self.V_th,
                     "g_nmda": self.g_nmda,
                     "g_ampa": self.g_ampa,
@@ -217,7 +217,7 @@ class SNN:
                             save_path = f"model/{folder}"
 
                             # Now you can access the variables like this:
-                            self.W_plastic_2d = np.load(save_path + "/W_plastic_2d.npy")
+                            self.W_exc_2d = np.load(save_path + "/W_exc_2d.npy")
                             self.spikes = np.load(save_path + "/spikes.npy")
                             self.MemPot = np.load(save_path + "/MemPot.npy")
                             self.pre_synaptic_trace = np.load(
@@ -237,8 +237,8 @@ class SNN:
                             self.z_i = np.load(save_path + "/z_i.npy")
                             self.z_j = np.load(save_path + "/z_j.npy")
                             self.V_th_array = np.load(save_path + "/V_th_array.npy")
-                            self.W_plastic = np.load(save_path + "/plastic_weights.npy")
-                            self.W_static = np.load(save_path + "/static_weights.npy")
+                            self.W_exc = np.load(save_path + "/exc_weights.npy")
+                            self.W_inh = np.load(save_path + "/inh_weights.npy")
                             self.V_th = np.load(save_path + "/V_th.npy")
                             self.g_nmda = np.load(save_path + "/g_nmda.npy")
                             self.g_ampa = np.load(save_path + "/g_ampa.npy")
@@ -394,7 +394,7 @@ class SNN:
         # Concatenate plastic weights
         self.W_plastic = np.concatenate((self.W_se, self.W_ee, self.W_ie), axis=0)
         self.W_plastic_ideal = np.concatenate(
-            (self.W_se_ideal, self.W_ee_ideal), axis=0
+            (self.W_se_ideal, self.W_ee_ideal, self.W_ie_ideal), axis=0
         )
         self.W_plastic_2d = np.concatenate(
             (self.W_se_2d, self.W_ee_2d, self.W_ie_2d), axis=1
@@ -526,7 +526,7 @@ class SNN:
             return
 
         (
-            self.W_plastic_2d,
+            self.W_exc_2d,
             self.spikes,
             self.MemPot,
             self.pre_synaptic_trace,
@@ -540,8 +540,8 @@ class SNN:
             self.z_i,
             self.z_j,
             self.V_th_array,
-            self.W_plastic,
-            self.W_static,
+            self.W_exc,
+            self.W_inh,
             self.V_th,
             self.g_nmda,
             self.g_ampa,
@@ -585,11 +585,12 @@ class SNN:
             N_excit_neurons=self.N_excit_neurons,
             N_inhib_neurons=self.N_inhib_neurons,
             N_input_neurons=self.N_input_neurons,
-            W_plastic=self.W_plastic,
-            W_static=self.W_static,
-            W_plastic_ideal=self.W_plastic_ideal,
-            W_plastic_2d=self.W_plastic_2d,
-            W_plastic_plt_idx=self.W_plastic_plt_idx,
+            MemPot=self.MemPot,
+            W_exc=self.W_exc,
+            W_inh=self.W_inh,
+            W_exc_ideal=self.W_exc_ideal,
+            W_exc_2d=self.W_exc_2d,
+            W_exc_plt_idx=self.W_exc_plt_idx,
             gamma=self.gamma,
             alpha_exc=self.alpha_exc,
             alpha_inh=self.alpha_inh,
@@ -605,6 +606,8 @@ class SNN:
         t_start: int = None,
         items: int = None,
         ws_nd_spikes: bool = True,
+        idx_start: int = 0,
+        idx_stop: int = None,
         mv: bool = True,
         overlap: bool = True,
         traces: bool = True,
@@ -620,10 +623,13 @@ class SNN:
             t_start = self.time - int(self.time * 0.2)
         print("t_start:", t_start, "t_stop:", t_stop)
 
+        if idx_stop == None:
+            idx_stop = self.num_neurons
+
         if ws_nd_spikes:
             plot_weights_and_spikes(
                 spikes=self.spikes,
-                weights=self.W_plastic_2d,
+                weights=self.W_exc_2d,
                 t_start=t_start,
                 t_stop=t_stop,
             )

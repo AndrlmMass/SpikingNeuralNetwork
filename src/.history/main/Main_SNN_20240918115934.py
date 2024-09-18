@@ -2,7 +2,7 @@
 from SNN_functions import SNN
 
 # Initiate SNN object
-snn = SNN(num_items=480)
+snn = SNN(num_items=48)
 
 # Initialize network
 snn.build()
