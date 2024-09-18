@@ -110,7 +110,7 @@ def update_membrane_potential_conduct(
     x += dt * (((1 - x) / tau_d) - u * x * S_j_exc)  # shape:(968, 1)
 
     # Update transmitter channels
-    g_ampa_e += dt * (-(g_ampa_e / tau_ampa) + (np.dot(w_ij_exc.T, (u * x * S_j_exc))))
+    g_ampa_e -= dt * ((g_ampa_e / tau_ampa) + (np.dot(w_ij_exc.T, (u * x * S_j_exc))))
     g_nmda_e += dt / tau_nmda * (g_ampa_e - g_nmda_e)
     g_e = alpha_exc * g_ampa_e + (1 - alpha_exc) * g_nmda_e
     g_gaba_e += dt * (-(g_gaba_e / tau_gaba) + np.dot(w_ij_inh.T, S_j_inh))

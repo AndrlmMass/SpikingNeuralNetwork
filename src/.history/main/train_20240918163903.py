@@ -232,15 +232,6 @@ def train_model(
             spikes[t - 1, N_input_neurons:-N_inhib_neurons],
         )
 
-        print(
-            "W_se",
-            np.round(np.mean(W_plastic[:N_input_neurons]), 5),
-            "W_ee",
-            np.round(np.mean(W_plastic[:-N_inhib_neurons]), 5),
-            "W_ie",
-            np.round(np.mean(W_plastic[-N_inhib_neurons:]), 5),
-        )
-
         # Assign the selected indices to the first ro
         if t % update_freq == 0:
             W_plastic_2d[t] = W_plastic[

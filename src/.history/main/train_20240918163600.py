@@ -82,9 +82,9 @@ def train_model(
     C = np.full(num_neurons, A)
     z_i = np.zeros(N_excit_neurons)
     z_j = np.zeros(N_inhib_neurons)
-    z_ht = np.zeros(num_neurons)
-    x = np.zeros((N_input_neurons + N_excit_neurons, 1))
-    u = np.zeros((N_input_neurons + N_excit_neurons, 1))
+    z_ht = np.(num_neurons)
+    x = np.ones((N_input_neurons + N_excit_neurons, 1))
+    u = np.ones((N_input_neurons + N_excit_neurons, 1))
     H = 0
     V_th_ = float(V_th_)
     V_th = np.full(num_neurons - N_input_neurons, V_th_)
@@ -230,15 +230,6 @@ def train_model(
             learning_rate,
             spikes[t - 1, -N_inhib_neurons:],
             spikes[t - 1, N_input_neurons:-N_inhib_neurons],
-        )
-
-        print(
-            "W_se",
-            np.round(np.mean(W_plastic[:N_input_neurons]), 5),
-            "W_ee",
-            np.round(np.mean(W_plastic[:-N_inhib_neurons]), 5),
-            "W_ie",
-            np.round(np.mean(W_plastic[-N_inhib_neurons:]), 5),
         )
 
         # Assign the selected indices to the first ro

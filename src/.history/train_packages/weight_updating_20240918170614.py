@@ -129,6 +129,13 @@ def exc_weight_update(
     mean_pre_trace_se = np.round(np.mean(pre_trace_se), 5)
     mean_pre_trace_ee = np.round(np.mean(pre_trace_ee), 5)
 
+    print(
+        "W_ee",
+        mean_w_ee,
+        "W_se",
+        mean_w_se,
+    )
+
     return (
         W_se,
         W_ee,
@@ -187,5 +194,7 @@ def inh_weight_update(
     W_inh += delta_w
 
     # W_inh = np.clip(W_inh, 0.1, 5.0)
+
+    print(np.round(np.mean(W_inh), 5))
 
     return W_inh, z_i, z_j, H

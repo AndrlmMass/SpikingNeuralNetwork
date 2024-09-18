@@ -238,7 +238,7 @@ def train_model(
             "W_ee",
             np.round(np.mean(W_plastic[:-N_inhib_neurons]), 5),
             "W_ie",
-            np.round(np.mean(W_plastic[-N_inhib_neurons:]), 5),
+            np.round(np.mean(W_plastic), 5),
         )
 
         # Assign the selected indices to the first ro

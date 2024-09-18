@@ -2,10 +2,10 @@
 from SNN_functions import SNN
 
 # Initiate SNN object
-snn = SNN(num_items=40)
+snn = SNN(num_items=4)
 
 # Initialize network
-snn.build(load_model_if_available=False)
+snn.build()
 
 # Generate data
 snn.gen_data()
