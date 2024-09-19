@@ -553,6 +553,7 @@ class SNN:
             U_cons=self.U_cons,
             run_njit=run_njit,
         )
+
         if save_model:
             self.process(model=True, save=True)
 
@@ -585,7 +586,6 @@ class SNN:
                 t_stop=t_stop,
             )
         if mv:
-            print(self.V_th)
             plot_membrane_activity(
                 MemPot=self.MemPot,
                 MemPot_th=self.V_th,

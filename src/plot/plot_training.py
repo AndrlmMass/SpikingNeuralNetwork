@@ -15,6 +15,7 @@ def plot_membrane_activity(
     t_stop: int,
     N_excit_neurons: int,
 ):
+
     t = np.arange(t_start, t_stop)
     print(t.shape[0])
     MemPot_th_ = np.full(shape=t.shape[0], fill_value=MemPot_th)
@@ -73,10 +74,11 @@ def plot_weights_and_spikes(spikes, weights, t_start, t_stop):
     axs[0].set_ylabel("Neuron index")
 
     # Define x values
-    t = np.arange(t_start, t_stop)
+    t = np.arange(start=t_start, stop=t_stop)
+    print(t)
 
     # Plot weights with different colors for each weight matrix
-    axs[1].plot(weights[t_start:t_stop, 0], color="green")
+    axs[1].plot(t, weights[t_start:t_stop, 0], color="green")
     axs[1].fill_between(
         t,
         weights[t_start:t_stop, 1],
@@ -86,7 +88,7 @@ def plot_weights_and_spikes(spikes, weights, t_start, t_stop):
         label="SE weight Range",
     )
 
-    axs[1].plot(weights[t_start:t_stop, 3], color="green")
+    axs[1].plot(t, weights[t_start:t_stop, 3], color="red")
     axs[1].fill_between(
         t,
         weights[t_start:t_stop, 4],
@@ -96,7 +98,7 @@ def plot_weights_and_spikes(spikes, weights, t_start, t_stop):
         label="EE weight Range",
     )
 
-    axs[1].plot(weights[t_start:t_stop, 6], color="green")
+    axs[1].plot(t, weights[t_start:t_stop, 6], color="blue")
     axs[1].fill_between(
         t,
         weights[t_start:t_stop, 7],

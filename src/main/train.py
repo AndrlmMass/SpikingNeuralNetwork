@@ -262,6 +262,8 @@ def train_model(
             W_plastic_plt[t, 7] = W_ie_high
             W_plastic_plt[t, 8] = W_ie_low
 
+            print("W_ee", W_ee_mean)
+
     return (
         W_plastic_plt,
         spikes,
