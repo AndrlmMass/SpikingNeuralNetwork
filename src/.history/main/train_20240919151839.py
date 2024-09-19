@@ -205,7 +205,7 @@ def train_model(
         )
 
         # Update inhibitory weights
-        W_ie, z_i, z_j, H = inh_weight_update(
+        W_plastic[-N_inhib_neurons:], z_i, z_j, H = inh_weight_update(
             H,
             dt,
             W_plastic[-N_inhib_neurons:],
@@ -218,8 +218,6 @@ def train_model(
             spikes[t - 1, -N_inhib_neurons:],
             spikes[t - 1, N_input_neurons:-N_inhib_neurons],
         )
-
-        # Assign pre-existing weight arrays and misc to new values
 
         # Assign the selected indices to the first row
         if t % update_freq == 0:
