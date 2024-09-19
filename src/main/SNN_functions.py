@@ -164,7 +164,7 @@ class SNN:
 
                 # Create a dictionary of file names and variables
                 vars_to_save = {
-                    "W_plastic_2d": self.W_plastic_2d,
+                    "W_plastic_plt": self.W_plastic_plt,
                     "spikes": self.spikes,
                     "MemPot": self.MemPot,
                     "pre_synaptic_trace": self.pre_synaptic_trace,  # why is this not a variable?
@@ -217,7 +217,9 @@ class SNN:
                             save_path = f"model/{folder}"
 
                             # Now you can access the variables like this:
-                            self.W_plastic_2d = np.load(save_path + "/W_plastic_2d.npy")
+                            self.W_plastic_plt = np.load(
+                                save_path + "/W_plastic_plt.npy"
+                            )
                             self.spikes = np.load(save_path + "/spikes.npy")
                             self.MemPot = np.load(save_path + "/MemPot.npy")
                             self.pre_synaptic_trace = np.load(
@@ -357,16 +359,14 @@ class SNN:
         # Generate weights
         gws = gen_weights()
 
-        self.W_se, self.W_se_ideal, self.W_se_plt = gws.gen_SE(
+        self.W_se, self.W_se_ideal = gws.gen_SE(
             N_input_neurons=self.N_input_neurons,
             N_excit_neurons=self.N_excit_neurons,
-            time=self.time,
             w_prob=w_prob_se,
             w_val=w_val_se,
         )
-        self.W_ee, self.W_ee_ideal, self.W_ee_plt = gws.gen_EE(
+        self.W_ee, self.W_ee_ideal = gws.gen_EE(
             N_excit_neurons=self.N_excit_neurons,
-            time=self.time,
             w_prob=w_prob_ee,
             w_val=w_val_ee,
         )
@@ -377,21 +377,13 @@ class SNN:
             w_val=w_val_ei,
         )
 
-<<<<<<< Updated upstream
         self.W_ii = gws.gen_II(
-=======
-        self.W_ii = gws.gen_IE(
->>>>>>> Stashed changes
             N_inhib_neurons=self.N_inhib_neurons,
             w_prob=w_prob_ii,
             w_val=w_val_ii,
         )
 
-<<<<<<< Updated upstream
-        self.W_ie, self.W_ie_2d, self.W_ie_plt_idx = gws.gen_IE(
-=======
         self.W_ie, self.W_ie_plt = gws.gen_IE(
->>>>>>> Stashed changes
             N_inhib_neurons=self.N_inhib_neurons,
             N_excit_neurons=self.N_excit_neurons,
             time=self.time,
@@ -404,81 +396,10 @@ class SNN:
         self.W_plastic_ideal = np.concatenate(
             (self.W_se_ideal, self.W_ee_ideal), axis=0
         )
-<<<<<<< Updated upstream
-        self.W_plastic_2d = np.concatenate(
-            (self.W_se_2d, self.W_ee_2d, self.W_ie_2d), axis=1
-        )
-        self.W_plastic_plt_idx = np.concatenate(
-            (self.W_se_plt_idx, self.W_ee_plt_idx, self.W_ie_plt_idx), axis=0
-        )
+        self.W_plastic_plt = np.zeros(shape=(self.time, 9))
+
         # Concatenate static weights
-        self.W_static = np.concatenate((self.W_ii, self.W_ei), axis=0)
-=======
-        self.W_exc_plt = np.concatenate(
-            (self.W_se_plt, self.W_ee_plt, self.W_ie_plt), axis=1
-        )
-        self.W_exc_idx = np.concatenate(
-            (self.W_se_plt_idx, self.W_ee_plt_idx, self.W_ie_plt_idx), axis=0
-        )
-        # Concatenate inhibitory weights
-        self.W_inh = np.concatenate((self.W_ii, self.W_ie), axis=0)
-        self.W_inh_2d = np.concatenate((self.W_ii_2d, self.W_ie_2d), axis=0)
-        self.W_inh_idx = np.concatenate((self.W_ii_plt_idx, self.W_ie_plt_idx), axis=0)
-
-        # Generate membrane potential and spikes array
-        self.MemPot = np.zeros(
-            (self.time, (self.N_excit_neurons + self.N_inhib_neurons))
-        )
-        self.MemPot[0, :] = self.V_rest
-        self.spikes = np.zeros((self.time, self.num_neurons))
-
-        if retur:
-            return (
-                self.MemPot,
-                self.spikes,
-                self.W_exc,
-                self.W_inh,
-                self.W_exc_ideal,
-            )
->>>>>>> Stashed changes
-
-    def vis_network(self, heatmap: bool, weight_layer: bool):
-        if heatmap:
-            plot_input_space(self.W_se)
-        if weight_layer:
-            draw_weights_layer(
-                weights=self.W_se_2d,
-                title="Input space",
-                xlabel="Input Neurons",
-                ylabel="Input Neurons",
-            )
-            W_es_ = np.sum(self.W_se, axis=0).reshape(
-                int(np.sqrt(self.N_input_neurons)), int(np.sqrt(self.N_input_neurons))
-            )
-            draw_weights_layer(
-                weights=W_es_,
-                title="Excitatory space",
-                xlabel="Excitatory Neurons",
-                ylabel="Excitatory Neurons",
-            )
-            W_ee_ = np.sum(self.W_ee, axis=1).reshape(
-                int(np.sqrt(self.N_excit_neurons)), int(np.sqrt(self.N_excit_neurons))
-            )
-            draw_weights_layer(
-                weights=W_ee_,
-                title="Excitatory space",
-                xlabel="Excitatory neuron",
-                ylabel="Excitatory neuron",
-            )
-            W_ie_ = np.sum(self.W_ie, axis=0).reshape(
-                int(np.sqrt(self.N_excit_neurons)), int(np.sqrt(self.N_excit_neurons))
-            )
-            draw_weights_layer(
-                weights=W_ie_,
-                title="Excitatory space",
-                xlabel="Excitatory neuron",
-                ylabel="Excitatory neuron",
-            )
+        self.W_static = np.concatenate((self.W_ei, self.W_ii), axis=0)
 
     def gen_data(
         self,
@@ -563,7 +484,7 @@ class SNN:
             return
 
         (
-            self.W_plastic_2d,
+            self.W_plastic_plt,
             self.spikes,
             self.MemPot,
             self.pre_synaptic_trace,
@@ -625,8 +546,7 @@ class SNN:
             W_plastic=self.W_plastic,
             W_static=self.W_static,
             W_plastic_ideal=self.W_plastic_ideal,
-            W_plastic_2d=self.W_plastic_2d,
-            W_plastic_plt_idx=self.W_plastic_plt_idx,
+            W_plastic_plt=self.W_plastic_plt,
             gamma=self.gamma,
             alpha_exc=self.alpha_exc,
             alpha_inh=self.alpha_inh,
@@ -660,7 +580,7 @@ class SNN:
         if ws_nd_spikes:
             plot_weights_and_spikes(
                 spikes=self.spikes,
-                weights=self.W_plastic_2d,
+                weights=self.W_plastic_plt,
                 t_start=t_start,
                 t_stop=t_stop,
             )

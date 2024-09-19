@@ -72,33 +72,40 @@ def plot_weights_and_spikes(spikes, weights, t_start, t_stop):
     axs[0].set_xlabel("Time (ms)")
     axs[0].set_ylabel("Neuron index")
 
-    # Define se, ee and ie indices for weights
-    w_se_start, w_se_stop = 0, 9
-    w_ee_start, w_ee_stop = 10, 19
-    w_ie_start, w_ie_stop = 20, 29
-
-    # Define color and label mapping for plots
-    weight_plots = {
-        "W_se": {"data": weights[t_start:t_stop, w_se_start:w_se_stop], "color": "red"},
-        "W_ee": {
-            "data": weights[t_start:t_stop, w_ee_start:w_ee_stop],
-            "color": "blue",
-        },
-        "W_ie": {
-            "data": weights[t_start:t_stop, w_ie_start:w_ie_stop],
-            "color": "green",
-        },
-    }
+    # Define x values
+    t = np.arange(t_start, t_stop)
 
     # Plot weights with different colors for each weight matrix
-    for key, info in weight_plots.items():
-        for i, weights in enumerate(info["data"].T):
-            if i == 0:
-                axs[1].plot(
-                    weights, color=info["color"], label=key
-                )  # Label only the first line of each type
-            else:
-                axs[1].plot(weights, color=info["color"])
+    axs[1].plot(weights[t_start:t_stop, 0], color="green")
+    axs[1].fill_between(
+        t,
+        weights[t_start:t_stop, 1],
+        weights[t_start:t_stop, 2],
+        color="green",
+        alpha=0.2,
+        label="SE weight Range",
+    )
+
+    axs[1].plot(weights[t_start:t_stop, 3], color="green")
+    axs[1].fill_between(
+        t,
+        weights[t_start:t_stop, 4],
+        weights[t_start:t_stop, 5],
+        color="red",
+        alpha=0.2,
+        label="EE weight Range",
+    )
+
+    axs[1].plot(weights[t_start:t_stop, 6], color="green")
+    axs[1].fill_between(
+        t,
+        weights[t_start:t_stop, 7],
+        weights[t_start:t_stop, 8],
+        color="blue",
+        alpha=0.2,
+        label="IE weight Range",
+    )
+
     axs[1].set_title("Weight Matrix Changes")
     axs[1].set_xlabel("Time (ms)")
     axs[1].set_ylabel("Weight Value")

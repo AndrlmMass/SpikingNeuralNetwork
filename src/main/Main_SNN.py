@@ -5,10 +5,10 @@ from SNN_functions import SNN
 snn = SNN(num_items=40)
 
 # Initialize network
-snn.build(load_model_if_available=False)
+snn.build()
 
 # Generate data
-snn.gen_data()
+snn.gen_data(var_high_freq=0, var_low_freq=0)
 
 # Train network
 snn.train_()

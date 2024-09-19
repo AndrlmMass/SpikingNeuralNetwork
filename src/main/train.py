@@ -65,8 +65,7 @@ def train_model(
     W_static: np.ndarray,
     W_plastic: np.ndarray,
     W_plastic_ideal: np.ndarray,
-    W_plastic_2d: np.ndarray,
-    W_plastic_plt_idx: np.ndarray,
+    W_plastic_plt: np.ndarray,
     gamma: float | int,  # Where is gamma used?
     alpha_exc: float | int,
     alpha_inh: float | int,
@@ -232,23 +231,39 @@ def train_model(
             spikes[t - 1, N_input_neurons:-N_inhib_neurons],
         )
 
-        print(
-            "W_se",
-            np.round(np.mean(W_plastic[:N_input_neurons]), 5),
-            "W_ee",
-            np.round(np.mean(W_plastic[:-N_inhib_neurons]), 5),
-            "W_ie",
-            np.round(np.mean(W_plastic[-N_inhib_neurons:]), 5),
-        )
-
         # Assign the selected indices to the first ro
         if t % update_freq == 0:
-            W_plastic_2d[t] = W_plastic[
-                W_plastic_plt_idx[:, 0], W_plastic_plt_idx[:, 1]
-            ]
+            # Calculate the mean, high and low weights for each plastic group
+            W_se_mean = np.round(np.mean(W_plastic[:N_input_neurons]), 5)
+            W_se_high = np.round(np.amax(W_plastic[:N_input_neurons]), 5)
+            W_se_low = np.round(np.amin(W_plastic[:N_input_neurons]), 5)
+
+            W_plastic_plt[t, 0] = W_se_mean
+            W_plastic_plt[t, 1] = W_se_high
+            W_plastic_plt[t, 2] = W_se_low
+
+            W_ee_mean = np.round(
+                np.mean(W_plastic[N_input_neurons:-N_inhib_neurons]), 5
+            )
+            W_ee_high = np.round(
+                np.amax(W_plastic[N_input_neurons:-N_inhib_neurons]), 5
+            )
+            W_ee_low = np.round(np.amin(W_plastic[N_input_neurons:-N_inhib_neurons]), 5)
+
+            W_plastic_plt[t, 3] = W_ee_mean
+            W_plastic_plt[t, 4] = W_ee_high
+            W_plastic_plt[t, 5] = W_ee_low
+
+            W_ie_mean = np.round(np.mean(W_plastic[-N_inhib_neurons:]), 5)
+            W_ie_high = np.round(np.amax(W_plastic[-N_inhib_neurons:]), 5)
+            W_ie_low = np.round(np.amin(W_plastic[-N_inhib_neurons:]), 5)
+
+            W_plastic_plt[t, 6] = W_ie_mean
+            W_plastic_plt[t, 7] = W_ie_high
+            W_plastic_plt[t, 8] = W_ie_low
 
     return (
-        W_plastic_2d,
+        W_plastic_plt,
         spikes,
         MemPot,
         pre_synaptic_trace,

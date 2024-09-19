@@ -114,20 +114,7 @@ def exc_weight_update(
     # Update the weights
     W_ee += delta_w_ee
 
-    # W_ee = np.clip(W_ee, 0.0, 5.0)
-
-    ## W_se weights ##
-    mean_spikes = np.round(np.mean(spikes), 5)
-    z_ht_mean = np.round(np.mean(z_ht), 5)
-    C_mean = np.round(np.mean(C), 5)
-    mean_w_se = np.round(np.mean(W_se), 5)
-    mean_w_ee = np.round(np.mean(W_ee), 5)
-    mean_w_se_ideal = np.round(np.mean(W_se_ideal), 5)
-    mean_w_ee_ideal = np.round(np.mean(W_ee_ideal), 5)
-    mean_post_trace_se = np.round(np.mean(post_trace_se), 5)
-    mean_post_trace_ee = np.round(np.mean(post_trace_ee), 5)
-    mean_pre_trace_se = np.round(np.mean(pre_trace_se), 5)
-    mean_pre_trace_ee = np.round(np.mean(pre_trace_ee), 5)
+    W_ee = np.clip(W_ee, 0.0, 5.0)
 
     return (
         W_se,
@@ -186,6 +173,6 @@ def inh_weight_update(
     # Update weights with constraint
     W_inh += delta_w
 
-    # W_inh = np.clip(W_inh, 0.1, 5.0)
+    W_inh = np.clip(W_inh, 0.1, 5.0)
 
     return W_inh, z_i, z_j, H
