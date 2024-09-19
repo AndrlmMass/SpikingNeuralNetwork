@@ -1,9 +1,20 @@
-# Update weights of the network
+import jax.numpy as jnp
+from functools import partial
+from jax import jit
 
-# Import libraries
-import numpy as np
 
-
+@partial(
+    jit,
+    static_argnames=[
+        "N_input_neurons",
+        "N_inhib_neurons",
+        "tau_plus",
+        "tau_minus",
+        "tau_slow",
+        "tau_ht",
+        "tau_hom",
+    ],
+)
 def exc_weight_update(
     dt,
     tau_cons,
@@ -30,8 +41,8 @@ def exc_weight_update(
     z_ht,
     C,
 ):
-    # Update ideal weights if t is divisible by euler
-    W_se_ideal += (dt / tau_cons) * (
+    # Update ideal weights
+    W_se_ideal = W_se_ideal + (dt / tau_cons) * (
         W_se
         - W_se_ideal
         - P * W_se_ideal * ((w_p / 2) - W_se_ideal) * (w_p - W_se_ideal)
@@ -41,7 +52,7 @@ def exc_weight_update(
     post_spikes_se = spikes[N_input_neurons:-N_inhib_neurons]
     pre_spikes_se = spikes[:N_input_neurons]
 
-    # Initiate presynaptic and postsynaptic traces
+    # Extract traces
     pre_trace_se = pre_synaptic_trace[:N_input_neurons]
     post_trace_se = post_synaptic_trace
     slow_trace_se = slow_pre_synaptic_trace[:N_input_neurons]
@@ -49,14 +60,14 @@ def exc_weight_update(
     C_se = C[:N_input_neurons]
 
     # Update synaptic traces
-    pre_trace_se += dt * ((-pre_trace_se / tau_plus) + pre_spikes_se)
-    post_trace_se += dt * ((-post_trace_se / tau_minus) + post_spikes_se)
-    slow_trace_se += dt * ((-slow_trace_se / tau_slow) + post_spikes_se)
+    pre_trace_se = pre_trace_se + dt * ((-pre_trace_se / tau_plus) + pre_spikes_se)
+    post_trace_se = post_trace_se + dt * ((-post_trace_se / tau_minus) + post_spikes_se)
+    slow_trace_se = slow_trace_se + dt * ((-slow_trace_se / tau_slow) + post_spikes_se)
 
-    # Update z_th, C and B variables
-    z_ht_se += dt * (-z_ht_se / tau_ht + post_spikes_se)
-    C_se += dt * (-C_se / tau_hom + z_ht_se**2)
-    B_se = np.where(C_se <= 1 / A, A * C_se, A)
+    # Update z_ht, C, and B variables
+    z_ht_se = z_ht_se + dt * (-z_ht_se / tau_ht + post_spikes_se)
+    C_se = C_se + dt * (-C_se / tau_hom + z_ht_se**2)
+    B_se = jnp.where(C_se <= 1 / A, A * C_se, A)
 
     # Get learning components
     triplet_LTP = A * pre_trace_se * slow_trace_se
@@ -67,14 +78,13 @@ def exc_weight_update(
     delta_w_se = dt * (post_spikes_se * (triplet_LTP - heterosynaptic) - transmitter)
 
     # Update the weights
-    W_se += delta_w_se
-
-    W_se = np.clip(W_se, 0.0, 5)
+    W_se = W_se + delta_w_se
+    W_se = jnp.clip(W_se, 0.0, 5.0)
 
     ## W_ee weights ##
 
-    # Update ideal weights if t is divisble by euler
-    W_ee_ideal += (dt / tau_cons) * (
+    # Update ideal weights
+    W_ee_ideal = W_ee_ideal + (dt / tau_cons) * (
         W_ee
         - W_ee_ideal
         - P * W_ee_ideal * ((w_p / 2) - W_ee_ideal) * (w_p - W_ee_ideal)
@@ -84,7 +94,7 @@ def exc_weight_update(
     post_spikes_ee = spikes[N_input_neurons:-N_inhib_neurons]
     pre_spikes_ee = spikes[N_input_neurons:-N_inhib_neurons]
 
-    # Initiate presynaptic and postsynaptic traces
+    # Extract traces
     pre_trace_ee = pre_synaptic_trace[N_input_neurons:-N_inhib_neurons]
     post_trace_ee = post_synaptic_trace
     slow_trace_ee = slow_pre_synaptic_trace[N_input_neurons:-N_inhib_neurons]
@@ -92,14 +102,14 @@ def exc_weight_update(
     C_ee = C[N_input_neurons:-N_inhib_neurons]
 
     # Update synaptic traces
-    pre_trace_ee += dt * (-pre_trace_ee / tau_plus + pre_spikes_ee)
-    post_trace_ee += dt * (-post_trace_ee / tau_minus + post_spikes_ee)
-    slow_trace_ee += dt * (-slow_trace_ee / tau_slow + post_spikes_ee)
+    pre_trace_ee = pre_trace_ee + dt * (-pre_trace_ee / tau_plus + pre_spikes_ee)
+    post_trace_ee = post_trace_ee + dt * (-post_trace_ee / tau_minus + post_spikes_ee)
+    slow_trace_ee = slow_trace_ee + dt * (-slow_trace_ee / tau_slow + post_spikes_ee)
 
-    # Update z_th, C and B variables
-    z_ht_ee += dt * (-z_ht_ee / tau_ht + post_spikes_ee)
-    C_ee += dt * (-C_ee / tau_hom + z_ht_ee**2)
-    B_ee = np.where(C_ee <= 1 / A, A * C_ee, A)
+    # Update z_ht, C, and B variables
+    z_ht_ee = z_ht_ee + dt * (-z_ht_ee / tau_ht + post_spikes_ee)
+    C_ee = C_ee + dt * (-C_ee / tau_hom + z_ht_ee**2)
+    B_ee = jnp.where(C_ee <= 1 / A, A * C_ee, A)
 
     # Get learning components
     triplet_LTP_ee = A * pre_trace_ee * slow_trace_ee
@@ -112,27 +122,45 @@ def exc_weight_update(
     )
 
     # Update the weights
-    W_ee += delta_w_ee
+    W_ee = W_ee + delta_w_ee
+    W_ee = jnp.clip(W_ee, 0.0, 5.0)
 
-    W_ee = np.clip(W_ee, 0.0, 5.0)
+    # Update the original arrays for traces
+    pre_synaptic_trace = pre_synaptic_trace.at[:N_input_neurons].set(pre_trace_se)
+    pre_synaptic_trace = pre_synaptic_trace.at[N_input_neurons:-N_inhib_neurons].set(
+        pre_trace_ee
+    )
+
+    slow_pre_synaptic_trace = slow_pre_synaptic_trace.at[:N_input_neurons].set(
+        slow_trace_se
+    )
+    slow_pre_synaptic_trace = slow_pre_synaptic_trace.at[
+        N_input_neurons:-N_inhib_neurons
+    ].set(slow_trace_ee)
+
+    z_ht = z_ht.at[:N_input_neurons].set(z_ht_se)
+    z_ht = z_ht.at[N_input_neurons:-N_inhib_neurons].set(z_ht_ee)
+
+    C = C.at[:N_input_neurons].set(C_se)
+    C = C.at[N_input_neurons:-N_inhib_neurons].set(C_ee)
+
+    # Update post_synaptic_trace
+    post_synaptic_trace = post_trace_se  # Updated in-place
 
     return (
         W_se,
         W_ee,
         W_se_ideal,
         W_ee_ideal,
-        pre_trace_se,
-        post_trace_se,
-        slow_trace_se,
-        z_ht_se,
-        C_se,
-        pre_trace_ee,
-        slow_trace_ee,
-        z_ht_ee,
-        C_ee,
+        pre_synaptic_trace,
+        post_synaptic_trace,
+        slow_pre_synaptic_trace,
+        z_ht,
+        C,
     )
 
 
+@jit
 def inh_weight_update(
     H,
     dt,
@@ -147,18 +175,18 @@ def inh_weight_update(
     post_spikes,
 ):
     # Update synaptic traces using Euler's method
-    z_i += dt * (-z_i / tau_stdp + post_spikes)
-    z_j += dt * (-z_j / tau_stdp + pre_spikes)
+    z_i = z_i + dt * (-z_i / tau_stdp + post_spikes)
+    z_j = z_j + dt * (-z_j / tau_stdp + pre_spikes)
 
     # Update H using Euler's method
-    H += dt * (-H / tau_H + np.sum(post_spikes))
+    H = H + dt * (-H / tau_H + jnp.sum(post_spikes))
     G = H - gamma
 
     # Reshape arrays for matrix operations
-    z_i_reshaped = np.expand_dims(z_i, axis=1)
-    z_j_reshaped = np.expand_dims(z_j, axis=1)
-    post_spikes_reshaped = np.expand_dims(post_spikes, axis=1)
-    pre_spikes_reshaped = np.expand_dims(pre_spikes, axis=1)
+    z_i_reshaped = jnp.expand_dims(z_i, axis=1)
+    z_j_reshaped = jnp.expand_dims(z_j, axis=1)
+    post_spikes_reshaped = jnp.expand_dims(post_spikes, axis=1)
+    pre_spikes_reshaped = jnp.expand_dims(pre_spikes, axis=1)
 
     # Calculate delta weights
     delta_w = (
@@ -166,13 +194,13 @@ def inh_weight_update(
         * learning_rate
         * G
         * (
-            np.dot(pre_spikes_reshaped, z_i_reshaped.T + 1)
-            + np.dot(z_j_reshaped, post_spikes_reshaped.T)
+            jnp.dot(pre_spikes_reshaped, (z_i_reshaped.T + 1))
+            + jnp.dot(z_j_reshaped, post_spikes_reshaped.T)
         )
     )
-    # Update weights with constraint
-    W_inh += delta_w
 
-    W_inh = np.clip(W_inh, 0.1, 5.0)
+    # Update weights with constraints
+    W_inh = W_inh + delta_w
+    W_inh = jnp.clip(W_inh, 0.1, 5.0)
 
     return W_inh, z_i, z_j, H

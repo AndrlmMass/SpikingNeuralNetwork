@@ -551,7 +551,6 @@ class SNN:
             alpha_exc=self.alpha_exc,
             alpha_inh=self.alpha_inh,
             U_cons=self.U_cons,
-            run_njit=run_njit,
         )
 
         if save_model:
