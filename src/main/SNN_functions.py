@@ -46,8 +46,8 @@ class SNN:
         tau_m: float | int = 20,  # Membrane time constant
         tau_hom: float | int = 1.2 * 10**6,  # metaplasticity time constant (20 minutes)
         tau_istdp: float | int = 20,  # Inhibitory weight update constant
-        tau_H: float | int = 1 * 10**4,  #
-        tau_thr: float | int = 2,  # 2ms
+        tau_H: float | int = 1 * 10**4,  # Global secreted factor time constant
+        tau_thr: float | int = 2,  #
         tau_ampa: float | int = 5,
         tau_nmda: float | int = 100,
         tau_gaba: float | int = 10,
@@ -357,14 +357,14 @@ class SNN:
         # Generate weights
         gws = gen_weights()
 
-        self.W_se, self.W_se_ideal, self.W_se_2d, self.W_se_plt_idx = gws.gen_SE(
+        self.W_se, self.W_se_ideal, self.W_se_plt = gws.gen_SE(
             N_input_neurons=self.N_input_neurons,
             N_excit_neurons=self.N_excit_neurons,
             time=self.time,
             w_prob=w_prob_se,
             w_val=w_val_se,
         )
-        self.W_ee, self.W_ee_ideal, self.W_ee_2d, self.W_ee_plt_idx = gws.gen_EE(
+        self.W_ee, self.W_ee_ideal, self.W_ee_plt = gws.gen_EE(
             N_excit_neurons=self.N_excit_neurons,
             time=self.time,
             w_prob=w_prob_ee,
@@ -377,13 +377,21 @@ class SNN:
             w_val=w_val_ei,
         )
 
+<<<<<<< Updated upstream
         self.W_ii = gws.gen_II(
+=======
+        self.W_ii = gws.gen_IE(
+>>>>>>> Stashed changes
             N_inhib_neurons=self.N_inhib_neurons,
             w_prob=w_prob_ii,
             w_val=w_val_ii,
         )
 
+<<<<<<< Updated upstream
         self.W_ie, self.W_ie_2d, self.W_ie_plt_idx = gws.gen_IE(
+=======
+        self.W_ie, self.W_ie_plt = gws.gen_IE(
+>>>>>>> Stashed changes
             N_inhib_neurons=self.N_inhib_neurons,
             N_excit_neurons=self.N_excit_neurons,
             time=self.time,
@@ -396,6 +404,7 @@ class SNN:
         self.W_plastic_ideal = np.concatenate(
             (self.W_se_ideal, self.W_ee_ideal), axis=0
         )
+<<<<<<< Updated upstream
         self.W_plastic_2d = np.concatenate(
             (self.W_se_2d, self.W_ee_2d, self.W_ie_2d), axis=1
         )
@@ -404,6 +413,34 @@ class SNN:
         )
         # Concatenate static weights
         self.W_static = np.concatenate((self.W_ii, self.W_ei), axis=0)
+=======
+        self.W_exc_plt = np.concatenate(
+            (self.W_se_plt, self.W_ee_plt, self.W_ie_plt), axis=1
+        )
+        self.W_exc_idx = np.concatenate(
+            (self.W_se_plt_idx, self.W_ee_plt_idx, self.W_ie_plt_idx), axis=0
+        )
+        # Concatenate inhibitory weights
+        self.W_inh = np.concatenate((self.W_ii, self.W_ie), axis=0)
+        self.W_inh_2d = np.concatenate((self.W_ii_2d, self.W_ie_2d), axis=0)
+        self.W_inh_idx = np.concatenate((self.W_ii_plt_idx, self.W_ie_plt_idx), axis=0)
+
+        # Generate membrane potential and spikes array
+        self.MemPot = np.zeros(
+            (self.time, (self.N_excit_neurons + self.N_inhib_neurons))
+        )
+        self.MemPot[0, :] = self.V_rest
+        self.spikes = np.zeros((self.time, self.num_neurons))
+
+        if retur:
+            return (
+                self.MemPot,
+                self.spikes,
+                self.W_exc,
+                self.W_inh,
+                self.W_exc_ideal,
+            )
+>>>>>>> Stashed changes
 
     def vis_network(self, heatmap: bool, weight_layer: bool):
         if heatmap:
