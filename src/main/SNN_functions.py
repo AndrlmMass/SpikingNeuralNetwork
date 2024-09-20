@@ -72,7 +72,7 @@ class SNN:
         B: float | int = 1 * 10**-3,  # LTD rate,
         beta: float | int = 0.05,
         delta: float | int = 2 * 10**-5,  # Transmitter triggered plasticity
-        tau_cons: float | int = 1.8 * 10**6,  # 30 minutes until weight convergence
+        tau_cons: float | int = 1.2 * 10**6,  # 20 minutes until weight convergence
         euler: int = 5,
         U_cons: float | int = 0.2,
     ):
@@ -479,8 +479,9 @@ class SNN:
         self,
         run_njit: bool = True,
         save_model: bool = True,
+        force_retrain: bool = False,
     ):
-        if self.model_loaded == True:
+        if self.model_loaded == True and force_retrain == False:
             return
 
         (

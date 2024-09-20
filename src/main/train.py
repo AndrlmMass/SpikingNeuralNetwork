@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 from tqdm import tqdm
+import numpy as np
 import os
 import sys
 
@@ -74,11 +75,11 @@ def train_model(
     spikes = jnp.zeros((time, num_neurons))
     pre_synaptic_trace = jnp.zeros((time, num_neurons))
     post_synaptic_trace = jnp.zeros((time, N_excit_neurons))
-    slow_pre_synaptic_trace = jnp.zeros((time, num_neurons))
-    C = jnp.full(num_neurons, A)
+    slow_post_synaptic_trace = jnp.zeros((time, N_excit_neurons))
+    C = jnp.full(N_excit_neurons, A)
     z_i = jnp.zeros(N_excit_neurons)
     z_j = jnp.zeros(N_inhib_neurons)
-    z_ht = jnp.zeros(num_neurons)
+    z_ht = jnp.zeros(N_excit_neurons)
     x = jnp.zeros((N_input_neurons + N_excit_neurons, 1))
     u = jnp.zeros((N_input_neurons + N_excit_neurons, 1))
     H = 0.0
@@ -95,7 +96,7 @@ def train_model(
     MemPot = MemPot.at[0, :].set(V_rest)
     spikes = spikes.at[:, :N_input_neurons].set(training_data)
 
-    # Define update frequency for adaptive threshold
+    # Define update frequency for adaptive threshold for every percent in update
     update_freq = time // 100
 
     # Loop through time and update membrane potential, spikes, and weights
@@ -152,19 +153,16 @@ def train_model(
 
         # Update excitatory weights
         (
-            W_plastic[:N_input_neurons],
-            W_plastic[N_input_neurons:-N_inhib_neurons],
-            W_plastic_ideal_se,
-            W_plastic_ideal_ee,
+            W_se,
+            W_ee,
+            W_se_ideal,
+            W_ee_ideal,
             pre_trace_se,
-            post_trace_t,
-            slow_trace_se,
-            z_ht_se,
-            C_se,
+            post_trace,
+            slow_trace,
+            z_ht,
+            C,
             pre_trace_ee,
-            slow_trace_ee,
-            z_ht_ee,
-            C_ee,
         ) = exc_weight_update(
             dt,
             tau_cons,
@@ -179,7 +177,7 @@ def train_model(
             N_inhib_neurons,
             pre_synaptic_trace[t - 1],
             post_synaptic_trace[t - 1],
-            slow_pre_synaptic_trace[euler_unit],
+            slow_post_synaptic_trace[euler_unit],
             tau_plus,
             tau_minus,
             tau_slow,
@@ -193,7 +191,7 @@ def train_model(
         )
 
         # Update inhibitory weights
-        W_plastic[-N_inhib_neurons:], z_i, z_j, H = inh_weight_update(
+        W_ie, z_i, z_j, H = inh_weight_update(
             H,
             dt,
             W_plastic[-N_inhib_neurons:],
@@ -207,40 +205,50 @@ def train_model(
             spikes[t - 1, N_input_neurons:-N_inhib_neurons],
         )
 
-        # Assign the selected indices to the first row
-        if t % update_freq == 0:
-            # Calculate the mean, high, and low weights for each plastic group
-            W_se_mean = jnp.round(jnp.mean(W_plastic[:N_input_neurons]), 5)
-            W_se_high = jnp.round(jnp.amax(W_plastic[:N_input_neurons]), 5)
-            W_se_low = jnp.round(jnp.amin(W_plastic[:N_input_neurons]), 5)
+        # Update the original arrays for traces
+        pre_synaptic_trace = pre_synaptic_trace.at[t, :N_input_neurons].set(
+            pre_trace_se
+        )
+        pre_synaptic_trace = pre_synaptic_trace.at[
+            t, N_input_neurons:-N_inhib_neurons
+        ].set(pre_trace_ee)
+        post_synaptic_trace = post_synaptic_trace.at[t].set(post_trace)
+        slow_post_synaptic_trace = slow_post_synaptic_trace.at[t].set(slow_trace)
+        if isinstance(W_plastic, np.ndarray):
+            print("cow")
 
-            W_plastic_plt = W_plastic_plt.at[t, 0].set(W_se_mean)
-            W_plastic_plt = W_plastic_plt.at[t, 1].set(W_se_high)
-            W_plastic_plt = W_plastic_plt.at[t, 2].set(W_se_low)
+        # Update original weights and ideal weights
+        W_plastic = W_plastic.at[:N_input_neurons].set(W_se)
+        W_plastic = W_plastic.at[N_input_neurons:-N_inhib_neurons].set(W_ee)
+        W_plastic = W_plastic.at[:-N_inhib_neurons].set(W_ie)
 
-            W_ee_mean = jnp.round(
-                jnp.mean(W_plastic[N_input_neurons:-N_inhib_neurons]), 5
-            )
-            W_ee_high = jnp.round(
-                jnp.amax(W_plastic[N_input_neurons:-N_inhib_neurons]), 5
-            )
-            W_ee_low = jnp.round(
-                jnp.amin(W_plastic[N_input_neurons:-N_inhib_neurons]), 5
-            )
+        W_plastic_ideal = W_plastic_ideal.at[:N_input_neurons].set(W_se_ideal)
+        W_plastic_ideal = W_plastic_ideal.at[N_input_neurons:].set(W_ee_ideal)
 
-            W_plastic_plt = W_plastic_plt.at[t, 3].set(W_ee_mean)
-            W_plastic_plt = W_plastic_plt.at[t, 4].set(W_ee_high)
-            W_plastic_plt = W_plastic_plt.at[t, 5].set(W_ee_low)
+        ## Calculate the mean, high, and low weights for each plastic group ##
+        W_se_mean = jnp.round(jnp.mean(W_plastic[:N_input_neurons]), 5)
+        W_se_high = jnp.round(jnp.amax(W_plastic[:N_input_neurons]), 5)
+        W_se_low = jnp.round(jnp.amin(W_plastic[:N_input_neurons]), 5)
 
-            W_ie_mean = jnp.round(jnp.mean(W_plastic[-N_inhib_neurons:]), 5)
-            W_ie_high = jnp.round(jnp.amax(W_plastic[-N_inhib_neurons:]), 5)
-            W_ie_low = jnp.round(jnp.amin(W_plastic[-N_inhib_neurons:]), 5)
+        W_plastic_plt = W_plastic_plt.at[t, 0].set(W_se_mean)
+        W_plastic_plt = W_plastic_plt.at[t, 1].set(W_se_high)
+        W_plastic_plt = W_plastic_plt.at[t, 2].set(W_se_low)
 
-            W_plastic_plt = W_plastic_plt.at[t, 6].set(W_ie_mean)
-            W_plastic_plt = W_plastic_plt.at[t, 7].set(W_ie_high)
-            W_plastic_plt = W_plastic_plt.at[t, 8].set(W_ie_low)
+        W_ee_mean = jnp.round(jnp.mean(W_plastic[N_input_neurons:-N_inhib_neurons]), 5)
+        W_ee_high = jnp.round(jnp.amax(W_plastic[N_input_neurons:-N_inhib_neurons]), 5)
+        W_ee_low = jnp.round(jnp.amin(W_plastic[N_input_neurons:-N_inhib_neurons]), 5)
 
-            print(f"W_ee_mean: {W_ee_mean}\r")
+        W_plastic_plt = W_plastic_plt.at[t, 3].set(W_ee_mean)
+        W_plastic_plt = W_plastic_plt.at[t, 4].set(W_ee_high)
+        W_plastic_plt = W_plastic_plt.at[t, 5].set(W_ee_low)
+
+        W_ie_mean = jnp.round(jnp.mean(W_plastic[-N_inhib_neurons:]), 5)
+        W_ie_high = jnp.round(jnp.amax(W_plastic[-N_inhib_neurons:]), 5)
+        W_ie_low = jnp.round(jnp.amin(W_plastic[-N_inhib_neurons:]), 5)
+
+        W_plastic_plt = W_plastic_plt.at[t, 6].set(W_ie_mean)
+        W_plastic_plt = W_plastic_plt.at[t, 7].set(W_ie_high)
+        W_plastic_plt = W_plastic_plt.at[t, 8].set(W_ie_low)
 
     return (
         W_plastic_plt,
@@ -248,7 +256,7 @@ def train_model(
         MemPot,
         pre_synaptic_trace,
         post_synaptic_trace,
-        slow_pre_synaptic_trace,
+        slow_post_synaptic_trace,
         C,
         z_ht,
         x,
