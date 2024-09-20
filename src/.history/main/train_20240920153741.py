@@ -116,6 +116,7 @@ def train_model(
                 U_inh,
                 U_exc,
                 V_th,
+                V_th_,
                 W_plastic,
                 W_static,
                 spikes[t - 1],
@@ -153,7 +154,7 @@ def train_model(
         # Update spikes based on membrane potential
         spike_mask = MemPot_t > V_th
         spikes = spikes.at[t, N_input_neurons:].set(spike_mask.astype(int))
-        MemPot_t = jnp.where(spike_mask, V_rest, MemPot_t)
+        MemPot_t = jnp.where(spike_mask, V_reset, MemPot_t)
         MemPot = MemPot.at[t].set(MemPot_t)
 
         # Update spiking threshold based on who has spiked
@@ -223,7 +224,6 @@ def train_model(
         ].set(pre_trace_ee)
         post_synaptic_trace = post_synaptic_trace.at[t].set(post_trace)
         slow_post_synaptic_trace = slow_post_synaptic_trace.at[t].set(slow_trace)
-
         if isinstance(W_plastic, np.ndarray):
             print("cow")
 

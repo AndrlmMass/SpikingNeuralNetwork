@@ -518,6 +518,7 @@ class SNN:
             time=self.time,
             V_th_=self.V_th,
             V_rest=self.V_rest,
+            V_reset=self.V_reset,
             dt=self.dt,
             tau_plus=self.tau_plus,
             tau_minus=self.tau_minus,
