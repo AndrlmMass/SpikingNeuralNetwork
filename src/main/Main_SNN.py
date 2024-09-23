@@ -15,3 +15,5 @@ snn.train_(force_retrain=True)
 
 # Plot training
 snn.plot_training(traces=False, overlap=False, tsne=False)
+
+# Just testing what happens when I do this
