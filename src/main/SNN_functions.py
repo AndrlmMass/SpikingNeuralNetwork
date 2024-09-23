@@ -396,14 +396,14 @@ class SNN:
         )
 
         # Concatenate plastic weights
-        self.W_plastic = np.concatenate((self.W_se, self.W_ee, self.W_ie), axis=0)
-        self.W_plastic_ideal = np.concatenate(
+        self.W_plastic = jnp.concatenate((self.W_se, self.W_ee, self.W_ie), axis=0)
+        self.W_plastic_ideal = jnp.concatenate(
             (self.W_se_ideal, self.W_ee_ideal), axis=0
         )
-        self.W_plastic_plt = np.zeros(shape=(self.time, 9))
+        self.W_plastic_plt = jnp.zeros(shape=(self.time, 9))
 
         # Concatenate static weights
-        self.W_static = np.concatenate((self.W_ei, self.W_ii), axis=0)
+        self.W_static = jnp.concatenate((self.W_ei, self.W_ii), axis=0)
 
     def gen_data(
         self,

@@ -42,7 +42,6 @@ def update_membrane_potential_conduct(
     U,
     U_inh,
     U_exc,
-    V_th,
     W_plastic,
     W_static,
     S,
@@ -58,7 +57,6 @@ def update_membrane_potential_conduct(
     tau_ampa,
     tau_nmda,
     tau_gaba,
-    tau_thr,
     tau_d,
     tau_f,
     tau_a,
@@ -163,4 +161,4 @@ def update_membrane_potential_conduct(
     g_nmda = jnp.concatenate((g_nmda_e, g_nmda_i), axis=0)
     g_gaba = jnp.concatenate((g_gaba_e, g_gaba_i), axis=0)
 
-    return U, V_th, g_ampa, g_nmda, g_gaba, x, u, g_a, g_b
+    return U, g_ampa, g_nmda, g_gaba, x, u, g_a, g_b

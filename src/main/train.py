@@ -1,6 +1,5 @@
 import jax.numpy as jnp
 from tqdm import tqdm
-import numpy as np
 import os
 import sys
 
@@ -106,16 +105,12 @@ def train_model(
         # Calculate Euler time unit
         euler_unit = int(t - update_freq > 0) * (t - update_freq)
 
-        # Update membrane threshold
-        V_th = V_th + dt / tau_thr * (V_th_ - V_th)
-
         # Update membrane potential
-        MemPot_t, V_th_nu, g_ampa, g_nmda, g_gaba, x, u, g_a, g_b = (
+        MemPot_t, g_ampa, g_nmda, g_gaba, x, u, g_a, g_b = (
             update_membrane_potential_conduct(
                 MemPot[t - 1],
                 U_inh,
                 U_exc,
-                V_th,
                 W_plastic,
                 W_static,
                 spikes[t - 1],
@@ -131,7 +126,6 @@ def train_model(
                 tau_ampa,
                 tau_nmda,
                 tau_gaba,
-                tau_thr,
                 tau_d,
                 tau_f,
                 tau_a,
@@ -146,10 +140,6 @@ def train_model(
                 U_cons,
             )
         )
-        # Add new membrane potential to array
-        MemPot = MemPot.at[t].set(MemPot_t)
-        V_th = V_th.at[t].set(V_th_nu)
-
         # Update spikes based on membrane potential
         spike_mask = MemPot_t > V_th
         spikes = spikes.at[t, N_input_neurons:].set(spike_mask.astype(int))
@@ -157,8 +147,8 @@ def train_model(
         MemPot = MemPot.at[t].set(MemPot_t)
 
         # Update spiking threshold based on who has spiked
-        V_th_upd = jnp.where(spike_mask, th_refact, V_th_nu)
-        V_th = V_th.at[t].set(V_th_upd)
+        V_th = V_th + dt / tau_thr * (th_rest - V_th)
+        V_th = jnp.where(condition=spike_mask, x=th_refact, y=V_th)
 
         # Update excitatory weights
         (
@@ -224,13 +214,10 @@ def train_model(
         post_synaptic_trace = post_synaptic_trace.at[t].set(post_trace)
         slow_post_synaptic_trace = slow_post_synaptic_trace.at[t].set(slow_trace)
 
-        if isinstance(W_plastic, np.ndarray):
-            print("cow")
-
         # Update original weights and ideal weights
         W_plastic = W_plastic.at[:N_input_neurons].set(W_se)
         W_plastic = W_plastic.at[N_input_neurons:-N_inhib_neurons].set(W_ee)
-        W_plastic = W_plastic.at[:-N_inhib_neurons].set(W_ie)
+        W_plastic = W_plastic.at[-N_inhib_neurons:].set(W_ie)
 
         W_plastic_ideal = W_plastic_ideal.at[:N_input_neurons].set(W_se_ideal)
         W_plastic_ideal = W_plastic_ideal.at[N_input_neurons:].set(W_ee_ideal)

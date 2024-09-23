@@ -2,7 +2,7 @@
 from SNN_functions import SNN
 
 # Initiate SNN object
-snn = SNN()
+snn = SNN(num_items=400)
 
 # Initialize network
 snn.build(load_model_if_available=False)
