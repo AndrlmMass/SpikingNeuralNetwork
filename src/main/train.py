@@ -24,77 +24,77 @@ from weight_updating import exc_weight_update, inh_weight_update
 
 
 def train_model(
-    A: float,
-    P: float,
-    w_p: float,
-    beta: float,
-    delta: float,
-    time: int,
-    V_th_: float,
-    V_rest: float,
-    dt: float,
-    tau_plus: float,
-    tau_minus: float,
-    tau_slow: float,
-    tau_m: float,
-    tau_ht: float,
-    tau_hom: float,
-    tau_cons: float,
-    tau_H: float,
-    tau_istdp: float,
-    tau_ampa: float,
-    tau_nmda: float,
-    tau_gaba: float,
-    tau_thr: float,
-    tau_d: float,
-    tau_f: float,
-    tau_a: float,
-    tau_b: float,
-    delta_a: float,
-    delta_b: float,
-    U_exc: float,
-    U_inh: float,
-    learning_rate: float,
+    A: jnp.float16,
+    P: jnp.float16,
+    w_p: jnp.float16,
+    beta: jnp.float16,
+    delta: jnp.float16,
+    time: jnp.int16,
+    V_th_: jnp.float16,
+    V_rest: jnp.float16,
+    dt: jnp.float16,
+    tau_plus: jnp.float16,
+    tau_minus: jnp.float16,
+    tau_slow: jnp.float16,
+    tau_m: jnp.float16,
+    tau_ht: jnp.float16,
+    tau_hom: jnp.float16,
+    tau_cons: jnp.float16,
+    tau_H: jnp.float16,
+    tau_istdp: jnp.float16,
+    tau_ampa: jnp.float16,
+    tau_nmda: jnp.float16,
+    tau_gaba: jnp.float16,
+    tau_thr: jnp.float16,
+    tau_d: jnp.float16,
+    tau_f: jnp.float16,
+    tau_a: jnp.float16,
+    tau_b: jnp.float16,
+    delta_a: jnp.float16,
+    delta_b: jnp.float16,
+    U_exc: jnp.float16,
+    U_inh: jnp.float16,
+    learning_rate: jnp.float16,
     training_data: jnp.ndarray,
-    N_excit_neurons: int,
-    N_inhib_neurons: int,
-    N_input_neurons: int,
+    N_excit_neurons: jnp.int16,
+    N_inhib_neurons: jnp.int16,
+    N_input_neurons: jnp.int16,
     W_static: jnp.ndarray,
     W_plastic: jnp.ndarray,
     W_plastic_ideal: jnp.ndarray,
     W_plastic_plt: jnp.ndarray,
-    gamma: float,
-    alpha_exc: float,
-    alpha_inh: float,
-    U_cons: float,
-    th_rest: float | int,
-    th_refact: float | int,
+    gamma: jnp.float16,
+    alpha_exc: jnp.float16,
+    alpha_inh: jnp.float16,
+    U_cons: jnp.float16,
+    th_rest: jnp.float16 | jnp.int16,
+    th_refact: jnp.float16 | jnp.int16,
 ):
     # Initiate relevant traces and variables
-    num_neurons = N_excit_neurons + N_inhib_neurons + N_input_neurons
-    spikes = jnp.zeros((time, num_neurons))
-    pre_synaptic_trace = jnp.zeros((time, num_neurons))
-    post_synaptic_trace = jnp.zeros((time, N_excit_neurons))
-    slow_post_synaptic_trace = jnp.zeros((time, N_excit_neurons))
-    C = jnp.full(N_excit_neurons, A)
-    z_i = jnp.zeros(N_excit_neurons)
-    z_j = jnp.zeros(N_inhib_neurons)
-    z_ht = jnp.zeros(N_excit_neurons)
-    x = jnp.zeros((N_input_neurons + N_excit_neurons, 1))
-    u = jnp.zeros((N_input_neurons + N_excit_neurons, 1))
-    H = 0.0
-    V_th = jnp.full(num_neurons - N_input_neurons, V_th_)
-    V_th_array = jnp.zeros((100))  # for plotting
-    V_th_array = V_th_array.at[0].set(V_th_)
-    g_nmda = jnp.zeros((N_excit_neurons + N_inhib_neurons, 1))
-    g_ampa = jnp.zeros((N_excit_neurons + N_inhib_neurons, 1))
-    g_gaba = jnp.zeros((N_excit_neurons + N_inhib_neurons, 1))
-    g_a = jnp.zeros((N_excit_neurons, 1))
-    g_b = jnp.zeros((N_excit_neurons, 1))
+    num_neurons = jnp.float16(N_excit_neurons + N_inhib_neurons + N_input_neurons)
+    spikes = jnp.zeros((time, num_neurons), dtype=jnp.float16)
+    pre_synaptic_trace = jnp.zeros((time, num_neurons), dtype=jnp.float16)
+    post_synaptic_trace = jnp.zeros((time, N_excit_neurons), dtype=jnp.float16)
+    slow_post_synaptic_trace = jnp.zeros((time, N_excit_neurons), dtype=jnp.float16)
+    C = jnp.full(N_excit_neurons, A, dtype=jnp.float16)
+    z_i = jnp.zeros(N_excit_neurons, dtype=jnp.float16)
+    z_j = jnp.zeros(N_inhib_neurons, dtype=jnp.float16)
+    z_ht = jnp.zeros(N_excit_neurons, dtype=jnp.float16)
+    x = jnp.zeros((N_input_neurons + N_excit_neurons, 1), dtype=jnp.float16)
+    u = jnp.zeros((N_input_neurons + N_excit_neurons, 1), dtype=jnp.float16)
+    H = jnp.float16(0.0)
+    V_th = jnp.full(num_neurons - N_input_neurons, V_th_, dtype=jnp.float16)
+    V_th_array = jnp.zeros((100), dtype=jnp.float16)  # for plotting
+    V_th_array = V_th_array.at[0].set(jnp.float16(V_th_))
+    g_nmda = jnp.zeros((N_excit_neurons + N_inhib_neurons, 1), dtype=jnp.float16)
+    g_ampa = jnp.zeros((N_excit_neurons + N_inhib_neurons, 1), dtype=jnp.float16)
+    g_gaba = jnp.zeros((N_excit_neurons + N_inhib_neurons, 1), dtype=jnp.float16)
+    g_a = jnp.zeros((N_excit_neurons, 1), dtype=jnp.float16)
+    g_b = jnp.zeros((N_excit_neurons, 1), dtype=jnp.float16)
     # Generate membrane potential and spikes array
-    MemPot = jnp.zeros((time, (N_excit_neurons + N_inhib_neurons)))
-    MemPot = MemPot.at[0, :].set(V_rest)
-    spikes = spikes.at[:, :N_input_neurons].set(training_data)
+    MemPot = jnp.zeros((time, (N_excit_neurons + N_inhib_neurons)), dtype=jnp.float16)
+    MemPot = MemPot.at[0, :].set(jnp.float16(V_rest))
+	spikes = spikes.at[:, :N_input_neurons].set(training_data.astype(jnp.float16))
 
     # Define update frequency for adaptive threshold for every percent in update
     update_freq = time // 100
