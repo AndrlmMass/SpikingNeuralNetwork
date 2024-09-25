@@ -1,43 +1,5 @@
 import jax.numpy as jnp
 
-
-def update_membrane_potential(
-    MemPot,
-    W_exc,
-    W_inh,
-    S,
-    N_input_neurons,
-    N_inhib_neurons,
-    N_excit_neurons,
-    tau_m,
-    R,
-    dt,
-    V_rest,
-):
-    # Update I_in
-    exc_e = jnp.dot(W_exc[:-N_inhib_neurons].T, S[:-N_inhib_neurons])
-    exc_i = jnp.dot(W_exc[-N_inhib_neurons:].T, S[-N_inhib_neurons:])
-    I_in_e = exc_e - exc_i
-
-    I_in_i = jnp.dot(
-        W_inh.T,
-        S[N_input_neurons:-N_inhib_neurons],
-    )
-
-    # Update membrane potential based on I_in
-    delta_MemPot_e = (-((MemPot[:N_excit_neurons] - V_rest) + R * I_in_e) / tau_m) * dt
-    MemPot = MemPot.at[:N_excit_neurons].set(
-        MemPot[:N_excit_neurons] - jnp.round(delta_MemPot_e, 4)
-    )
-
-    delta_MemPot_i = (-((MemPot[N_excit_neurons:] - V_rest) + R * I_in_i) / tau_m) * dt
-    MemPot = MemPot.at[N_excit_neurons:].set(
-        MemPot[N_excit_neurons:] - jnp.round(delta_MemPot_i, 4)
-    )
-
-    return MemPot
-
-
 def update_membrane_potential_conduct(
     U,
     U_inh,
@@ -73,18 +35,18 @@ def update_membrane_potential_conduct(
     ### Update excitatory membrane potential ###
 
     # Update spike indices
-    S_j_exc = jnp.expand_dims(S[:-N_inhib_neurons], axis=1)  # presynaptic exc spikes
-    S_j_inh = jnp.expand_dims(S[-N_inhib_neurons:], axis=1)  # presynaptic inh spikes
+    S_j_exc = jnp.expand_dims(S[:-N_inhib_neurons], axis=1, dtype=jnp.float16)  # presynaptic exc spikes
+    S_j_inh = jnp.expand_dims(S[-N_inhib_neurons:], axis=1, dtype=jnp.float16)  # presynaptic inh spikes
     S_i = jnp.expand_dims(
-        S[N_input_neurons:-N_inhib_neurons], axis=1
+        S[N_input_neurons:-N_inhib_neurons], axis=1, dtype=jnp.float16
     )  # postsynaptic spikes
 
     # Update weight indices
-    w_ij_exc = W_plastic[:-N_inhib_neurons]  # plastic excitatory weights
+    w_ij_exc = jnp.float16(W_plastic[:-N_inhib_neurons])  # plastic excitatory weights
     w_ij_inh = W_plastic[-N_inhib_neurons:]  # plastic inhibitory weights
 
     # Update membrane potential indices
-    U_e = jnp.expand_dims(U[:-N_inhib_neurons], axis=1)
+    U_e = jnp.expand_dims(U[:-N_inhib_neurons], axis=1, dtype=jnp.float16)
 
     # Update traces indices
     g_ampa_e = g_ampa[:-N_inhib_neurons]  # shape: (484, 1)
