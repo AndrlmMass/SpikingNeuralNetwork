@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 
+
 def update_membrane_potential_conduct(
     U,
     U_inh,
@@ -35,10 +36,10 @@ def update_membrane_potential_conduct(
     ### Update excitatory membrane potential ###
 
     # Update spike indices
-    S_j_exc = jnp.expand_dims(S[:-N_inhib_neurons], axis=1, dtype=jnp.float16)  # presynaptic exc spikes
-    S_j_inh = jnp.expand_dims(S[-N_inhib_neurons:], axis=1, dtype=jnp.float16)  # presynaptic inh spikes
+    S_j_exc = jnp.expand_dims(S[:-N_inhib_neurons], axis=1)  # presynaptic exc spikes
+    S_j_inh = jnp.expand_dims(S[-N_inhib_neurons:], axis=1)  # presynaptic inh spikes
     S_i = jnp.expand_dims(
-        S[N_input_neurons:-N_inhib_neurons], axis=1, dtype=jnp.float16
+        S[N_input_neurons:-N_inhib_neurons], axis=1
     )  # postsynaptic spikes
 
     # Update weight indices
@@ -46,7 +47,7 @@ def update_membrane_potential_conduct(
     w_ij_inh = W_plastic[-N_inhib_neurons:]  # plastic inhibitory weights
 
     # Update membrane potential indices
-    U_e = jnp.expand_dims(U[:-N_inhib_neurons], axis=1, dtype=jnp.float16)
+    U_e = jnp.expand_dims(U[:-N_inhib_neurons], axis=1)
 
     # Update traces indices
     g_ampa_e = g_ampa[:-N_inhib_neurons]  # shape: (484, 1)

@@ -1,26 +1,17 @@
+# Import external libraries
 import jax.numpy as jnp
 from tqdm import tqdm
-import os
-import sys
 
-# Set the current directory based on the existence of a specific path
-if os.path.exists(
-    "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\src"
-):
-    base_path = "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\src"
-else:
-    base_path = "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\src"
+# Import internal libraries
+from plot.plot_training import *
+from plot.plot_network import *
+from train_packages.membrane_potential import update_membrane_potential_conduct
+from train_packages.weight_updating import exc_weight_update, inh_weight_update
 
-os.chdir(base_path)
-sys.path.append(os.path.join(base_path, "main"))
-sys.path.append(os.path.join(base_path, "plot"))
-sys.path.append(os.path.join(base_path, "tool"))
-sys.path.append(os.path.join(base_path, "train_packages"))
+# Check if jax-jit with NVIDIA GPU support is running
+import jax
 
-from plot_training import *
-from plot_network import *
-from membrane_potential import update_membrane_potential_conduct
-from weight_updating import exc_weight_update, inh_weight_update
+print(jax.default_device())
 
 
 def train_model(
@@ -71,7 +62,7 @@ def train_model(
     th_refact: jnp.float16 | jnp.int16,
 ):
     # Initiate relevant traces and variables
-    num_neurons = jnp.float16(N_excit_neurons + N_inhib_neurons + N_input_neurons)
+    num_neurons = jnp.int16(N_excit_neurons + N_inhib_neurons + N_input_neurons)
     spikes = jnp.zeros((time, num_neurons), dtype=jnp.float16)
     pre_synaptic_trace = jnp.zeros((time, num_neurons), dtype=jnp.float16)
     post_synaptic_trace = jnp.zeros((time, N_excit_neurons), dtype=jnp.float16)
@@ -94,7 +85,7 @@ def train_model(
     # Generate membrane potential and spikes array
     MemPot = jnp.zeros((time, (N_excit_neurons + N_inhib_neurons)), dtype=jnp.float16)
     MemPot = MemPot.at[0, :].set(jnp.float16(V_rest))
-	spikes = spikes.at[:, :N_input_neurons].set(training_data.astype(jnp.float16))
+    spikes = spikes.at[:, :N_input_neurons].set(training_data.astype(jnp.float16))
 
     # Define update frequency for adaptive threshold for every percent in update
     update_freq = time // 100
@@ -148,7 +139,7 @@ def train_model(
 
         # Update spiking threshold based on who has spiked
         V_th = V_th + dt / tau_thr * (th_rest - V_th)
-        V_th = jnp.where(condition=spike_mask, x=th_refact, y=V_th)
+        V_th = jnp.where(spike_mask, th_refact, V_th)
 
         # Update excitatory weights
         (

@@ -1,19 +1,17 @@
 # Main SNN execution file
-from SNN_functions import SNN
+from main.SNN_functions import SNN
 
 # Initiate SNN object
-snn = SNN(num_items=400)
+snn = SNN()
 
 # Initialize network
-snn.build(load_model_if_available=False)
+snn.build()
 
 # Generate data
 snn.gen_data(var_high_freq=0, var_low_freq=0)
 
 # Train network
-snn.train_(force_retrain=True)
+snn.train_()
 
 # Plot training
 snn.plot_training(traces=False, overlap=False, tsne=False)
-
-# Just testing what happens when I do this

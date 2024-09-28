@@ -1,23 +1,10 @@
-# Gen data according to y number of classes
-import os
-import sys
+# Import external libraries
 import numpy as np
 from tqdm import tqdm
-from snntorch.spikegen import target_rate_code
 
-if os.path.exists(
-    "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\src"
-):
-    base_path = "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\src"
-else:
-    base_path = "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\src"
-
-os.chdir(base_path)
-
-sys.path.append(os.path.join(base_path, "gen"))
-sys.path.append(os.path.join(base_path, "main"))
-
-from gen_symbol import *
+# from snntorch.spikegen import target_rate_code
+# Import internal libraries
+from gen.gen_symbol import *
 
 
 class gen_data_cl:

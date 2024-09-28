@@ -1,31 +1,15 @@
 # SNN functions script
-
-# Import libraries
 import os
-import sys
 import numpy as np
+import random
 import json
 
-# Set the current directory based on the existence of a specific path
-if os.path.exists(
-    "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\src"
-):
-    base_path = "C:\\Users\\Bruker\\OneDrive\\Documents\\NMBU_\\BONSAI\\SNN\\SpikingNeuralNetwork\\src"
-else:
-    base_path = "C:\\Users\\andreama\\OneDrive - Norwegian University of Life Sciences\\Documents\\Projects\\BONXAI\\SpikingNeuralNetwork\\src"
-
-os.chdir(base_path)
-sys.path.append(os.path.join(base_path, "gen"))
-sys.path.append(os.path.join(base_path, "main"))
-sys.path.append(os.path.join(base_path, "plot"))
-sys.path.append(os.path.join(base_path, "tool"))
-
-from plot_training import *
-from plot_network import *
-from gen_weights import *
-from plot_data import *
-from gen_data import *
-from train import *
+from plot.plot_training import *
+from plot.plot_network import *
+from gen.gen_weights import *
+from plot.plot_data import *
+from gen.gen_data import *
+from main.train import *
 
 
 # Initialize class variable
@@ -151,18 +135,19 @@ class SNN:
 
         ########## load or save model ##########
         if model:
+            if not os.path.exists("model"):
+                os.makedirs("model")
             if save:
                 # Generate a random number for model folder
-                rand_num = np.random.randint(0, 1000)
+                rand_num = random.sample((0, 9), 5)
 
                 # Check if random number folder exists
-                while os.path.exists(f"model/model_{rand_num}"):
-                    rand_num = np.random.randint(0, 1000)
-
-                os.makedirs(f"model/model_{rand_num}")
+                while os.path.exists(os.path.join("model", f"model_{rand_num}")):
+                    rand_num = random.sample((0, 9), 5)
 
                 # Save main path
-                save_path = f"model/model_{rand_num}"
+                save_path = os.path.join("model", f"model_{rand_num}")
+                os.makedirs(os.path.join(save_path))
 
                 # Create a dictionary of file names and variables
                 vars_to_save = {
@@ -192,10 +177,10 @@ class SNN:
 
                 # Loop through the dictionary and save each variable
                 for filename, var in vars_to_save.items():
-                    np.save(f"{save_path}/{filename}.npy", var)
+                    np.save(os.path.join(save_path, filename), var)
 
                 # Save model parameters
-                filepath = f"{save_path}/model_parameters.json"
+                filepath = os.path.join(save_path, "model_parameters.json")
 
                 with open(filepath, "w") as outfile:
                     json.dump(self.model_parameters, outfile)
@@ -210,45 +195,57 @@ class SNN:
                 if len(folders) > 0:
                     for folder in folders:
                         ex_params = json.load(
-                            open(f"model\\{folder}\\model_parameters.json")
+                            open(os.path.join("model", folder, "model_parameters.json"))
                         )
 
                         # Check if parameters are the same as the current ones
                         if ex_params == self.model_parameters:
-                            # Load the model
-                            save_path = f"model/{folder}"
+                            # Load the modelll(dir != "data" for dir in os.listdir()):
+                            save_path = os.path.join("model", folder)
 
                             # Now you can access the variables like this:
                             self.W_plastic_plt = np.load(
-                                save_path + "/W_plastic_plt.npy"
+                                os.path.join(save_path, "W_plastic_plt.npy")
                             )
-                            self.spikes = np.load(save_path + "/spikes.npy")
-                            self.MemPot = np.load(save_path + "/MemPot.npy")
+                            self.spikes = np.load(os.path.join(save_path, "spikes.npy"))
+                            self.MemPot = np.load(os.path.join(save_path, "MemPot.npy"))
                             self.pre_synaptic_trace = np.load(
-                                save_path + "/pre_synaptic_trace.npy"
+                                os.path.join(save_path, "pre_synaptic_trace.npy")
                             )
                             self.post_synaptic_trace = np.load(
-                                save_path + "/post_synaptic_trace.npy"
+                                os.path.join(save_path, "post_synaptic_trace.npy")
                             )
                             self.slow_pre_synaptic_trace = np.load(
-                                save_path + "/slow_pre_synaptic_trace.npy"
+                                os.path.join(save_path, "slow_pre_synaptic_trace.npy")
                             )
-                            self.C = np.load(save_path + "/C.npy")
-                            self.z_ht = np.load(save_path + "/z_ht.npy")
-                            self.x = np.load(save_path + "/x.npy")
-                            self.u = np.load(save_path + "/u.npy")
-                            self.H = np.load(save_path + "/H.npy")
-                            self.z_i = np.load(save_path + "/z_i.npy")
-                            self.z_j = np.load(save_path + "/z_j.npy")
-                            self.V_th_array = np.load(save_path + "/V_th_array.npy")
-                            self.W_plastic = np.load(save_path + "/plastic_weights.npy")
-                            self.W_static = np.load(save_path + "/static_weights.npy")
-                            self.V_th = np.load(save_path + "/V_th.npy")
-                            self.g_nmda = np.load(save_path + "/g_nmda.npy")
-                            self.g_ampa = np.load(save_path + "/g_ampa.npy")
-                            self.g_gaba = np.load(save_path + "/g_gaba.npy")
-                            self.g_a = np.load(save_path + "/g_a.npy")
-                            self.g_b = np.load(save_path + "/g_b.npy")
+                            self.C = np.load(os.path.join(save_path, "C.npy"))
+                            self.z_ht = np.load(os.path.join(save_path, "\\z_ht.npy"))
+                            self.x = np.load(os.path.join(save_path, "\\x.npy"))
+                            self.u = np.load(os.path.join(save_path, "\\u.npy"))
+                            self.H = np.load(os.path.join(save_path, "\\H.npy"))
+                            self.z_i = np.load(os.path.join(save_path, "\\z_i.npy"))
+                            self.z_j = np.load(os.path.join(save_path, "\\z_j.npy"))
+                            self.V_th_array = np.load(
+                                os.path.join(save_path, "\\V_th_array.npy")
+                            )
+                            self.W_plastic = np.load(
+                                os.path.join(save_path, "\\plastic_weights.npy")
+                            )
+                            self.W_static = np.load(
+                                os.path.join(save_path, "\\static_weights.npy")
+                            )
+                            self.V_th = np.load(os.path.join(save_path, "\\V_th.npy"))
+                            self.g_nmda = np.load(
+                                os.path.join(save_path, "\\g_nmda.npy")
+                            )
+                            self.g_ampa = np.load(
+                                os.path.join(save_path, "\\g_ampa.npy")
+                            )
+                            self.g_gaba = np.load(
+                                os.path.join(save_path, "\\g_gaba.npy")
+                            )
+                            self.g_a = np.load(os.path.join(save_path, "\\g_a.npy"))
+                            self.g_b = np.load(os.path.join(save_path, "\\g_b.npy"))
                             print("model loaded", end="\r")
                             self.model_loaded = True
                             return
@@ -256,22 +253,24 @@ class SNN:
 
         ########## load or save data ##########
         if data:
+            if not os.path.exists("data"):
+                os.makedirs("data")
             if save:
                 rand_nums = np.random.randint(low=0, high=9, size=5)
 
-                # Check if name is taken
                 while any(item in os.listdir("data") for item in rand_nums):
-                    rand_nums = np.random.randint(low=0, high=9, size=5)
+                    rand_nums = random.randint(low=0, high=9, size=5)[0]
 
                 # Create folder to store data
-                os.makedirs(f"data\\{rand_nums}")
+                data_dir = os.path.join("data", str(rand_nums))
+                os.makedirs(data_dir)
 
                 # Save training data and labels
-                np.save(f"data\\{rand_nums}\\data_bin.npy", self.training_data)
-                np.save(f"data\\{rand_nums}\\labels_bin.npy", self.labels_train)
-                np.save(f"data\\{rand_nums}\\basic_data.npy", self.basic_data)
-                np.save(f"data\\{rand_nums}\\labels_seq.npy", self.labels_seq)
-                filepath = f"data\\{rand_nums}\\data_parameters.json"
+                np.save(os.path.join(data_dir, "data_bin.npy"), self.training_data)
+                np.save(os.path.join(data_dir, "labels_bin.npy"), self.labels_train)
+                np.save(os.path.join(data_dir, "basic_data.npy"), self.basic_data)
+                np.save(os.path.join(data_dir, "labels_seq.npy"), self.labels_seq)
+                filepath = os.path.join(data_dir, "data_parameters.json")
 
                 with open(filepath, "w") as outfile:
                     json.dump(self.data_parameters, outfile)
@@ -286,7 +285,9 @@ class SNN:
                 # Search for existing data gens
                 if len(folders) > 0:
                     for folder in folders:
-                        json_file_path = f"data\\{folder}\\data_parameters.json"
+                        json_file_path = os.path.join(
+                            "data", folder, "data_parameters.json"
+                        )
 
                         with open(json_file_path, "r") as j:
                             ex_params = json.loads(j.read())
@@ -294,13 +295,17 @@ class SNN:
                         # Check if parameters are the same as the current ones
                         if ex_params == self.data_parameters:
                             self.training_data = np.load(
-                                f"data\\{folder}\\data_bin.npy"
+                                os.path.join("data", folder, "data_bin.npy")
                             )
                             self.labels_train = np.load(
-                                f"data\\{folder}\\labels_bin.npy"
+                                os.path.join("data", folder, "labels_bin.npy")
                             )
-                            self.basic_data = np.load(f"data\\{folder}\\basic_data.npy")
-                            self.labels_seq = np.load(f"data\\{folder}\\labels_seq.npy")
+                            self.basic_data = np.load(
+                                os.path.join("data", folder, "basic_data.npy")
+                            )
+                            self.labels_seq = np.load(
+                                os.path.join("data", folder, "labels_seq.npy")
+                            )
 
                             self.data_loaded = True
 

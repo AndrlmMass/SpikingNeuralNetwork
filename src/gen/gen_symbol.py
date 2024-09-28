@@ -1,5 +1,6 @@
 import numpy as np
-from skimage.draw import circle_perimeter, line
+
+# from skimage.draw import circle_perimeter, line
 
 
 def generate_normal_value(mean=0, variance=0.1):

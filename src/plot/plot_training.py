@@ -3,9 +3,11 @@
 # Import libraries
 import numpy as np
 import math
-import matplotlib.pyplot as plt
-from matplotlib.patches import Patch
-from sklearn.manifold import TSNE
+
+# import matplotlib.pyplot as plt
+# from matplotlib.patches import Patch
+
+# from sklearn.manifold import TSNE
 
 
 def plot_membrane_activity(
