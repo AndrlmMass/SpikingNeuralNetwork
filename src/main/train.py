@@ -8,59 +8,113 @@ from plot.plot_network import *
 from train_packages.membrane_potential import update_membrane_potential_conduct
 from train_packages.weight_updating import exc_weight_update, inh_weight_update
 
-# Check if jax-jit with NVIDIA GPU support is running
-import jax
-
-print(jax.default_device())
-
 
 def train_model(
-    A: jnp.float16,
-    P: jnp.float16,
-    w_p: jnp.float16,
-    beta: jnp.float16,
-    delta: jnp.float16,
-    time: jnp.int16,
-    V_th_: jnp.float16,
-    V_rest: jnp.float16,
-    dt: jnp.float16,
-    tau_plus: jnp.float16,
-    tau_minus: jnp.float16,
-    tau_slow: jnp.float16,
-    tau_m: jnp.float16,
-    tau_ht: jnp.float16,
-    tau_hom: jnp.float16,
-    tau_cons: jnp.float16,
-    tau_H: jnp.float16,
-    tau_istdp: jnp.float16,
-    tau_ampa: jnp.float16,
-    tau_nmda: jnp.float16,
-    tau_gaba: jnp.float16,
-    tau_thr: jnp.float16,
-    tau_d: jnp.float16,
-    tau_f: jnp.float16,
-    tau_a: jnp.float16,
-    tau_b: jnp.float16,
-    delta_a: jnp.float16,
-    delta_b: jnp.float16,
-    U_exc: jnp.float16,
-    U_inh: jnp.float16,
-    learning_rate: jnp.float16,
-    training_data: jnp.ndarray,
-    N_excit_neurons: jnp.int16,
-    N_inhib_neurons: jnp.int16,
-    N_input_neurons: jnp.int16,
-    W_static: jnp.ndarray,
-    W_plastic: jnp.ndarray,
-    W_plastic_ideal: jnp.ndarray,
-    W_plastic_plt: jnp.ndarray,
-    gamma: jnp.float16,
-    alpha_exc: jnp.float16,
-    alpha_inh: jnp.float16,
-    U_cons: jnp.float16,
-    th_rest: jnp.float16 | jnp.int16,
-    th_refact: jnp.float16 | jnp.int16,
+    A: int | float,
+    P: int | float,
+    w_p: int | float,
+    beta: int | float,
+    delta: int | float,
+    time: int,
+    V_th_: int,
+    V_rest: int,
+    dt: int | float,
+    tau_plus: int | float,
+    tau_minus: int | float,
+    tau_slow: int | float,
+    tau_m: int | float,
+    tau_ht: int | float,
+    tau_hom: int | float,
+    tau_cons: int | float,
+    tau_H: int | float,
+    tau_istdp: int | float,
+    tau_ampa: int | float,
+    tau_nmda: int | float,
+    tau_gaba: int | float,
+    tau_thr: int | float,
+    tau_d: int | float,
+    tau_f: int | float,
+    tau_a: int | float,
+    tau_b: int | float,
+    delta_a: int | float,
+    delta_b: int | float,
+    U_exc: int,
+    U_inh: int,
+    learning_rate: int | float,
+    training_data: np.ndarray,
+    N_excit_neurons: int,
+    N_inhib_neurons: int,
+    N_input_neurons: int,
+    W_static: np.ndarray,
+    W_plastic: np.ndarray,
+    W_plastic_ideal: np.ndarray,
+    W_plastic_plt: np.ndarray,
+    gamma: int | float,
+    alpha_exc: int | float,
+    alpha_inh: int | float,
+    U_cons: int | float,
+    th_rest: float,
+    th_refact: float,
 ):
+    # Define a helper function for logging
+    def convert_and_log(var_name, var_value):
+        try:
+            converted = jnp.asarray(var_value, dtype=jnp.float16)
+            print(f"Successfully converted {var_name}")
+            return converted
+        except Exception as e:
+            print(f"Error converting {var_name}: {e}")
+            raise
+
+    # Convert scalar float parameters
+    A = convert_and_log("A", A)
+    P = convert_and_log("P", P)
+    w_p = convert_and_log("w_p", w_p)
+    beta = convert_and_log("beta", beta)
+    delta = convert_and_log("delta", delta)
+    V_th_ = convert_and_log("V_th_", V_th_)
+    V_rest = convert_and_log("V_rest", V_rest)
+    dt = convert_and_log("dt", dt)
+    tau_plus = convert_and_log("tau_plus", tau_plus)
+    tau_minus = convert_and_log("tau_minus", tau_minus)
+    tau_slow = convert_and_log("tau_slow", tau_slow)
+    tau_m = convert_and_log("tau_m", tau_m)
+    tau_ht = convert_and_log("tau_ht", tau_ht)
+    tau_hom = convert_and_log("tau_hom", tau_hom)
+    tau_cons = convert_and_log("tau_cons", tau_cons)
+    tau_H = convert_and_log("tau_H", tau_H)
+    tau_istdp = convert_and_log("tau_istdp", tau_istdp)
+    tau_ampa = convert_and_log("tau_ampa", tau_ampa)
+    tau_nmda = convert_and_log("tau_nmda", tau_nmda)
+    tau_gaba = convert_and_log("tau_gaba", tau_gaba)
+    tau_thr = convert_and_log("tau_thr", tau_thr)
+    tau_d = convert_and_log("tau_d", tau_d)
+    tau_f = convert_and_log("tau_f", tau_f)
+    tau_a = convert_and_log("tau_a", tau_a)
+    tau_b = convert_and_log("tau_b", tau_b)
+    delta_a = convert_and_log("delta_a", delta_a)
+    delta_b = convert_and_log("delta_b", delta_b)
+    U_exc = convert_and_log("U_exc", U_exc)
+    U_inh = convert_and_log("U_inh", U_inh)
+    learning_rate = convert_and_log("learning_rate", learning_rate)
+
+    # Convert NumPy arrays
+    training_data = convert_and_log("training_data", training_data)
+    W_static = convert_and_log("W_static", W_static)
+    W_plastic = convert_and_log("W_plastic", W_plastic)
+    W_plastic_ideal = convert_and_log("W_plastic_ideal", W_plastic_ideal)
+    W_plastic_plt = convert_and_log("W_plastic_plt", W_plastic_plt)
+
+    # Convert additional float parameters
+    gamma = convert_and_log("gamma", gamma)
+    alpha_exc = convert_and_log("alpha_exc", alpha_exc)
+    alpha_inh = convert_and_log("alpha_inh", alpha_inh)
+    U_cons = convert_and_log("U_cons", U_cons)
+
+    # Convert threshold parameters (float or int)
+    th_rest = convert_and_log("th_rest", th_rest)
+    th_refact = convert_and_log("th_refact", th_refact)
+
     # Initiate relevant traces and variables
     num_neurons = jnp.int16(N_excit_neurons + N_inhib_neurons + N_input_neurons)
     spikes = jnp.zeros((time, num_neurons), dtype=jnp.float16)

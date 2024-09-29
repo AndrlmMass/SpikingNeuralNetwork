@@ -1,6 +1,11 @@
 # Main SNN execution file
 from main.SNN_functions import SNN
 
+# Check if jax-jit with NVIDIA GPU support is running
+import jax
+
+print("Sanity check:", jax.devices())
+
 # Initiate SNN object
 snn = SNN()
 

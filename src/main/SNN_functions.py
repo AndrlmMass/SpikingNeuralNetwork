@@ -27,7 +27,7 @@ class SNN:
         tau_slow: float | int = 100,  # slowsynaptic excitatory synapse
         tau_ht: float | int = 100,  # Spiking threshold time constant
         tau_m: float | int = 20,  # Membrane time constant
-        tau_hom: float | int = 1.2 * 10**6,  # metaplasticity time constant (20 minutes)
+        tau_hom: float | int = 30000,  # metaplasticity time constant (5 minutes)
         tau_istdp: float | int = 20,  # Inhibitory weight update constant
         tau_H: float | int = 1 * 10**4,  # Global secreted factor time constant
         tau_thr: float | int = 2,  #
@@ -40,14 +40,14 @@ class SNN:
         tau_f: float | int = 600,
         delta_a: float | int = 0.1,  # decay unit
         delta_b: float | int = 5 * 10**-4,  # seconds,
-        U_exc: float | int = 0,
-        U_inh: float | int = -80,
+        U_exc: int = 0,
+        U_inh: int = -80,
         alpha_exc: float | int = 0.2,
         alpha_inh: float | int = 0.3,
         learning_rate: float | int = 2 * 10**-5,
         gamma: float | int = 4 * 10**-3,  # Target population rate in Hz
-        num_items: float = 4,  # Num of items,
-        dt: float = 1,  # time unit for modelling,
+        num_items: int = 4,  # Num of items,
+        dt: int | float = 1,  # time unit for modelling,
         T: int = 1000,  # total time each item will appear
         wp: float | int = 0.5,
         num_epochs: int = 1,  # number of epochs -> not currently in use
@@ -55,11 +55,11 @@ class SNN:
         B: float | int = 1 * 10**-3,  # LTD rate,
         beta: float | int = 0.05,
         delta: float | int = 2 * 10**-5,  # Transmitter triggered plasticity
-        tau_cons: float | int = 1.2 * 10**6,  # 20 minutes until weight convergence
+        tau_cons: float | int = 6 * 10**4,  # 5 minutes until weight convergence
         euler: int = 5,
         U_cons: float | int = 0.2,
-        th_rest: float | int = -50,
-        th_refact: float | int = 50,
+        th_rest: int = -50,
+        th_refact: int = 50,
     ):
         self.V_th = V_th
         self.P = P
