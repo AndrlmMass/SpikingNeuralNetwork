@@ -13,7 +13,7 @@ snn = SNN()
 snn.build()
 
 # Generate data
-snn.gen_data(var_high_freq=0, var_low_freq=0)
+snn.gen_data(var_high_freq=0, var_low_freq=0, force_new_data=True)
 
 # Train network
 snn.train_()

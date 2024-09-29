@@ -19,12 +19,12 @@ def train_model(
     V_th_: int,
     V_rest: int,
     dt: int | float,
-    tau_plus: int | float,
-    tau_minus: int | float,
-    tau_slow: int | float,
+    tau_plus: int | float,  # static
+    tau_minus: int | float,  # static
+    tau_slow: int | float,  # static
     tau_m: int | float,
-    tau_ht: int | float,
-    tau_hom: int | float,
+    tau_ht: int | float,  # static
+    tau_hom: int | float,  # static
     tau_cons: int | float,
     tau_H: int | float,
     tau_istdp: int | float,
@@ -42,9 +42,9 @@ def train_model(
     U_inh: int,
     learning_rate: int | float,
     training_data: np.ndarray,
-    N_excit_neurons: int,
-    N_inhib_neurons: int,
-    N_input_neurons: int,
+    N_excit_neurons: int,  # static
+    N_inhib_neurons: int,  # static
+    N_input_neurons: int,  # static
     W_static: np.ndarray,
     W_plastic: np.ndarray,
     W_plastic_ideal: np.ndarray,
@@ -66,58 +66,14 @@ def train_model(
             print(f"Error converting {var_name}: {e}")
             raise
 
-    # Convert scalar float parameters
-    A = convert_and_log("A", A)
-    P = convert_and_log("P", P)
-    w_p = convert_and_log("w_p", w_p)
-    beta = convert_and_log("beta", beta)
-    delta = convert_and_log("delta", delta)
-    V_th_ = convert_and_log("V_th_", V_th_)
-    V_rest = convert_and_log("V_rest", V_rest)
-    dt = convert_and_log("dt", dt)
-    tau_plus = convert_and_log("tau_plus", tau_plus)
-    tau_minus = convert_and_log("tau_minus", tau_minus)
-    tau_slow = convert_and_log("tau_slow", tau_slow)
-    tau_m = convert_and_log("tau_m", tau_m)
-    tau_ht = convert_and_log("tau_ht", tau_ht)
-    tau_hom = convert_and_log("tau_hom", tau_hom)
-    tau_cons = convert_and_log("tau_cons", tau_cons)
-    tau_H = convert_and_log("tau_H", tau_H)
-    tau_istdp = convert_and_log("tau_istdp", tau_istdp)
-    tau_ampa = convert_and_log("tau_ampa", tau_ampa)
-    tau_nmda = convert_and_log("tau_nmda", tau_nmda)
-    tau_gaba = convert_and_log("tau_gaba", tau_gaba)
-    tau_thr = convert_and_log("tau_thr", tau_thr)
-    tau_d = convert_and_log("tau_d", tau_d)
-    tau_f = convert_and_log("tau_f", tau_f)
-    tau_a = convert_and_log("tau_a", tau_a)
-    tau_b = convert_and_log("tau_b", tau_b)
-    delta_a = convert_and_log("delta_a", delta_a)
-    delta_b = convert_and_log("delta_b", delta_b)
-    U_exc = convert_and_log("U_exc", U_exc)
-    U_inh = convert_and_log("U_inh", U_inh)
-    learning_rate = convert_and_log("learning_rate", learning_rate)
-
-    # Convert NumPy arrays
-    training_data = convert_and_log("training_data", training_data)
-    W_static = convert_and_log("W_static", W_static)
+    # Convert dynamic parameters to low bit precision
     W_plastic = convert_and_log("W_plastic", W_plastic)
     W_plastic_ideal = convert_and_log("W_plastic_ideal", W_plastic_ideal)
     W_plastic_plt = convert_and_log("W_plastic_plt", W_plastic_plt)
 
-    # Convert additional float parameters
-    gamma = convert_and_log("gamma", gamma)
-    alpha_exc = convert_and_log("alpha_exc", alpha_exc)
-    alpha_inh = convert_and_log("alpha_inh", alpha_inh)
-    U_cons = convert_and_log("U_cons", U_cons)
-
-    # Convert threshold parameters (float or int)
-    th_rest = convert_and_log("th_rest", th_rest)
-    th_refact = convert_and_log("th_refact", th_refact)
-
     # Initiate relevant traces and variables
     num_neurons = jnp.int16(N_excit_neurons + N_inhib_neurons + N_input_neurons)
-    spikes = jnp.zeros((time, num_neurons), dtype=jnp.float16)
+    spikes = jnp.zeros((time, num_neurons), dtype=jnp.int16)
     pre_synaptic_trace = jnp.zeros((time, num_neurons), dtype=jnp.float16)
     post_synaptic_trace = jnp.zeros((time, N_excit_neurons), dtype=jnp.float16)
     slow_post_synaptic_trace = jnp.zeros((time, N_excit_neurons), dtype=jnp.float16)

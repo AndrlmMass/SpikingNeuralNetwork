@@ -143,9 +143,8 @@ class gen_data_cl:
                 else:
                     rate = self.avg_low_freq / self.timesteps
                 # Calculate spike sequence
-                spike_sequence = target_rate_code(
-                    num_steps=self.timesteps, rate=rate, firing_pattern="poisson"
-                )[0].numpy()
+                p = rate / self.timesteps
+                spike_sequence = (np.random.rand(self.timesteps) < p).astype(int)
 
                 poisson_input[
                     i * self.timesteps : i * self.timesteps + self.timesteps, n

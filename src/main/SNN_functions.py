@@ -422,6 +422,7 @@ class SNN:
         avg_low_freq: float | int = 10,
         var_high_freq: float | int = 0.05,
         var_low_freq: float | int = 0.05,
+        force_new_data: bool = False,
     ):
         self.N_classes = N_classes
         self.data_parameters = {**locals()}
@@ -439,7 +440,7 @@ class SNN:
         # Check if training data exists and load if it does
         self.process(data=True, load=True)
 
-        if self.data_loaded == True:
+        if self.data_loaded == True and force_new_data == False:
             return
 
         # Create training data since it does not exist already
