@@ -48,22 +48,6 @@ def exc_weight_update(
     z_ht,
     C,
 ):
-    # Convert static arguments to jnp-low bit preision
-    dt = jnp.int16(dt)
-    tau_cons = jnp.float16(dt)
-    P = jnp.float16(dt)
-    w_p = jnp.float16(dt)
-    N_input_neurons = jnp.int16(dt)
-    N_inhib_neurons = jnp.int16(dt)
-    tau_plus = jnp.int16(dt)
-    tau_minus = jnp.int16(dt)
-    tau_slow = jnp.int16(dt)
-    tau_ht = jnp.int16(dt)
-    tau_hom = jnp.int16(dt)
-    A = jnp.float16(dt)
-    beta = jnp.float16(dt)
-    delta = jnp.float16(dt)
-
     # Update ideal weights
     W_se_ideal = W_se_ideal + (dt / tau_cons) * (
         W_se
