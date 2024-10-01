@@ -10,69 +10,60 @@ from train_packages.weight_updating import exc_weight_update, inh_weight_update
 
 
 def train_model(
-    A: int | float,
-    P: int | float,
-    w_p: int | float,
-    beta: int | float,
-    delta: int | float,
-    time: int,
-    V_th_: int,
-    V_rest: int,
-    dt: int | float,
+    A: int | float, # static
+    P: int | float, # static
+    w_p: int | float, # static
+    beta: int | float, # static
+    delta: int | float, # static
+    euler: int, # static
+    time: int, # static
+    V_th_: int, # static
+    V_rest: int, # static
+    dt: int | float, # static
     tau_plus: int | float,  # static
     tau_minus: int | float,  # static
     tau_slow: int | float,  # static
-    tau_m: int | float,
-    tau_ht: int | float,  # static
-    tau_hom: int | float,  # static
-    tau_cons: int | float,
-    tau_H: int | float,
-    tau_istdp: int | float,
-    tau_ampa: int | float,
-    tau_nmda: int | float,
-    tau_gaba: int | float,
-    tau_thr: int | float,
-    tau_d: int | float,
-    tau_f: int | float,
-    tau_a: int | float,
-    tau_b: int | float,
-    delta_a: int | float,
-    delta_b: int | float,
-    U_exc: int,
-    U_inh: int,
-    learning_rate: int | float,
-    training_data: np.ndarray,
+    tau_m: int | float, # static
+    tau_ht: int | float, # static
+    tau_hom: int | float, # static
+    tau_cons: int | float, # static
+    tau_H: int | float, # static
+    tau_istdp: int | float, # static
+    tau_ampa: int | float, # static
+    tau_nmda: int | float, # static
+    tau_gaba: int | float, # static
+    tau_thr: int | float, # static
+    tau_d: int | float, # static
+    tau_f: int | float, # static
+    tau_a: int | float, # static
+    tau_b: int | float, # static
+    delta_a: int | float, # static
+    delta_b: int | float, # static
+    U_exc: int, # static
+    U_inh: int, # static
+    learning_rate: int | float, # static
+    training_data: np.ndarray, # static
     N_excit_neurons: int,  # static
     N_inhib_neurons: int,  # static
     N_input_neurons: int,  # static
-    W_static: np.ndarray,
-    W_plastic: np.ndarray,
-    W_plastic_ideal: np.ndarray,
-    W_plastic_plt: np.ndarray,
-    gamma: int | float,
-    alpha_exc: int | float,
-    alpha_inh: int | float,
-    U_cons: int | float,
-    th_rest: float,
-    th_refact: float,
+    W_static: np.ndarray, # static
+    W_plastic: np.ndarray, # plastic
+    W_plastic_ideal: np.ndarray, #plastic
+    W_plastic_plt: np.ndarray, #plastic
+    gamma: int | float, # static
+    alpha_exc: int | float, # static
+    alpha_inh: int | float, # static
+    U_cons: int | float, # static
+    th_rest: float, # static
+    th_refact: float, # static
 ):
-    # Define a helper function for logging
-    def convert_and_log(var_name, var_value):
-        try:
-            converted = jnp.asarray(var_value, dtype=jnp.float16)
-            print(f"Successfully converted {var_name}")
-            return converted
-        except Exception as e:
-            print(f"Error converting {var_name}: {e}")
-            raise
-
     # Convert dynamic parameters to low bit precision
-    W_plastic = convert_and_log("W_plastic", W_plastic)
-    W_plastic_ideal = convert_and_log("W_plastic_ideal", W_plastic_ideal)
-    W_plastic_plt = convert_and_log("W_plastic_plt", W_plastic_plt)
+    W_plastic = jnp.asarray(W_plastic, dtype=jnp.float16)
+    W_plastic_ideal = jnp.asarray(W_plastic_ideal, dtype=jnp.float16)
+    W_plastic_plt = jnp.asarray(W_plastic_plt, dtype=jnp.float16)
 
     # Initiate relevant traces and variables
-    num_neurons = jnp.int16(N_excit_neurons + N_inhib_neurons + N_input_neurons)
+    num_neurons = N_excit_neurons + N_inhib_neurons + N_input_neurons	
     spikes = jnp.zeros((time, num_neurons), dtype=jnp.int16)
     pre_synaptic_trace = jnp.zeros((time, num_neurons), dtype=jnp.float16)
     post_synaptic_trace = jnp.zeros((time, N_excit_neurons), dtype=jnp.float16)
@@ -102,9 +93,6 @@ def train_model(
 
     # Loop through time and update membrane potential, spikes, and weights
     for t in tqdm(range(1, time), desc="Training network"):
-
-        # Calculate Euler time unit
-        euler_unit = int(t - update_freq > 0) * (t - update_freq)
 
         # Update membrane potential
         MemPot_t, g_ampa, g_nmda, g_gaba, x, u, g_a, g_b = (
@@ -177,7 +165,8 @@ def train_model(
             N_inhib_neurons,
             pre_synaptic_trace[t - 1],
             post_synaptic_trace[t - 1],
-            slow_post_synaptic_trace[euler_unit],
+            post_synaptic_trace[max(t - euler, 0)],
+            slow_post_synaptic_trace[max(t - euler, 0)],
             tau_plus,
             tau_minus,
             tau_slow,
