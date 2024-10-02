@@ -90,7 +90,9 @@ def train_model(
 
     # update functions based on njit arg
     if run_njit:
-        update_membrane_potential_conduct_ = njit(update_membrane_potential_conduct)
+        update_membrane_potential_conduct_ = njit(
+            update_membrane_potential_conduct, parallel=False
+        )
         exc_weight_update_ = njit(exc_weight_update)
         inh_weight_update_ = njit(inh_weight_update)
     else:
