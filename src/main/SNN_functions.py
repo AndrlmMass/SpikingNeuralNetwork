@@ -4,6 +4,7 @@ import numpy as np
 import random
 import json
 
+# Importing local scripts, u know
 from plot.plot_training import *
 from plot.plot_network import *
 from gen.gen_weights import *
