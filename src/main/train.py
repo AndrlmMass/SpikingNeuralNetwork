@@ -101,7 +101,7 @@ def train_model(
     # Loop through time and update membrane potential, spikes, and weights
     for t in tqdm(range(1, time), desc="Training network"):
         # Update membrane potential
-        MemPot_t, g_ampa, g_nmda, g_gaba, x, u, g_a, g_b = (
+        MemPot[t], g_ampa, g_nmda, g_gaba, x, u, g_a, g_b = (
             update_membrane_potential_conduct_(
                 MemPot[t - 1],
                 U_inh,
@@ -136,7 +136,7 @@ def train_model(
             )
         )
         # Update spikes based on membrane potential
-        spike_mask = MemPot_t > V_th
+        spike_mask = MemPot[t] > V_th
         spikes[t, N_input_neurons:] = spike_mask.astype(int)
         MemPot[t][spike_mask] = V_rest
 
@@ -200,23 +200,24 @@ def train_model(
         )
 
         ## Calculate the mean, high, and low weights for each plastic group ##
-        W_plastic_plt[t, 0] = np.round(np.mean(W_plastic[:N_input_neurons]), 5)
-        W_plastic_plt[t, 1] = np.round(np.amax(W_plastic[:N_input_neurons]), 5)
-        W_plastic_plt[t, 2] = np.round(np.amin(W_plastic[:N_input_neurons]), 5)
+        if t % update_freq == 0:
+            W_plastic_plt[t, 0] = np.round(np.mean(W_plastic[:N_input_neurons]), 5)
+            W_plastic_plt[t, 1] = np.round(np.amax(W_plastic[:N_input_neurons]), 5)
+            W_plastic_plt[t, 2] = np.round(np.amin(W_plastic[:N_input_neurons]), 5)
 
-        W_plastic_plt[t, 3] = np.round(
-            np.mean(W_plastic[N_input_neurons:-N_inhib_neurons]), 5
-        )
-        W_plastic_plt[t, 4] = np.round(
-            np.amax(W_plastic[N_input_neurons:-N_inhib_neurons]), 5
-        )
-        W_plastic_plt[t, 5] = np.round(
-            np.amin(W_plastic[N_input_neurons:-N_inhib_neurons]), 5
-        )
+            W_plastic_plt[t, 3] = np.round(
+                np.mean(W_plastic[N_input_neurons:-N_inhib_neurons]), 5
+            )
+            W_plastic_plt[t, 4] = np.round(
+                np.amax(W_plastic[N_input_neurons:-N_inhib_neurons]), 5
+            )
+            W_plastic_plt[t, 5] = np.round(
+                np.amin(W_plastic[N_input_neurons:-N_inhib_neurons]), 5
+            )
 
-        W_plastic_plt[t, 6] = np.round(np.mean(W_plastic[-N_inhib_neurons:]), 5)
-        W_plastic_plt[t, 7] = np.round(np.amax(W_plastic[-N_inhib_neurons:]), 5)
-        W_plastic_plt[t, 8] = np.round(np.amin(W_plastic[-N_inhib_neurons:]), 5)
+            W_plastic_plt[t, 6] = np.round(np.mean(W_plastic[-N_inhib_neurons:]), 5)
+            W_plastic_plt[t, 7] = np.round(np.amax(W_plastic[-N_inhib_neurons:]), 5)
+            W_plastic_plt[t, 8] = np.round(np.amin(W_plastic[-N_inhib_neurons:]), 5)
 
     return (
         W_plastic_plt,

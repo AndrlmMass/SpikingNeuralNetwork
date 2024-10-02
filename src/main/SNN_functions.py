@@ -140,7 +140,7 @@ class SNN:
                 os.makedirs("model")
             if save:
                 # Generate a random number for model folder
-                rand_num = random.sample((0, 9), 5)
+                rand_num = np.random.randint(low=0, high=9, size=5)
 
                 # Check if random number folder exists
                 while os.path.exists(os.path.join("model", f"model_{rand_num}")):
@@ -220,33 +220,27 @@ class SNN:
                                 os.path.join(save_path, "slow_pre_synaptic_trace.npy")
                             )
                             self.C = np.load(os.path.join(save_path, "C.npy"))
-                            self.z_ht = np.load(os.path.join(save_path, "\\z_ht.npy"))
-                            self.x = np.load(os.path.join(save_path, "\\x.npy"))
-                            self.u = np.load(os.path.join(save_path, "\\u.npy"))
-                            self.H = np.load(os.path.join(save_path, "\\H.npy"))
-                            self.z_i = np.load(os.path.join(save_path, "\\z_i.npy"))
-                            self.z_j = np.load(os.path.join(save_path, "\\z_j.npy"))
+                            self.z_ht = np.load(os.path.join(save_path, "z_ht.npy"))
+                            self.x = np.load(os.path.join(save_path, "x.npy"))
+                            self.u = np.load(os.path.join(save_path, "u.npy"))
+                            self.H = np.load(os.path.join(save_path, "H.npy"))
+                            self.z_i = np.load(os.path.join(save_path, "z_i.npy"))
+                            self.z_j = np.load(os.path.join(save_path, "z_j.npy"))
                             self.V_th_array = np.load(
-                                os.path.join(save_path, "\\V_th_array.npy")
+                                os.path.join(save_path, "V_th_array.npy")
                             )
                             self.W_plastic = np.load(
-                                os.path.join(save_path, "\\plastic_weights.npy")
+                                os.path.join(save_path, "plastic_weights.npy")
                             )
                             self.W_static = np.load(
-                                os.path.join(save_path, "\\static_weights.npy")
+                                os.path.join(save_path, "static_weights.npy")
                             )
-                            self.V_th = np.load(os.path.join(save_path, "\\V_th.npy"))
-                            self.g_nmda = np.load(
-                                os.path.join(save_path, "\\g_nmda.npy")
-                            )
-                            self.g_ampa = np.load(
-                                os.path.join(save_path, "\\g_ampa.npy")
-                            )
-                            self.g_gaba = np.load(
-                                os.path.join(save_path, "\\g_gaba.npy")
-                            )
-                            self.g_a = np.load(os.path.join(save_path, "\\g_a.npy"))
-                            self.g_b = np.load(os.path.join(save_path, "\\g_b.npy"))
+                            self.V_th = np.load(os.path.join(save_path, "V_th.npy"))
+                            self.g_nmda = np.load(os.path.join(save_path, "g_nmda.npy"))
+                            self.g_ampa = np.load(os.path.join(save_path, "g_ampa.npy"))
+                            self.g_gaba = np.load(os.path.join(save_path, "g_gaba.npy"))
+                            self.g_a = np.load(os.path.join(save_path, "g_a.npy"))
+                            self.g_b = np.load(os.path.join(save_path, "g_b.npy"))
                             print("model loaded", end="\r")
                             self.model_loaded = True
                             return
