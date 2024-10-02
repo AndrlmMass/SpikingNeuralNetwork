@@ -166,11 +166,13 @@ def inh_weight_update(
     post_spikes,
 ):
     N_post = len(post_spikes)
+    N_pre = len(pre_spikes)
 
     # Update synaptic traces using Euler's method
     for i in range(N_post):
         z_i[i] += dt * (-z_i[i] / tau_stdp + post_spikes[i])
-        z_j[i] += dt * (-z_j[i] / tau_stdp + pre_spikes[i])
+    for j in range(N_pre):
+        z_j[j] += dt * (-z_j[j] / tau_stdp + pre_spikes[j])
 
     # Update H using Euler's method
     H += dt * (-H / tau_H + np.sum(post_spikes))
@@ -179,21 +181,21 @@ def inh_weight_update(
     # Calculate delta weights
     delta_w = np.zeros((N_post, N_post))
     for i in range(N_post):
-        for j in range(N_post):
-            delta_w[i, j] = (
+        for j in range(N_pre):
+            delta_w[j, i] = (
                 dt
                 * learning_rate
                 * G
-                * (pre_spikes[i] * (z_i[j] + 1.0) + z_j[i] * post_spikes[j])
+                * (pre_spikes[j] * (z_i[i] + 1.0) + z_j[j] * post_spikes[i])
             )
 
     # Update weights with constraints
     for i in range(N_post):
-        for j in range(N_post):
-            W_inh[i, j] += delta_w[i, j]
-            if W_inh[i, j] < 0.0:
-                W_inh[i, j] = 0.0
-            elif W_inh[i, j] > 5.0:
-                W_inh[i, j] = 5.0
+        for j in range(N_pre):
+            W_inh[j, i] += delta_w[j, i]
+            if W_inh[j, i] < 0.0:
+                W_inh[j, i] = 0.0
+            elif W_inh[j, i] > 5.0:
+                W_inh[j, i] = 5.0
 
     return W_inh, z_i, z_j, H
