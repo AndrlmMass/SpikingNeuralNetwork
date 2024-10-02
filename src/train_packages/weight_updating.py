@@ -1,27 +1,6 @@
-import jax.numpy as jnp
-from functools import partial
-from jax import jit
+import numpy as np
 
 
-@partial(
-    jit,
-    static_argnames=[
-        "dt",
-        "tau_cons",
-        "P",
-        "w_p",
-        "N_inp",
-        "N_inh",
-        "tau_plus",
-        "tau_minus",
-        "tau_slow",
-        "tau_ht",
-        "tau_hom",
-        "A",
-        "beta",
-        "delta",
-    ],
-)
 def exc_weight_update(
     dt,
     tau_cons,
@@ -50,7 +29,7 @@ def exc_weight_update(
     C,
 ):
     # Update ideal weights
-    W_se_ideal = W_se_ideal + (dt / tau_cons) * (
+    W_se_ideal += (dt / tau_cons) * (
         W_se
         - W_se_ideal
         - P * W_se_ideal * ((w_p / 2) - W_se_ideal) * (w_p - W_se_ideal)
@@ -66,14 +45,14 @@ def exc_weight_update(
     C_se = C
 
     # Update synaptic traces
-    pre_trace_se = pre_trace_se + dt * ((-pre_trace_se / tau_plus) + pre_spikes_se)
-    post_trace = post_trace + dt * ((-post_trace / tau_minus) + post_spikes)
-    slow_trace = slow_trace + dt * ((-slow_trace / tau_slow) + post_spikes)
+    pre_trace_se += dt * ((-pre_trace_se / tau_plus) + pre_spikes_se)
+    post_trace += dt * ((-post_trace / tau_minus) + post_spikes)
+    slow_trace += dt * ((-slow_trace / tau_slow) + post_spikes)
 
     # Update z_ht, C, and B variables
-    z_ht_se = z_ht_se + dt * (-z_ht_se / tau_ht + post_spikes)
-    C_se = C_se + dt * (-C_se / tau_hom + z_ht_se**2)
-    B = jnp.where(C_se <= 1 / A, A * C_se, A)
+    z_ht_se += dt * (-z_ht_se / tau_ht + post_spikes)
+    C_se += dt * (-C_se / tau_hom + z_ht_se**2)
+    B = np.where(C_se <= 1, A * C_se, A)
 
     # Get learning components
     triplet_LTP = A * pre_trace_se * slow_trace
@@ -86,13 +65,12 @@ def exc_weight_update(
     )
 
     # Update the weights
-    W_se = W_se + delta_w_se
-    W_se = jnp.clip(W_se, 0.0, 5.0)
+    W_se = np.clip(W_se + delta_w_se, 0.0, 5.0)
 
     ## W_ee weights ##
 
     # Update ideal weights
-    W_ee_ideal = W_ee_ideal + (dt / tau_cons) * (
+    W_ee_ideal += (dt / tau_cons) * (
         W_ee
         - W_ee_ideal
         - P * W_ee_ideal * ((w_p / 2) - W_ee_ideal) * (w_p - W_ee_ideal)
@@ -102,10 +80,10 @@ def exc_weight_update(
     pre_spikes_ee = spikes[N_inp:-N_inh]
 
     # Extract traces
-    pre_trace_ee = pre_trace[N_inp:-N_inh]
+    pre_trace_ee = pre_trace[N_inp:]
 
     # Update synaptic traces
-    pre_trace_ee = pre_trace_ee + dt * (-pre_trace_ee / tau_plus + pre_spikes_ee)
+    pre_trace_ee += dt * (-pre_trace_ee / tau_plus + pre_spikes_ee)
 
     # Get learning components
     triplet_LTP_ee = A * pre_trace_ee * slow_trace
@@ -119,8 +97,7 @@ def exc_weight_update(
     )
 
     # Update the weights
-    W_ee = W_ee + delta_w_ee
-    W_ee = jnp.clip(W_ee, 0.0, 5.0)
+    W_ee = np.clip(W_ee + delta_w_ee, 0.0, 5.0)
 
     return (
         W_se,
@@ -136,7 +113,6 @@ def exc_weight_update(
     )
 
 
-@jit
 def inh_weight_update(
     H,
     dt,
@@ -151,18 +127,18 @@ def inh_weight_update(
     post_spikes,
 ):
     # Update synaptic traces using Euler's method
-    z_i = z_i + dt * (-z_i / tau_stdp + post_spikes)
-    z_j = z_j + dt * (-z_j / tau_stdp + pre_spikes)
+    z_i += dt * (-z_i / tau_stdp + post_spikes)
+    z_j += dt * (-z_j / tau_stdp + pre_spikes)
 
     # Update H using Euler's method
-    H = H + dt * (-H / tau_H + jnp.sum(post_spikes))
+    H += dt * (-H / tau_H + np.sum(post_spikes))
     G = H - gamma
 
     # Reshape arrays for matrix operations
-    z_i_reshaped = jnp.expand_dims(z_i, axis=1)
-    z_j_reshaped = jnp.expand_dims(z_j, axis=1)
-    post_spikes_reshaped = jnp.expand_dims(post_spikes, axis=1)
-    pre_spikes_reshaped = jnp.expand_dims(pre_spikes, axis=1)
+    z_i_reshaped = np.expand_dims(z_i, axis=1)
+    z_j_reshaped = np.expand_dims(z_j, axis=1)
+    post_spikes_reshaped = np.expand_dims(post_spikes, axis=1)
+    pre_spikes_reshaped = np.expand_dims(pre_spikes, axis=1)
 
     # Calculate delta weights
     delta_w = (
@@ -170,13 +146,12 @@ def inh_weight_update(
         * learning_rate
         * G
         * (
-            jnp.dot(pre_spikes_reshaped, (z_i_reshaped.T + 1))
-            + jnp.dot(z_j_reshaped, post_spikes_reshaped.T)
+            np.dot(pre_spikes_reshaped, (z_i_reshaped.T + 1))
+            + np.dot(z_j_reshaped, post_spikes_reshaped.T)
         )
     )
 
     # Update weights with constraints
-    W_inh = W_inh + delta_w
-    W_inh = jnp.clip(W_inh, 0.0, 5.0)
+    W_inh = np.clip(W_inh + delta_w, 0.0, 5.0)
 
     return W_inh, z_i, z_j, H
