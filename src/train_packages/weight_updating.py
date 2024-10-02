@@ -37,7 +37,7 @@ def exc_weight_update(
     pre_trace,
     post_trace,
     post_euler_trace,
-    slow_post_trace,
+    slow_trace,
     tau_plus,
     tau_minus,
     tau_slow,
@@ -61,18 +61,17 @@ def exc_weight_update(
     pre_spikes_se = spikes[:N_inp]
 
     # Extract traces
-    pre_trace_se = pre_synaptic_trace[:N_inp]
+    pre_trace_se = pre_trace[:N_inp]
     z_ht_se = z_ht
     C_se = C
 
     # Update synaptic traces
     pre_trace_se = pre_trace_se + dt * ((-pre_trace_se / tau_plus) + pre_spikes_se)
-    post_trace = post_trace + dt * ((-post_trace / tau_minus) + post_spikes_se)
-    post_euler_trace = post_euler_trace + dt * ((-post_euler_trace / tau_minus) + post_spikes_se)
-    slow_trace = slow_trace + dt * ((-slow_trace / tau_slow) + post_spikes_se)
+    post_trace = post_trace + dt * ((-post_trace / tau_minus) + post_spikes)
+    slow_trace = slow_trace + dt * ((-slow_trace / tau_slow) + post_spikes)
 
     # Update z_ht, C, and B variables
-    z_ht_se = z_ht_se + dt * (-z_ht_se / tau_ht + post_spikes_se)
+    z_ht_se = z_ht_se + dt * (-z_ht_se / tau_ht + post_spikes)
     C_se = C_se + dt * (-C_se / tau_hom + z_ht_se**2)
     B = jnp.where(C_se <= 1 / A, A * C_se, A)
 
@@ -83,7 +82,7 @@ def exc_weight_update(
 
     # Compute the differential update for weights using Euler's method
     delta_w_se = dt * (
-        post_spikes_se * (triplet_LTP - heterosynaptic) - pre_spikes_se * transmitter
+        post_spikes * (triplet_LTP - heterosynaptic) - pre_spikes_se * transmitter
     )
 
     # Update the weights
@@ -103,7 +102,7 @@ def exc_weight_update(
     pre_spikes_ee = spikes[N_inp:-N_inh]
 
     # Extract traces
-    pre_trace_ee = pre_synaptic_trace[N_inp:-N_inh]
+    pre_trace_ee = pre_trace[N_inp:-N_inh]
 
     # Update synaptic traces
     pre_trace_ee = pre_trace_ee + dt * (-pre_trace_ee / tau_plus + pre_spikes_ee)
@@ -111,11 +110,12 @@ def exc_weight_update(
     # Get learning components
     triplet_LTP_ee = A * pre_trace_ee * slow_trace
     heterosynaptic_ee = beta * post_trace**3 * (W_ee - W_ee_ideal)
-    transmitter_ee = B_ee * post_trace - delta
+    transmitter_ee = B * post_trace - delta
 
     # Compute the differential update for weights using Euler's method
     delta_w_ee = dt * (
-        post_spikes * (triplet_LTP_ee - heterosynaptic_ee) - pre_spikes_ee * transmitter_ee
+        post_spikes * (triplet_LTP_ee - heterosynaptic_ee)
+        - pre_spikes_ee * transmitter_ee
     )
 
     # Update the weights
@@ -128,8 +128,8 @@ def exc_weight_update(
         W_se_ideal,
         W_ee_ideal,
         pre_trace_se,
-        post_trace_se,
-        slow_trace_se,
+        post_trace,
+        slow_trace,
         z_ht_se,
         C_se,
         pre_trace_ee,

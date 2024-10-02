@@ -7,7 +7,7 @@ import jax
 print("Sanity check:", jax.devices())
 
 # Initiate SNN object
-snn = SNN()
+snn = SNN(num_items=40)
 
 # Initialize network
 snn.build()

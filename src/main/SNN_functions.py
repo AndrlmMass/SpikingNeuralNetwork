@@ -20,7 +20,7 @@ class SNN:
         V_th: int = -50,  # Spiking threshold
         V_rest: int = -60,  # Resting potential
         P: int | float = 20,  # Potential strength
-        C: int | int = 1,  # Where does it say that this should be 1?
+        C: int | float = 1,  # Where does it say that this should be 1?
         U: float | int = 0.2,  # Initial release probability parameter
         tau_plus: float | int = 20,  # presynaptic excitatory synapse
         tau_minus: float | int = 20,  # postsynaptic excitatory synapse
@@ -523,6 +523,7 @@ class SNN:
             w_p=self.wp,
             beta=self.beta,
             delta=self.delta,
+            euler=self.euler,
             time=self.time,
             V_th_=self.V_th,
             V_rest=self.V_rest,

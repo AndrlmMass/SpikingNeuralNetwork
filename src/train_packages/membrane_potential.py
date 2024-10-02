@@ -43,7 +43,7 @@ def update_membrane_potential_conduct(
     )  # postsynaptic spikes
 
     # Update weight indices
-    w_ij_exc = jnp.float16(W_plastic[:-N_inhib_neurons])  # plastic excitatory weights
+    w_ij_exc = W_plastic[:-N_inhib_neurons]  # plastic excitatory weights
     w_ij_inh = W_plastic[-N_inhib_neurons:]  # plastic inhibitory weights
 
     # Update membrane potential indices
