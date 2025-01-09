@@ -1,4 +1,4 @@
-import jax.numpy as jnp
+import numpy as np
 
 
 def update_membrane_potential_conduct(
@@ -36,18 +36,18 @@ def update_membrane_potential_conduct(
     ### Update excitatory membrane potential ###
 
     # Update spike indices
-    S_j_exc = jnp.expand_dims(S[:-N_inhib_neurons], axis=1)  # presynaptic exc spikes
-    S_j_inh = jnp.expand_dims(S[-N_inhib_neurons:], axis=1)  # presynaptic inh spikes
-    S_i = jnp.expand_dims(
+    S_j_exc = np.expand_dims(S[:-N_inhib_neurons], axis=1)  # presynaptic exc spikes
+    S_j_inh = np.expand_dims(S[-N_inhib_neurons:], axis=1)  # presynaptic inh spikes
+    S_i = np.expand_dims(
         S[N_input_neurons:-N_inhib_neurons], axis=1
     )  # postsynaptic spikes
 
     # Update weight indices
-    w_ij_exc = jnp.float16(W_plastic[:-N_inhib_neurons])  # plastic excitatory weights
+    w_ij_exc = W_plastic[:-N_inhib_neurons]  # plastic excitatory weights
     w_ij_inh = W_plastic[-N_inhib_neurons:]  # plastic inhibitory weights
 
     # Update membrane potential indices
-    U_e = jnp.expand_dims(U[:-N_inhib_neurons], axis=1)
+    U_e = np.expand_dims(U[:-N_inhib_neurons], axis=1)
 
     # Update traces indices
     g_ampa_e = g_ampa[:-N_inhib_neurons]  # shape: (484, 1)
@@ -55,20 +55,16 @@ def update_membrane_potential_conduct(
     g_gaba_e = g_gaba[:-N_inhib_neurons]  # shape: (121, 1)
 
     # Update traces
-    g_a = g_a + dt * (-(g_a / tau_a) + delta_a * S_i)  # shape:(484, 1)
-    g_b = g_b + dt * (-(g_b / tau_b) + delta_b * S_i)  # shape:(484, 1)
-    u = u + dt * (
-        ((U_cons - u) / tau_f) + (U_cons * (1 - u) * S_j_exc)
-    )  # shape:(968, 1)
-    x = x + dt * (((1 - x) / tau_d) - u * x * S_j_exc)  # shape:(968, 1)
+    g_a += dt * (-(g_a / tau_a) + delta_a * S_i)  # shape:(484, 1)
+    g_b += dt * (-(g_b / tau_b) + delta_b * S_i)  # shape:(484, 1)
+    u += dt * (((U_cons - u) / tau_f) + (U_cons * (1 - u) * S_j_exc))  # shape:(968, 1)
+    x += dt * (((1 - x) / tau_d) - u * x * S_j_exc)  # shape:(968, 1)
 
     # Update transmitter channels
-    g_ampa_e = g_ampa_e + dt * (
-        -(g_ampa_e / tau_ampa) + (jnp.dot(w_ij_exc.T, (u * x * S_j_exc)))
-    )
-    g_nmda_e = g_nmda_e + dt / tau_nmda * (g_ampa_e - g_nmda_e)
+    g_ampa_e += dt * (-(g_ampa_e / tau_ampa) + (np.dot(w_ij_exc.T, (u * x * S_j_exc))))
+    g_nmda_e += dt / tau_nmda * (g_ampa_e - g_nmda_e)
     g_e = alpha_exc * g_ampa_e + (1 - alpha_exc) * g_nmda_e
-    g_gaba_e = g_gaba_e + dt * (-(g_gaba_e / tau_gaba) + jnp.dot(w_ij_inh.T, S_j_inh))
+    g_gaba_e += dt * (-(g_gaba_e / tau_gaba) + np.dot(w_ij_inh.T, S_j_inh))
 
     # Update membrane potential
     delta_U_ex = (
@@ -81,21 +77,21 @@ def update_membrane_potential_conduct(
         )
     )
 
-    U = U.at[:-N_inhib_neurons].set((U_e + delta_U_ex).reshape(-1) + 0.01)
+    U[:-N_inhib_neurons] = (U_e + delta_U_ex).reshape(-1)
 
     ### Update inhibitory membrane potential ###
 
     # Update spike indices
-    S_j_exc = jnp.expand_dims(S[N_input_neurons:-N_inhib_neurons], axis=1)
-    S_j_inh = jnp.expand_dims(S[-N_inhib_neurons:], axis=1)
-    S_i = jnp.expand_dims(S[-N_inhib_neurons:], axis=1)  # postsynaptic spikes
+    S_j_exc = np.expand_dims(S[N_input_neurons:-N_inhib_neurons], axis=1)
+    S_j_inh = np.expand_dims(S[-N_inhib_neurons:], axis=1)
+    S_i = np.expand_dims(S[-N_inhib_neurons:], axis=1)  # postsynaptic spikes
 
     # Update weight indices
     w_ij_exc = W_static[:-N_inhib_neurons]  # excitatory weights (4, 1)
     w_ij_inh = W_static[-N_inhib_neurons:]  # inhibitory weights (1, 1)
 
     # Update membrane potential indices
-    U_i = jnp.expand_dims(U[-N_inhib_neurons:], axis=1)
+    U_i = np.expand_dims(U[-N_inhib_neurons:], axis=1)
 
     # Update traces indices
     g_ampa_i = g_ampa[-N_inhib_neurons:]
@@ -103,12 +99,10 @@ def update_membrane_potential_conduct(
     g_gaba_i = g_gaba[-N_inhib_neurons:]
 
     # Update transmitter channels
-    g_ampa_i = g_ampa_i + dt * (
-        -(g_ampa_i / tau_ampa) + (jnp.dot(w_ij_exc.T, (S_j_exc)))
-    )
-    g_nmda_i = g_nmda_i + dt / tau_nmda * (g_ampa_i - g_nmda_i)
+    g_ampa_i += dt * (-(g_ampa_i / tau_ampa) + (np.dot(w_ij_exc.T, (S_j_exc))))
+    g_nmda_i += dt / tau_nmda * (g_ampa_i - g_nmda_i)
     g_i = alpha_inh * g_ampa_i + (1 - alpha_inh) * g_nmda_i
-    g_gaba_i = g_gaba_i + dt * (-(g_gaba_i / tau_gaba) + jnp.dot(w_ij_inh.T, S_j_inh))
+    g_gaba_i += dt * (-(g_gaba_i / tau_gaba) + np.dot(w_ij_inh.T, S_j_inh))
 
     # Update membrane potential
     delta_U_in = (
@@ -117,11 +111,11 @@ def update_membrane_potential_conduct(
         * ((V_rest - U_i) + (g_i * (U_exc - U_i)) + (g_gaba_i) * (U_inh - U_i))
     )
 
-    U = U.at[-N_inhib_neurons:].set((U_i + delta_U_in).reshape(-1))
+    U[-N_inhib_neurons:] = (U_i + delta_U_in).reshape(-1)
 
     # Update transmitter levels
-    g_ampa = jnp.concatenate((g_ampa_e, g_ampa_i), axis=0)
-    g_nmda = jnp.concatenate((g_nmda_e, g_nmda_i), axis=0)
-    g_gaba = jnp.concatenate((g_gaba_e, g_gaba_i), axis=0)
+    g_ampa = np.concatenate((g_ampa_e, g_ampa_i), axis=0)
+    g_nmda = np.concatenate((g_nmda_e, g_nmda_i), axis=0)
+    g_gaba = np.concatenate((g_gaba_e, g_gaba_i), axis=0)
 
     return U, g_ampa, g_nmda, g_gaba, x, u, g_a, g_b
