@@ -4,7 +4,7 @@
 import numpy as np
 import math
 
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
 # from sklearn.manifold import TSNE

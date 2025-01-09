@@ -4,6 +4,7 @@ import numpy as np
 import random
 import json
 
+# Importing local scripts
 from plot.plot_training import *
 from plot.plot_network import *
 from gen.gen_weights import *
@@ -20,7 +21,7 @@ class SNN:
         V_th: int = -50,  # Spiking threshold
         V_rest: int = -60,  # Resting potential
         P: int | float = 20,  # Potential strength
-        C: int | int = 1,  # Where does it say that this should be 1?
+        C: int | float = 1,  # Where does it say that this should be 1?
         U: float | int = 0.2,  # Initial release probability parameter
         tau_plus: float | int = 20,  # presynaptic excitatory synapse
         tau_minus: float | int = 20,  # postsynaptic excitatory synapse
@@ -139,7 +140,7 @@ class SNN:
                 os.makedirs("model")
             if save:
                 # Generate a random number for model folder
-                rand_num = random.sample((0, 9), 5)
+                rand_num = np.random.randint(low=0, high=9, size=5)
 
                 # Check if random number folder exists
                 while os.path.exists(os.path.join("model", f"model_{rand_num}")):
@@ -219,33 +220,27 @@ class SNN:
                                 os.path.join(save_path, "slow_pre_synaptic_trace.npy")
                             )
                             self.C = np.load(os.path.join(save_path, "C.npy"))
-                            self.z_ht = np.load(os.path.join(save_path, "\\z_ht.npy"))
-                            self.x = np.load(os.path.join(save_path, "\\x.npy"))
-                            self.u = np.load(os.path.join(save_path, "\\u.npy"))
-                            self.H = np.load(os.path.join(save_path, "\\H.npy"))
-                            self.z_i = np.load(os.path.join(save_path, "\\z_i.npy"))
-                            self.z_j = np.load(os.path.join(save_path, "\\z_j.npy"))
+                            self.z_ht = np.load(os.path.join(save_path, "z_ht.npy"))
+                            self.x = np.load(os.path.join(save_path, "x.npy"))
+                            self.u = np.load(os.path.join(save_path, "u.npy"))
+                            self.H = np.load(os.path.join(save_path, "H.npy"))
+                            self.z_i = np.load(os.path.join(save_path, "z_i.npy"))
+                            self.z_j = np.load(os.path.join(save_path, "z_j.npy"))
                             self.V_th_array = np.load(
-                                os.path.join(save_path, "\\V_th_array.npy")
+                                os.path.join(save_path, "V_th_array.npy")
                             )
                             self.W_plastic = np.load(
-                                os.path.join(save_path, "\\plastic_weights.npy")
+                                os.path.join(save_path, "plastic_weights.npy")
                             )
                             self.W_static = np.load(
-                                os.path.join(save_path, "\\static_weights.npy")
+                                os.path.join(save_path, "static_weights.npy")
                             )
-                            self.V_th = np.load(os.path.join(save_path, "\\V_th.npy"))
-                            self.g_nmda = np.load(
-                                os.path.join(save_path, "\\g_nmda.npy")
-                            )
-                            self.g_ampa = np.load(
-                                os.path.join(save_path, "\\g_ampa.npy")
-                            )
-                            self.g_gaba = np.load(
-                                os.path.join(save_path, "\\g_gaba.npy")
-                            )
-                            self.g_a = np.load(os.path.join(save_path, "\\g_a.npy"))
-                            self.g_b = np.load(os.path.join(save_path, "\\g_b.npy"))
+                            self.V_th = np.load(os.path.join(save_path, "V_th.npy"))
+                            self.g_nmda = np.load(os.path.join(save_path, "g_nmda.npy"))
+                            self.g_ampa = np.load(os.path.join(save_path, "g_ampa.npy"))
+                            self.g_gaba = np.load(os.path.join(save_path, "g_gaba.npy"))
+                            self.g_a = np.load(os.path.join(save_path, "g_a.npy"))
+                            self.g_b = np.load(os.path.join(save_path, "g_b.npy"))
                             print("model loaded", end="\r")
                             self.model_loaded = True
                             return
@@ -401,14 +396,14 @@ class SNN:
         )
 
         # Concatenate plastic weights
-        self.W_plastic = jnp.concatenate((self.W_se, self.W_ee, self.W_ie), axis=0)
-        self.W_plastic_ideal = jnp.concatenate(
+        self.W_plastic = np.concatenate((self.W_se, self.W_ee, self.W_ie), axis=0)
+        self.W_plastic_ideal = np.concatenate(
             (self.W_se_ideal, self.W_ee_ideal), axis=0
         )
-        self.W_plastic_plt = jnp.zeros(shape=(self.time, 9))
+        self.W_plastic_plt = np.zeros(shape=(self.time, 9))
 
         # Concatenate static weights
-        self.W_static = jnp.concatenate((self.W_ei, self.W_ii), axis=0)
+        self.W_static = np.concatenate((self.W_ei, self.W_ii), axis=0)
 
     def gen_data(
         self,
@@ -523,6 +518,7 @@ class SNN:
             w_p=self.wp,
             beta=self.beta,
             delta=self.delta,
+            euler=self.euler,
             time=self.time,
             V_th_=self.V_th,
             V_rest=self.V_rest,
@@ -563,6 +559,7 @@ class SNN:
             U_cons=self.U_cons,
             th_rest=self.th_rest,
             th_refact=self.th_refact,
+            run_njit=run_njit,
         )
 
         if save_model:
