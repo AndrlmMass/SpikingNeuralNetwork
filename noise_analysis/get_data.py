@@ -1,8 +1,9 @@
 from torchvision import datasets, transforms
-import matplotlib.pyplot as plt
 from snntorch import spikegen
+import pickle as pkl
 import numpy as np
 import torch
+import os
 
 
 def create_data(
@@ -15,6 +16,19 @@ def create_data(
     download,
     num_images,
 ):
+    file_name1 = "sdata/MNIST_spiked.pkl"
+    file_name2 = "sdata/MNIST_spiked_labels.pkl"
+
+    if os.path.exists(file_name1):
+        with open(file_name1, "rb") as file:
+            data = pkl.load(file)
+
+        with open(file_name2, "rb") as file:
+            labels = pkl.load(file)
+
+        return data, labels
+
+    # set transform rule
     transform = transforms.Compose(
         [
             transforms.Grayscale(),  # Ensure single channel
@@ -23,6 +37,7 @@ def create_data(
         ]
     )
 
+    # get dataset
     mnist = datasets.MNIST(
         root="data", train=True, transform=transform, download=download
     )
@@ -57,5 +72,15 @@ def create_data(
         spike_data_corrected,
         (spike_data.shape[0] * spike_data.shape[1], spike_data_corrected.shape[2]),
     )
+
+    # create folder for data
+    os.makedirs("sdata")
+
+    # save training data in binary format
+    with open(file_name1, "wb") as file:
+        pkl.dump(spike_data_corrected, file)
+
+    with open(file_name2, "wb") as file:
+        pkl.dump(spike_labels, file)
 
     return spike_data_corrected, spike_labels
