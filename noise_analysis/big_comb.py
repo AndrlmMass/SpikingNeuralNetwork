@@ -109,6 +109,8 @@ class SNN_noisy:
         stop_index_mp=None,
         time_start_mp=None,
         time_stop_mp=None,
+        mean_noise=0,
+        var_noise=1,
         retur=False,
         save=True,
     ):
@@ -129,6 +131,8 @@ class SNN_noisy:
             save=save,
             N_x=self.N_x,
             T=self.T,
+            mean_noise=mean_noise,
+            var_noise=var_noise,
         )
         if plot_spikes:
             if start_time_spike_plot == None:

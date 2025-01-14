@@ -19,6 +19,8 @@ def update_membrane_potential(
     membrane_conductance,
     dt,
     very_small_value,
+    mean_noise,
+    var_noise,
 ):
     I_in = np.dot(weights.T, spikes)
     mp_delta = (
@@ -26,7 +28,7 @@ def update_membrane_potential(
         * dt
         / membrane_conductance
     )
-    mp += mp_delta
+    mp += mp_delta + np.random.normal(loc=mean_noise, scale=var_noise, size=mp.shape)
 
     return mp
 
@@ -47,6 +49,8 @@ def train_network(
     save,
     N_x,
     T,
+    mean_noise,
+    var_noise,
 ):
 
     for t in range(1, T):
@@ -60,6 +64,8 @@ def train_network(
             membrane_conductance=membrane_conductance,
             very_small_value=very_small_value,
             dt=dt,
+            mean_noise=mean_noise,
+            var_noise=var_noise,
         )
 
         # update spikes array

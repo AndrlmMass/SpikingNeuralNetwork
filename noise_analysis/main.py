@@ -10,8 +10,6 @@ snn_N.prepare_data()
 snn_N.prepare_training()
 
 # train network
-snn_N.train_network_(
-    plot_spikes=True, plot_mp=True, start_index_mp=-50, stop_index_mp=350
-)
+snn_N.train_network_(plot_spikes=True, plot_mp=True)
 
 # analyse results
