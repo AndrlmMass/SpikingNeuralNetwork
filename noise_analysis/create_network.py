@@ -37,11 +37,12 @@ def create_weigths(
 
 
 def create_arrays(N, resting_membrane, total_time, data, N_x):
-    membrane_potential = np.full((N, total_time), fill_value=resting_membrane)
+    membrane_potential = np.zeros((total_time, N - N_x))
+    membrane_potential[0] = resting_membrane
 
-    trace = np.zeros((N, total_time))
+    trace = np.zeros((total_time, N))
 
-    spikes = np.zeros((N, total_time))
-    spikes[:N_x] = np.transpose(data)
+    spikes = np.zeros((total_time, N))
+    spikes[:, :N_x] = data
 
     return membrane_potential, trace, spikes
