@@ -61,6 +61,7 @@ class SNN_noisy:
         weight_affinity_hidden=0.1,
         weight_affinity_input=0.05,
         resting_membrane=-70,
+        max_time=100,
         pos_weight=1,
         neg_weight=4,
         plot_weights=False,
@@ -78,19 +79,21 @@ class SNN_noisy:
             plot_weights=plot_weights,
         )
         self.resting_potential = resting_membrane
+        self.max_time = max_time
 
         # create other arrays
-        self.mp, self.elig_trace, self.spikes = create_arrays(
+        self.mp, self.elig_trace, self.spikes, self.spike_times = create_arrays(
             N=self.N,
             resting_membrane=self.resting_potential,
             total_time=self.T,
             data=self.data,
             N_x=self.N_x,
+            max_time=self.max_time,
         )
 
         # return results if retur == True
         if retur:
-            return self.weights, self.mp, self.elig_trace
+            return self.weights, self.mp, self.elig_trace, self.spike_times
 
     def train_network_(
         self,
@@ -100,9 +103,18 @@ class SNN_noisy:
         very_small_value=0.00001,
         spike_threshold=-65,
         reset_potential=-80,
+        learning_rate=0.00001,
         tau_trace=0.1,
         plot_spikes=False,
         plot_mp=False,
+        min_weight_exc=0,
+        max_weight_exc=2,
+        min_weight_inh=0,
+        max_weight_inh=-8,
+        learning_rate_exc=0.0001,
+        learning_rate_inh=-0.001,
+        tau_pre=20,
+        tau_post=20,
         start_time_spike_plot=None,
         stop_time_spike_plot=None,
         start_index_mp=None,
@@ -124,10 +136,20 @@ class SNN_noisy:
             membrane_resistance=membrane_resistance,
             membrane_conductance=membrane_conductance,
             very_small_value=very_small_value,
+            min_weight_exc=min_weight_exc,
+            max_weight_exc=max_weight_exc,
+            min_weight_inh=min_weight_inh,
+            max_weight_inh=max_weight_inh,
+            N_inh=self.N_inh,
+            learning_rate_exc=learning_rate_exc,
+            learning_rate_inh=learning_rate_inh,
+            tau_pre=tau_pre,
+            tau_post=tau_post,
             dt=self.dt,
             spike_threshold=spike_threshold,
             reset_potential=reset_potential,
             tau_trace=tau_trace,
+            spike_times=self.spike_times,
             save=save,
             N_x=self.N_x,
             T=self.T,
