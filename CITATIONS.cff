@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "SpikingNeuralNetwork"
+authors:
+  - family-names: "Massey"
+    given-names: "Andreas"
+abstract: "This repository improves upon existing spiking neural networks (SNNs) to make them more flexible, applicable, and relevant."
+version: "1.0.0"
+date-released: "2025-01-16"
+url: "https://github.com/AndrImMass/SpikingNeuralNetwork"
+repository-code: "https://github.com/AndrImMass/SpikingNeuralNetwork"
+preferred-citation:
+  type: software
+  authors:
+    - family-names: "Massey"
+      given-names: "Andreas"
+  title: "SpikingNeuralNetwork"
+  version: "1.0.0"
+  url: "https://github.com/AndrImMass/SpikingNeuralNetwork"
+  date-released: "2025-01-16"
+  bibtex: |
+    @software{spikingneuralnetwork,
+      author = {Mass, AndrIm},
+      title = {SpikingNeuralNetwork},
+      year = {2025},
+      version = {1.0.0},
+      url = {https://github.com/AndrImMass/SpikingNeuralNetwork},
+      note = {Accessed: 2025-01-16}
+    }
