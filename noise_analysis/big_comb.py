@@ -26,6 +26,7 @@ class SNN_noisy:
         num_images=20,
         min_time=None,
         max_time=None,
+        recreate=False,
     ):
         self.T = num_images * num_steps
 
@@ -38,6 +39,7 @@ class SNN_noisy:
             time_var_input=time_var_input,
             download=download,
             num_images=num_images,
+            recreate=recreate,
         )
 
         # plot spikes
@@ -103,8 +105,7 @@ class SNN_noisy:
         very_small_value=0.00001,
         spike_threshold=-65,
         reset_potential=-80,
-        learning_rate=0.00001,
-        tau_trace=0.1,
+        tau_trace=0.0001,
         plot_spikes=False,
         plot_mp=False,
         min_weight_exc=0,

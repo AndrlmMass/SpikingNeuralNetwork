@@ -1,4 +1,5 @@
 import os
+from tqdm import tqdm
 import numpy as np
 import pickle as pkl
 
@@ -72,11 +73,11 @@ def update_weights(
 
     # Update weights
     weights[:-N_inh] += np.sum(
-        delta_weights_exc, axis=0
+        delta_weights_exc.T, axis=0
     )  # Summing contributions from all spikes
     weights[:-N_inh] = np.clip(weights[:-N_inh], min_weight_exc, max_weight_exc)
 
-    weights[-N_inh:] += np.sum(delta_weights_inh, axis=0)
+    weights[-N_inh:] += np.sum(delta_weights_inh.T, axis=0)
     weights[-N_inh:] = np.clip(weights[-N_inh:], min_weight_inh, max_weight_inh)
 
     return weights
@@ -135,7 +136,7 @@ def train_network(
     var_noise,
 ):
 
-    for t in range(1, T):
+    for t in tqdm(range(1, T)):
         # update membrane potential
         mp[t] = update_membrane_potential(
             mp=mp[t - 1],
@@ -157,8 +158,8 @@ def train_network(
         spike_times = np.where(spikes[t] == 1, 0, spike_times)
 
         # update eligibility trace
-        elig_trace[t] = elig_trace[t - 1] * (1 - (1 / tau_trace))
-        elig_trace[t][spikes[t] == 1] += 1
+        # elig_trace[t] = elig_trace[t - 1] - (elig_trace[t - 1] / tau_trace)
+        # elig_trace[t][spikes[t] == 1] += 1
 
         # update weights
         weights = update_weights(

@@ -41,6 +41,7 @@ def create_arrays(N, resting_membrane, total_time, max_time, data, N_x):
     membrane_potential[0] = resting_membrane
 
     trace = np.zeros((total_time, N))
+    trace[0] = 1
 
     spikes = np.zeros((total_time, N))
     spikes[:, :N_x] = data
