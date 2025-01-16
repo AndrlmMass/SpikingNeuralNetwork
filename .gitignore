@@ -2,3 +2,6 @@
 data/
 model/
 plot_files/
+sdata/
+*.pyc
+*.pkl
