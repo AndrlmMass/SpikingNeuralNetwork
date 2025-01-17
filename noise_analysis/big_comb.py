@@ -1,6 +1,7 @@
+import numpy as np
 from train import train_network
 from get_data import create_data
-from plot import spike_plot, heat_map, mp_plot
+from plot import spike_plot, heat_map, mp_plot, weights_plot
 from create_network import create_weigths, create_arrays
 
 
@@ -31,7 +32,7 @@ class SNN_noisy:
         self.T = num_images * num_steps
 
         self.data, self.labels = create_data(
-            pixel_size=self.N_x,
+            pixel_size=int(np.sqrt(self.N_x)),
             num_steps=num_steps,
             gain=gain,
             offset=offset,
@@ -100,22 +101,22 @@ class SNN_noisy:
     def train_network_(
         self,
         dt=1,
-        membrane_resistance=20,
-        membrane_conductance=5,
-        very_small_value=0.00001,
+        tau_m=10,
+        membrane_resistance=100,
         spike_threshold=-65,
         reset_potential=-80,
-        tau_trace=0.0001,
         plot_spikes=False,
+        plot_weights=False,
         plot_mp=False,
-        min_weight_exc=0,
+        min_weight_exc=0.1,
         max_weight_exc=2,
-        min_weight_inh=0,
+        min_weight_inh=-0.1,
         max_weight_inh=-8,
         learning_rate_exc=0.0001,
         learning_rate_inh=-0.001,
-        tau_pre=20,
-        tau_post=20,
+        tau_pre=0.01,
+        tau_post=0.01,
+        interval=100,
         start_time_spike_plot=None,
         stop_time_spike_plot=None,
         start_index_mp=None,
@@ -124,38 +125,42 @@ class SNN_noisy:
         time_stop_mp=None,
         mean_noise=0,
         var_noise=1,
+        load_weights=False,
         retur=False,
         save=True,
     ):
         self.dt = dt
-        self.weights, self.spikes, self.elig_trace, self.mp = train_network(
-            weights=self.weights,
-            mp=self.mp,
-            spikes=self.spikes,
-            elig_trace=self.elig_trace,
-            resting_potential=self.resting_potential,
-            membrane_resistance=membrane_resistance,
-            membrane_conductance=membrane_conductance,
-            very_small_value=very_small_value,
-            min_weight_exc=min_weight_exc,
-            max_weight_exc=max_weight_exc,
-            min_weight_inh=min_weight_inh,
-            max_weight_inh=max_weight_inh,
-            N_inh=self.N_inh,
-            learning_rate_exc=learning_rate_exc,
-            learning_rate_inh=learning_rate_inh,
-            tau_pre=tau_pre,
-            tau_post=tau_post,
-            dt=self.dt,
-            spike_threshold=spike_threshold,
-            reset_potential=reset_potential,
-            tau_trace=tau_trace,
-            spike_times=self.spike_times,
-            save=save,
-            N_x=self.N_x,
-            T=self.T,
-            mean_noise=mean_noise,
-            var_noise=var_noise,
+        self.weights, self.spikes, self.elig_trace, self.mp, self.weights2plot = (
+            train_network(
+                weights=self.weights,
+                mp=self.mp,
+                spikes=self.spikes,
+                elig_trace=self.elig_trace,
+                resting_potential=self.resting_potential,
+                membrane_resistance=membrane_resistance,
+                min_weight_exc=min_weight_exc,
+                max_weight_exc=max_weight_exc,
+                min_weight_inh=min_weight_inh,
+                max_weight_inh=max_weight_inh,
+                N_inh=self.N_inh,
+                N_exc=self.N_exc,
+                learning_rate_exc=learning_rate_exc,
+                learning_rate_inh=learning_rate_inh,
+                interval=interval,
+                tau_pre=tau_pre,
+                tau_post=tau_post,
+                tau_m=tau_m,
+                dt=self.dt,
+                N=self.N,
+                spike_threshold=spike_threshold,
+                reset_potential=reset_potential,
+                spike_times=self.spike_times,
+                save=save,
+                N_x=self.N_x,
+                T=self.T,
+                mean_noise=mean_noise,
+                var_noise=var_noise,
+            )
         )
         if plot_spikes:
             if start_time_spike_plot == None:
@@ -178,6 +183,9 @@ class SNN_noisy:
             mp_plot(
                 mp=self.mp[time_start_mp:time_stop_mp, start_index_mp:stop_index_mp]
             )
+
+        if plot_weights:
+            weights_plot(weights_plot=self.weights2plot, N_x=self.N_x, N_inh=self.N_inh)
 
         if retur:
             return self.weights, self.spikes, self.elig_trace

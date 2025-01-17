@@ -71,6 +71,11 @@ def update_weights(
         learning_rate_inh * stdp_update[:, -N_inh:]
     )  # For inhibitory connections
 
+    # print(
+    #     f"\rmean exc delta: {np.mean(delta_weights_exc)}, mean inh delta: {np.mean(delta_weights_inh)}",
+    #     end="",
+    # )
+
     # Update weights
     weights[:-N_inh] += np.sum(
         delta_weights_exc.T, axis=0
@@ -89,19 +94,16 @@ def update_membrane_potential(
     mp,
     resting_potential,
     membrane_resistance,
-    membrane_conductance,
+    tau_m,
     dt,
-    very_small_value,
     mean_noise,
     var_noise,
 ):
     I_in = np.dot(weights.T, spikes)
-    mp_delta = (
-        (I_in - ((mp - resting_potential + very_small_value) / membrane_resistance))
-        * dt
-        / membrane_conductance
-    )
-    mp += mp_delta + np.random.normal(loc=mean_noise, scale=var_noise, size=mp.shape)
+    mp_delta = (-(mp - resting_potential) + membrane_resistance * I_in) / tau_m * dt
+    mp += mp_delta + np.random.normal(
+        loc=mean_noise, scale=var_noise, size=mp.shape
+    )  # Gaussian noise
 
     return mp
 
@@ -113,28 +115,31 @@ def train_network(
     elig_trace,
     resting_potential,
     membrane_resistance,
-    membrane_conductance,
-    very_small_value,
     spike_times,
     min_weight_exc,
     max_weight_exc,
     min_weight_inh,
     max_weight_inh,
     N_inh,
+    N_exc,
     learning_rate_exc,
     learning_rate_inh,
     tau_pre,
     tau_post,
     dt,
+    N,
+    tau_m,
     spike_threshold,
     reset_potential,
-    tau_trace,
+    interval,
     save,
     N_x,
     T,
     mean_noise,
     var_noise,
 ):
+    # create weights_plotting_array
+    weights_4_plotting = np.zeros((T // interval, N_exc + N_inh, N))
 
     for t in tqdm(range(1, T)):
         # update membrane potential
@@ -144,8 +149,7 @@ def train_network(
             spikes=spikes[t - 1],
             resting_potential=resting_potential,
             membrane_resistance=membrane_resistance,
-            membrane_conductance=membrane_conductance,
-            very_small_value=very_small_value,
+            tau_m=tau_m,
             dt=dt,
             mean_noise=mean_noise,
             var_noise=var_noise,
@@ -176,6 +180,10 @@ def train_network(
             tau_post,
         )
 
+        # save weights for plotting
+        if t % interval == 0:
+            weights_4_plotting[t // interval] = weights[N_x:]
+
     if save:
         file_name = "trained_weights/weights.pkl"
 
@@ -185,4 +193,4 @@ def train_network(
         with open(file_name, "wb") as file:
             pkl.dump(weights, file)
 
-    return weights, spikes, elig_trace, mp
+    return weights, spikes, elig_trace, mp, weights_4_plotting

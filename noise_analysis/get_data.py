@@ -4,6 +4,7 @@ import pickle as pkl
 import numpy as np
 import torch
 import os
+from tqdm import tqdm  # Import tqdm for progress bars
 
 
 def create_data(
@@ -25,18 +26,27 @@ def create_data(
         transform = transforms.Compose(
             [
                 transforms.Grayscale(),  # Ensure single channel
-                transforms.Resize((pixel_size, pixel_size)),  # Resize to 3x3 pixels
+                transforms.Resize((pixel_size)),  # Resize to specified pixels
                 transforms.ToTensor(),  # Convert to tensor
             ]
         )
 
-        # get dataset
-        mnist = datasets.MNIST(
-            root="data", train=True, transform=transform, download=download
-        )
+        # get dataset with progress bar
+        print("Downloading MNIST dataset...")
+        with tqdm(total=1, desc="Downloading MNIST") as pbar:
+            mnist = datasets.MNIST(
+                root="data", train=True, transform=transform, download=download
+            )
+            pbar.update(1)  # Update progress bar when download completes
 
         # Extract image tensors and labels
-        images, labels = zip(*[(mnist[i][0], mnist[i][1]) for i in range(len(mnist))])
+        print("Processing images and labels...")
+        images, labels = zip(
+            *[
+                (mnist[i][0], mnist[i][1])
+                for i in tqdm(range(len(mnist)), desc="Extracting samples")
+            ]
+        )
         images = torch.stack(images)  # Shape: [num_samples, 1, 28, 28]
         labels = torch.tensor(labels)  # Shape: [num_samples]
 
@@ -44,7 +54,8 @@ def create_data(
         limited_images = images[:num_images]
         limited_labels = labels[:num_images]
 
-        # convert to spikes
+        # convert to spikes with progress bar
+        print("Converting images to spike trains...")
         spike_data = spikegen.rate(
             limited_images,
             num_steps=num_steps,
@@ -66,18 +77,23 @@ def create_data(
             (spike_data.shape[0] * spike_data.shape[1], spike_data_corrected.shape[2]),
         )
 
-        # create folder for data
+        # save training data in binary format with progress bar
+        print("Saving spike data and labels...")
+        os.makedirs("sdata", exist_ok=True)
 
-        # save training data in binary format
-        with open(file_name1, "wb") as file:
-            pkl.dump(spike_data_corrected, file)
+        with tqdm(total=2, desc="Saving Data") as pbar:
+            with open(file_name1, "wb") as file:
+                pkl.dump(spike_data_corrected, file)
+            pbar.update(1)
 
-        with open(file_name2, "wb") as file:
-            pkl.dump(spike_labels, file)
+            with open(file_name2, "wb") as file:
+                pkl.dump(spike_labels, file)
+            pbar.update(1)
 
         return spike_data_corrected, spike_labels
 
     elif os.path.exists(file_name1):
+        print("\rLoading existing data...", end="")
         with open(file_name1, "rb") as file:
             data = pkl.load(file)
 

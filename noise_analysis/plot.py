@@ -19,4 +19,17 @@ def heat_map(data, pixel_size):
 
 def mp_plot(mp):
     plt.plot(mp)
+    plt.title("membrane potential during training")
+    plt.xlabel("time (ms)")
+    plt.ylabel("Membrane potential (mV)")
+    plt.show()
+
+
+def weights_plot(weights_plot, N_x, N_inh):
+    # simplify weights
+    mu_weights = np.mean(weights_plot, axis=2)
+
+    plt.plot(mu_weights[:, N_x:-N_inh], color="blue", label="excitatory")
+    plt.plot(mu_weights[:, -N_inh:], color="red", label="inhibitory")
+    plt.legend()
     plt.show()
