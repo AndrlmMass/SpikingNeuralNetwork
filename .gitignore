@@ -6,3 +6,4 @@ sdata/
 pycache/
 *.pyc
 *.pkl
+noise_analysis/__pycache__/plot.cpython-312.pyc
