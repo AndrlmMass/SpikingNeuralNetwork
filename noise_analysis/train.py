@@ -14,8 +14,8 @@ def update_weights(
     N_inh,
     learning_rate_exc,
     learning_rate_inh,
-    tau_pre,
-    tau_post,
+    tau_LTP,
+    tau_LTD,
 ):
     """
     Apply the STDP rule to update synaptic weights using a fully vectorized approach.
@@ -42,49 +42,46 @@ def update_weights(
     # Compute pairwise time differences for all neurons
     time_diff = np.subtract.outer(spike_times, spike_times)
 
+    """So far, so good"""
+
     # Mask time differences to only consider interactions involving spiking neurons
-    spike_mask = (
-        spiking_neurons[:, None] | spiking_neurons[None, :]
-    )  # Broadcast mask for any interaction with spiking neurons
-    masked_time_diff = (
-        time_diff * spike_mask
-    )  # Mask time differences; irrelevant entries become 0
+    spike_mask = spiking_neurons[:, None] | spiking_neurons[None, :]
+    masked_time_diff = np.where(spike_mask == True, time_diff, float("nan"))
 
     # STDP update rule
     stdp_update = np.zeros_like(masked_time_diff)
 
     # Potentiation for Δt > 0 (pre-spike before post-spike)
-    stdp_update[masked_time_diff > 0] = np.exp(
-        -masked_time_diff[masked_time_diff > 0] / tau_pre
+    stdp_update[masked_time_diff >= 0] = np.exp(
+        -masked_time_diff[masked_time_diff >= 0] / tau_LTP
     )
 
     # Depression for Δt < 0 (post-spike before pre-spike)
     stdp_update[masked_time_diff < 0] = -np.exp(
-        masked_time_diff[masked_time_diff < 0] / tau_post
+        masked_time_diff[masked_time_diff < 0] / tau_LTD
     )
 
     # Separate updates for excitatory and inhibitory neurons
     delta_weights_exc = (
-        learning_rate_exc * stdp_update[:, :-N_inh]
+        learning_rate_exc * stdp_update[:-N_inh]
     )  # For excitatory connections
-    delta_weights_inh = (
-        learning_rate_inh * stdp_update[:, -N_inh:]
+    delta_weights_inh = -(
+        learning_rate_inh * stdp_update[-N_inh:]
     )  # For inhibitory connections
 
-    # print(
-    #     f"\rmean exc delta: {np.mean(delta_weights_exc)}, mean inh delta: {np.mean(delta_weights_inh)}",
-    #     end="",
-    # )
+    # print(np.sum(delta_weights_inh), np.sum(delta_weights_exc))
 
     # Update weights
     weights[:-N_inh] += np.sum(
-        delta_weights_exc.T, axis=0
+        delta_weights_exc, axis=0
     )  # Summing contributions from all spikes
-    weights[:-N_inh] = np.clip(weights[:-N_inh], min_weight_exc, max_weight_exc)
+    # weights[:-N_inh] = np.clip(weights[:-N_inh], min_weight_exc, max_weight_exc)
 
-    weights[-N_inh:] += np.sum(delta_weights_inh.T, axis=0)
-    weights[-N_inh:] = np.clip(weights[-N_inh:], min_weight_inh, max_weight_inh)
-
+    weights[-N_inh:] += np.sum(delta_weights_inh, axis=0)
+    # weights[-N_inh:] = np.clip(weights[-N_inh:], min_weight_inh, max_weight_inh)
+    # print(
+    #     "excitatory", np.mean(weights[:-N_inh]), "inhibitory", np.mean(weights[-N_inh:])
+    # )
     return weights
 
 
@@ -98,8 +95,6 @@ def update_membrane_potential(
     dt,
     mean_noise,
     var_noise,
-    max_mp,
-    min_mp,
 ):
     mp_new = mp.copy()
     I_in = np.dot(weights.T, spikes)
@@ -107,7 +102,7 @@ def update_membrane_potential(
     mp_new += mp_delta + np.random.normal(
         loc=mean_noise, scale=var_noise, size=mp.shape
     )  # Gaussian noise
-
+    # print(np.mean(mp_new))
     return mp_new
 
 
@@ -127,8 +122,8 @@ def train_network(
     N_exc,
     learning_rate_exc,
     learning_rate_inh,
-    tau_pre,
-    tau_post,
+    tau_LTP,
+    tau_LTD,
     max_mp,
     min_mp,
     dt,
@@ -145,6 +140,7 @@ def train_network(
 ):
     # create weights_plotting_array
     weights_4_plotting = np.zeros((T // interval, N_exc + N_inh, N))
+    weights_4_plotting[0] = weights[N_x:]
 
     for t in tqdm(range(1, T)):
         # update membrane potential
@@ -158,19 +154,14 @@ def train_network(
             dt=dt,
             mean_noise=mean_noise,
             var_noise=var_noise,
-            max_mp=max_mp,
-            min_mp=min_mp,
         )
 
         # update spikes array
         mp[t] = np.clip(mp[t], a_min=min_mp, a_max=max_mp)
+        print(np.mean(mp[t]))
         spikes[t, N_x:][mp[t] > spike_threshold] = 1
         mp[t][mp[t] > spike_threshold] = reset_potential
-        spike_times = np.where(spikes[t] == 1, 0, spike_times)
-
-        d = np.min(mp[t])
-        if d < min_mp:
-            print(d)
+        spike_times = np.where(spikes[t] == 1, 0, spike_times + 1)
 
         # update eligibility trace
         # elig_trace[t] = elig_trace[t - 1] - (elig_trace[t - 1] / tau_trace)
@@ -187,8 +178,8 @@ def train_network(
             N_inh,
             learning_rate_exc,
             learning_rate_inh,
-            tau_pre,
-            tau_post,
+            tau_LTP,
+            tau_LTD,
         )
 
         # save weights for plotting

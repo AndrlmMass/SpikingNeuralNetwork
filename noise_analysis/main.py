@@ -4,7 +4,7 @@ from big_comb import SNN_noisy
 snn_N = SNN_noisy()
 
 # acquire data
-snn_N.prepare_data(num_images=5)
+snn_N.prepare_data(num_images=5, recreate=False)
 
 # set up network for training
 snn_N.prepare_training(plot_weights=False)
@@ -15,5 +15,4 @@ snn_N.train_network_(
 )
 
 # analyse results
-
 ## K

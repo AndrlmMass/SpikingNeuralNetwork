@@ -46,6 +46,6 @@ def create_arrays(N, resting_membrane, total_time, max_time, data, N_x):
     spikes = np.zeros((total_time, N))
     spikes[:, :N_x] = data
 
-    spike_times = np.full(N, fill_value=max_time + 1)
+    spike_times = np.random.randint(low=max_time, high=max_time**2, size=N)
 
     return membrane_potential, trace, spikes, spike_times
