@@ -65,8 +65,8 @@ class SNN_noisy:
         weight_affinity_input=0.05,
         resting_membrane=-70,
         max_time=100,
-        pos_weight=1,
-        neg_weight=4,
+        pos_weight=0.5,
+        neg_weight=-1,
         plot_weights=False,
         retur=False,
     ):
@@ -101,7 +101,7 @@ class SNN_noisy:
     def train_network_(
         self,
         dt=1,
-        tau_m=10,
+        tau_m=30,
         membrane_resistance=100,
         spike_threshold=-65,
         reset_potential=-80,
@@ -111,7 +111,7 @@ class SNN_noisy:
         min_weight_exc=0.1,
         max_weight_exc=2,
         min_weight_inh=-0.1,
-        max_weight_inh=-8,
+        max_weight_inh=-2,
         learning_rate_exc=0.0001,
         learning_rate_inh=-0.001,
         tau_pre=0.01,
@@ -125,6 +125,8 @@ class SNN_noisy:
         time_stop_mp=None,
         mean_noise=0,
         var_noise=1,
+        max_mp=40,
+        min_mp=-80,
         load_weights=False,
         retur=False,
         save=True,
@@ -150,6 +152,8 @@ class SNN_noisy:
                 tau_pre=tau_pre,
                 tau_post=tau_post,
                 tau_m=tau_m,
+                max_mp=max_mp,
+                min_mp=min_mp,
                 dt=self.dt,
                 N=self.N,
                 spike_threshold=spike_threshold,
@@ -168,20 +172,23 @@ class SNN_noisy:
             if stop_time_spike_plot == None:
                 stop_time_spike_plot = self.T
 
-            spike_plot(self.spikes[start_time_spike_plot:stop_time_spike_plot])
+            spike_plot(
+                self.spikes[start_time_spike_plot:stop_time_spike_plot], self.labels
+            )
 
         if plot_mp:
             if start_index_mp == None:
                 start_index_mp = self.N_x
             if stop_index_mp == None:
-                stop_index_mp = -self.N_inh
+                stop_index_mp = self.N_exc + self.N_inh
             if time_start_mp == None:
                 time_start_mp = 0
             if time_stop_mp == None:
                 time_stop_mp = self.T
 
             mp_plot(
-                mp=self.mp[time_start_mp:time_stop_mp, start_index_mp:stop_index_mp]
+                mp=self.mp[time_start_mp:time_stop_mp],
+                N_exc=self.N_exc,
             )
 
         if plot_weights:

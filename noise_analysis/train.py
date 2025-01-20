@@ -98,14 +98,17 @@ def update_membrane_potential(
     dt,
     mean_noise,
     var_noise,
+    max_mp,
+    min_mp,
 ):
+    mp_new = mp.copy()
     I_in = np.dot(weights.T, spikes)
     mp_delta = (-(mp - resting_potential) + membrane_resistance * I_in) / tau_m * dt
-    mp += mp_delta + np.random.normal(
+    mp_new += mp_delta + np.random.normal(
         loc=mean_noise, scale=var_noise, size=mp.shape
     )  # Gaussian noise
 
-    return mp
+    return mp_new
 
 
 def train_network(
@@ -126,6 +129,8 @@ def train_network(
     learning_rate_inh,
     tau_pre,
     tau_post,
+    max_mp,
+    min_mp,
     dt,
     N,
     tau_m,
@@ -144,7 +149,7 @@ def train_network(
     for t in tqdm(range(1, T)):
         # update membrane potential
         mp[t] = update_membrane_potential(
-            mp=mp[t - 1],
+            mp=mp[t - 1].copy(),
             weights=weights[:, N_x:],
             spikes=spikes[t - 1],
             resting_potential=resting_potential,
@@ -153,13 +158,19 @@ def train_network(
             dt=dt,
             mean_noise=mean_noise,
             var_noise=var_noise,
+            max_mp=max_mp,
+            min_mp=min_mp,
         )
 
         # update spikes array
+        mp[t] = np.clip(mp[t], a_min=min_mp, a_max=max_mp)
         spikes[t, N_x:][mp[t] > spike_threshold] = 1
-        mask = spikes[t, N_x:] == 1
-        mp[t][mask] = reset_potential
+        mp[t][mp[t] > spike_threshold] = reset_potential
         spike_times = np.where(spikes[t] == 1, 0, spike_times)
+
+        d = np.min(mp[t])
+        if d < min_mp:
+            print(d)
 
         # update eligibility trace
         # elig_trace[t] = elig_trace[t - 1] - (elig_trace[t - 1] / tau_trace)

@@ -21,14 +21,14 @@ def create_weigths(
     weights = np.zeros(shape=(N, N))
 
     # input_weights
-    weights[:N_x, N_x:-N_inh][mask_input[:N_x, N_x:-N_inh]] = pos_weight
+    weights[:N_x, N_x:][mask_input[:N_x, N_x:]] = pos_weight
     # excitatory weights
     weights[N_x:-N_inh, N_x:][mask_hidden[N_x:-N_inh, N_x:]] = pos_weight
     # inhibitory weights
-    weights[-N_inh:, N_x:][mask_hidden[-N_inh:, N_x:]] = neg_weight
+    weights[-N_inh:, N_x:-N_inh][mask_hidden[-N_inh:, N_x:-N_inh]] = neg_weight
 
     if plot_weights:
-        plt.imshow(weights)
+        plt.imshow(weights, cmap="gray")
         plt.gca().invert_yaxis()
         plt.title("Weights")
         plt.show()

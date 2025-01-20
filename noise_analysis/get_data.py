@@ -66,7 +66,7 @@ def create_data(
         )
 
         # extend labels based on num_steps
-        spike_labels = limited_labels.unsqueeze(0).repeat(num_steps, 1)
+        spike_labels = limited_labels.numpy().repeat(num_steps)
 
         # remove unnecessary dimensions
         spike_data_corrected = spike_data.squeeze(2).flatten(start_dim=2)
