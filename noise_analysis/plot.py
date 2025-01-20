@@ -2,14 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-import matplotlib.pyplot as plt
-import numpy as np
-
-
-import matplotlib.pyplot as plt
-import numpy as np
-
-
 def spike_plot(data, labels):
     # Validate dimensions
     if len(labels) != data.shape[0]:
@@ -70,13 +62,13 @@ def mp_plot(mp, N_exc):
     plt.plot(mp[:, :N_exc], color="green")
     plt.title("membrane potential during training")
     plt.xlabel("time (ms)")
-    plt.ylabel("Membrane potential (mV)")
+    plt.ylabel("Inhibitory membrane potential (mV)")
     plt.show()
 
     plt.plot(mp[:, N_exc:], color="red")
     plt.title("membrane potential during training")
     plt.xlabel("time (ms)")
-    plt.ylabel("Membrane potential (mV)")
+    plt.ylabel("Excitatory membrane potential (mV)")
     plt.show()
 
 

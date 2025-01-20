@@ -42,10 +42,8 @@ def update_weights(
     # Compute pairwise time differences for all neurons
     time_diff = np.subtract.outer(spike_times, spike_times)
 
-    """So far, so good"""
-
     # Mask time differences to only consider interactions involving spiking neurons
-    spike_mask = spiking_neurons[:, None] | spiking_neurons[None, :]
+    spike_mask = spiking_neurons[:, None] & spiking_neurons[None, :]
     masked_time_diff = np.where(spike_mask == True, time_diff, float("nan"))
 
     # STDP update rule
@@ -75,10 +73,10 @@ def update_weights(
     weights[:-N_inh] += np.sum(
         delta_weights_exc, axis=0
     )  # Summing contributions from all spikes
-    # weights[:-N_inh] = np.clip(weights[:-N_inh], min_weight_exc, max_weight_exc)
+    weights[:-N_inh] = np.clip(weights[:-N_inh], min_weight_exc, max_weight_exc)
 
     weights[-N_inh:] += np.sum(delta_weights_inh, axis=0)
-    # weights[-N_inh:] = np.clip(weights[-N_inh:], min_weight_inh, max_weight_inh)
+    weights[-N_inh:] = np.clip(weights[-N_inh:], min_weight_inh, max_weight_inh)
     # print(
     #     "excitatory", np.mean(weights[:-N_inh]), "inhibitory", np.mean(weights[-N_inh:])
     # )
@@ -131,6 +129,7 @@ def train_network(
     tau_m,
     spike_threshold,
     reset_potential,
+    w_interval,
     interval,
     save,
     N_x,
@@ -158,29 +157,26 @@ def train_network(
 
         # update spikes array
         mp[t] = np.clip(mp[t], a_min=min_mp, a_max=max_mp)
-        print(np.mean(mp[t]))
+        print(f"\r{np.mean(mp[t])}", end="")
         spikes[t, N_x:][mp[t] > spike_threshold] = 1
         mp[t][mp[t] > spike_threshold] = reset_potential
         spike_times = np.where(spikes[t] == 1, 0, spike_times + 1)
 
-        # update eligibility trace
-        # elig_trace[t] = elig_trace[t - 1] - (elig_trace[t - 1] / tau_trace)
-        # elig_trace[t][spikes[t] == 1] += 1
-
         # update weights
-        weights = update_weights(
-            weights,
-            spike_times,
-            min_weight_exc,
-            max_weight_exc,
-            min_weight_inh,
-            max_weight_inh,
-            N_inh,
-            learning_rate_exc,
-            learning_rate_inh,
-            tau_LTP,
-            tau_LTD,
-        )
+        if t % w_interval:
+            weights = update_weights(
+                weights,
+                spike_times,
+                min_weight_exc,
+                max_weight_exc,
+                min_weight_inh,
+                max_weight_inh,
+                N_inh,
+                learning_rate_exc,
+                learning_rate_inh,
+                tau_LTP,
+                tau_LTD,
+            )
 
         # save weights for plotting
         if t % interval == 0:
