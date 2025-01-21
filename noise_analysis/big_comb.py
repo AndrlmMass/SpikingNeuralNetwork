@@ -2,7 +2,7 @@ import numpy as np
 from train import train_network
 from get_data import create_data
 from plot import spike_plot, heat_map, mp_plot, weights_plot
-from create_network import create_weigths, create_arrays
+from create_network import create_weights, create_arrays
 
 
 class SNN_noisy:
@@ -28,8 +28,11 @@ class SNN_noisy:
         min_time=None,
         max_time=None,
         recreate=False,
+        add_breaks=True,
+        break_lengths=[500, 400, 300],
+        noisy_data=True,
+        noise_level=0.05,
     ):
-        self.T = num_images * num_steps
 
         self.data, self.labels = create_data(
             pixel_size=int(np.sqrt(self.N_x)),
@@ -41,7 +44,12 @@ class SNN_noisy:
             download=download,
             num_images=num_images,
             recreate=recreate,
+            add_breaks=add_breaks,
+            break_lengths=break_lengths,
+            noisy_data=noisy_data,
+            noise_level=noise_level,
         )
+        self.T = self.data.shape[0]
 
         # plot spikes
         if plot_spikes:
@@ -49,7 +57,7 @@ class SNN_noisy:
                 min_time = 0
             if max_time == None:
                 max_time = self.T
-            spike_plot(self.data[min_time:max_time])
+            spike_plot(self.data[min_time:max_time], self.labels)
 
         # plot heatmap of activity
         if plot_heat_map:
@@ -61,7 +69,8 @@ class SNN_noisy:
 
     def prepare_training(
         self,
-        weight_affinity_hidden=0.1,
+        weight_affinity_hidden_exc=0.1,
+        weight_affinity_hidden_inh=0.2,
         weight_affinity_input=0.05,
         resting_membrane=-70,
         max_time=100,
@@ -71,11 +80,12 @@ class SNN_noisy:
         retur=False,
     ):
         # create weights
-        self.weights = create_weigths(
+        self.weights = create_weights(
             N_exc=self.N_exc,
             N_inh=self.N_inh,
             N_x=self.N_x,
-            weight_affinity_hidden=weight_affinity_hidden,
+            weight_affinity_hidden_exc=weight_affinity_hidden_exc,
+            weight_affinity_hidden_inh=weight_affinity_hidden_inh,
             weight_affinity_input=weight_affinity_input,
             pos_weight=pos_weight,
             neg_weight=neg_weight,
@@ -108,12 +118,13 @@ class SNN_noisy:
         plot_spikes=False,
         plot_weights=False,
         plot_mp=False,
-        min_weight_exc=0.1,
+        min_weight_exc=0.01,
         max_weight_exc=2,
-        min_weight_inh=-0.1,
-        max_weight_inh=-4,
+        min_weight_inh=-4,
+        max_weight_inh=-0.01,
         learning_rate_exc=0.0005,
         learning_rate_inh=0.0005,
+        update_weights=True,
         tau_LTP=2,
         tau_LTD=2,
         w_interval=5,
@@ -128,7 +139,6 @@ class SNN_noisy:
         var_noise=5,
         max_mp=40,
         min_mp=-100,
-        load_weights=False,
         retur=False,
         save=True,
     ):
@@ -147,6 +157,7 @@ class SNN_noisy:
                 max_weight_inh=max_weight_inh,
                 N_inh=self.N_inh,
                 N_exc=self.N_exc,
+                update_weights_=update_weights,
                 learning_rate_exc=learning_rate_exc,
                 learning_rate_inh=learning_rate_inh,
                 w_interval=w_interval,

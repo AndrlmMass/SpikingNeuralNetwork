@@ -116,6 +116,7 @@ def train_network(
     max_weight_exc,
     min_weight_inh,
     max_weight_inh,
+    update_weights_,
     N_inh,
     N_exc,
     learning_rate_exc,
@@ -140,7 +141,7 @@ def train_network(
     # create weights_plotting_array
     weights_4_plotting = np.zeros((T // interval, N_exc + N_inh, N))
     weights_4_plotting[0] = weights[N_x:]
-
+    print("Training network...")
     for t in tqdm(range(1, T)):
         # update membrane potential
         mp[t] = update_membrane_potential(
@@ -163,7 +164,7 @@ def train_network(
         spike_times = np.where(spikes[t] == 1, 0, spike_times + 1)
 
         # update weights
-        if t % w_interval:
+        if update_weights_:
             weights = update_weights(
                 weights,
                 spike_times,

@@ -28,6 +28,8 @@ def spike_plot(data, labels):
     # Add the horizontal line below the spikes
     y_offset = -10  # Position below the spike raster
     for label in unique_labels:
+        if label == -1:
+            continue
         # Get the indices where this label is active
         label_indices = np.where(labels == label)[0]
 
@@ -60,15 +62,15 @@ def heat_map(data, pixel_size):
 
 def mp_plot(mp, N_exc):
     plt.plot(mp[:, :N_exc], color="green")
-    plt.title("membrane potential during training")
+    plt.title("excitatory membrane potential during training")
     plt.xlabel("time (ms)")
-    plt.ylabel("Inhibitory membrane potential (mV)")
+    plt.ylabel("membrane potential (mV)")
     plt.show()
 
     plt.plot(mp[:, N_exc:], color="red")
-    plt.title("membrane potential during training")
+    plt.title("inhibitory membrane potential during training")
     plt.xlabel("time (ms)")
-    plt.ylabel("Excitatory membrane potential (mV)")
+    plt.ylabel("membrane potential (mV)")
     plt.show()
 
 

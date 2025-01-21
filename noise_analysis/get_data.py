@@ -1,10 +1,11 @@
 from torchvision import datasets, transforms
+import matplotlib.pyplot as plt
 from snntorch import spikegen
+from tqdm import tqdm
 import pickle as pkl
 import numpy as np
 import torch
 import os
-from tqdm import tqdm  # Import tqdm for progress bars
 
 
 def create_data(
@@ -17,6 +18,10 @@ def create_data(
     download,
     num_images,
     recreate,
+    add_breaks,
+    break_lengths,
+    noisy_data,
+    noise_level,
 ):
     file_name1 = "sdata/MNIST_spiked.pkl"
     file_name2 = "sdata/MNIST_spiked_labels.pkl"
@@ -72,10 +77,43 @@ def create_data(
         spike_data_corrected = spike_data.squeeze(2).flatten(start_dim=2)
 
         # merge second and first dimensions
-        spike_data_corrected = np.reshape(
+        S_data = np.reshape(
             spike_data_corrected,
             (spike_data.shape[0] * spike_data.shape[1], spike_data_corrected.shape[2]),
         )
+
+        # convert S_data to numpy array
+        S_data_conv = S_data.numpy()
+
+        if add_breaks:
+            # Keep track of how much the array has grown so that the index is correct
+            offset = 0
+
+            for img in range(num_images):
+                # choose random break length
+                length = np.random.choice(break_lengths, size=1)[0]
+
+                # define break spiking activity
+                break_activity = np.zeros((length, int(pixel_size**2)), dtype=int)
+
+                # create break labels
+                break_labels = np.full(length, fill_value=-1)
+
+                # compute the start position for inserting break
+                start = img * num_steps + offset
+
+                # IMPORTANT: reassign the output of np.insert
+                S_data_conv = np.insert(S_data_conv, start, break_activity, axis=0)
+                spike_labels = np.insert(spike_labels, start, break_labels, axis=0)
+
+                # update offset since we have inserted 'length' steps of break
+                offset += length
+        if noisy_data:
+            # create break activity
+            break_activity = (np.random.random(size=S_data.shape) < noise_level).astype(
+                int
+            )
+            S_data = S_data | break_activity
 
         # save training data in binary format with progress bar
         print("Saving spike data and labels...")
@@ -83,14 +121,14 @@ def create_data(
 
         with tqdm(total=2, desc="Saving Data") as pbar:
             with open(file_name1, "wb") as file:
-                pkl.dump(spike_data_corrected, file)
+                pkl.dump(S_data_conv, file)
             pbar.update(1)
 
             with open(file_name2, "wb") as file:
                 pkl.dump(spike_labels, file)
             pbar.update(1)
 
-        return spike_data_corrected, spike_labels
+        return S_data_conv, spike_labels
 
     elif os.path.exists(file_name1):
         print("\rLoading existing data...", end="")
