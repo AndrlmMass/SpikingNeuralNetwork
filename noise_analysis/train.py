@@ -11,6 +11,10 @@ def update_weights(
     max_weight_exc,
     min_weight_inh,
     max_weight_inh,
+    weight_decay_rate_exc,
+    weight_decay_rate_inh,
+    tau_decay_exc,
+    tau_decay_inh,
     N_inh,
     learning_rate_exc,
     learning_rate_inh,
@@ -32,6 +36,16 @@ def update_weights(
     Returns:
     - Updated weights.
     """
+    # Add weight decay
+    decay_exc = np.round(
+        -np.exp((weights[:-N_inh] - tau_decay_exc) / weight_decay_rate_exc), 7
+    )
+    decay_inh = np.round(
+        np.exp((weights[-N_inh:] - tau_decay_inh) / weight_decay_rate_inh), 7
+    )
+    weights[:-N_inh] += decay_exc
+    weights[-N_inh:] += decay_inh
+
     # Find the neurons that spiked in the current timestep
     spiking_neurons = spike_times == 0
 
@@ -43,7 +57,7 @@ def update_weights(
     time_diff = np.subtract.outer(spike_times, spike_times)
 
     # Mask time differences to only consider interactions involving spiking neurons
-    spike_mask = spiking_neurons[:, None] & spiking_neurons[None, :]
+    spike_mask = spiking_neurons[:, None] | spiking_neurons[None, :]
     masked_time_diff = np.where(spike_mask == True, time_diff, float("nan"))
 
     # STDP update rule
@@ -63,19 +77,17 @@ def update_weights(
     delta_weights_exc = (
         learning_rate_exc * stdp_update[:-N_inh]
     )  # For excitatory connections
-    delta_weights_inh = -(
+    delta_weights_inh = (
         learning_rate_inh * stdp_update[-N_inh:]
     )  # For inhibitory connections
 
     # print(np.sum(delta_weights_inh), np.sum(delta_weights_exc))
 
     # Update weights
-    weights[:-N_inh] += np.sum(
-        delta_weights_exc, axis=0
-    )  # Summing contributions from all spikes
+    weights[:-N_inh] += delta_weights_exc
     weights[:-N_inh] = np.clip(weights[:-N_inh], min_weight_exc, max_weight_exc)
 
-    weights[-N_inh:] += np.sum(delta_weights_inh, axis=0)
+    weights[-N_inh:] += delta_weights_inh
     weights[-N_inh:] = np.clip(weights[-N_inh:], min_weight_inh, max_weight_inh)
     # print(
     #     "excitatory", np.mean(weights[:-N_inh]), "inhibitory", np.mean(weights[-N_inh:])
@@ -99,8 +111,8 @@ def update_membrane_potential(
     mp_delta = (-(mp - resting_potential) + membrane_resistance * I_in) / tau_m * dt
     mp_new += mp_delta + np.random.normal(
         loc=mean_noise, scale=var_noise, size=mp.shape
-    )  # Gaussian noise
-    # print(np.mean(mp_new))
+    )
+
     return mp_new
 
 
@@ -117,6 +129,8 @@ def train_network(
     min_weight_inh,
     max_weight_inh,
     update_weights_,
+    weight_decay_rate_exc,
+    weight_decay_rate_inh,
     N_inh,
     N_exc,
     learning_rate_exc,
@@ -125,6 +139,8 @@ def train_network(
     tau_LTD,
     max_mp,
     min_mp,
+    tau_decay_exc,
+    tau_decay_inh,
     dt,
     N,
     tau_m,
@@ -158,7 +174,6 @@ def train_network(
 
         # update spikes array
         mp[t] = np.clip(mp[t], a_min=min_mp, a_max=max_mp)
-        print(f"\r{np.mean(mp[t])}", end="")
         spikes[t, N_x:][mp[t] > spike_threshold] = 1
         mp[t][mp[t] > spike_threshold] = reset_potential
         spike_times = np.where(spikes[t] == 1, 0, spike_times + 1)
@@ -166,18 +181,23 @@ def train_network(
         # update weights
         if update_weights_:
             weights = update_weights(
-                weights,
-                spike_times,
-                min_weight_exc,
-                max_weight_exc,
-                min_weight_inh,
-                max_weight_inh,
-                N_inh,
-                learning_rate_exc,
-                learning_rate_inh,
-                tau_LTP,
-                tau_LTD,
+                weights=weights,
+                spike_times=spike_times,
+                weight_decay_rate_exc=weight_decay_rate_exc,
+                weight_decay_rate_inh=weight_decay_rate_inh,
+                tau_decay_exc=tau_decay_exc,
+                tau_decay_inh=tau_decay_inh,
+                min_weight_exc=min_weight_exc,
+                max_weight_exc=max_weight_exc,
+                min_weight_inh=min_weight_inh,
+                max_weight_inh=max_weight_inh,
+                N_inh=N_inh,
+                learning_rate_exc=learning_rate_exc,
+                learning_rate_inh=learning_rate_inh,
+                tau_LTP=tau_LTP,
+                tau_LTD=tau_LTD,
             )
+            print(f"\r{np.max(weights[:N_exc])}, {np.min(weights[N_exc:])}", end="")
 
         # save weights for plotting
         if t % interval == 0:

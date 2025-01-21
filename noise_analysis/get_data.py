@@ -109,11 +109,13 @@ def create_data(
                 # update offset since we have inserted 'length' steps of break
                 offset += length
         if noisy_data:
+            # Convert the float array to an integer array first
+            S_data_conv = S_data_conv.astype(int)
             # create break activity
-            break_activity = (np.random.random(size=S_data.shape) < noise_level).astype(
-                int
-            )
-            S_data = S_data | break_activity
+            break_activity = (
+                np.random.random(size=S_data_conv.shape) < noise_level
+            ).astype(int)
+            S_data_conv = S_data_conv | break_activity
 
         # save training data in binary format with progress bar
         print("Saving spike data and labels...")

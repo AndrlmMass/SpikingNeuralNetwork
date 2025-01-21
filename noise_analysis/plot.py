@@ -9,15 +9,16 @@ def spike_plot(data, labels):
             f"Labels length ({len(labels)}) must match the number of time steps ({data.shape[0]})."
         )
 
-    # Assign colors to unique labels
-    unique_labels = np.unique(labels)
+    # Assign colors to unique labels (excluding -1 if desired)
+    valid_label_mask = labels != -1
+    unique_labels = np.unique(labels[valid_label_mask])
     colors = plt.cm.tab10(np.linspace(0, 1, len(unique_labels)))
     label_colors = {label: color for label, color in zip(unique_labels, colors)}
 
     # Collect spike positions for each neuron
     positions = [np.where(data[:, n] == 1)[0] for n in range(data.shape[1])]
 
-    # Create the plot
+    # Create the figure and axes
     fig, ax = plt.subplots(figsize=(12, 6))
 
     # Plot the spikes
@@ -25,27 +26,60 @@ def spike_plot(data, labels):
     ax.set_ylabel(f"{data.shape[1]} Units")
     ax.set_xlabel("Time (ms)")
 
+    # We'll collect which labels we've drawn (for legend) so we don't add duplicates
+    drawn_labels = set()
+
     # Add the horizontal line below the spikes
     y_offset = -10  # Position below the spike raster
-    for label in unique_labels:
-        if label == -1:
-            continue
-        # Get the indices where this label is active
-        label_indices = np.where(labels == label)[0]
 
-        # Plot a horizontal line for the label
-        if len(label_indices) > 0:
-            ax.hlines(
-                y=y_offset,  # Position below the raster
-                xmin=label_indices[0],  # Start of the label
-                xmax=label_indices[-1] + 1,  # End of the label
-                color=label_colors[label],  # Color for the label
-                linewidth=6,
-                label=f"Class {label}",
-            )
+    # We iterate through the time steps to identify contiguous segments
+    segment_start = 0
+    current_label = labels[0]
 
-    # Add legend for the labels
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=len(unique_labels))
+    for i in range(1, len(labels)):
+        # If the label changes, we close off the old segment (unless it was -1)
+        if labels[i] != current_label:
+            if current_label != -1:
+                # Plot from segment_start to i for current_label
+                ax.hlines(
+                    y=y_offset,
+                    xmin=segment_start,
+                    xmax=i,  # up to but not including i
+                    color=label_colors.get(current_label, "black"),
+                    linewidth=6,
+                    label=(
+                        None
+                        if current_label in drawn_labels
+                        else f"Class {current_label}"
+                    ),
+                )
+                drawn_labels.add(current_label)
+
+            # Update to the new segment
+            current_label = labels[i]
+            segment_start = i
+
+    # Handle the last segment after exiting the loop
+    if current_label != -1:
+        ax.hlines(
+            y=y_offset,
+            xmin=segment_start,
+            xmax=len(labels),
+            color=label_colors.get(current_label, "black"),
+            linewidth=6,
+            label=None if current_label in drawn_labels else f"Class {current_label}",
+        )
+        drawn_labels.add(current_label)
+
+    # Create a legend from the existing artists
+    handles, labels_legend = ax.get_legend_handles_labels()
+    ax.legend(
+        handles,
+        labels_legend,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.1),
+        ncol=len(unique_labels),
+    )
 
     plt.title("Spikes with Class-based Horizontal Lines")
     plt.tight_layout()
