@@ -1,7 +1,7 @@
 import numpy as np
 from train import train_network
 from get_data import create_data
-from plot import spike_plot, heat_map, mp_plot, weights_plot
+from plot import spike_plot, heat_map, mp_plot, weights_plot, spike_threshold_plot
 from create_network import create_weights, create_arrays
 
 
@@ -95,7 +95,12 @@ class SNN_noisy:
         self.max_time = max_time
 
         # create other arrays
-        self.mp, self.elig_trace, self.spikes, self.spike_times = create_arrays(
+        (
+            self.mp,
+            self.elig_trace,
+            self.spikes,
+            self.spike_times,
+        ) = create_arrays(
             N=self.N,
             resting_membrane=self.resting_potential,
             total_time=self.T,
@@ -113,11 +118,15 @@ class SNN_noisy:
         dt=1,
         tau_m=30,
         membrane_resistance=100,
-        spike_threshold=-65,
+        spike_threshold_default=int(-65),
         reset_potential=-80,
+        noisy_threshold=False,
+        spike_slope=-0.1,
+        spike_intercept=-4,
         plot_spikes=False,
         plot_weights=False,
         plot_mp=False,
+        plot_threshold=False,
         min_weight_exc=0.01,
         max_weight_exc=2,
         min_weight_inh=-4,
@@ -131,61 +140,83 @@ class SNN_noisy:
         tau_LTD=100,
         w_interval=5,
         interval=100,
+        spike_adaption=False,
+        delta_adaption=0.3,
+        tau_adaption=1,
         start_time_spike_plot=None,
         stop_time_spike_plot=None,
         start_index_mp=None,
         stop_index_mp=None,
         time_start_mp=None,
         time_stop_mp=None,
+        noisy_potential=False,
         mean_noise=0,
         var_noise=5,
         max_mp=40,
         min_mp=-100,
         weight_decay_rate_exc=1.5,
         weight_decay_rate_inh=1.5,
+        noisy_weights=False,
+        weight_mean_noise=0.05,
+        weight_var_noise=0.005,
         retur=False,
         save=True,
     ):
         self.dt = dt
-        self.weights, self.spikes, self.elig_trace, self.mp, self.weights2plot = (
-            train_network(
-                weights=self.weights,
-                mp=self.mp,
-                spikes=self.spikes,
-                elig_trace=self.elig_trace,
-                resting_potential=self.resting_potential,
-                membrane_resistance=membrane_resistance,
-                min_weight_exc=min_weight_exc,
-                max_weight_exc=max_weight_exc,
-                min_weight_inh=min_weight_inh,
-                max_weight_inh=max_weight_inh,
-                N_inh=self.N_inh,
-                N_exc=self.N_exc,
-                weight_decay_rate_exc=weight_decay_rate_exc,
-                weight_decay_rate_inh=weight_decay_rate_inh,
-                update_weights_=update_weights,
-                learning_rate_exc=learning_rate_exc,
-                learning_rate_inh=learning_rate_inh,
-                w_interval=w_interval,
-                interval=interval,
-                tau_decay_exc=tau_decay_exc,
-                tau_decay_inh=tau_decay_inh,
-                tau_LTP=tau_LTP,
-                tau_LTD=tau_LTD,
-                tau_m=tau_m,
-                max_mp=max_mp,
-                min_mp=min_mp,
-                dt=self.dt,
-                N=self.N,
-                spike_threshold=spike_threshold,
-                reset_potential=reset_potential,
-                spike_times=self.spike_times,
-                save=save,
-                N_x=self.N_x,
-                T=self.T,
-                mean_noise=mean_noise,
-                var_noise=var_noise,
-            )
+        (
+            self.weights,
+            self.spikes,
+            self.elig_trace,
+            self.mp,
+            self.weights2plot,
+            self.spike_threshold,
+        ) = train_network(
+            weights=self.weights,
+            mp=self.mp,
+            spikes=self.spikes,
+            elig_trace=self.elig_trace,
+            resting_potential=self.resting_potential,
+            membrane_resistance=membrane_resistance,
+            min_weight_exc=min_weight_exc,
+            max_weight_exc=max_weight_exc,
+            min_weight_inh=min_weight_inh,
+            max_weight_inh=max_weight_inh,
+            N_inh=self.N_inh,
+            N_exc=self.N_exc,
+            weight_decay_rate_exc=weight_decay_rate_exc,
+            weight_decay_rate_inh=weight_decay_rate_inh,
+            update_weights_=update_weights,
+            learning_rate_exc=learning_rate_exc,
+            learning_rate_inh=learning_rate_inh,
+            w_interval=w_interval,
+            interval=interval,
+            tau_decay_exc=tau_decay_exc,
+            tau_decay_inh=tau_decay_inh,
+            tau_LTP=tau_LTP,
+            tau_LTD=tau_LTD,
+            tau_m=tau_m,
+            max_mp=max_mp,
+            min_mp=min_mp,
+            dt=self.dt,
+            N=self.N,
+            spike_adaption=spike_adaption,
+            delta_adaption=delta_adaption,
+            tau_adaption=tau_adaption,
+            spike_threshold_default=spike_threshold_default,
+            spike_intercept=spike_intercept,
+            spike_slope=spike_slope,
+            noisy_threshold=noisy_threshold,
+            reset_potential=reset_potential,
+            spike_times=self.spike_times,
+            noisy_potential=noisy_potential,
+            noisy_weights=noisy_weights,
+            weight_mean_noise=weight_mean_noise,
+            weight_var_noise=weight_var_noise,
+            save=save,
+            N_x=self.N_x,
+            T=self.T,
+            mean_noise=mean_noise,
+            var_noise=var_noise,
         )
         if plot_spikes:
             if start_time_spike_plot == None:
@@ -196,6 +227,9 @@ class SNN_noisy:
             spike_plot(
                 self.spikes[start_time_spike_plot:stop_time_spike_plot], self.labels
             )
+
+        if plot_threshold:
+            spike_threshold_plot(spike_threshold, N_exc)
 
         if plot_mp:
             if start_index_mp == None:

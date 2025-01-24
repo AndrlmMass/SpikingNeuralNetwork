@@ -86,6 +86,14 @@ def spike_plot(data, labels):
     plt.show()
 
 
+def spike_threshold_plot(spike_threshold, N_exc):
+    plt.plot(spike_threshold[:N_exc], label="excitatory", color="green")
+    plt.plot(spike_threshold[N_exc:], label="excitatory", color="green")
+    plt.ylabel("spiking threshold (mV)")
+    plt.xlabel("time (ms)")
+    plt.show()
+
+
 def heat_map(data, pixel_size):
     data = data.numpy()
     summed_data = np.sum(data, axis=0)

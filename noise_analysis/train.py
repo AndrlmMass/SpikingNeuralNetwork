@@ -15,7 +15,11 @@ def update_weights(
     weight_decay_rate_inh,
     tau_decay_exc,
     tau_decay_inh,
+    noisy_weights,
+    weight_mean_noise,
+    weight_var_noise,
     N_inh,
+    dt,
     learning_rate_exc,
     learning_rate_inh,
     tau_LTP,
@@ -82,16 +86,20 @@ def update_weights(
     )  # For inhibitory connections
 
     # print(np.sum(delta_weights_inh), np.sum(delta_weights_exc))
+    if noisy_weights:
+        delta_weight_noise = np.random.normal(
+            loc=weight_mean_noise, scale=weight_var_noise, size=weights.shape
+        )
+    else:
+        delta_weight_noise = np.zeros(weights.shape)
 
     # Update weights
-    weights[:-N_inh] += delta_weights_exc
+    weights[:-N_inh] += (delta_weights_exc + delta_weight_noise[:-N_inh]) * dt
     weights[:-N_inh] = np.clip(weights[:-N_inh], min_weight_exc, max_weight_exc)
 
-    weights[-N_inh:] += delta_weights_inh
+    weights[-N_inh:] += (delta_weights_inh + delta_weight_noise[-N_inh:]) * dt
     weights[-N_inh:] = np.clip(weights[-N_inh:], min_weight_inh, max_weight_inh)
-    # print(
-    #     "excitatory", np.mean(weights[:-N_inh]), "inhibitory", np.mean(weights[-N_inh:])
-    # )
+
     return weights
 
 
@@ -99,6 +107,7 @@ def update_membrane_potential(
     spikes,
     weights,
     mp,
+    noisy_potential,
     resting_potential,
     membrane_resistance,
     tau_m,
@@ -106,20 +115,73 @@ def update_membrane_potential(
     mean_noise,
     var_noise,
 ):
+    if noisy_potential:
+        gaussian_noise = np.random.normal(
+            loc=mean_noise, scale=var_noise, size=mp.shape
+        )
+    else:
+        gaussian_noise = 0
+
     mp_new = mp.copy()
     I_in = np.dot(weights.T, spikes)
     mp_delta = (-(mp - resting_potential) + membrane_resistance * I_in) / tau_m * dt
-    mp_new += mp_delta + np.random.normal(
-        loc=mean_noise, scale=var_noise, size=mp.shape
-    )
-
+    mp_new += mp_delta + gaussian_noise
     return mp_new
+
+
+def update_spikes(
+    N_x,
+    mp,
+    dt,
+    spikes,
+    spike_times,
+    max_mp,
+    min_mp,
+    spike_adaption,
+    tau_adaption,
+    delta_adaption,
+    noisy_threshold,
+    spike_slope,
+    spike_intercept,
+    spike_threshold,
+    spike_threshold_default,
+    reset_potential,
+):
+    # update spike threshold
+    if spike_adaption:
+        spike_threshold += (spike_threshold_default - spike_threshold) / tau_adaption
+
+    # update spikes array
+    mp = np.clip(mp, a_min=min_mp, a_max=max_mp)
+    spikes[N_x:][mp > spike_threshold] = 1
+
+    # Add Solve's noisy membrane potential
+    if noisy_threshold:
+        delta_potential = spike_threshold - mp
+        p_fire = np.exp(spike_slope * delta_potential + spike_intercept) / (
+            1 + np.exp(spike_slope * delta_potential + spike_intercept)
+        )
+        additional_spikes = np.random.binomial(n=1, p=p_fire)
+        spikes[N_x:] = spikes[N_x:] | additional_spikes
+
+    # add spike adaption
+    if spike_adaption:
+        spike_threshold[spikes[N_x:] == 1] += (
+            spike_threshold[spikes[N_x:] == 1] * delta_adaption * dt
+        )
+        print(f"\r{np.mean(spike_threshold)}", end="")
+
+    mp[spikes[N_x:] == 1] = reset_potential
+    spike_times = np.where(spikes == 1, 0, spike_times + 1)
+
+    return mp, spikes, spike_times, spike_threshold
 
 
 def train_network(
     weights,
     mp,
     spikes,
+    noisy_potential,
     elig_trace,
     resting_potential,
     membrane_resistance,
@@ -144,8 +206,17 @@ def train_network(
     dt,
     N,
     tau_m,
-    spike_threshold,
+    spike_adaption,
+    tau_adaption,
+    delta_adaption,
+    spike_threshold_default: int,
     reset_potential,
+    spike_slope,
+    spike_intercept,
+    noisy_threshold,
+    noisy_weights,
+    weight_mean_noise,
+    weight_var_noise,
     w_interval,
     interval,
     save,
@@ -157,6 +228,15 @@ def train_network(
     # create weights_plotting_array
     weights_4_plotting = np.zeros((T // interval, N_exc + N_inh, N))
     weights_4_plotting[0] = weights[N_x:]
+
+    # create spike threshold array
+    if spike_adaption:
+        spike_threshold = np.full(
+            shape=(T, N - N_x), fill_value=spike_threshold_default, dtype=float
+        )
+    else:
+        spike_threshold = float(spike_threshold_default)
+
     print("Training network...")
     for t in tqdm(range(1, T)):
         # update membrane potential
@@ -168,15 +248,30 @@ def train_network(
             membrane_resistance=membrane_resistance,
             tau_m=tau_m,
             dt=dt,
+            noisy_potential=noisy_potential,
             mean_noise=mean_noise,
             var_noise=var_noise,
         )
 
         # update spikes array
-        mp[t] = np.clip(mp[t], a_min=min_mp, a_max=max_mp)
-        spikes[t, N_x:][mp[t] > spike_threshold] = 1
-        mp[t][mp[t] > spike_threshold] = reset_potential
-        spike_times = np.where(spikes[t] == 1, 0, spike_times + 1)
+        mp[t], spikes[t], spike_times, spike_threshold[t] = update_spikes(
+            N_x=N_x,
+            mp=mp[t].copy(),
+            dt=dt,
+            spikes=spikes[t].copy(),
+            spike_times=spike_times.copy(),
+            spike_intercept=spike_intercept,
+            spike_slope=spike_slope,
+            noisy_threshold=noisy_threshold,
+            spike_adaption=spike_adaption,
+            tau_adaption=tau_adaption,
+            delta_adaption=delta_adaption,
+            max_mp=max_mp,
+            min_mp=min_mp,
+            spike_threshold=spike_threshold[t - 1],
+            spike_threshold_default=spike_threshold_default,
+            reset_potential=reset_potential,
+        )
 
         # update weights
         if update_weights_:
@@ -191,13 +286,17 @@ def train_network(
                 max_weight_exc=max_weight_exc,
                 min_weight_inh=min_weight_inh,
                 max_weight_inh=max_weight_inh,
+                noisy_weights=noisy_weights,
+                weight_mean_noise=weight_mean_noise,
+                weight_var_noise=weight_var_noise,
                 N_inh=N_inh,
                 learning_rate_exc=learning_rate_exc,
                 learning_rate_inh=learning_rate_inh,
                 tau_LTP=tau_LTP,
                 tau_LTD=tau_LTD,
+                dt=dt,
             )
-            print(f"\r{np.max(weights[:N_exc])}, {np.min(weights[N_exc:])}", end="")
+            # print(f"\r{np.max(weights[:N_exc])}, {np.min(weights[N_exc:])}", end="")
 
         # save weights for plotting
         if t % interval == 0:
@@ -212,4 +311,4 @@ def train_network(
         with open(file_name, "wb") as file:
             pkl.dump(weights, file)
 
-    return weights, spikes, elig_trace, mp, weights_4_plotting
+    return weights, spikes, elig_trace, mp, weights_4_plotting, spike_threshold
