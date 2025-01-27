@@ -139,16 +139,20 @@ def weights_plot(weights_plot, N_x, N_inh):
     handles, labels = plt.gca().get_legend_handles_labels()
     by_label = dict(zip(labels, handles))  # Remove duplicates by creating a dictionary
     plt.legend(by_label.values(), by_label.keys())
-
     plt.show()
 
 
-def t_SNE(spikes, labels_spike, timesteps, N_x):
-    # Reshape labels to match spikes
-    labels_spike_simpl = np.argmax(labels_spike, axis=1)
+def t_SNE(
+    spikes,
+    labels_spike,
+    timesteps,
+    N_x,
+    n_components,
+    perplexity,
+):
 
     # Remove ISI
-    filler_mask = labels_spike_simpl == -1
+    filler_mask = labels_spike != -1
     spikes = spikes[filler_mask]
     spikes = spikes[:, N_x:]
     labels_spike = labels_spike[filler_mask]
@@ -167,12 +171,14 @@ def t_SNE(spikes, labels_spike, timesteps, N_x):
         features[i, :] = np.mean(spikes[start:end, :], axis=0)
 
     # Apply t-SNE
-    tsne = TSNE(n_components=2, perplexity=10, n_iter=1000, random_state=42)
+    tsne = TSNE(n_components=2, perplexity=8, n_iter=1000, random_state=42)
     tsne_results = tsne.fit_transform(features)
 
     # Visualize the results with labels
     plt.figure(figsize=(10, 8))
     for label in np.unique(labels):
+        if label == -1:
+            continue
         indices = labels == label
         plt.scatter(tsne_results[indices, 0], tsne_results[indices, 1], label=label)
     plt.title("t-SNE results of SNN firing rates")

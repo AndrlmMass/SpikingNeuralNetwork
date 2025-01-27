@@ -109,6 +109,19 @@ def update_weights(
         pre_trace += spiked_2d * dt
         post_trace += spikes[N_x:] * dt
 
+        # update weights for post-neurons that spiked
+        weight_mask = weights != 0
+        delta_weight = (
+            A_plus * pre_trace[weight_mask] * spikes - A_minus * post_trace * spikes
+        )
+
+        """
+        pre_trace: N x N
+        spikes: N
+        post_trace: N-N_x
+        
+        """
+
     # print(np.sum(delta_weights_inh), np.sum(delta_weights_exc))
     if noisy_weights:
         delta_weight_noise = np.random.normal(
