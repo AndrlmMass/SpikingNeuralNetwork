@@ -1,7 +1,14 @@
 import numpy as np
 from train import train_network
 from get_data import create_data
-from plot import spike_plot, heat_map, mp_plot, weights_plot, spike_threshold_plot
+from plot import (
+    spike_plot,
+    heat_map,
+    mp_plot,
+    weights_plot,
+    spike_threshold_plot,
+    t_SNE,
+)
 from create_network import create_weights, create_arrays
 
 
@@ -34,6 +41,7 @@ class SNN_noisy:
         noise_level=0.05,
     ):
 
+        self.num_steps = num_steps
         self.data, self.labels = create_data(
             pixel_size=int(np.sqrt(self.N_x)),
             num_steps=num_steps,
@@ -167,6 +175,7 @@ class SNN_noisy:
         noisy_weights=False,
         weight_mean_noise=0.05,
         weight_var_noise=0.005,
+        perform_t_SNE=False,
         retur=False,
         save=True,
     ):
@@ -265,6 +274,14 @@ class SNN_noisy:
 
         if plot_weights:
             weights_plot(weights_plot=self.weights2plot, N_x=self.N_x, N_inh=self.N_inh)
+
+        if perform_t_SNE:
+            t_SNE(
+                spikes=self.spikes,
+                labels_spike=self.labels,
+                timesteps=self.num_steps,
+                N_x=self.N_x,
+            )
 
         if retur:
             return self.weights, self.spikes, self.elig_trace
