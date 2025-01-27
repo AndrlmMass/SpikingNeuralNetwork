@@ -87,10 +87,20 @@ def spike_plot(data, labels):
 
 
 def spike_threshold_plot(spike_threshold, N_exc):
-    plt.plot(spike_threshold[:N_exc], label="excitatory", color="green")
-    plt.plot(spike_threshold[N_exc:], label="excitatory", color="green")
-    plt.ylabel("spiking threshold (mV)")
-    plt.xlabel("time (ms)")
+    fig, axs = plt.subplots(2, 1, figsize=(8, 6))
+    axs[0].plot(
+        np.mean(spike_threshold[:N_exc], axis=1), label="excitatory", color="green"
+    )
+    axs[1].plot(
+        np.mean(spike_threshold[N_exc:], axis=1), label="inhibitory", color="red"
+    )
+    axs[0].set_ylabel("spiking threshold (mV)")
+    axs[1].set_ylabel("spiking threshold (mV)")
+    axs[0].legend(loc="upper right")
+    axs[1].legend(loc="upper right")
+    fig.text(0.5, 0.04, "time (ms)", ha="center")
+    fig.suptitle("Average spiking threshold per neuron group over time")
+    plt.legend()
     plt.show()
 
 

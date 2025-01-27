@@ -11,6 +11,7 @@ def update_weights(
     max_weight_exc,
     min_weight_inh,
     max_weight_inh,
+    weight_decay,
     weight_decay_rate_exc,
     weight_decay_rate_inh,
     tau_decay_exc,
@@ -41,14 +42,11 @@ def update_weights(
     - Updated weights.
     """
     # Add weight decay
-    decay_exc = np.round(
-        -np.exp((weights[:-N_inh] - tau_decay_exc) / weight_decay_rate_exc), 7
-    )
-    decay_inh = np.round(
-        np.exp((weights[-N_inh:] - tau_decay_inh) / weight_decay_rate_inh), 7
-    )
-    weights[:-N_inh] += decay_exc
-    weights[-N_inh:] += decay_inh
+    if weight_decay:
+        decay_exc *= (weights[:-N_inh] - tau_decay_exc) / weight_decay_rate_exc
+        decay_inh *= (weights[-N_inh:] - tau_decay_inh) / weight_decay_rate_inh
+        weights[:-N_inh] += decay_exc
+        weights[-N_inh:] += decay_inh
 
     # Find the neurons that spiked in the current timestep
     spiking_neurons = spike_times == 0
@@ -190,7 +188,8 @@ def train_network(
     max_weight_exc,
     min_weight_inh,
     max_weight_inh,
-    update_weights_,
+    train_weights,
+    weight_decay,
     weight_decay_rate_exc,
     weight_decay_rate_inh,
     N_inh,
@@ -209,7 +208,7 @@ def train_network(
     spike_adaption,
     tau_adaption,
     delta_adaption,
-    spike_threshold_default: int,
+    spike_threshold_default,
     reset_potential,
     spike_slope,
     spike_intercept,
@@ -274,10 +273,11 @@ def train_network(
         )
 
         # update weights
-        if update_weights_:
+        if train_weights:
             weights = update_weights(
                 weights=weights,
                 spike_times=spike_times,
+                weight_decay=weight_decay,
                 weight_decay_rate_exc=weight_decay_rate_exc,
                 weight_decay_rate_inh=weight_decay_rate_inh,
                 tau_decay_exc=tau_decay_exc,

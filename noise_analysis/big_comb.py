@@ -23,7 +23,7 @@ class SNN_noisy:
         offset=0,
         first_spike_time=0,
         time_var_input=False,
-        download=False,
+        download=True,
         num_images=20,
         min_time=None,
         max_time=None,
@@ -133,7 +133,7 @@ class SNN_noisy:
         max_weight_inh=-0.01,
         learning_rate_exc=0.5,
         learning_rate_inh=0.5,
-        update_weights=True,
+        train_weights=True,
         tau_decay_exc=9.5,
         tau_decay_inh=9.5,
         tau_LTP=100,
@@ -154,6 +154,7 @@ class SNN_noisy:
         var_noise=5,
         max_mp=40,
         min_mp=-100,
+        weight_decay=False,
         weight_decay_rate_exc=1.5,
         weight_decay_rate_inh=1.5,
         noisy_weights=False,
@@ -183,9 +184,10 @@ class SNN_noisy:
             max_weight_inh=max_weight_inh,
             N_inh=self.N_inh,
             N_exc=self.N_exc,
+            weight_decay=weight_decay,
             weight_decay_rate_exc=weight_decay_rate_exc,
             weight_decay_rate_inh=weight_decay_rate_inh,
-            update_weights_=update_weights,
+            train_weights=train_weights,
             learning_rate_exc=learning_rate_exc,
             learning_rate_inh=learning_rate_inh,
             w_interval=w_interval,
@@ -229,7 +231,7 @@ class SNN_noisy:
             )
 
         if plot_threshold:
-            spike_threshold_plot(spike_threshold, N_exc)
+            spike_threshold_plot(self.spike_threshold, self.N_exc)
 
         if plot_mp:
             if start_index_mp == None:
