@@ -178,6 +178,10 @@ class SNN_noisy:
         perform_t_SNE=False,
         retur=False,
         save=True,
+        perplexity=8,
+        n_iter=1000,
+        random_state=48,
+        n_components=2,
     ):
         self.dt = dt
         (
@@ -281,6 +285,10 @@ class SNN_noisy:
                 labels_spike=self.labels,
                 timesteps=self.num_steps,
                 N_x=self.N_x,
+                n_components=n_components,
+                perplexity=perplexity,
+                n_iter=n_iter,
+                random_state=random_state,
             )
 
         if retur:

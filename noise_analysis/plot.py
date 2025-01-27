@@ -149,6 +149,8 @@ def t_SNE(
     N_x,
     n_components,
     perplexity,
+    n_iter,
+    random_state,
 ):
 
     # Remove ISI
@@ -171,7 +173,12 @@ def t_SNE(
         features[i, :] = np.mean(spikes[start:end, :], axis=0)
 
     # Apply t-SNE
-    tsne = TSNE(n_components=2, perplexity=8, n_iter=1000, random_state=42)
+    tsne = TSNE(
+        n_components=n_components,
+        perplexity=perplexity,
+        n_iter=n_iter,
+        random_state=random_state,
+    )
     tsne_results = tsne.fit_transform(features)
 
     # Visualize the results with labels

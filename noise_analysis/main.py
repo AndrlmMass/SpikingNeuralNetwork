@@ -1,11 +1,11 @@
 from big_comb import SNN_noisy
 
 # init class
-snn_N = SNN_noisy(N_exc=200, N_inh=50, Nx=100)
+snn_N = SNN_noisy(N_exc=200, N_inh=50, N_x=100)
 
 # acquire data
 snn_N.prepare_data(
-    num_images=200,
+    num_images=10,
     recreate=True,
     plot_spikes=False,
     noisy_data=True,
