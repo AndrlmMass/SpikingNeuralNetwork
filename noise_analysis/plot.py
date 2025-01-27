@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.manifold import TSNE
 
 
 def spike_plot(data, labels):
@@ -139,4 +140,43 @@ def weights_plot(weights_plot, N_x, N_inh):
     by_label = dict(zip(labels, handles))  # Remove duplicates by creating a dictionary
     plt.legend(by_label.values(), by_label.keys())
 
+    plt.show()
+
+
+def t_SNE(spikes, labels_spike, timesteps, N_x):
+    # Reshape labels to match spikes
+    labels_spike_simpl = np.argmax(labels_spike, axis=1)
+
+    # Remove ISI
+    filler_mask = labels_spike_simpl == -1
+    spikes = spikes[filler_mask]
+    spikes = spikes[:, N_x:]
+    labels_spike = labels_spike[filler_mask]
+    diff_indices = np.where(np.diff(labels_spike) != 0)[0] + 1
+    labels = np.concatenate(([labels_spike[0]], labels_spike[diff_indices]))
+
+    # Temporal binning to create features
+    n_time_steps, n_neurons = spikes.shape
+    n_bins = n_time_steps // timesteps
+    bin_size = timesteps
+    features = np.zeros((n_bins, n_neurons))
+
+    for i in range(n_bins):
+        start = i * bin_size
+        end = (i + 1) * bin_size
+        features[i, :] = np.mean(spikes[start:end, :], axis=0)
+
+    # Apply t-SNE
+    tsne = TSNE(n_components=2, perplexity=10, n_iter=1000, random_state=42)
+    tsne_results = tsne.fit_transform(features)
+
+    # Visualize the results with labels
+    plt.figure(figsize=(10, 8))
+    for label in np.unique(labels):
+        indices = labels == label
+        plt.scatter(tsne_results[indices, 0], tsne_results[indices, 1], label=label)
+    plt.title("t-SNE results of SNN firing rates")
+    plt.xlabel("t-SNE dimension 1")
+    plt.ylabel("t-SNE dimension 2")
+    plt.legend()
     plt.show()
