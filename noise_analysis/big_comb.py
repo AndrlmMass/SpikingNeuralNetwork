@@ -161,6 +161,8 @@ class SNN_noisy:
         time_start_mp=None,
         time_stop_mp=None,
         noisy_potential=False,
+        clip_exc_weights=True,
+        clip_inh_weights=True,
         mean_noise=0,
         var_noise=5,
         max_mp=40,
@@ -182,6 +184,7 @@ class SNN_noisy:
         n_iter=1000,
         random_state=48,
         n_components=2,
+        save_weights=False,
     ):
         self.dt = dt
         (
@@ -226,6 +229,8 @@ class SNN_noisy:
             min_mp=min_mp,
             dt=self.dt,
             N=self.N,
+            clip_exc_weights=clip_exc_weights,
+            clip_inh_weights=clip_inh_weights,
             A_plus=A_plus,
             A_minus=A_minus,
             trace_update=trace_update,
@@ -248,6 +253,10 @@ class SNN_noisy:
             mean_noise=mean_noise,
             var_noise=var_noise,
         )
+
+        if save_weights:
+            ...
+
         if plot_spikes:
             if start_time_spike_plot == None:
                 start_time_spike_plot = 0
