@@ -146,6 +146,7 @@ def t_SNE(
     spikes,
     labels_spike,
     timesteps,
+    items,
     N_x,
     n_components,
     perplexity,
@@ -171,6 +172,9 @@ def t_SNE(
         start = i * bin_size
         end = (i + 1) * bin_size
         features[i, :] = np.mean(spikes[start:end, :], axis=0)
+
+    if perplexity < items:
+        perplexity = items - 1
 
     # Apply t-SNE
     tsne = TSNE(

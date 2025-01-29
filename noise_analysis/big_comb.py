@@ -42,6 +42,7 @@ class SNN_noisy:
     ):
 
         self.num_steps = num_steps
+        self.num_items = num_images
         self.data, self.labels = create_data(
             pixel_size=int(np.sqrt(self.N_x)),
             num_steps=num_steps,
@@ -83,7 +84,7 @@ class SNN_noisy:
         resting_membrane=-70,
         max_time=100,
         pos_weight=0.5,
-        neg_weight=-1,
+        neg_weight=-2,
         plot_weights=False,
         retur=False,
     ):
@@ -163,6 +164,7 @@ class SNN_noisy:
         noisy_potential=False,
         clip_exc_weights=True,
         clip_inh_weights=True,
+        alpha=1.25,
         mean_noise=0,
         var_noise=5,
         max_mp=40,
@@ -172,13 +174,16 @@ class SNN_noisy:
         tau_post_trace_exc=1,
         tau_post_trace_inh=1,
         weight_decay=False,
-        weight_decay_rate_exc=1.5,
-        weight_decay_rate_inh=1.5,
+        weight_decay_rate_exc=0.5,
+        weight_decay_rate_inh=0.5,
         noisy_weights=False,
         weight_mean_noise=0.05,
         weight_var_noise=0.005,
         perform_t_SNE=False,
+        w_target_exc=0.1,
+        w_target_inh=-0.1,
         retur=False,
+        sleep=False,
         save=True,
         perplexity=8,
         n_iter=1000,
@@ -198,6 +203,8 @@ class SNN_noisy:
         ) = train_network(
             weights=self.weights,
             mp=self.mp,
+            sleep=sleep,
+            alpha=alpha,
             timing_update=timing_update,
             spikes=self.spikes,
             pre_trace=self.pre_trace,
@@ -222,6 +229,8 @@ class SNN_noisy:
             learning_rate_inh=learning_rate_inh,
             w_interval=w_interval,
             interval=interval,
+            w_target_exc=w_target_exc,
+            w_target_inh=w_target_inh,
             tau_LTP=tau_LTP,
             tau_LTD=tau_LTD,
             tau_m=tau_m,
@@ -297,6 +306,7 @@ class SNN_noisy:
                 n_components=n_components,
                 perplexity=perplexity,
                 n_iter=n_iter,
+                items=self.num_items,
                 random_state=random_state,
             )
 
