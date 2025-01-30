@@ -8,6 +8,7 @@ def update_weights(
     weights,
     spike_times,
     timing_update,
+    non_weight_mask,
     pre_trace,
     post_trace,
     trace_update,
@@ -31,9 +32,15 @@ def update_weights(
     max_sum_weights,
     clip_exc_weights,
     clip_inh_weights,
+    vectorized_trace,
+    baseline_weight_sum,
     spikes,
     N_inh,
+    N_exc,
     sleep,
+    sleep_now,
+    delta_w,
+    N_x,
     t,
     dt,
     A_plus,
@@ -60,19 +67,26 @@ def update_weights(
     """
     sum_weights = np.sum(np.abs(weights))
 
+    if max_sum_weights < sum_weights:
+        sleep_now = True
+
     # Add weight decay
-    if weight_decay and sleep and sum_weights > max_sum_weights:
-        exc_weights = weights[weight_mask][:-N_inh]
-        inh_weights = weights[weight_mask][-N_inh:]
+    if sleep and sleep_now:
+        exc_weights = weights[:-N_inh]
+        inh_weights = weights[-N_inh:]
 
         decay_exc = w_target_exc * (exc_weights / w_target_exc) ** weight_decay_rate_exc
         decay_inh = w_target_inh * (inh_weights / w_target_inh) ** weight_decay_rate_inh
+        print(f"\r{weight_decay_rate_exc}, {weight_decay_rate_inh}", end="")
 
-        weights[weight_mask][:-N_inh] -= decay_exc
-        weights[weight_mask][-N_inh:] += decay_inh
+        weights[:-N_inh] -= decay_exc
+        weights[-N_inh:] += decay_inh
+
+        if np.sum(np.abs(weights)) <= baseline_weight_sum:
+            sleep_now = False
 
     # Find the neurons that spiked in the current timestep
-    spike_idx = spike_times == 0
+    spike_idx = spikes == 1
 
     # If no neurons spiked, return weights unchanged
     if not np.any(spike_idx):
@@ -88,7 +102,7 @@ def update_weights(
         post_trace[:-N_inh] *= decay_post_exc
         post_trace[-N_inh:] *= decay_post_inh
 
-        return weights, pre_trace, post_trace
+        return weights, pre_trace, post_trace, sleep_now
 
     if timing_update:
         # Compute pairwise time differences for all neurons
@@ -112,14 +126,32 @@ def update_weights(
         )
 
         # Separate updates for excitatory and inhibitory neurons
-        delta_weights_exc = (
-            learning_rate_exc * stdp_update[:-N_inh]
-        )  # For excitatory connections
-        delta_weights_inh = (
-            learning_rate_inh * stdp_update[-N_inh:]
-        )  # For inhibitory connections
+        delta_weights_exc = learning_rate_exc * stdp_update[:-N_inh] * dt
+        delta_weights_inh = -learning_rate_inh * stdp_update[-N_inh:] * dt
+
+        weights[:-N_inh] += delta_weights_exc
+        weights[-N_inh:] += delta_weights_inh
 
     if trace_update:
+        # I assume that post_spikes and pre_spikes are the same, so we just use "spikes"
+        spike_idx = np.where(spikes == 1)[0]
+        pre_spikes = spike_idx
+        post_spikes = spike_idx[spike_idx > N_x]
+        for post_idx in range(post_spikes.shape[0]):
+            i = post_spikes[post_idx]
+            nonzero_w = weights[:, i].T != 0
+            delta_pos = A_plus * pre_trace[nonzero_w]
+            delta_w[nonzero_w, i] = delta_pos * dt
+            for pre_idx in range(pre_spikes.shape[0]):
+                j = pre_spikes[pre_idx]
+                if weights[j, i] > 0:
+                    delta_neg = -A_minus * post_trace[i - N_x]
+                    delta_w[j, i] = delta_neg * dt
+
+        # Flip sign of inhibitory weights change
+        delta_w[-N_inh:] *= -1
+        weights += delta_w
+
         # Precompute exponential decay factors
         decay_pre_exc = np.exp(-dt / tau_pre_trace_exc)
         decay_pre_inh = np.exp(-dt / tau_pre_trace_inh)
@@ -134,16 +166,37 @@ def update_weights(
 
         # increase trace if neuron spiked
         pre_trace += spikes * dt
-        post_trace += spikes * dt
+        post_trace += spikes[N_x:] * dt
 
+    if vectorized_trace:
+        """
+        if used in future, select which posts and pre neurons
+        spiked to significantly improve inference time
+        """
         # update weights
-        dw = A_plus * np.outer(spikes, pre_trace) - A_minus * np.outer(
-            post_trace, spikes
+        dw = (
+            A_plus * np.outer(spikes, pre_trace)
+            - A_minus * np.outer(post_trace, spikes) * dt
         )
+        # change weight sign for inhibitory weights
+        dw[:, -N_inh:] *= -1
+        weights += dw
 
-        delta_weights_exc = learning_rate_exc * dw[:-N_inh] * weight_mask[:-N_inh]
-        df = dw * -1
-        delta_weights_inh = learning_rate_inh * df[-N_inh:] * weight_mask[-N_inh:]
+        # Precompute exponential decay factors
+        decay_pre_exc = np.exp(-dt / tau_pre_trace_exc)
+        decay_pre_inh = np.exp(-dt / tau_pre_trace_inh)
+        decay_post_exc = np.exp(-dt / tau_post_trace_exc)
+        decay_post_inh = np.exp(-dt / tau_post_trace_inh)
+
+        # Update eligibility traces
+        pre_trace[:-N_inh] *= decay_pre_exc
+        pre_trace[-N_inh:] *= decay_pre_inh
+        post_trace[:-N_inh] *= decay_post_exc
+        post_trace[-N_inh:] *= decay_post_inh
+
+        # increase trace if neuron spiked
+        pre_trace += spikes * dt
+        post_trace += spikes[N_x:] * dt
 
     # add noise to weights if desired
     if noisy_weights:
@@ -155,24 +208,24 @@ def update_weights(
 
     # Update weights
     # print(
-    #     f"\rexc weight change:{np.mean(np.round(delta_weights_exc),}, inh weight change:{np.mean(delta_weights_inh)}",
+    #     f"\rexc weight change:{np.round(np.mean(delta_weights_exc),6)}, inh weight change:{np.round(np.mean(delta_weights_inh),6)}",
     #     end="",
     # )
-    weights[:-N_inh] += delta_weights_exc + delta_weight_noise[:-N_inh] * dt
-    weights[-N_inh:] -= delta_weights_inh + delta_weight_noise[-N_inh:] * dt
 
     if clip_exc_weights:
-        weights[weight_mask][:-N_inh] = np.clip(
-            weights[weight_mask][:-N_inh], max=max_weight_exc, min=min_weight_exc
+        weights[:-N_inh] = np.clip(
+            weights[:-N_inh], a_min=min_weight_exc, a_max=max_weight_exc
         )
-        print("clipping the clips")
-    if clip_inh_weights:
-        weights[weight_mask][-N_inh:] = np.clip(
-            weights[weight_mask][-N_inh:], max=max_weight_inh, min=min_weight_inh
-        )
-        print("clipping the claps")
 
-    return weights, pre_trace, post_trace
+    if clip_inh_weights:
+        weights[-N_inh:] = np.clip(
+            weights[-N_inh:], a_min=min_weight_inh, a_max=max_weight_inh
+        )
+
+    weights += delta_weight_noise
+    weights[non_weight_mask] = 0
+
+    return weights, pre_trace, post_trace, sleep_now
 
 
 def update_membrane_potential(
@@ -298,6 +351,8 @@ def train_network(
     spike_intercept,
     noisy_threshold,
     noisy_weights,
+    vectorized_trace,
+    spike_labels,
     alpha,
     weight_mean_noise,
     weight_var_noise,
@@ -320,11 +375,17 @@ def train_network(
         shape=(T, N - N_x), fill_value=spike_threshold_default, dtype=float
     )
     weight_mask = weights != 0
+    non_weight_mask = weights == 0
 
-    max_sum_weights = np.sum(np.abs(weights)) * alpha
+    baseline_weight_sum = np.sum(np.abs(weights))
+    max_sum_weights = baseline_weight_sum * alpha
+    delta_w = np.zeros(shape=weights.shape)
+
+    sleep_now = False
 
     print("Training network...")
     for t in tqdm(range(1, T)):
+
         # update membrane potential
         mp[t] = update_membrane_potential(
             mp=mp[t - 1].copy(),
@@ -366,11 +427,17 @@ def train_network(
 
         # update weights
         if train_weights:
-            weights, pre_trace, post_trace = update_weights(
+            weights, pre_trace, post_trace, sleep_now = update_weights(
                 spikes=spikes[t - 1],
-                weights=weights,
+                weights=weights.copy(),
                 max_sum_weights=max_sum_weights,
+                non_weight_mask=non_weight_mask,
+                baseline_weight_sum=baseline_weight_sum,
                 sleep=sleep,
+                N_x=N_x,
+                vectorized_trace=vectorized_trace,
+                delta_w=delta_w,
+                N_exc=N_exc,
                 weight_mask=weight_mask,
                 pre_trace=pre_trace,
                 post_trace=post_trace,
@@ -395,6 +462,7 @@ def train_network(
                 w_target_inh=w_target_inh,
                 clip_exc_weights=clip_exc_weights,
                 clip_inh_weights=clip_inh_weights,
+                sleep_now=sleep_now,
                 t=t,
                 N_inh=N_inh,
                 A_plus=A_plus,
@@ -410,6 +478,10 @@ def train_network(
         # save weights for plotting
         if t % interval == 0:
             weights_4_plotting[t // interval] = weights[N_x:]
+
+        if sleep_now:
+            spikes[t, :N_x] = 0
+            spike_labels[t] = -2
 
     if save:
         file_name = "trained_weights/weights.pkl"

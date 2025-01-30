@@ -150,7 +150,7 @@ def t_SNE(
     N_x,
     n_components,
     perplexity,
-    n_iter,
+    max_iter,
     random_state,
 ):
 
@@ -180,7 +180,7 @@ def t_SNE(
     tsne = TSNE(
         n_components=n_components,
         perplexity=perplexity,
-        n_iter=n_iter,
+        max_iter=max_iter,
         random_state=random_state,
     )
     tsne_results = tsne.fit_transform(features)
