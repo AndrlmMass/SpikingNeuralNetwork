@@ -137,6 +137,7 @@ class SNN_noisy:
         spike_intercept=-4,
         plot_spikes=False,
         plot_weights=False,
+        check_sleep_interval=1000,
         plot_mp=False,
         plot_threshold=False,
         min_weight_exc=0.01,
@@ -193,6 +194,7 @@ class SNN_noisy:
         save_weights=False,
     ):
         self.dt = dt
+        check_sleep_interval = self.T // check_sleep_interval
         (
             self.weights,
             self.spikes,
@@ -211,6 +213,7 @@ class SNN_noisy:
             spikes=self.spikes,
             pre_trace=self.pre_trace,
             post_trace=self.post_trace,
+            check_sleep_interval=check_sleep_interval,
             tau_pre_trace_exc=tau_pre_trace_exc,
             tau_pre_trace_inh=tau_pre_trace_inh,
             tau_post_trace_exc=tau_post_trace_exc,
@@ -268,6 +271,7 @@ class SNN_noisy:
 
         if save_weights:
             ...
+            # add logic
 
         if plot_spikes:
             if start_time_spike_plot == None:
