@@ -369,13 +369,13 @@ def update_weights(
     # )
 
     if clip_exc_weights:
-        weights[weight_mask][:-N_inh] = np.clip(
-            weights[weight_mask][:-N_inh], a_min=min_weight_exc, a_max=max_weight_exc
+        weights[:-N_inh] = np.clip(
+            weights[:-N_inh], a_min=min_weight_exc, a_max=max_weight_exc
         )
 
     if clip_inh_weights:
-        weights[weight_mask][-N_inh:] = np.clip(
-            weights[weight_mask][-N_inh:], a_min=min_weight_inh, a_max=max_weight_inh
+        weights[-N_inh:] = np.clip(
+            weights[-N_inh:], a_min=min_weight_inh, a_max=max_weight_inh
         )
 
     # weights += delta_weight_noise
@@ -644,6 +644,7 @@ def train_network(
             weights_4_plotting[t // interval] = weights[N_x:]
 
         if sleep_now:
+            print(f"\r{np.sum(np.abs(weights))}", end="")
             spikes[t, :N_x] = 0
             spike_labels[t] = -2
 

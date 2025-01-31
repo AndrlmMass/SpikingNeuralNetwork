@@ -5,7 +5,7 @@ snn_N = SNN_noisy(N_exc=200, N_inh=50, N_x=100)
 
 # acquire data
 snn_N.prepare_data(
-    num_images=5,
+    num_images=24,
     recreate=False,
     plot_spikes=False,
     noisy_data=True,
@@ -39,8 +39,8 @@ snn_N.train_network_(
     min_mp=-80,
     sleep=True,
     weight_decay=False,
-    weight_decay_rate_exc=0.99,
-    weight_decay_rate_inh=0.99,
+    weight_decay_rate_exc=3,
+    weight_decay_rate_inh=3,
     noisy_potential=True,
     noisy_threshold=False,
     noisy_weights=False,
@@ -53,9 +53,9 @@ snn_N.train_network_(
     vectorized_trace=False,
     clip_exc_weights=True,
     clip_inh_weights=True,
-    alpha=1.25,
-    A_plus=0.1,
-    A_minus=0.1,
+    alpha=2.25,
+    A_plus=0.0001,
+    A_minus=0.00001,
 )
 
 # analyse results
