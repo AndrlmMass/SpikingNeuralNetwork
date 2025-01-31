@@ -8,7 +8,7 @@ import os
 @njit
 def sleep_func(
     weights,  # shape = (N_pre, N_post)
-    max_sum_weights,  # rename to avoid confusion w/ Python 'sleep'
+    max_sum_weights,
     sleep_now,
     N_inh,
     w_target_exc,
@@ -40,6 +40,9 @@ def sleep_func(
     # ------------------------------------------------
     if sum_weights > max_sum_weights:
         sleep_now = True
+    else:
+        sleep_now = False
+        return weights, sleep_now
 
     # ------------------------------------------------
     # 3) If sleeping is active, apply decay
@@ -53,22 +56,22 @@ def sleep_func(
             for j in range(N_post):
                 w_ij = weights[i, j]
                 if w_ij != 0.0:
-                    # Decay = w_target_exc * (w_ij / w_target_exc)^weight_decay_rate_exc
-                    decay_exc = w_target_exc * (
-                        (w_ij / w_target_exc) ** weight_decay_rate_exc
-                    )
-                    weights[i, j] = w_ij - decay_exc
+                    # Calculate the ratio for decay
+                    ratio = w_ij / w_target_exc
+
+                    # Compute decay based on the ratio and decay rate
+                    weights[i, j] = w_target_exc * (ratio**weight_decay_rate_exc)
 
         # --- Inhibitory portion: rows [end_exc..N_pre) ---
         for i in range(end_exc, N_pre):
             for j in range(N_post):
                 w_ij = weights[i, j]
                 if w_ij != 0.0:
-                    # Decay = w_target_inh * (w_ij / w_target_inh)^weight_decay_rate_inh
-                    decay_inh = w_target_inh * (
-                        (w_ij / w_target_inh) ** weight_decay_rate_inh
-                    )
-                    weights[i, j] = w_ij + decay_inh
+                    # Calculate the ratio for decay
+                    ratio = abs(w_ij / w_target_inh)
+
+                    # Compute decay based on the ratio and decay rate
+                    weights[i, j] = w_target_inh * (ratio**weight_decay_rate_inh)
 
         # Re-check sum of absolute weights
         sum_weights2 = 0.0
@@ -239,18 +242,17 @@ def update_weights(
     - Updated weights.
     """
     if sleep:
-        if t % check_sleep_interval == 0:
-            weights, sleep_now = sleep_func(
-                weights,
-                max_sum_weights,
-                sleep_now,
-                N_inh,
-                w_target_exc,
-                w_target_inh,
-                weight_decay_rate_exc,
-                weight_decay_rate_inh,
-                baseline_weight_sum,
-            )
+        weights, sleep_now = sleep_func(
+            weights,
+            max_sum_weights,
+            sleep_now,
+            N_inh,
+            w_target_exc,
+            w_target_inh,
+            weight_decay_rate_exc,
+            weight_decay_rate_inh,
+            baseline_weight_sum,
+        )
 
     # Find the neurons that spiked in the current timestep
     spike_idx = spikes == 1
@@ -366,18 +368,21 @@ def update_weights(
     #     end="",
     # )
 
-    # if clip_exc_weights:
-    #     weights[:-N_inh] = np.clip(
-    #         weights[:-N_inh], a_min=min_weight_exc, a_max=max_weight_exc
-    #     )
+    if clip_exc_weights:
+        weights[weight_mask][:-N_inh] = np.clip(
+            weights[weight_mask][:-N_inh], a_min=min_weight_exc, a_max=max_weight_exc
+        )
 
-    # if clip_inh_weights:
-    #     weights[-N_inh:] = np.clip(
-    #         weights[-N_inh:], a_min=min_weight_inh, a_max=max_weight_inh
-    #     )
+    if clip_inh_weights:
+        weights[weight_mask][-N_inh:] = np.clip(
+            weights[weight_mask][-N_inh:], a_min=min_weight_inh, a_max=max_weight_inh
+        )
 
     # weights += delta_weight_noise
     # weights[non_weight_mask] = 0
+
+    # weights[:-N_inh] += 0.0000001
+    # weights[-N_inh:] -= 0.0000001
 
     return weights, pre_trace, post_trace, sleep_now
 
@@ -428,7 +433,8 @@ def update_spikes(
 ):
     # update spike threshold
     if spike_adaption:
-        spike_threshold += (spike_threshold_default - spike_threshold) / tau_adaption
+        threshold_decay = (spike_threshold_default - spike_threshold) / tau_adaption
+        spike_threshold += threshold_decay
 
     # update spikes array
     mp = np.clip(mp, a_min=min_mp, a_max=max_mp)
@@ -445,9 +451,8 @@ def update_spikes(
 
     # add spike adaption
     if spike_adaption:
-        spike_threshold[spikes[N_x:] == 1] += (
-            spike_threshold[spikes[N_x:] == 1] * delta_adaption * dt
-        )
+        delta_spike_threshold = spike_threshold[spikes[N_x:] == 1] * delta_adaption * dt
+        spike_threshold[spikes[N_x:] == 1] -= delta_spike_threshold
         # print(f"\r{np.mean(spike_threshold)}", end="")
 
     mp[spikes[N_x:] == 1] = reset_potential
@@ -566,7 +571,7 @@ def train_network(
             N_x=N_x,
             mp=mp[t],
             dt=dt,
-            spikes=spikes[t - 1],
+            spikes=spikes[t],
             spike_times=spike_times,
             spike_intercept=spike_intercept,
             spike_slope=spike_slope,
@@ -659,4 +664,5 @@ def train_network(
         mp,
         weights_4_plotting,
         spike_threshold,
+        weight_mask,
     )

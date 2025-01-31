@@ -118,7 +118,7 @@ class SNN_noisy:
             N_x=self.N_x,
             max_time=self.max_time,
         )
-
+        d = 2
         # return results if retur == True
         if retur:
             return self.weights, self.mp, self.elig_trace, self.spike_times
@@ -137,7 +137,7 @@ class SNN_noisy:
         spike_intercept=-4,
         plot_spikes=False,
         plot_weights=False,
-        check_sleep_interval=1000,
+        check_sleep_interval=10000,
         plot_mp=False,
         plot_threshold=False,
         min_weight_exc=0.01,
@@ -203,6 +203,7 @@ class SNN_noisy:
             self.mp,
             self.weights2plot,
             self.spike_threshold,
+            self.weight_mask,
         ) = train_network(
             weights=self.weights,
             spike_labels=self.labels,
@@ -302,7 +303,11 @@ class SNN_noisy:
             )
 
         if plot_weights:
-            weights_plot(weights_plot=self.weights2plot, N_x=self.N_x, N_inh=self.N_inh)
+            weights_plot(
+                weights=self.weights2plot,
+                N_x=self.N_x,
+                N_inh=self.N_inh,
+            )
 
         if perform_t_SNE:
             t_SNE(

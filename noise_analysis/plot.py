@@ -41,19 +41,30 @@ def spike_plot(data, labels):
         # If the label changes, we close off the old segment (unless it was -1)
         if labels[i] != current_label:
             if current_label != -1:
-                # Plot from segment_start to i for current_label
-                ax.hlines(
-                    y=y_offset,
-                    xmin=segment_start,
-                    xmax=i,  # up to but not including i
-                    color=label_colors.get(current_label, "black"),
-                    linewidth=6,
-                    label=(
-                        None
-                        if current_label in drawn_labels
-                        else f"Class {current_label}"
-                    ),
-                )
+                if current_label == -2:
+                    # Plot from segment_start to i for current_label
+                    ax.hlines(
+                        y=y_offset,
+                        xmin=segment_start,
+                        xmax=i,  # up to but not including i
+                        color=label_colors.get(current_label, "blue"),
+                        linewidth=6,
+                        label=("Sleep"),
+                    )
+                else:
+                    # Plot from segment_start to i for current_label
+                    ax.hlines(
+                        y=y_offset,
+                        xmin=segment_start,
+                        xmax=i,  # up to but not including i
+                        color=label_colors.get(current_label, "black"),
+                        linewidth=6,
+                        label=(
+                            None
+                            if current_label in drawn_labels
+                            else f"Class {current_label}"
+                        ),
+                    )
                 drawn_labels.add(current_label)
 
             # Update to the new segment
@@ -127,18 +138,40 @@ def mp_plot(mp, N_exc):
     plt.show()
 
 
-def weights_plot(weights_plot, N_x, N_inh):
+def weights_plot(weights, N_x, N_inh):
     # Simplify weights
-    mu_weights = np.mean(weights_plot, axis=2)
+    weights_exc = weights[:, :-N_inh]
+    weights_inh = weights[:, -N_inh:]
 
-    # Plot the data
-    plt.plot(mu_weights[:, N_x:-N_inh], color="blue", label="excitatory")
-    plt.plot(mu_weights[:, -N_inh:], color="red", label="inhibitory")
+    mu_weights_exc = np.reshape(weights_exc, (weights_exc.shape[0], -1))
+    mu_weights_inh = np.reshape(weights_inh, (weights_inh.shape[0], -1))
 
-    # Ensure only unique legends are displayed
-    handles, labels = plt.gca().get_legend_handles_labels()
-    by_label = dict(zip(labels, handles))  # Remove duplicates by creating a dictionary
-    plt.legend(by_label.values(), by_label.keys())
+    idx_exc = np.where(np.sum(mu_weights_exc, axis=0) == 0)
+    mu_weights_exc[:, idx_exc[0]] = 0
+
+    idx_inh = np.where(np.sum(mu_weights_inh, axis=0) == 0)
+    mu_weights_inh[:, idx_inh[0]] = 0
+
+    # Define colormap gradients
+    cmap_exc = plt.get_cmap("autumn")  # Excitatory in red-yellow shades
+    cmap_inh = plt.get_cmap("winter")  # Inhibitory in blue-green shades
+
+    # Plot each excitatory neuron with a unique color
+    for i in range(mu_weights_exc.shape[1]):
+        plt.plot(
+            mu_weights_exc[:, i], color=cmap_exc(i / mu_weights_exc.shape[1]), alpha=0.7
+        )
+
+    # Plot each inhibitory neuron with a unique color
+    for i in range(mu_weights_inh.shape[1]):
+        plt.plot(
+            mu_weights_inh[:, i], color=cmap_inh(i / mu_weights_inh.shape[1]), alpha=0.7
+        )
+
+    # Add legend and show the plot
+    plt.title("Weight Evolution Over Time")
+    plt.xlabel("Time Step")
+    plt.ylabel("Synaptic Weight")
     plt.show()
 
 
@@ -173,8 +206,8 @@ def t_SNE(
         end = (i + 1) * bin_size
         features[i, :] = np.mean(spikes[start:end, :], axis=0)
 
-    if perplexity < items:
-        perplexity = items - 1
+    if perplexity >= n_bins:
+        perplexity = n_bins - 1
 
     # Apply t-SNE
     tsne = TSNE(
