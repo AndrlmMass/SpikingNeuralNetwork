@@ -3,12 +3,7 @@ from tqdm import tqdm
 import pickle as pkl
 import numpy as np
 import os
-from training_functions import (
-    sleep_func,
-    vectorized_trace_func,
-    trace_STDP,
-    spike_timing,
-)
+from weight_funcs import sleep_func, spike_timing, vectorized_trace_func, trace_STDP
 
 
 def update_weights(

@@ -11,6 +11,14 @@ from plot import (
 )
 from create_network import create_weights, create_arrays
 
+import os
+
+# Get the absolute path of the current file's directory
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Change the current working directory to that directory
+os.chdir(current_dir)
+
 
 class SNN_noisy:
     def __init__(self, N_exc=200, N_inh=50, N_x=100):
@@ -149,7 +157,7 @@ class SNN_noisy:
         tau_LTP=100,
         tau_LTD=100,
         w_interval=5,
-        interval=100,
+        interval=1000,
         spike_adaption=False,
         delta_adaption=0.3,
         trace_update=True,
@@ -180,16 +188,11 @@ class SNN_noisy:
         noisy_weights=False,
         weight_mean_noise=0.05,
         weight_var_noise=0.005,
-        perform_t_SNE=False,
         w_target_exc=0.1,
         w_target_inh=-0.1,
         retur=False,
         sleep=False,
         save=True,
-        perplexity=8,
-        max_iter=1000,
-        random_state=48,
-        n_components=2,
         save_weights=False,
     ):
         self.dt = dt
@@ -308,7 +311,20 @@ class SNN_noisy:
                 N_inh=self.N_inh,
             )
 
-        if perform_t_SNE:
+        if retur:
+            return self.weights, self.spikes, self.elig_trace
+
+    def analysis(
+        self,
+        perplexity=8,
+        max_iter=1000,
+        random_state=48,
+        n_components=2,
+        t_sne=True,
+        pls=False,
+        log_reg=False,
+    ):
+        if t_sne:
             t_SNE(
                 spikes=self.spikes,
                 labels_spike=self.labels,
@@ -320,6 +336,7 @@ class SNN_noisy:
                 items=self.num_items,
                 random_state=random_state,
             )
-
-        if retur:
-            return self.weights, self.spikes, self.elig_trace
+        if pls:
+            ...
+        if log_reg:
+            ...

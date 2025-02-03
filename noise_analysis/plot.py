@@ -194,10 +194,10 @@ def weights_plot(weights, N_x, N_inh):
     mu_weights_inh = np.reshape(weights_inh, (weights_inh.shape[0], -1))
 
     idx_exc = np.where(np.sum(mu_weights_exc, axis=0) == 0)
-    mu_weights_exc[:, idx_exc[0]] = 0
+    mu_weights_exc[:, idx_exc[0]] = None
 
     idx_inh = np.where(np.sum(mu_weights_inh, axis=0) == 0)
-    mu_weights_inh[:, idx_inh[0]] = 0
+    mu_weights_inh[:, idx_inh[0]] = None
 
     # Define colormap gradients
     cmap_exc = plt.get_cmap("autumn")  # Excitatory in red-yellow shades
