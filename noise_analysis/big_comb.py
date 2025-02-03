@@ -118,7 +118,6 @@ class SNN_noisy:
             N_x=self.N_x,
             max_time=self.max_time,
         )
-        d = 2
         # return results if retur == True
         if retur:
             return self.weights, self.mp, self.elig_trace, self.spike_times
@@ -167,7 +166,7 @@ class SNN_noisy:
         clip_inh_weights=True,
         alpha=1.25,
         mean_noise=0,
-        var_noise=5,
+        var_noise=0.01,
         max_mp=40,
         min_mp=-100,
         vectorized_trace=False,
