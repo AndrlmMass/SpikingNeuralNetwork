@@ -11,14 +11,6 @@ from plot import (
 )
 from create_network import create_weights, create_arrays
 
-import os
-
-# Get the absolute path of the current file's directory
-current_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Change the current working directory to that directory
-os.chdir(current_dir)
-
 
 class SNN_noisy:
     def __init__(self, N_exc=200, N_inh=50, N_x=100):
@@ -47,6 +39,7 @@ class SNN_noisy:
         break_lengths=[500, 400, 300],
         noisy_data=True,
         noise_level=0.05,
+        classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
     ):
 
         self.num_steps = num_steps
@@ -65,6 +58,7 @@ class SNN_noisy:
             break_lengths=break_lengths,
             noisy_data=noisy_data,
             noise_level=noise_level,
+            classes=classes,
         )
         self.T = self.data.shape[0]
 
@@ -157,7 +151,7 @@ class SNN_noisy:
         tau_LTP=100,
         tau_LTD=100,
         w_interval=5,
-        interval=1000,
+        interval=100,
         spike_adaption=False,
         delta_adaption=0.3,
         trace_update=True,
@@ -206,6 +200,7 @@ class SNN_noisy:
             self.weights2plot,
             self.spike_threshold,
             self.weight_mask,
+            self.max_weight_sum,
         ) = train_network(
             weights=self.weights,
             spike_labels=self.labels,
@@ -309,6 +304,7 @@ class SNN_noisy:
                 weights=self.weights2plot,
                 N_x=self.N_x,
                 N_inh=self.N_inh,
+                max_weight_sum=self.max_weight_sum,
             )
 
         if retur:
@@ -328,12 +324,9 @@ class SNN_noisy:
             t_SNE(
                 spikes=self.spikes,
                 labels_spike=self.labels,
-                timesteps=self.num_steps,
-                N_x=self.N_x,
                 n_components=n_components,
                 perplexity=perplexity,
                 max_iter=max_iter,
-                items=self.num_items,
                 random_state=random_state,
             )
         if pls:

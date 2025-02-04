@@ -72,17 +72,18 @@ def update_weights(
     - Updated weights.
     """
     if sleep:
-        weights, sleep_now = sleep_func(
-            weights,
-            max_sum_weights,
-            sleep_now,
-            N_inh,
-            w_target_exc,
-            w_target_inh,
-            weight_decay_rate_exc,
-            weight_decay_rate_inh,
-            baseline_weight_sum,
-        )
+        if check_sleep_interval % t == 0:
+            weights, sleep_now = sleep_func(
+                weights,
+                max_sum_weights,
+                sleep_now,
+                N_inh,
+                w_target_exc,
+                w_target_inh,
+                weight_decay_rate_exc,
+                weight_decay_rate_inh,
+                baseline_weight_sum,
+            )
 
     # Find the neurons that spiked in the current timestep
     spike_idx = spikes == 1
@@ -138,6 +139,7 @@ def update_weights(
 
     if vectorized_trace:
         weights, pre_trace, post_trace = vectorized_trace_func(
+            check_sleep_interval=check_sleep_interval,
             spikes=spikes,
             N_x=N_x,
             nz_rows=nz_rows,
@@ -247,7 +249,8 @@ def update_spikes(
 
     # add spike adaption
     if spike_adaption:
-        delta_spike_threshold = spike_threshold[spikes[N_x:] == 1] * delta_adaption * dt
+        delta_adapt_dt = delta_adaption * dt
+        delta_spike_threshold = spike_threshold[spikes[N_x:] == 1] * delta_adapt_dt
         spike_threshold[spikes[N_x:] == 1] -= delta_spike_threshold
         # print(f"\r{np.mean(spike_threshold)}", end="")
 
@@ -322,16 +325,17 @@ def train_network(
     mean_noise,
     var_noise,
 ):
+    weight_mask = weights != 0
+    non_weight_mask = weights == 0
+
     # create weights_plotting_array
-    weights_4_plotting = np.zeros((T // interval, N_exc + N_inh, N))
-    weights_4_plotting[0] = weights[N_x:]
+    weights_4_plotting = np.zeros((T // interval, N, N - N_x))
+    weights_4_plotting[0] = weights[:, N_x:]
 
     # create spike threshold array
     spike_threshold = np.full(
         shape=(T, N - N_x), fill_value=spike_threshold_default, dtype=float
     )
-    weight_mask = weights != 0
-    non_weight_mask = weights == 0
 
     baseline_weight_sum = np.sum(np.abs(weights))
     max_sum_weights = baseline_weight_sum * alpha
@@ -437,13 +441,12 @@ def train_network(
             # print(f"\r{np.max(weights[:N_exc])}, {np.min(weights[N_exc:])}", end="")
 
         # save weights for plotting
-        if t % interval == 0:
-            weights_4_plotting[t // interval] = weights[N_x:]
+        if t % interval == 0 and t != T:
+            weights_4_plotting[t // interval] = weights[:, N_x:]
 
-        if sleep_now:
-            print(f"\r{np.sum(np.abs(weights))}", end="")
-            spikes[t, :N_x] = 0
-            spike_labels[t] = -2
+        # if sleep_now:
+        #     spikes[t, :N_x] = 0
+        #     spike_labels[t] = -2
 
     if save:
         file_name = "trained_weights/weights.pkl"
@@ -463,4 +466,5 @@ def train_network(
         weights_4_plotting,
         spike_threshold,
         weight_mask,
+        max_sum_weights,
     )

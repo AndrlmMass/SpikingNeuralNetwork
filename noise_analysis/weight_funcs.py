@@ -30,13 +30,16 @@ def sleep_func(
     N_pre, N_post = weights.shape
     for i in range(N_pre):
         for j in range(N_post):
-            sum_weights += abs(weights[i, j])
+            delta_weights = abs(weights[i, j])
+            if delta_weights != None:
+                sum_weights += delta_weights
 
     # ------------------------------------------------
     # 2) Check if we exceed max_sum_weights
     # ------------------------------------------------
     if sum_weights > max_sum_weights:
         sleep_now = True
+        print("sleepy!")
     else:
         sleep_now = False
         return weights, sleep_now
@@ -74,7 +77,9 @@ def sleep_func(
         sum_weights2 = 0.0
         for i in range(N_pre):
             for j in range(N_post):
-                sum_weights2 += abs(weights[i, j])
+                delta_weights = abs(weights[i, j])
+                if delta_weights != None:
+                    weights += delta_weights
 
         # If weights decayed below baseline => stop sleeping
         if sum_weights2 <= baseline_weight_sum:

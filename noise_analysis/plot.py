@@ -185,7 +185,10 @@ def mp_plot(mp, N_exc):
     plt.show()
 
 
-def weights_plot(weights, N_x, N_inh):
+def weights_plot(weights, N_x, N_inh, max_weight_sum):
+
+    fig, axs = plt.subplots(2, 1, figsize=(10, 8))
+
     # Simplify weights
     weights_exc = weights[:, :-N_inh]
     weights_inh = weights[:, -N_inh:]
@@ -205,29 +208,32 @@ def weights_plot(weights, N_x, N_inh):
 
     # Plot each excitatory neuron with a unique color
     for i in range(mu_weights_exc.shape[1]):
-        plt.plot(
+        axs[0].plot(
             mu_weights_exc[:, i], color=cmap_exc(i / mu_weights_exc.shape[1]), alpha=0.7
         )
 
     # Plot each inhibitory neuron with a unique color
     for i in range(mu_weights_inh.shape[1]):
-        plt.plot(
+        axs[0].plot(
             mu_weights_inh[:, i], color=cmap_inh(i / mu_weights_inh.shape[1]), alpha=0.7
         )
+    sum_weights = np.nansum(np.abs(weights), axis=0)
+    # plot sum of weights
+    axs[1].plot(sum_weights, color="black")
+    axs[1].axhline(y=max_weight_sum, color="red", linestyle="--", linewidth=2)
 
     # Add legend and show the plot
-    plt.title("Weight Evolution Over Time")
-    plt.xlabel("Time Step")
-    plt.ylabel("Synaptic Weight")
+    # Add titles and labels appropriately
+    axs[0].set_title("Weight Evolution Over Time (Individual Neurons)")
+    axs[1].set_title("Total Weight Evolution Over Time")
+    axs[1].set_xlabel("Time Step")
+    axs[1].set_ylabel("Synaptic Weight")
     plt.show()
 
 
 def t_SNE(
     spikes,
     labels_spike,
-    timesteps,
-    items,
-    N_x,
     n_components,
     perplexity,
     max_iter,
@@ -236,15 +242,10 @@ def t_SNE(
     # Now, bin the spikes using the labels, skipping breaks:
     features, segment_labels = bin_spikes_by_label_no_breaks(spikes, labels_spike)
 
-    print("Number of segments (excluding breaks):", len(segment_labels))
-    print("Segment labels:", segment_labels)
-
     # Apply t-SNE on the computed features:
-    n_components = 2
+
     # Ensure that perplexity is less than the number of segments.
     perplexity = min(30, len(features) - 1)
-    max_iter = 1000
-    random_state = 42
 
     tsne = TSNE(
         n_components=n_components,

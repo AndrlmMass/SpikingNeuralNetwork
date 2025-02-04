@@ -22,6 +22,7 @@ def create_data(
     break_lengths,
     noisy_data,
     noise_level,
+    classes,
 ):
     file_name1 = "sdata/MNIST_spiked.pkl"
     file_name2 = "sdata/MNIST_spiked_labels.pkl"
@@ -44,14 +45,15 @@ def create_data(
             )
             pbar.update(1)  # Update progress bar when download completes
 
-        # Extract image tensors and labels
-        print("Processing images and labels...")
-        images, labels = zip(
-            *[
-                (mnist[i][0], mnist[i][1])
-                for i in tqdm(range(len(mnist)), desc="Extracting samples")
-            ]
-        )
+        # Filter the dataset so that only samples with allowed labels are included
+        filtered_samples = [
+            (mnist[i][0], mnist[i][1])
+            for i in tqdm(range(len(mnist)), desc="Extracting samples")
+            if mnist[i][1] in classes
+        ]
+
+        # Now unpack and convert to tensors
+        images, labels = zip(*filtered_samples)
         images = torch.stack(images)  # Shape: [num_samples, 1, 28, 28]
         labels = torch.tensor(labels)  # Shape: [num_samples]
 
