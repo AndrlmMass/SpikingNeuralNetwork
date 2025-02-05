@@ -1,5 +1,5 @@
 from torchvision import datasets, transforms
-import matplotlib.pyplot as plt
+from plot import plot_floats_and_spikes
 from snntorch import spikegen
 from tqdm import tqdm
 import pickle as pkl
@@ -23,6 +23,7 @@ def create_data(
     noisy_data,
     noise_level,
     classes,
+    plot_comparison,
 ):
     file_name1 = "sdata/MNIST_spiked.pkl"
     file_name2 = "sdata/MNIST_spiked_labels.pkl"
@@ -86,6 +87,9 @@ def create_data(
 
         # convert S_data to numpy array
         S_data_conv = S_data.numpy()
+
+        if plot_comparison:
+            plot_floats_and_spikes(images, S_data_conv, spike_labels, labels)
 
         if add_breaks:
             # Keep track of how much the array has grown so that the index is correct

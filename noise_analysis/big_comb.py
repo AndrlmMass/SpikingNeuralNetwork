@@ -7,8 +7,9 @@ from plot import (
     mp_plot,
     weights_plot,
     spike_threshold_plot,
-    t_SNE,
+    plot_traces,
 )
+from analysis import t_SNE
 from create_network import create_weights, create_arrays
 
 
@@ -24,6 +25,7 @@ class SNN_noisy:
         self,
         plot_spikes=False,
         plot_heat_map=False,
+        plot_comparison=False,
         retur=False,
         num_steps=1000,
         gain=1,
@@ -47,6 +49,7 @@ class SNN_noisy:
         self.data, self.labels = create_data(
             pixel_size=int(np.sqrt(self.N_x)),
             num_steps=num_steps,
+            plot_comparison=plot_comparison,
             gain=gain,
             offset=offset,
             first_spike_time=first_spike_time,
@@ -138,6 +141,7 @@ class SNN_noisy:
         spike_intercept=-4,
         plot_spikes=False,
         plot_weights=False,
+        plot_traces_=False,
         check_sleep_interval=10000,
         plot_mp=False,
         plot_threshold=False,
@@ -198,6 +202,8 @@ class SNN_noisy:
             self.post_trace,
             self.mp,
             self.weights2plot,
+            self.pre_trace_plot,
+            self.post_trace_plot,
             self.spike_threshold,
             self.weight_mask,
             self.max_weight_sum,
@@ -305,6 +311,14 @@ class SNN_noisy:
                 N_x=self.N_x,
                 N_inh=self.N_inh,
                 max_weight_sum=self.max_weight_sum,
+            )
+
+        if plot_traces_:
+            plot_traces(
+                N_exc=self.N_exc,
+                N_inh=self.N_inh,
+                pre_traces=self.pre_trace_plot,
+                post_traces=self.post_trace_plot,
             )
 
         if retur:

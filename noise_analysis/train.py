@@ -331,6 +331,8 @@ def train_network(
     # create weights_plotting_array
     weights_4_plotting = np.zeros((T // interval, N, N - N_x))
     weights_4_plotting[0] = weights[:, N_x:]
+    pre_trace_4_plot = np.zeros((T // interval, N))
+    post_trace_4_plot = np.zeros((T // interval, N - N_x))
 
     # create spike threshold array
     spike_threshold = np.full(
@@ -443,6 +445,8 @@ def train_network(
         # save weights for plotting
         if t % interval == 0 and t != T:
             weights_4_plotting[t // interval] = weights[:, N_x:]
+            pre_trace_4_plot[t // interval] = pre_trace
+            post_trace_4_plot[t // interval] = post_trace
 
         # if sleep_now:
         #     spikes[t, :N_x] = 0
@@ -464,6 +468,8 @@ def train_network(
         post_trace,
         mp,
         weights_4_plotting,
+        pre_trace_4_plot,
+        post_trace_4_plot,
         spike_threshold,
         weight_mask,
         max_sum_weights,

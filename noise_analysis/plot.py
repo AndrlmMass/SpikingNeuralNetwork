@@ -1,53 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.manifold import TSNE
 import matplotlib
 
 matplotlib.use("TkAgg")
-
-
-def bin_spikes_by_label_no_breaks(spikes, labels):
-    """
-    Splits spike data into segments based on contiguous blocks in the labels vector,
-    skipping any segments where the label is -1.
-
-    Parameters:
-        spikes (np.array): 2D array with shape (T, N) where T is total time and N is the number of neurons.
-        labels (np.array): 1D array of length T indicating the label at each time point.
-
-    Returns:
-        features (np.array): 2D array where each row is the average spike activity for a valid segment.
-        segment_labels (np.array): 1D array of labels corresponding to each segment.
-    """
-    segments = []
-    segment_labels = []
-    start = 0  # start index for the current segment
-
-    # Iterate through the labels to detect change points.
-    for t in range(1, len(labels)):
-        if labels[t] != labels[t - 1]:
-            # End of the current segment.
-            current_label = labels[t - 1]
-            # Process only if the current label is not -1.
-            if current_label != -1:
-                segment = spikes[start:t]
-                # Compute feature for the segment (here, the mean firing rate for each neuron).
-                feature_vector = np.mean(segment, axis=0)
-                segments.append(feature_vector)
-                segment_labels.append(current_label)
-            # Update the start index for the next segment.
-            start = t
-
-    # Handle the final segment.
-    if start < len(labels):
-        current_label = labels[-1]
-        if current_label != -1:
-            segment = spikes[start:]
-            feature_vector = np.mean(segment, axis=0)
-            segments.append(feature_vector)
-            segment_labels.append(current_label)
-
-    return np.array(segments), np.array(segment_labels)
 
 
 def spike_plot(data, labels):
@@ -145,6 +100,87 @@ def spike_plot(data, labels):
     plt.show()
 
 
+def get_contiguous_segment(indices):
+    """
+    Given a sorted 1D array of indices, find contiguous segments
+    and return the longest segment.
+    """
+    if len(indices) == 0:
+        return None
+    # Find gaps where consecutive indices differ by more than 1
+    gaps = np.where(np.diff(indices) != 1)[0]
+    segments = np.split(indices, gaps + 1)
+    # Return the longest contiguous segment
+    return max(segments, key=len)
+
+
+def plot_floats_and_spikes(images, spikes, spike_labels, img_labels):
+    """
+    Given:
+      - images: an array of MNIST images (e.g., shape [num_images, H, W])
+      - spikes: a 2D array of spike activity (shape: [time, neurons])
+      - spike_labels: an array (length equal to the time dimension of spikes)
+                      containing the label of the image that produced that spike train.
+      - img_labels: an array of labels for the floating images
+    This function plots, for each unique image label, the corresponding MNIST image
+    (in the bottom row) and a raster plot of the spike data (in the top row).
+    """
+    # Determine the unique digit labels from the images.
+    unique_labels = np.unique(img_labels)
+    n_cols = len(unique_labels)
+
+    # Create subplots: one column per digit, two rows (top for spikes, bottom for image)
+    fig, axs = plt.subplots(2, n_cols, figsize=(n_cols * 3, 6))
+
+    # If there's only one column, make sure axs is 2D.
+    if n_cols == 1:
+        axs = np.expand_dims(axs, axis=1)
+
+    for i, label in enumerate(unique_labels):
+        # Find the first image with this label
+        img_idx = np.where(np.array(img_labels) == label)[0][0]
+        # Plot the image in the bottom row
+        ax_img = axs[1, i]
+        # Ensure the image is 2D (squeeze any singleton dimensions)
+        ax_img.imshow(np.squeeze(images[img_idx]), cmap="gray")
+        ax_img.set_title(f"Digit {label}")
+        ax_img.axis("off")
+
+        # Find all time indices in the spiking data that belong to this label.
+        spike_idx_all = np.where(np.array(spike_labels) == label)[0]
+        if len(spike_idx_all) == 0:
+            print(f"No spiking data found for label {label}.")
+            continue
+
+        # Get a contiguous segment from the available indices.
+        segment = get_contiguous_segment(spike_idx_all)
+        if segment is None or len(segment) == 0:
+            print(f"No contiguous segment found for label {label}.")
+            continue
+
+        # Extract the spike data for this segment.
+        spike_segment = spikes[segment, :]  # shape: [time_segment, neurons]
+
+        # For each neuron, determine the time steps (relative to the segment) where it spiked.
+        positions = [
+            np.where(spike_segment[:, n] == 1)[0] for n in range(spike_segment.shape[1])
+        ]
+
+        # Plot the spike raster on the top row.
+        ax_spike = axs[0, i]
+        ax_spike.eventplot(positions, colors="black")
+        ax_spike.set_title(f"Spikes for {label}")
+        ax_spike.set_xlabel("Time steps")
+        ax_spike.set_ylabel("Neuron")
+        # Optionally, adjust y-limits for clarity:
+        ax_spike.set_ylim(-1, spike_segment.shape[1])
+
+    plt.tight_layout()
+
+    plt.savefig("plots/comparison_spike_img.png")
+    plt.show()
+
+
 def spike_threshold_plot(spike_threshold, N_exc):
     fig, axs = plt.subplots(2, 1, figsize=(8, 6))
     axs[0].plot(
@@ -220,7 +256,7 @@ def weights_plot(weights, N_x, N_inh, max_weight_sum):
     sum_weights = np.nansum(np.abs(weights), axis=0)
     # plot sum of weights
     axs[1].plot(sum_weights, color="black")
-    axs[1].axhline(y=max_weight_sum, color="red", linestyle="--", linewidth=2)
+    # axs[1].axhline(y=max_weight_sum, color="red", linestyle="--", linewidth=2)
 
     # Add legend and show the plot
     # Add titles and labels appropriately
@@ -231,39 +267,34 @@ def weights_plot(weights, N_x, N_inh, max_weight_sum):
     plt.show()
 
 
-def t_SNE(
-    spikes,
-    labels_spike,
-    n_components,
-    perplexity,
-    max_iter,
-    random_state,
+def plot_traces(
+    random_selection=False,
+    num_exc=None,
+    num_inh=None,
+    N_exc=200,
+    N_inh=50,
+    pre_traces=None,
+    post_traces=None,
 ):
-    # Now, bin the spikes using the labels, skipping breaks:
-    features, segment_labels = bin_spikes_by_label_no_breaks(spikes, labels_spike)
+    if random_selection:
+        ...
+    else:
+        fig, axs = plt.subplots(2, 2)
 
-    # Apply t-SNE on the computed features:
-
-    # Ensure that perplexity is less than the number of segments.
-    perplexity = min(30, len(features) - 1)
-
-    tsne = TSNE(
-        n_components=n_components,
-        perplexity=perplexity,
-        max_iter=max_iter,
-        random_state=random_state,
-    )
-    tsne_results = tsne.fit_transform(features)
-
-    # Visualize the results:
-    plt.figure(figsize=(10, 8))
-    for label in np.unique(segment_labels):
-        indices = segment_labels == label
-        plt.scatter(
-            tsne_results[indices, 0], tsne_results[indices, 1], label=f"Class {label}"
+        axs[0, 0].plot(
+            pre_traces[:, :-N_inh], label="excitatory pre-traces", color="lightgreen"
         )
-    plt.title("t-SNE results")
-    plt.xlabel("t-SNE dimension 1")
-    plt.ylabel("t-SNE dimension 2")
-    plt.legend()
-    plt.show()
+        axs[0, 0].set_title("excitatory pre-trace")
+        axs[0, 1].plot(
+            pre_traces[:, -N_inh:], label="inhibitory pre-traces", color="lightblue"
+        )
+        axs[0, 1].set_title("inhibitory pre-trace")
+        axs[1, 0].plot(
+            post_traces[:, :N_exc], label="excitatory post-traces", color="green"
+        )
+        axs[1, 0].set_title("excitatory post-trace")
+        axs[1, 1].plot(
+            post_traces[:, N_exc:], label="inhibitory post-trace", color="blue"
+        )
+        axs[1, 1].set_title("inhbitiory post-trace")
+        plt.show()
