@@ -1,4 +1,3 @@
-from numba import njit
 from tqdm import tqdm
 import pickle as pkl
 import numpy as np
@@ -72,7 +71,8 @@ def update_weights(
     - Updated weights.
     """
     if sleep:
-        if check_sleep_interval % t == 0:
+        now = t % check_sleep_interval
+        if now == 0 or sleep_now:
             weights, sleep_now = sleep_func(
                 weights,
                 max_sum_weights,
@@ -346,8 +346,7 @@ def train_network(
     nz_rows, nz_cols = np.nonzero(weights)
     sleep_now = False
 
-    print("Training network...")
-    for t in tqdm(range(1, T)):
+    for t in tqdm(range(1, T), desc="Training network:"):
 
         # update membrane potential
         mp[t] = update_membrane_potential(
@@ -448,9 +447,9 @@ def train_network(
             pre_trace_4_plot[t // interval] = pre_trace
             post_trace_4_plot[t // interval] = post_trace
 
-        # if sleep_now:
-        #     spikes[t, :N_x] = 0
-        #     spike_labels[t] = -2
+        if sleep_now:
+            spikes[t, :N_x] = 0
+            spike_labels[t] = -2
 
     if save:
         file_name = "trained_weights/weights.pkl"

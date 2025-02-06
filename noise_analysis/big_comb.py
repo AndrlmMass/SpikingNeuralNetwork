@@ -142,7 +142,7 @@ class SNN_noisy:
         plot_spikes=False,
         plot_weights=False,
         plot_traces_=False,
-        check_sleep_interval=10000,
+        check_sleep_interval=100,
         plot_mp=False,
         plot_threshold=False,
         min_weight_exc=0.01,
@@ -194,7 +194,6 @@ class SNN_noisy:
         save_weights=False,
     ):
         self.dt = dt
-        check_sleep_interval = self.T // check_sleep_interval
         (
             self.weights,
             self.spikes,

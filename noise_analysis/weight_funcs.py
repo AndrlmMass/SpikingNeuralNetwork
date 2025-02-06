@@ -34,6 +34,8 @@ def sleep_func(
             if delta_weights != None:
                 sum_weights += delta_weights
 
+    print(sum_weights, max_sum_weights, baseline_weight_sum)
+
     # ------------------------------------------------
     # 2) Check if we exceed max_sum_weights
     # ------------------------------------------------
