@@ -188,6 +188,9 @@ class SNN_noisy:
         weight_var_noise=0.005,
         w_target_exc=0.1,
         w_target_inh=-0.1,
+        random_selection_weight_plot=True,
+        num_exc_weight_plot=50,
+        num_inh_weight_plot=10,
         beta=0.75,
         retur=False,
         sleep=False,
@@ -206,6 +209,8 @@ class SNN_noisy:
             self.post_trace_plot,
             self.spike_threshold,
             self.weight_mask,
+            self.max_weight_sum_inh,
+            self.max_weight_sum_exc,
         ) = train_network(
             weights=self.weights,
             spike_labels=self.labels,
@@ -308,9 +313,15 @@ class SNN_noisy:
         if plot_weights:
             weights_plot(
                 weights=self.weights2plot,
+                N=self.N,
                 N_x=self.N_x,
+                N_exc=self.N_exc,
                 N_inh=self.N_inh,
-                max_weight_sum=self.max_weight_sum,
+                max_weight_sum_inh=self.max_weight_sum_inh,
+                max_weight_sum_exc=self.max_weight_sum_exc,
+                num_exc=num_exc_weight_plot,
+                num_inh=num_inh_weight_plot,
+                random_selection=random_selection_weight_plot,
             )
 
         if plot_traces_:

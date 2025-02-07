@@ -7,7 +7,8 @@ def sleep_func(
     weights,  # shape = (N_pre, N_post)
     max_sum_exc,
     max_sum_inh,
-    sleep_now,
+    sleep_now_inh,
+    sleep_now_exc,
     N_inh,
     N_exc,
     N_x,
@@ -42,28 +43,28 @@ def sleep_func(
                 else:
                     sum_weights_exc += delta_weights
 
-    # ------------------------------------------------
-    # 2) Check if we exceed max_sum_weights
-    # ------------------------------------------------
-
-    if sum_weights_exc > sum_weights_exc:
-        sleep_now = True
-        print("sleepy!")
-    elif sum_weights_inh:
-        sleep_now = True
-    else:
-        return weights, sleep_now
+    # ------------------------------------------------#
+    # 2) Check if we exceed max_sum_weights           #
+    # ------------------------------------------------#
+    if sum_weights_exc > max_sum_exc:
+        sleep_now_exc = True
+        print("sleepy exc!")
+    if sum_weights_inh > max_sum_inh:
+        sleep_now_inh = True
+        print("sleepy inh!")
+    if not sleep_now_inh and not sleep_now_exc:
+        return weights, sleep_now_inh, sleep_now_exc
 
     # ------------------------------------------------
     # 3) If sleeping is active, apply decay
     # ------------------------------------------------
-    if sleep_now:
+    if sleep_now_exc:
         # Number of excitatory rows:
         end_exc = N_pre - N_inh
 
         # --- Excitatory portion: rows [0..end_exc) ---
         for i in range(end_exc):
-            for j in range(N_post):
+            for j in range(N_x, N_post):
                 w_ij = weights[i, j]
                 if w_ij != 0.0:
                     # Calculate the ratio for decay
@@ -72,9 +73,27 @@ def sleep_func(
                     # Compute decay based on the ratio and decay rate
                     weights[i, j] = w_target_exc * (ratio**weight_decay_rate_exc)
 
+        # calculte the new sum of weights
+        sum_weights_exc2 = 0.0
+        N_pre, N_post = weights.shape
+        for i in range(end_exc):
+            for j in range(N_x, N_post):
+                delta_weights = abs(weights[i, j])
+                if delta_weights != None:
+                    sum_weights_exc2 += delta_weights
+
+        # If weights decayed below baseline => stop sleeping
+        if sum_weights_exc2 <= baseline_sum_exc:
+            sleep_now_exc = False
+
+    if sleep_now_inh:
+        # Number of excitatory rows:
+        end_inh = N_pre - N_inh
+        end_inh_post = N_post - N_inh
+
         # --- Inhibitory portion: rows [end_exc..N_pre) ---
-        for i in range(end_exc, N_pre):
-            for j in range(N_post):
+        for i in range(end_inh, N_pre):
+            for j in range(N_x, end_inh_post):
                 w_ij = weights[i, j]
                 if w_ij != 0.0:
                     # Calculate the ratio for decay
@@ -83,19 +102,19 @@ def sleep_func(
                     # Compute decay based on the ratio and decay rate
                     weights[i, j] = w_target_inh * (ratio**weight_decay_rate_inh)
 
-        # Re-check sum of absolute weights
-        sum_weights2 = 0.0
-        for i in range(N_pre):
-            for j in range(N_post):
+        sum_weights_inh2 = 0.0
+        N_pre, N_post = weights.shape
+        for i in range(end_inh, N_pre):
+            for j in range(N_x, end_inh_post):
                 delta_weights = abs(weights[i, j])
                 if delta_weights != None:
-                    sum_weights2 += delta_weights
+                    sum_weights_inh2 += delta_weights
 
         # If weights decayed below baseline => stop sleeping
-        if sum_weights2 <= baseline_weight_sum:
-            sleep_now = False
+        if sum_weights_inh2 <= baseline_sum_inh:
+            sleep_now_inh = False
 
-    return weights, sleep_now
+    return weights, sleep_now_inh, sleep_now_exc
 
 
 def vectorized_trace_func(
@@ -279,16 +298,16 @@ def spike_timing(
 ):
 
     pre_spikes = []
-    for i in range(spike_times.size):
-        if spike_times[i] == 0:
+    for i in spike_times:
+        if i == 0:
             pre_spikes.append(i)
 
     # Separate post-spikes (i >= N_x)
     post_spikes = []
-    for idx in spike_times:
-        if idx >= N_x:
-            if spike_times[idx] == 0:
-                post_spikes.append(idx)
+    for i in spike_times:
+        if i >= N_x:
+            if i == 0:
+                post_spikes.append(i)
 
     # Compute the update using explicit loops.
     exc_pre_spikes = pre_spikes[:-N_inh]

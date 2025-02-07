@@ -45,7 +45,8 @@ def update_weights(
     N,
     N_exc,
     sleep,
-    sleep_now,
+    sleep_now_inh,
+    sleep_now_exc,
     delta_w,
     N_x,
     nz_cols,
@@ -76,13 +77,16 @@ def update_weights(
     """
     if sleep:
         now = t % check_sleep_interval
-        if now == 0 or sleep_now:
-            weights, sleep_now = sleep_func(
+        if now == 0 or sleep_now_inh or sleep_now_exc:
+            weights, sleep_now_inh, sleep_now_exc = sleep_func(
                 weights=weights,
                 max_sum_exc=max_sum_exc,
                 max_sum_inh=max_sum_inh,
-                sleep_now=sleep_now,
+                sleep_now_exc=sleep_now_exc,
+                sleep_now_inh=sleep_now_inh,
                 N_inh=N_inh,
+                N_exc=N_exc,
+                N_x=N_x,
                 w_target_exc=w_target_exc,
                 w_target_inh=w_target_inh,
                 weight_decay_rate_exc=weight_decay_rate_exc,
@@ -108,7 +112,7 @@ def update_weights(
         post_trace[:-N_inh] *= decay_post_exc
         post_trace[-N_inh:] *= decay_post_inh
 
-        return weights, pre_trace, post_trace, sleep_now
+        return weights, pre_trace, post_trace, sleep_now_inh, sleep_now_exc
 
     if timing_update:
         weights = spike_timing(
@@ -189,7 +193,7 @@ def update_weights(
 
     weights[non_weight_mask] = 0
 
-    return weights, pre_trace, post_trace, sleep_now
+    return weights, pre_trace, post_trace, sleep_now_inh, sleep_now_exc
 
 
 def update_membrane_potential(
@@ -357,7 +361,8 @@ def train_network(
     delta_w = np.zeros(shape=weights.shape)
 
     nz_rows, nz_cols = np.nonzero(weights)
-    sleep_now = False
+    sleep_now_inh = False
+    sleep_now_exc = False
 
     # Suppose weights is your initial 2D numpy array of weights.
     # Here, we assume that the columns correspond to post-neurons.
@@ -414,58 +419,61 @@ def train_network(
 
         # update weights
         if train_weights:
-            weights, pre_trace, post_trace, sleep_now = update_weights(
-                spikes=spikes[t - 1],
-                weights=weights,
-                max_sum_exc=max_sum_exc,
-                max_sum_inh=max_sum_inh,
-                non_weight_mask=non_weight_mask,
-                baseline_sum_exc=baseline_sum_exc,
-                baseline_sum_inh=baseline_sum_inh,
-                check_sleep_interval=check_sleep_interval,
-                sleep=sleep,
-                nonzero_pre_idx=nonzero_pre_idx,
-                N_x=N_x,
-                vectorized_trace=vectorized_trace,
-                delta_w=delta_w,
-                N_exc=N_exc,
-                weight_mask=weight_mask,
-                pre_trace=pre_trace,
-                post_trace=post_trace,
-                timing_update=timing_update,
-                trace_update=trace_update,
-                spike_times=spike_times,
-                weight_decay=weight_decay,
-                weight_decay_rate_exc=weight_decay_rate_exc,
-                weight_decay_rate_inh=weight_decay_rate_inh,
-                min_weight_exc=min_weight_exc,
-                max_weight_exc=max_weight_exc,
-                min_weight_inh=min_weight_inh,
-                max_weight_inh=max_weight_inh,
-                tau_pre_trace_exc=tau_pre_trace_exc,
-                tau_pre_trace_inh=tau_pre_trace_inh,
-                tau_post_trace_exc=tau_post_trace_exc,
-                tau_post_trace_inh=tau_post_trace_inh,
-                noisy_weights=noisy_weights,
-                weight_mean_noise=weight_mean_noise,
-                weight_var_noise=weight_var_noise,
-                w_target_exc=w_target_exc,
-                w_target_inh=w_target_inh,
-                clip_exc_weights=clip_exc_weights,
-                clip_inh_weights=clip_inh_weights,
-                sleep_now=sleep_now,
-                t=t,
-                N=N,
-                nz_cols=nz_cols,
-                nz_rows=nz_rows,
-                N_inh=N_inh,
-                A_plus=A_plus,
-                A_minus=A_minus,
-                learning_rate_exc=learning_rate_exc,
-                learning_rate_inh=learning_rate_inh,
-                tau_LTP=tau_LTP,
-                tau_LTD=tau_LTD,
-                dt=dt,
+            weights, pre_trace, post_trace, sleep_now_inh, sleep_now_exc = (
+                update_weights(
+                    spikes=spikes[t - 1],
+                    weights=weights,
+                    max_sum_exc=max_sum_exc,
+                    max_sum_inh=max_sum_inh,
+                    non_weight_mask=non_weight_mask,
+                    baseline_sum_exc=baseline_sum_exc,
+                    baseline_sum_inh=baseline_sum_inh,
+                    check_sleep_interval=check_sleep_interval,
+                    sleep=sleep,
+                    nonzero_pre_idx=nonzero_pre_idx,
+                    N_x=N_x,
+                    vectorized_trace=vectorized_trace,
+                    delta_w=delta_w,
+                    N_exc=N_exc,
+                    weight_mask=weight_mask,
+                    pre_trace=pre_trace,
+                    post_trace=post_trace,
+                    timing_update=timing_update,
+                    trace_update=trace_update,
+                    spike_times=spike_times,
+                    weight_decay=weight_decay,
+                    weight_decay_rate_exc=weight_decay_rate_exc,
+                    weight_decay_rate_inh=weight_decay_rate_inh,
+                    min_weight_exc=min_weight_exc,
+                    max_weight_exc=max_weight_exc,
+                    min_weight_inh=min_weight_inh,
+                    max_weight_inh=max_weight_inh,
+                    tau_pre_trace_exc=tau_pre_trace_exc,
+                    tau_pre_trace_inh=tau_pre_trace_inh,
+                    tau_post_trace_exc=tau_post_trace_exc,
+                    tau_post_trace_inh=tau_post_trace_inh,
+                    noisy_weights=noisy_weights,
+                    weight_mean_noise=weight_mean_noise,
+                    weight_var_noise=weight_var_noise,
+                    w_target_exc=w_target_exc,
+                    w_target_inh=w_target_inh,
+                    clip_exc_weights=clip_exc_weights,
+                    clip_inh_weights=clip_inh_weights,
+                    sleep_now_inh=sleep_now_inh,
+                    sleep_now_exc=sleep_now_exc,
+                    t=t,
+                    N=N,
+                    nz_cols=nz_cols,
+                    nz_rows=nz_rows,
+                    N_inh=N_inh,
+                    A_plus=A_plus,
+                    A_minus=A_minus,
+                    learning_rate_exc=learning_rate_exc,
+                    learning_rate_inh=learning_rate_inh,
+                    tau_LTP=tau_LTP,
+                    tau_LTD=tau_LTD,
+                    dt=dt,
+                )
             )
             # print(f"\r{np.max(weights[:N_exc])}, {np.min(weights[N_exc:])}", end="")
 
@@ -475,8 +483,10 @@ def train_network(
             pre_trace_4_plot[t // interval] = pre_trace
             post_trace_4_plot[t // interval] = post_trace
 
-        if sleep_now:
+        if sleep_now_exc:
             spikes[t, :N_x] = 0
+            spike_labels[t] = -2
+        elif sleep_now_inh:
             spike_labels[t] = -2
 
     if save:
@@ -499,4 +509,6 @@ def train_network(
         post_trace_4_plot,
         spike_threshold,
         weight_mask,
+        max_sum_inh,
+        max_sum_exc,
     )
