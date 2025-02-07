@@ -124,6 +124,7 @@ def update_weights(
             N_inh=N_inh,
             weights=weights,
             N_x=N_x,
+            spikes=spikes,
         )
 
     if trace_update:

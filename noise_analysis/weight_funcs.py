@@ -295,19 +295,16 @@ def spike_timing(
     N_inh,
     weights,
     N_x,
+    spikes,
 ):
 
     pre_spikes = []
-    for i in spike_times:
-        if i == 0:
-            pre_spikes.append(i)
-
-    # Separate post-spikes (i >= N_x)
     post_spikes = []
-    for i in spike_times:
-        if i >= N_x:
-            if i == 0:
+    for i in range(spike_times.size):
+        if spike_times[i] == 0:
+            if i >= N_x:
                 post_spikes.append(i)
+            pre_spikes.append(i)
 
     # Compute the update using explicit loops.
     exc_pre_spikes = pre_spikes[:-N_inh]
