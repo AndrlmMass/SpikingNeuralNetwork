@@ -113,13 +113,13 @@ def update_weights(
     if timing_update:
         weights = spike_timing(
             spike_times=spike_times,
-            spike_idx=spike_idx,
             tau_LTP=tau_LTP,
             tau_LTD=tau_LTD,
             learning_rate_exc=learning_rate_exc,
             learning_rate_inh=learning_rate_inh,
             N_inh=N_inh,
             weights=weights,
+            N_x=N_x,
         )
 
     if trace_update:

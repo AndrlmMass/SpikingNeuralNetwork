@@ -266,42 +266,51 @@ def trace_STDP(
     return post_trace, pre_trace, weights
 
 
+@njit
 def spike_timing(
     spike_times,
-    spike_idx,
     tau_LTP,
     tau_LTD,
     learning_rate_exc,
     learning_rate_inh,
     N_inh,
     weights,
+    N_x,
 ):
-    # Compute pairwise time differences for all neurons
-    time_diff = np.subtract.outer(spike_times, spike_times)
 
-    # Mask time differences to only consider interactions involving spiking neurons
-    spike_mask = spike_idx[:, None] | spike_idx[None, :]
-    masked_time_diff = np.where(spike_mask == True, time_diff, float("nan"))
+    pre_spikes = []
+    for i in range(spike_times.size):
+        if spike_times[i] == 0:
+            pre_spikes.append(i)
 
-    # STDP update rule
-    stdp_update = np.zeros_like(masked_time_diff)
+    # Separate post-spikes (i >= N_x)
+    post_spikes = []
+    for idx in spike_times:
+        if idx >= N_x:
+            if spike_times[idx] == 0:
+                post_spikes.append(idx)
 
-    # Potentiation for Δt > 0 (pre-spike before post-spike)
-    stdp_update[masked_time_diff >= 0] = np.exp(
-        -masked_time_diff[masked_time_diff >= 0] / tau_LTP
-    )
+    # Compute the update using explicit loops.
+    exc_pre_spikes = pre_spikes[:-N_inh]
+    inh_pre_spikes = pre_spikes[-N_inh:]
+    for j_ in range(len(exc_pre_spikes)):
+        for i_ in range(len(post_spikes)):
+            j = pre_spikes[j_]
+            i = post_spikes[i_]
+            dt = spike_times[i] - spike_times[j]
+            if dt >= 0:
+                weights[j, i] += np.exp(-dt / tau_LTP) * learning_rate_exc
+            else:
+                weights[j, i] -= np.exp(dt / tau_LTD) * learning_rate_inh
 
-    # Depression for Δt < 0 (post-spike before pre-spike)
-    stdp_update[masked_time_diff < 0] = -np.exp(
-        masked_time_diff[masked_time_diff < 0] / tau_LTD
-    )
-
-    # Separate updates for excitatory and inhibitory neurons
-    weights[:-N_inh] += (
-        learning_rate_exc * stdp_update[:-N_inh]
-    )  # For excitatory connections
-    weights[-N_inh:] -= (
-        learning_rate_inh * stdp_update[-N_inh:]
-    )  # For inhibitory connections
+    for j_ in range(len(inh_pre_spikes)):
+        for i_ in range(len(post_spikes)):
+            j = pre_spikes[j_]
+            i = post_spikes[i_]
+            dt = spike_times[i] - spike_times[j]
+            if dt >= 0:
+                weights[j, i] -= np.exp(-dt / tau_LTP) * learning_rate_exc
+            else:
+                weights[j, i] += np.exp(dt / tau_LTD) * learning_rate_inh
 
     return weights
