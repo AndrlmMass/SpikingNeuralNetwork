@@ -285,7 +285,7 @@ def trace_STDP(
     return post_trace, pre_trace, weights
 
 
-@njit
+# @njit
 def spike_timing(
     spike_times,
     tau_LTP,

@@ -242,8 +242,8 @@ def weights_plot(
         idx_inh = np.random.choice(inh_interval, size=num_inh, replace=False)
 
     # Simplify weights
-    weights_exc = weights[:, idx_exc, :-N_inh]
-    weights_inh = weights[:, idx_inh, -N_inh:]
+    weights_exc = weights[:, idx_exc]
+    weights_inh = weights[:, idx_inh]
 
     mu_weights_exc = np.reshape(weights_exc, (weights_exc.shape[0], -1))
     mu_weights_inh = np.reshape(weights_inh, (weights_inh.shape[0], -1))
