@@ -221,7 +221,13 @@ def mp_plot(mp, N_exc):
     plt.show()
 
 
-def weights_plot(weights, N_x, N_inh, max_weight_sum):
+def weights_plot(
+    weights,
+    N_x,
+    N_inh,
+    max_weight_sum,
+    random_selection,
+):
 
     fig, axs = plt.subplots(2, 1, figsize=(10, 8))
 

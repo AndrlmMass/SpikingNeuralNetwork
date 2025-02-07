@@ -5,14 +5,18 @@ from numba import njit
 @njit
 def sleep_func(
     weights,  # shape = (N_pre, N_post)
-    max_sum_weights,
+    max_sum_exc,
+    max_sum_inh,
     sleep_now,
     N_inh,
+    N_exc,
+    N_x,
     w_target_exc,
     w_target_inh,
     weight_decay_rate_exc,
     weight_decay_rate_inh,
-    baseline_weight_sum,
+    baseline_sum_exc,
+    baseline_sum_inh,
 ):
     """
     Numba-nopython-compatible version that:
@@ -26,24 +30,28 @@ def sleep_func(
     # ------------------------------------------------
     # 1) Sum of absolute weights
     # ------------------------------------------------
-    sum_weights = 0.0
+    sum_weights_exc = 0.0
+    sum_weights_inh = 0.0
     N_pre, N_post = weights.shape
     for i in range(N_pre):
         for j in range(N_post):
             delta_weights = abs(weights[i, j])
             if delta_weights != None:
-                sum_weights += delta_weights
-
-    print(sum_weights, max_sum_weights, baseline_weight_sum)
+                if j >= N_exc + N_x:
+                    sum_weights_inh += delta_weights
+                else:
+                    sum_weights_exc += delta_weights
 
     # ------------------------------------------------
     # 2) Check if we exceed max_sum_weights
     # ------------------------------------------------
-    if sum_weights > max_sum_weights:
+
+    if sum_weights_exc > sum_weights_exc:
         sleep_now = True
         print("sleepy!")
+    elif sum_weights_inh:
+        sleep_now = True
     else:
-        sleep_now = False
         return weights, sleep_now
 
     # ------------------------------------------------
@@ -81,7 +89,7 @@ def sleep_func(
             for j in range(N_post):
                 delta_weights = abs(weights[i, j])
                 if delta_weights != None:
-                    weights += delta_weights
+                    sum_weights2 += delta_weights
 
         # If weights decayed below baseline => stop sleeping
         if sum_weights2 <= baseline_weight_sum:
@@ -191,11 +199,9 @@ def trace_STDP(
     tau_pre_trace_inh: float,
     tau_post_trace_exc: float,
     tau_post_trace_inh: float,
+    nonzero_pre_idx,  # This is a typed List of arrays
 ):
-    """
-    Optimized Numba-friendly STDP update.
-    """
-    # Precompute constants
+    # Precompute some constants
     A_plus_dt = A_plus * dt
     A_minus_dt = A_minus * dt
     exp_pre_exc = np.exp(-dt / tau_pre_trace_exc)
@@ -203,45 +209,42 @@ def trace_STDP(
     exp_post_exc = np.exp(-dt / tau_post_trace_exc)
     exp_post_inh = np.exp(-dt / tau_post_trace_inh)
 
-    # Identify spike indices
+    # Determine which neurons spiked
+    # (This loop is similar to your original code.)
     spike_idx = []
     for i in range(spikes.size):
         if spikes[i] == 1:
             spike_idx.append(i)
-    spike_count = len(spike_idx)
 
-    # Separate post and pre spikes
+    # Separate post-spikes (i >= N_x)
     post_spikes = []
-    pre_spikes_exc = []
-    pre_spikes_inh = []
-    N_inh_idx = N - N_inh
-    for idx in range(spike_count):
-        i = spike_idx[idx]
-        if i >= N_x:
-            post_spikes.append(i)
-        if i <= N_inh_idx:
-            pre_spikes_exc.append(i)
-        else:
-            pre_spikes_inh.append(i)
+    for idx in spike_idx:
+        if idx >= N_x:
+            post_spikes.append(idx)
 
-    # Weight updates
+    # For each post–neuron that spiked, update only its incoming weights.
+    # Here we assume that nonzero_pre_idx[post_col] corresponds to the post–neuron
+    # with index post = post_col + N_x (since your weights are in columns N_x: ).
     for i_post in post_spikes:
-        post_tr = post_trace[i_post - N_x]
-        for j in pre_spikes_exc:
-            if weights[j, i_post] != 0.0:
-                # potentiation
+        # Determine the column index in the weight matrix and in the connectivity list
+        post_col = i_post - N_x
+        pre_indices = nonzero_pre_idx[post_col]
+        # Now loop over only those pre–neurons that have a connection to i_post
+        for j in pre_indices:
+            # Depending on whether pre neuron j is excitatory or inhibitory,
+            # update the weight accordingly. (Your original code uses an index check.)
+            if j < (N - N_inh):  # excitatory
                 weights[j, i_post] += A_plus_dt * pre_trace[j] * learning_rate_exc
-                # depression
-                weights[j, i_post] -= A_minus_dt * post_tr * learning_rate_exc
-
-        for j in pre_spikes_inh:
-            if weights[j, i_post] != 0.0:
-                # potentiation
+                weights[j, i_post] -= (
+                    A_minus_dt * post_trace[post_col] * learning_rate_exc
+                )
+            else:  # inhibitory
                 weights[j, i_post] -= A_plus_dt * pre_trace[j] * learning_rate_inh
-                # depression
-                weights[j, i_post] += A_minus_dt * post_tr * learning_rate_inh
+                weights[j, i_post] += (
+                    A_minus_dt * post_trace[post_col] * learning_rate_inh
+                )
 
-    # Decay the eligibility traces
+    # Now decay the eligibility traces as before
     for i in range(pre_trace.size):
         if i < pre_trace.size - N_inh:
             pre_trace[i] *= exp_pre_exc
@@ -254,14 +257,11 @@ def trace_STDP(
         else:
             post_trace[i] *= exp_post_inh
 
-    # Increase pre-trace for all spiking neurons
+    # Increase traces for spiking neurons.
     for idx in spike_idx:
         pre_trace[idx] += dt
-
-    # Increase post-trace for spiking post-neurons
     for i_post in post_spikes:
-        post_spike_idx = i_post - N_x
-        post_trace[post_spike_idx] += dt
+        post_trace[i_post - N_x] += dt
 
     return post_trace, pre_trace, weights
 

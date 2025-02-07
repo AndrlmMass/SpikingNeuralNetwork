@@ -188,6 +188,7 @@ class SNN_noisy:
         weight_var_noise=0.005,
         w_target_exc=0.1,
         w_target_inh=-0.1,
+        beta=0.75,
         retur=False,
         sleep=False,
         save=True,
@@ -205,7 +206,6 @@ class SNN_noisy:
             self.post_trace_plot,
             self.spike_threshold,
             self.weight_mask,
-            self.max_weight_sum,
         ) = train_network(
             weights=self.weights,
             spike_labels=self.labels,
@@ -229,6 +229,7 @@ class SNN_noisy:
             max_weight_inh=max_weight_inh,
             N_inh=self.N_inh,
             N_exc=self.N_exc,
+            beta=beta,
             weight_decay=weight_decay,
             weight_decay_rate_exc=weight_decay_rate_exc,
             weight_decay_rate_inh=weight_decay_rate_inh,

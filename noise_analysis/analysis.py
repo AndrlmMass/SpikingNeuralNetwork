@@ -29,7 +29,7 @@ def bin_spikes_by_label_no_breaks(spikes, labels):
             # End of the current segment.
             current_label = labels[t - 1]
             # Process only if the current label is not -1.
-            if current_label != -1:
+            if current_label != -1 and current_label != -2:
                 segment = spikes[start:t]
                 # Compute feature for the segment (here, the mean firing rate for each neuron).
                 feature_vector = np.mean(segment, axis=0)
@@ -41,7 +41,7 @@ def bin_spikes_by_label_no_breaks(spikes, labels):
     # Handle the final segment.
     if start < len(labels):
         current_label = labels[-1]
-        if current_label != -1:
+        if current_label != -1 and current_label != -2:
             segment = spikes[start:]
             feature_vector = np.mean(segment, axis=0)
             segments.append(feature_vector)

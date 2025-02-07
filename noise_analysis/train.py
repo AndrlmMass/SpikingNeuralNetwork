@@ -1,3 +1,4 @@
+from numba.typed import List
 from tqdm import tqdm
 import pickle as pkl
 import numpy as np
@@ -17,6 +18,7 @@ def update_weights(
     max_weight_exc,
     min_weight_inh,
     max_weight_inh,
+    nonzero_pre_idx,
     weight_decay,
     weight_decay_rate_exc,
     weight_decay_rate_inh,
@@ -30,11 +32,13 @@ def update_weights(
     weight_mask,
     w_target_exc,
     w_target_inh,
-    max_sum_weights,
+    max_sum_exc,
+    max_sum_inh,
     clip_exc_weights,
     clip_inh_weights,
     vectorized_trace,
-    baseline_weight_sum,
+    baseline_sum_exc,
+    baseline_sum_inh,
     check_sleep_interval,
     spikes,
     N_inh,
@@ -74,15 +78,17 @@ def update_weights(
         now = t % check_sleep_interval
         if now == 0 or sleep_now:
             weights, sleep_now = sleep_func(
-                weights,
-                max_sum_weights,
-                sleep_now,
-                N_inh,
-                w_target_exc,
-                w_target_inh,
-                weight_decay_rate_exc,
-                weight_decay_rate_inh,
-                baseline_weight_sum,
+                weights=weights,
+                max_sum_exc=max_sum_exc,
+                max_sum_inh=max_sum_inh,
+                sleep_now=sleep_now,
+                N_inh=N_inh,
+                w_target_exc=w_target_exc,
+                w_target_inh=w_target_inh,
+                weight_decay_rate_exc=weight_decay_rate_exc,
+                weight_decay_rate_inh=weight_decay_rate_inh,
+                baseline_sum_exc=baseline_sum_exc,
+                baseline_sum_inh=baseline_sum_inh,
             )
 
     # Find the neurons that spiked in the current timestep
@@ -131,6 +137,7 @@ def update_weights(
             N_inh=N_inh,
             N=N,
             N_exc=N_exc,
+            nonzero_pre_idx=nonzero_pre_idx,
             tau_pre_trace_exc=tau_pre_trace_exc,
             tau_pre_trace_inh=tau_pre_trace_inh,
             tau_post_trace_exc=tau_post_trace_exc,
@@ -322,6 +329,7 @@ def train_network(
     save,
     N_x,
     T,
+    beta,
     mean_noise,
     var_noise,
 ):
@@ -339,12 +347,29 @@ def train_network(
         shape=(T, N - N_x), fill_value=spike_threshold_default, dtype=float
     )
 
-    baseline_weight_sum = np.sum(np.abs(weights))
-    max_sum_weights = baseline_weight_sum * alpha
+    sum_weights_exc = np.sum(np.abs(weights[:-N_inh]))
+    sum_weights_inh = np.sum(np.abs(weights[-N_inh:]))
+
+    baseline_sum_exc = sum_weights_exc * beta
+    baseline_sum_inh = sum_weights_inh * beta
+    max_sum_exc = baseline_sum_exc * alpha
+    max_sum_inh = baseline_sum_inh * alpha
     delta_w = np.zeros(shape=weights.shape)
 
     nz_rows, nz_cols = np.nonzero(weights)
     sleep_now = False
+
+    # Suppose weights is your initial 2D numpy array of weights.
+    # Here, we assume that the columns correspond to post-neurons.
+    N, N_post = weights.shape
+
+    # Create a typed list to hold, for each post neuron, the indices of pre neurons
+    nonzero_pre_idx = List()
+    for i in range(N_post):
+        # np.nonzero returns a tuple; we take the first element (the indices)
+        pre_idx = np.nonzero(weights[:, i])[0]
+        # Ensure the pre_idx array is of type int64 (or another fixed int type)
+        nonzero_pre_idx.append(pre_idx.astype(np.int64))
 
     for t in tqdm(range(1, T), desc="Training network:"):
 
@@ -392,11 +417,14 @@ def train_network(
             weights, pre_trace, post_trace, sleep_now = update_weights(
                 spikes=spikes[t - 1],
                 weights=weights,
-                max_sum_weights=max_sum_weights,
+                max_sum_exc=max_sum_exc,
+                max_sum_inh=max_sum_inh,
                 non_weight_mask=non_weight_mask,
-                baseline_weight_sum=baseline_weight_sum,
+                baseline_sum_exc=baseline_sum_exc,
+                baseline_sum_inh=baseline_sum_inh,
                 check_sleep_interval=check_sleep_interval,
                 sleep=sleep,
+                nonzero_pre_idx=nonzero_pre_idx,
                 N_x=N_x,
                 vectorized_trace=vectorized_trace,
                 delta_w=delta_w,
@@ -471,5 +499,4 @@ def train_network(
         post_trace_4_plot,
         spike_threshold,
         weight_mask,
-        max_sum_weights,
     )
