@@ -1,5 +1,6 @@
+import math
 import numpy as np
-from numba import njit
+from numba import njit, prange
 
 
 @njit
@@ -229,15 +230,12 @@ def trace_STDP(
     # Determine which neurons spiked
     # (This loop is similar to your original code.)
     spike_idx = []
+    post_spikes = []
     for i in range(spikes.size):
         if spikes[i] == 1:
+            if i >= N_x:
+                post_spikes.append(i)
             spike_idx.append(i)
-
-    # Separate post-spikes (i >= N_x)
-    post_spikes = []
-    for idx in spike_idx:
-        if idx >= N_x:
-            post_spikes.append(idx)
 
     # For each post–neuron that spiked, update only its incoming weights.
     # Here we assume that nonzero_pre_idx[post_col] corresponds to the post–neuron
@@ -283,48 +281,51 @@ def trace_STDP(
     return post_trace, pre_trace, weights
 
 
-# @njit
+@njit(parallel=True)
 def spike_timing(
-    spike_times,
+    spike_times,  # Array of spike times
     tau_LTP,
     tau_LTD,
     learning_rate_exc,
     learning_rate_inh,
     N_inh,
-    weights,
-    N_x,
-    spikes,
+    weights,  # Weight matrix (pre x post)
+    N_x,  # Starting index for postsynaptic neurons
+    spikes,  # Binary spike indicator array
+    nonzero_pre_idx,  # Typed list: for each post neuron, an array of nonzero pre indices
 ):
+    n_neurons = spike_times.shape[0]
+    n_post = weights.shape[1]  # number of postsynaptic neurons
 
-    pre_spikes = []
-    post_spikes = []
-    for i in range(spike_times.size):
-        if spike_times[i] == 0:
-            if i >= N_x:
-                post_spikes.append(i)
-            pre_spikes.append(i)
+    # Loop over postsynaptic neurons, parallelized.
+    for i in prange(N_x, n_post):
+        # Skip postsynaptic neurons that did not spike
 
-    # Compute the update using explicit loops.
-    exc_pre_spikes = pre_spikes[:-N_inh]
-    inh_pre_spikes = pre_spikes[-N_inh:]
-    for j_ in range(len(exc_pre_spikes)):
-        for i_ in range(len(post_spikes)):
-            j = pre_spikes[j_]
-            i = post_spikes[i_]
-            dt = spike_times[i] - spike_times[j]
-            if dt >= 0:
-                weights[j, i] += np.exp(-dt / tau_LTP) * learning_rate_exc
-            else:
-                weights[j, i] -= np.exp(dt / tau_LTD) * learning_rate_inh
+        t_post = spike_times[i]
+        # Retrieve the pre-synaptic indices that have a nonzero connection to neuron i.
+        # Note: We assume the nonzero_pre_idx list is indexed relative to the postsynaptic
+        # neurons starting at N_x (i.e., index 0 in the list corresponds to neuron N_x)
+        pre_indices = nonzero_pre_idx[i - N_x]
 
-    for j_ in range(len(inh_pre_spikes)):
-        for i_ in range(len(post_spikes)):
-            j = pre_spikes[j_]
-            i = post_spikes[i_]
-            dt = spike_times[i] - spike_times[j]
-            if dt >= 0:
-                weights[j, i] -= np.exp(-dt / tau_LTP) * learning_rate_exc
-            else:
-                weights[j, i] += np.exp(dt / tau_LTD) * learning_rate_inh
+        # Iterate only over connections that exist.
+        for j in pre_indices:
+            # Skip if the presynaptic neuron did not spike
+            if spikes[j] == 0 and spikes[i] == 0:
+                continue
+
+            t_pre = spike_times[j]
+            dt = t_post - t_pre
+
+            # Determine if the connection is excitatory or inhibitory.
+            if j < (n_neurons - N_inh):  # excitatory pre–synaptic neuron
+                if dt >= 0:
+                    weights[j, i] += math.exp(-dt / tau_LTP) * learning_rate_exc
+                else:
+                    weights[j, i] -= math.exp(dt / tau_LTD) * learning_rate_exc
+            else:  # inhibitory pre–synaptic neuron
+                if dt >= 0:
+                    weights[j, i] -= math.exp(-dt / tau_LTP) * learning_rate_inh
+                else:
+                    weights[j, i] += math.exp(dt / tau_LTD) * learning_rate_inh
 
     return weights

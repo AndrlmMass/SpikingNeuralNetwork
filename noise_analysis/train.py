@@ -125,6 +125,7 @@ def update_weights(
             weights=weights,
             N_x=N_x,
             spikes=spikes,
+            nonzero_pre_idx=nonzero_pre_idx,
         )
 
     if trace_update:
@@ -339,7 +340,6 @@ def train_network(
     var_noise,
     num_exc,
     num_inh,
-    test,
 ):
     weight_mask = weights != 0
     non_weight_mask = weights == 0
@@ -500,10 +500,11 @@ def train_network(
             post_trace_4_plot[t // interval] = post_trace
 
         if sleep_now_exc:
-            spikes[t, :N_x] = 0
-            spike_labels[t] = -2
+            spikes[t + 1, :N_x] = 0
+            spike_labels[t + 1] = -2
         elif sleep_now_inh:
-            spike_labels[t] = -2
+            spike_labels[t + 1] = -2
+            spikes[t + 1, :N_x] = 0
 
     if save:
         file_name = "trained_weights/weights.pkl"

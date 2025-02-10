@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
 import matplotlib
 
 matplotlib.use("TkAgg")
@@ -84,5 +85,35 @@ def t_SNE(
     plt.title("t-SNE results")
     plt.xlabel("t-SNE dimension 1")
     plt.ylabel("t-SNE dimension 2")
+    plt.legend()
+    plt.show()
+
+
+def PCA_analysis(
+    spikes,
+    labels_spike,
+    n_components,
+    random_state,
+):
+    # Bin the spikes using the labels (assuming this function is defined elsewhere)
+    features, segment_labels = bin_spikes_by_label_no_breaks(spikes, labels_spike)
+
+    # Create a PCA instance.
+    # Note: PCA does not require perplexity or max_iter.
+    pca = PCA(n_components=n_components, random_state=random_state)
+
+    # Fit PCA on the features and transform them.
+    pca_results = pca.fit_transform(features)
+
+    # Visualize the results (assuming 2 components for scatter plot)
+    plt.figure(figsize=(10, 8))
+    for label in np.unique(segment_labels):
+        indices = segment_labels == label
+        plt.scatter(
+            pca_results[indices, 0], pca_results[indices, 1], label=f"Class {label}"
+        )
+    plt.title("PCA Results")
+    plt.xlabel("Principal Component 1")
+    plt.ylabel("Principal Component 2")
     plt.legend()
     plt.show()

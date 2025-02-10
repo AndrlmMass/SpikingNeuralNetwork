@@ -9,7 +9,7 @@ from plot import (
     spike_threshold_plot,
     plot_traces,
 )
-from analysis import t_SNE
+from analysis import t_SNE, PCA_analysis
 from create_network import create_weights, create_arrays
 
 
@@ -469,6 +469,8 @@ class SNN_noisy:
         t_sne_train=False,
         t_sne_test=True,
         pls=False,
+        pls_train=False,
+        pls_test=True,
         log_reg=False,
     ):
         if t_sne:
@@ -491,6 +493,19 @@ class SNN_noisy:
                     random_state=random_state,
                 )
         if pls:
-            ...
+            if pls_train:
+                PCA_analysis(
+                    spikes=self.spikes_train,
+                    labels_spike=self.labels_train,
+                    n_components=n_components,
+                    random_state=random_state,
+                )
+            if pls_test:
+                PCA_analysis(
+                    spikes=self.spikes_test,
+                    labels_spike=self.labels_test,
+                    n_components=n_components,
+                    random_state=random_state,
+                )
         if log_reg:
             ...
