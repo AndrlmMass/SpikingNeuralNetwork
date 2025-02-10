@@ -40,16 +40,39 @@ def create_weights(
     return weights
 
 
-def create_arrays(N, resting_membrane, total_time, max_time, data, N_x):
-    membrane_potential = np.zeros((total_time, N - N_x))
-    membrane_potential[0] = resting_membrane
+def create_arrays(
+    N,
+    resting_membrane,
+    total_time_train,
+    total_time_test,
+    max_time,
+    data_train,
+    data_test,
+    N_x,
+):
+    membrane_potential_train = np.zeros((total_time_train, N - N_x))
+    membrane_potential_train[0] = resting_membrane
+
+    membrane_potential_test = np.zeros((total_time_test, N - N_x))
+    membrane_potential_test[0] = resting_membrane
 
     pre_trace = np.zeros((N))
     post_trace = np.zeros((N - N_x))
 
-    spikes = np.zeros((total_time, N), dtype="int64")
-    spikes[:, :N_x] = data
+    spikes_train = np.zeros((total_time_train, N), dtype="int64")
+    spikes_train[:, :N_x] = data_train
+
+    spikes_test = np.zeros((total_time_test, N), dtype="int64")
+    spikes_test[:, :N_x] = data_test
 
     spike_times = np.random.randint(low=max_time, high=max_time**2, size=N)
 
-    return membrane_potential, pre_trace, post_trace, spikes, spike_times
+    return (
+        membrane_potential_train,
+        membrane_potential_test,
+        pre_trace,
+        post_trace,
+        spikes_train,
+        spikes_test,
+        spike_times,
+    )

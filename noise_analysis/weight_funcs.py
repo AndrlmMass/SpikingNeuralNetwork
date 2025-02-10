@@ -48,10 +48,8 @@ def sleep_func(
     # ------------------------------------------------#
     if sum_weights_exc > max_sum_exc:
         sleep_now_exc = True
-        print("sleepy exc!")
     if sum_weights_inh > max_sum_inh:
         sleep_now_inh = True
-        print("sleepy inh!")
     if not sleep_now_inh and not sleep_now_exc:
         return weights, sleep_now_inh, sleep_now_exc
 

@@ -42,28 +42,33 @@ class SNN_noisy:
         noisy_data=True,
         noise_level=0.05,
         classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        test_data_ratio=0.2,
     ):
 
         self.num_steps = num_steps
         self.num_items = num_images
-        self.data, self.labels = create_data(
-            pixel_size=int(np.sqrt(self.N_x)),
-            num_steps=num_steps,
-            plot_comparison=plot_comparison,
-            gain=gain,
-            offset=offset,
-            first_spike_time=first_spike_time,
-            time_var_input=time_var_input,
-            download=download,
-            num_images=num_images,
-            recreate=recreate,
-            add_breaks=add_breaks,
-            break_lengths=break_lengths,
-            noisy_data=noisy_data,
-            noise_level=noise_level,
-            classes=classes,
+        self.data_train, self.labels_train, self.data_test, self.labels_test = (
+            create_data(
+                pixel_size=int(np.sqrt(self.N_x)),
+                num_steps=num_steps,
+                plot_comparison=plot_comparison,
+                gain=gain,
+                offset=offset,
+                first_spike_time=first_spike_time,
+                time_var_input=time_var_input,
+                download=download,
+                num_images=num_images,
+                recreate=recreate,
+                add_breaks=add_breaks,
+                break_lengths=break_lengths,
+                noisy_data=noisy_data,
+                noise_level=noise_level,
+                classes=classes,
+                test_data_ratio=test_data_ratio,
+            )
         )
-        self.T = self.data.shape[0]
+        self.T_train = self.data_train.shape[0]
+        self.T_test = self.data_test.shape[0]
 
         # plot spikes
         if plot_spikes:
@@ -71,15 +76,15 @@ class SNN_noisy:
                 min_time = 0
             if max_time == None:
                 max_time = self.T
-            spike_plot(self.data[min_time:max_time], self.labels)
+            spike_plot(self.data_train[min_time:max_time], self.labels_train)
 
         # plot heatmap of activity
         if plot_heat_map:
-            heat_map(self.data, pixel_size=10)
+            heat_map(self.data_train, pixel_size=10)
 
         # return data and labels if needed
         if retur:
-            return self.data, self.labels
+            return self.data_train, self.labels_train
 
     def prepare_training(
         self,
@@ -110,16 +115,20 @@ class SNN_noisy:
 
         # create other arrays
         (
-            self.mp,
+            self.mp_train,
+            self.mp_test,
             self.pre_trace,
             self.post_trace,
-            self.spikes,
+            self.spikes_train,
+            self.spikes_test,
             self.spike_times,
         ) = create_arrays(
             N=self.N,
             resting_membrane=self.resting_potential,
-            total_time=self.T,
-            data=self.data,
+            total_time_train=self.T_train,
+            total_time_test=self.T_test,
+            data_train=self.data_train,
+            data_test=self.data_test,
             N_x=self.N_x,
             max_time=self.max_time,
         )
@@ -127,7 +136,7 @@ class SNN_noisy:
         if retur:
             return self.weights, self.mp, self.elig_trace, self.spike_times
 
-    def train_network_(
+    def train(
         self,
         dt=1,
         tau_m=30,
@@ -139,11 +148,13 @@ class SNN_noisy:
         noisy_threshold=False,
         spike_slope=-0.1,
         spike_intercept=-4,
-        plot_spikes=False,
+        plot_spikes_train=False,
+        plot_spikes_test=False,
         plot_weights=False,
         plot_traces_=False,
         check_sleep_interval=100,
-        plot_mp=False,
+        plot_mp_train=False,
+        plot_mp_test=False,
         plot_threshold=False,
         min_weight_exc=0.01,
         max_weight_exc=2,
@@ -195,16 +206,20 @@ class SNN_noisy:
         retur=False,
         sleep=False,
         save=True,
+        test=False,
+        num_inh=10,
+        num_exc=50,
         save_weights=False,
     ):
         self.dt = dt
         (
             self.weights,
-            self.spikes,
+            self.spikes_train,
             self.pre_trace,
             self.post_trace,
-            self.mp,
-            self.weights2plot,
+            self.mp_train,
+            self.weights2plot_exc,
+            self.weights2plot_inh,
             self.pre_trace_plot,
             self.post_trace_plot,
             self.spike_threshold,
@@ -213,12 +228,12 @@ class SNN_noisy:
             self.max_weight_sum_exc,
         ) = train_network(
             weights=self.weights,
-            spike_labels=self.labels,
-            mp=self.mp,
+            spike_labels=self.labels_train,
+            mp=self.mp_train,
             sleep=sleep,
             alpha=alpha,
             timing_update=timing_update,
-            spikes=self.spikes,
+            spikes=self.spikes_train,
             pre_trace=self.pre_trace,
             post_trace=self.post_trace,
             check_sleep_interval=check_sleep_interval,
@@ -235,6 +250,8 @@ class SNN_noisy:
             N_inh=self.N_inh,
             N_exc=self.N_exc,
             beta=beta,
+            num_exc=num_exc,
+            num_inh=num_inh,
             weight_decay=weight_decay,
             weight_decay_rate_exc=weight_decay_rate_exc,
             weight_decay_rate_inh=weight_decay_rate_inh,
@@ -273,7 +290,7 @@ class SNN_noisy:
             vectorized_trace=vectorized_trace,
             save=save,
             N_x=self.N_x,
-            T=self.T,
+            T=self.T_train,
             mean_noise=mean_noise,
             var_noise=var_noise,
         )
@@ -282,20 +299,21 @@ class SNN_noisy:
             ...
             # add logic
 
-        if plot_spikes:
+        if plot_spikes_train:
             if start_time_spike_plot == None:
                 start_time_spike_plot = 0
             if stop_time_spike_plot == None:
                 stop_time_spike_plot = self.T
 
             spike_plot(
-                self.spikes[start_time_spike_plot:stop_time_spike_plot], self.labels
+                self.spikes_train[start_time_spike_plot:stop_time_spike_plot],
+                self.labels_train,
             )
 
         if plot_threshold:
             spike_threshold_plot(self.spike_threshold, self.N_exc)
 
-        if plot_mp:
+        if plot_mp_train:
             if start_index_mp == None:
                 start_index_mp = self.N_x
             if stop_index_mp == None:
@@ -303,24 +321,23 @@ class SNN_noisy:
             if time_start_mp == None:
                 time_start_mp = 0
             if time_stop_mp == None:
-                time_stop_mp = self.T
+                time_stop_mp = self.T_train
 
             mp_plot(
-                mp=self.mp[time_start_mp:time_stop_mp],
+                mp=self.mp_train[time_start_mp:time_stop_mp],
                 N_exc=self.N_exc,
             )
 
         if plot_weights:
             weights_plot(
-                weights=self.weights2plot,
+                weights_exc=self.weights2plot_exc,
+                weights_inh=self.weights2plot_inh,
                 N=self.N,
                 N_x=self.N_x,
                 N_exc=self.N_exc,
                 N_inh=self.N_inh,
                 max_weight_sum_inh=self.max_weight_sum_inh,
                 max_weight_sum_exc=self.max_weight_sum_exc,
-                num_exc=num_exc_weight_plot,
-                num_inh=num_inh_weight_plot,
                 random_selection=random_selection_weight_plot,
             )
 
@@ -332,8 +349,115 @@ class SNN_noisy:
                 post_traces=self.post_trace_plot,
             )
 
-        if retur:
-            return self.weights, self.spikes, self.elig_trace
+        if test:
+            (
+                self.weights,
+                self.spikes_test,
+                self.pre_trace,
+                self.post_trace,
+                self.mp_test,
+                self.weights2plot_exc,
+                self.weights2plot_inh,
+                self.pre_trace_plot,
+                self.post_trace_plot,
+                self.spike_threshold,
+                self.weight_mask,
+                self.max_weight_sum_inh,
+                self.max_weight_sum_exc,
+            ) = train_network(
+                weights=self.weights,
+                spike_labels=self.labels_test,
+                mp=self.mp_test,
+                num_exc=num_exc,
+                num_inh=num_inh,
+                sleep=False,
+                alpha=alpha,
+                timing_update=timing_update,
+                spikes=self.spikes_test,
+                pre_trace=self.pre_trace,
+                post_trace=self.post_trace,
+                check_sleep_interval=check_sleep_interval,
+                tau_pre_trace_exc=tau_pre_trace_exc,
+                tau_pre_trace_inh=tau_pre_trace_inh,
+                tau_post_trace_exc=tau_post_trace_exc,
+                tau_post_trace_inh=tau_post_trace_inh,
+                resting_potential=self.resting_potential,
+                membrane_resistance=membrane_resistance,
+                min_weight_exc=min_weight_exc,
+                max_weight_exc=max_weight_exc,
+                min_weight_inh=min_weight_inh,
+                max_weight_inh=max_weight_inh,
+                N_inh=self.N_inh,
+                N_exc=self.N_exc,
+                beta=beta,
+                weight_decay=weight_decay,
+                weight_decay_rate_exc=weight_decay_rate_exc,
+                weight_decay_rate_inh=weight_decay_rate_inh,
+                train_weights=False,
+                learning_rate_exc=learning_rate_exc,
+                learning_rate_inh=learning_rate_inh,
+                w_interval=w_interval,
+                interval=interval,
+                w_target_exc=w_target_exc,
+                w_target_inh=w_target_inh,
+                tau_LTP=tau_LTP,
+                tau_LTD=tau_LTD,
+                tau_m=tau_m,
+                max_mp=max_mp,
+                min_mp=min_mp,
+                dt=self.dt,
+                N=self.N,
+                clip_exc_weights=clip_exc_weights,
+                clip_inh_weights=clip_inh_weights,
+                A_plus=A_plus,
+                A_minus=A_minus,
+                trace_update=trace_update,
+                spike_adaption=spike_adaption,
+                delta_adaption=delta_adaption,
+                tau_adaption=tau_adaption,
+                spike_threshold_default=spike_threshold_default,
+                spike_intercept=spike_intercept,
+                spike_slope=spike_slope,
+                noisy_threshold=noisy_threshold,
+                reset_potential=reset_potential,
+                spike_times=self.spike_times,
+                noisy_potential=noisy_potential,
+                noisy_weights=noisy_weights,
+                weight_mean_noise=weight_mean_noise,
+                weight_var_noise=weight_var_noise,
+                vectorized_trace=vectorized_trace,
+                save=save,
+                N_x=self.N_x,
+                T=self.T_test,
+                mean_noise=mean_noise,
+                var_noise=var_noise,
+            )
+
+            if plot_spikes_test:
+                if start_time_spike_plot == None:
+                    start_time_spike_plot = 0
+                if stop_time_spike_plot == None:
+                    stop_time_spike_plot = self.T
+
+                spike_plot(
+                    self.spikes_train[start_time_spike_plot:stop_time_spike_plot],
+                    self.labels_train,
+                )
+
+            if plot_mp_test:
+                if start_index_mp == None:
+                    start_index_mp = self.N_x
+                if stop_index_mp == None:
+                    stop_index_mp = self.N_exc + self.N_inh
+                if time_start_mp == None:
+                    time_start_mp = 0
+                if time_stop_mp == None:
+                    time_stop_mp = self.T_test
+
+                mp_plot(
+                    mp=self.mp_train[time_start_mp:time_stop_mp],
+                    N_exc=self.N_exc,
+                )
 
     def analysis(
         self,
@@ -342,18 +466,30 @@ class SNN_noisy:
         random_state=48,
         n_components=2,
         t_sne=True,
+        t_sne_train=False,
+        t_sne_test=True,
         pls=False,
         log_reg=False,
     ):
         if t_sne:
-            t_SNE(
-                spikes=self.spikes,
-                labels_spike=self.labels,
-                n_components=n_components,
-                perplexity=perplexity,
-                max_iter=max_iter,
-                random_state=random_state,
-            )
+            if t_sne_train:
+                t_SNE(
+                    spikes=self.spikes_train,
+                    labels_spike=self.labels_train,
+                    n_components=n_components,
+                    perplexity=perplexity,
+                    max_iter=max_iter,
+                    random_state=random_state,
+                )
+            if t_sne_test:
+                t_SNE(
+                    spikes=self.spikes_test,
+                    labels_spike=self.labels_test,
+                    n_components=n_components,
+                    perplexity=perplexity,
+                    max_iter=max_iter,
+                    random_state=random_state,
+                )
         if pls:
             ...
         if log_reg:

@@ -337,13 +337,23 @@ def train_network(
     beta,
     mean_noise,
     var_noise,
+    num_exc,
+    num_inh,
+    test,
 ):
     weight_mask = weights != 0
     non_weight_mask = weights == 0
 
+    exc_interval = np.arange(0, N - N_inh)
+    inh_interval = np.arange(N - N_inh, N)
+    idx_exc = np.random.choice(exc_interval, size=num_exc, replace=False)
+    idx_inh = np.random.choice(inh_interval, size=num_inh, replace=False)
+
     # create weights_plotting_array
-    weights_4_plotting = np.zeros((T // interval, N, N - N_x))
-    weights_4_plotting[0] = weights[:, N_x:]
+    weights_4_plotting_exc = np.zeros((T // interval, num_exc, N))
+    weights_4_plotting_inh = np.zeros((T // interval, num_inh, N - N_inh))
+    weights_4_plotting_exc[0] = weights[idx_exc]
+    weights_4_plotting_inh[0] = weights[idx_inh, :-N_inh]
     pre_trace_4_plot = np.zeros((T // interval, N))
     post_trace_4_plot = np.zeros((T // interval, N - N_x))
 
@@ -368,6 +378,10 @@ def train_network(
     # Suppose weights is your initial 2D numpy array of weights.
     # Here, we assume that the columns correspond to post-neurons.
     N, N_post = weights.shape
+    if train_weights:
+        desc = "Training network:"
+    else:
+        desc = "Testing network:"
 
     # Create a typed list to hold, for each post neuron, the indices of pre neurons
     nonzero_pre_idx = List()
@@ -377,7 +391,7 @@ def train_network(
         # Ensure the pre_idx array is of type int64 (or another fixed int type)
         nonzero_pre_idx.append(pre_idx.astype(np.int64))
 
-    for t in tqdm(range(1, T), desc="Training network:"):
+    for t in tqdm(range(1, T), desc=desc):
 
         # update membrane potential
         mp[t] = update_membrane_potential(
@@ -480,7 +494,8 @@ def train_network(
 
         # save weights for plotting
         if t % interval == 0 and t != T:
-            weights_4_plotting[t // interval] = weights[:, N_x:]
+            weights_4_plotting_exc[t // interval] = weights[idx_exc]
+            weights_4_plotting_inh[t // interval] = weights[idx_inh, :-N_inh]
             pre_trace_4_plot[t // interval] = pre_trace
             post_trace_4_plot[t // interval] = post_trace
 
@@ -505,7 +520,8 @@ def train_network(
         pre_trace,
         post_trace,
         mp,
-        weights_4_plotting,
+        weights_4_plotting_exc,
+        weights_4_plotting_inh,
         pre_trace_4_plot,
         post_trace_4_plot,
         spike_threshold,

@@ -222,7 +222,8 @@ def mp_plot(mp, N_exc):
 
 
 def weights_plot(
-    weights,
+    weights_exc,
+    weights_inh,
     N,
     N_x,
     N_exc,
@@ -230,20 +231,9 @@ def weights_plot(
     max_weight_sum_inh,
     max_weight_sum_exc,
     random_selection,
-    num_exc,
-    num_inh,
 ):
 
     fig, axs = plt.subplots(2, 1, figsize=(10, 8))
-    if random_selection:
-        exc_interval = np.arange(0, N - N_inh)
-        inh_interval = np.arange(N - N_inh, N)
-        idx_exc = np.random.choice(exc_interval, size=num_exc, replace=False)
-        idx_inh = np.random.choice(inh_interval, size=num_inh, replace=False)
-
-    # Simplify weights
-    weights_exc = weights[:, idx_exc]
-    weights_inh = weights[:, idx_inh]
 
     mu_weights_exc = np.reshape(weights_exc, (weights_exc.shape[0], -1))
     mu_weights_inh = np.reshape(weights_inh, (weights_inh.shape[0], -1))
@@ -269,12 +259,13 @@ def weights_plot(
         axs[0].plot(
             mu_weights_inh[:, i], color=cmap_inh(i / mu_weights_inh.shape[1]), alpha=0.7
         )
-    sum_weights_exc = np.nansum(np.abs(weights[:-N_inh]), axis=0)
-    sum_weights_inh = np.nansum(np.abs(weights[-N_inh:]), axis=0)
+    sum_weights_exc = np.nansum(np.abs(weights_exc), axis=0)
+    sum_weights_inh = np.nansum(np.abs(weights_inh), axis=0)
     # plot sum of weights
     axs[1].plot(sum_weights_exc, color="red")
     axs[1].plot(sum_weights_inh, color="blue")
-    # axs[1].axhline(y=max_weight_sum, color="red", linestyle="--", linewidth=2)
+    axs[1].axhline(y=max_weight_sum_exc, color="red", linestyle="--", linewidth=2)
+    axs[1].axhline(y=max_weight_sum_inh, color="blue", linestyle="--", linewidth=2)
 
     # Add legend and show the plot
     # Add titles and labels appropriately
