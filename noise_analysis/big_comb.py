@@ -303,7 +303,7 @@ class SNN_noisy:
             if start_time_spike_plot == None:
                 start_time_spike_plot = 0
             if stop_time_spike_plot == None:
-                stop_time_spike_plot = self.T
+                stop_time_spike_plot = self.T_train
 
             spike_plot(
                 self.spikes_train[start_time_spike_plot:stop_time_spike_plot],
@@ -476,7 +476,7 @@ class SNN_noisy:
         if t_sne:
             if t_sne_train:
                 t_SNE(
-                    spikes=self.spikes_train,
+                    spikes=self.spikes_train[:, self.N_x : -self.N_inh],
                     labels_spike=self.labels_train,
                     n_components=n_components,
                     perplexity=perplexity,
@@ -485,7 +485,7 @@ class SNN_noisy:
                 )
             if t_sne_test:
                 t_SNE(
-                    spikes=self.spikes_test,
+                    spikes=self.spikes_test[:, self.N_x : -self.N_inh],
                     labels_spike=self.labels_test,
                     n_components=n_components,
                     perplexity=perplexity,

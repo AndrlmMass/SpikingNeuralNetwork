@@ -193,8 +193,6 @@ def update_weights(
             weights[-N_inh:], a_min=min_weight_inh, a_max=max_weight_inh
         )
 
-    weights[non_weight_mask] = 0
-
     return weights, pre_trace, post_trace, sleep_now_inh, sleep_now_exc
 
 
@@ -499,12 +497,12 @@ def train_network(
             pre_trace_4_plot[t // interval] = pre_trace
             post_trace_4_plot[t // interval] = post_trace
 
-        if sleep_now_exc:
-            spikes[t + 1, :N_x] = 0
-            spike_labels[t + 1] = -2
-        elif sleep_now_inh:
-            spike_labels[t + 1] = -2
-            spikes[t + 1, :N_x] = 0
+        # if sleep_now_exc and t != T:
+        #     # spikes[t, :N_x] = 0
+        #     spike_labels[t] = -2
+        # elif sleep_now_inh and t != T:
+        #     spike_labels[t] = -2
+        #     # spikes[t, :N_x] = 0
 
     if save:
         file_name = "trained_weights/weights.pkl"

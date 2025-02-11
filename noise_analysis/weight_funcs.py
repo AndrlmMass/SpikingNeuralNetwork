@@ -299,8 +299,6 @@ def spike_timing(
 
     # Loop over postsynaptic neurons, parallelized.
     for i in prange(N_x, n_post):
-        # Skip postsynaptic neurons that did not spike
-
         t_post = spike_times[i]
         # Retrieve the pre-synaptic indices that have a nonzero connection to neuron i.
         # Note: We assume the nonzero_pre_idx list is indexed relative to the postsynaptic
