@@ -21,95 +21,56 @@ def sleep_func(
     baseline_sum_inh,
 ):
     """
-    Numba-nopython-compatible version that:
-     1) Computes sum of |weights|.
-     2) If sum > max_sum_weights => sleep_now = True.
-     3) If sleep_flag and sleep_now => apply decay to excitatory (rows [0..end_exc))
-        and inhibitory (rows [end_exc..N_pre)) synapses.
-     4) If the new sum of |weights| <= baseline_weight_sum => sleep_now = False.
+    Optimized, vectorized version:
+      1) Computes sum of |weights| using slices.
+      2) Checks if the sums exceed max values and sets sleep flags.
+      3) If sleeping is active, applies decay in a vectorized way.
+      4) Recomputes the sum to stop sleeping if below baseline.
     """
 
-    # ------------------------------------------------
-    # 1) Sum of absolute weights
-    # ------------------------------------------------
-    sum_weights_exc = 0.0
-    sum_weights_inh = 0.0
-    N_pre, N_post = weights.shape
-    for i in range(N_pre):
-        for j in range(N_post):
-            delta_weights = abs(weights[i, j])
-            if delta_weights != None:
-                if j >= N_exc + N_x:
-                    sum_weights_inh += delta_weights
-                else:
-                    sum_weights_exc += delta_weights
+    # Instead of nested loops, use slicing for excitatory/inhibitory sums.
+    # According to your code, columns [0, N_exc+N_x) are excitatory,
+    # and columns [N_exc+N_x, N_post) are inhibitory.
+    sum_weights_exc = np.sum(np.abs(weights[:-N_inh]))
+    sum_weights_inh = np.sum(np.abs(weights[-N_inh:, N_x:-N_inh]))
 
-    # ------------------------------------------------#
-    # 2) Check if we exceed max_sum_weights           #
-    # ------------------------------------------------#
     if sum_weights_exc > max_sum_exc:
+        print("sleepy exc!")
         sleep_now_exc = True
+    else:
+        sleep_now_exc = False
     if sum_weights_inh > max_sum_inh:
         sleep_now_inh = True
+        print("sleepy inh!")
+    else:
+        sleep_now_inh = False
+
+    # If no sleep is needed, return immediately.
     if not sleep_now_inh and not sleep_now_exc:
         return weights, sleep_now_inh, sleep_now_exc
 
-    # ------------------------------------------------
-    # 3) If sleeping is active, apply decay
-    # ------------------------------------------------
+    # --- Decay excitatory weights ---
     if sleep_now_exc:
-        # Number of excitatory rows:
-        end_exc = N_pre - N_inh
+        # Apply decay to columns [N_x, N_post] in a vectorized way.
+        # (Assuming w_target_exc is nonzero and weights are nonnegative.)
+        weights[:-N_inh] = w_target_exc * (
+            (weights[:-N_inh] / w_target_exc) ** weight_decay_rate_exc
+        )
 
-        # --- Excitatory portion: rows [0..end_exc) ---
-        for i in range(end_exc):
-            for j in range(N_x, N_post):
-                w_ij = weights[i, j]
-                if w_ij != 0.0:
-                    # Calculate the ratio for decay
-                    ratio = w_ij / w_target_exc
-
-                    # Compute decay based on the ratio and decay rate
-                    weights[i, j] = w_target_exc * (ratio**weight_decay_rate_exc)
-
-        # calculte the new sum of weights
-        sum_weights_exc2 = 0.0
-        N_pre, N_post = weights.shape
-        for i in range(end_exc):
-            for j in range(N_x, N_post):
-                delta_weights = abs(weights[i, j])
-                if delta_weights != None:
-                    sum_weights_exc2 += delta_weights
-
-        # If weights decayed below baseline => stop sleeping
+        # Recompute the excitatory sum (only for the decayed submatrix)
+        sum_weights_exc2 = np.sum(np.abs(weights[:-N_inh]))
         if sum_weights_exc2 <= baseline_sum_exc:
             sleep_now_exc = False
 
+    # --- Decay inhibitory weights ---
     if sleep_now_inh:
-        # Number of excitatory rows:
-        end_inh = N_pre - N_inh
-        end_inh_post = N_post - N_inh
+        # Apply decay; note that here we take the absolute value so that the exponentiation is safe.
+        weights[-N_inh:] = w_target_inh * (
+            (np.abs(weights[-N_inh:] / w_target_inh)) ** weight_decay_rate_inh
+        )
 
-        # --- Inhibitory portion: rows [end_exc..N_pre) ---
-        for i in range(end_inh, N_pre):
-            for j in range(N_x, end_inh_post):
-                w_ij = weights[i, j]
-                if w_ij != 0.0:
-                    # Calculate the ratio for decay
-                    ratio = abs(w_ij / w_target_inh)
-
-                    # Compute decay based on the ratio and decay rate
-                    weights[i, j] = w_target_inh * (ratio**weight_decay_rate_inh)
-
-        sum_weights_inh2 = 0.0
-        N_pre, N_post = weights.shape
-        for i in range(end_inh, N_pre):
-            for j in range(N_x, end_inh_post):
-                delta_weights = abs(weights[i, j])
-                if delta_weights != None:
-                    sum_weights_inh2 += delta_weights
-
-        # If weights decayed below baseline => stop sleeping
+        # Recompute the inhibitory sum (only for the decayed submatrix)
+        sum_weights_inh2 = np.sum(np.abs(weights[-N_inh:]))
         if sum_weights_inh2 <= baseline_sum_inh:
             sleep_now_inh = False
 

@@ -497,12 +497,12 @@ def train_network(
             pre_trace_4_plot[t // interval] = pre_trace
             post_trace_4_plot[t // interval] = post_trace
 
-        # if sleep_now_exc and t != T:
-        #     # spikes[t, :N_x] = 0
-        #     spike_labels[t] = -2
-        # elif sleep_now_inh and t != T:
-        #     spike_labels[t] = -2
-        #     # spikes[t, :N_x] = 0
+        if sleep_now_exc and t != T:
+            spikes[t, :N_x] = 0
+            spike_labels[t] = -2
+        elif sleep_now_inh and t != T:
+            spike_labels[t] = -2
+            spikes[t, :N_x] = 0
 
     if save:
         file_name = "trained_weights/weights.pkl"
