@@ -185,13 +185,13 @@ def update_weights(
     # )
 
     if clip_exc_weights:
-        weights[:-N_inh][weight_mask] = np.clip(
-            weights[:-N_inh][weight_mask], a_min=min_weight_exc, a_max=max_weight_exc
+        weights[weight_mask][:-N_inh] = np.clip(
+            weights[weight_mask][:-N_inh], a_min=min_weight_exc, a_max=max_weight_exc
         )
 
     if clip_inh_weights:
-        weights[-N_inh:][weight_mask] = np.clip(
-            weights[-N_inh:][weight_mask], a_min=min_weight_inh, a_max=max_weight_inh
+        weights[weight_mask][-N_inh:] = np.clip(
+            weights[weight_mask][-N_inh:], a_min=min_weight_inh, a_max=max_weight_inh
         )
 
     # weights[non_weight_mask] = 0
