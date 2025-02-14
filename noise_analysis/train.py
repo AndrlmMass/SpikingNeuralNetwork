@@ -93,6 +93,7 @@ def update_weights(
                 weight_decay_rate_inh=weight_decay_rate_inh,
                 baseline_sum_exc=baseline_sum_exc,
                 baseline_sum_inh=baseline_sum_inh,
+                non_weight_mask=non_weight_mask,
             )
 
     # Find the neurons that spiked in the current timestep
@@ -193,6 +194,8 @@ def update_weights(
             weights[-N_inh:], a_min=min_weight_inh, a_max=max_weight_inh
         )
 
+    weights[non_weight_mask] = 0
+
     return weights, pre_trace, post_trace, sleep_now_inh, sleep_now_exc
 
 
@@ -240,10 +243,6 @@ def update_spikes(
     spike_threshold_default,
     reset_potential,
 ):
-    # update spike threshold
-    if spike_adaption:
-        threshold_decay = (spike_threshold_default - spike_threshold) / tau_adaption
-        spike_threshold += threshold_decay
 
     # update spikes array
     mp = np.clip(mp, a_min=min_mp, a_max=max_mp)
@@ -260,6 +259,7 @@ def update_spikes(
 
     # add spike adaption
     if spike_adaption:
+        spike_threshold += (spike_threshold_default - spike_threshold) / tau_adaption
         delta_adapt_dt = delta_adaption * dt
         delta_spike_threshold = spike_threshold[spikes[N_x:] == 1] * delta_adapt_dt
         spike_threshold[spikes[N_x:] == 1] -= delta_spike_threshold
@@ -488,6 +488,9 @@ def train_network(
                     dt=dt,
                 )
             )
+            sum_weights_exc = np.sum(weights[:-N_inh])
+            sum_weights_inh = np.sum(np.abs(weights[-N_inh:, N_x:-N_inh]))
+            print(sum_weights_exc, max_sum_exc, sum_weights_inh, max_sum_inh)
             # print(f"\r{np.max(weights[:N_exc])}, {np.min(weights[N_exc:])}", end="")
 
         # save weights for plotting

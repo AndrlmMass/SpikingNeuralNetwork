@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 import matplotlib
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
 
 matplotlib.use("TkAgg")
 
@@ -83,7 +85,6 @@ def t_SNE(
         ax.scatter(
             tsne_results[indices, 0],
             tsne_results[indices, 1],
-            tsne_results[indices, 2],
             label=f"Class {label}",
         )
     plt.title("t-SNE results")
@@ -103,25 +104,44 @@ def PCA_analysis(
     features, segment_labels = bin_spikes_by_label_no_breaks(spikes, labels_spike)
 
     # Create a PCA instance.
-    # Note: PCA does not require perplexity or max_iter.
     pca = PCA(n_components=n_components, random_state=random_state)
-
-    # Fit PCA on the features and transform them.
     pca_results = pca.fit_transform(features)
 
-    # Visualize the results (assuming 2 components for scatter plot)
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(projection="3d")
+    clf = LogisticRegression(
+        multi_class="auto", solver="lbfgs", random_state=random_state
+    )
+    clf.fit(pca_results, segment_labels)
+    pred_labels = clf.predict(pca_results)
+    acc = accuracy_score(segment_labels, pred_labels)
+
+    # Create a mesh grid to plot the decision boundary:
+    x_min, x_max = pca_results[:, 0].min() - 1, pca_results[:, 0].max() + 1
+    y_min, y_max = pca_results[:, 1].min() - 1, pca_results[:, 1].max() + 1
+    xx, yy = np.meshgrid(np.linspace(x_min, x_max, 300), np.linspace(y_min, y_max, 300))
+    grid = np.c_[xx.ravel(), yy.ravel()]
+
+    # For multi-class classification, predict the class label for each point in the grid:
+    grid_pred = clf.predict(grid).reshape(xx.shape)
+
+    # Plotting:
+    plt.figure(figsize=(10, 8))
+
+    # Plot the decision regions
+    plt.contourf(xx, yy, grid_pred, alpha=0.3, cmap="coolwarm")
+
+    # Scatter plot for each class:
     for label in np.unique(segment_labels):
         indices = segment_labels == label
-        ax.scatter(
+        plt.scatter(
             pca_results[indices, 0],
             pca_results[indices, 1],
-            pca_results[indices, 2],
             label=f"Class {label}",
+            edgecolor="k",
+            s=60,
         )
-    ax.set_title("PCA Results")
-    ax.set_xlabel("Principal Component 1")
-    ax.set_ylabel("Principal Component 2")
+
+    plt.title("2D PCA with Logistic Regression Decision Boundary: accuracy " + str(acc))
+    plt.xlabel("Principal Component 1")
+    plt.ylabel("Principal Component 2")
     plt.legend()
     plt.show()

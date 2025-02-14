@@ -75,8 +75,10 @@ class SNN_noisy:
             if min_time == None:
                 min_time = 0
             if max_time == None:
-                max_time = self.T
-            spike_plot(self.data_train[min_time:max_time], self.labels_train)
+                max_time = self.T_train
+            spike_plot(
+                self.data_train[min_time:max_time], self.labels_train[min_time:max_time]
+            )
 
         # plot heatmap of activity
         if plot_heat_map:

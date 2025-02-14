@@ -3,7 +3,7 @@ import numpy as np
 from numba import njit, prange
 
 
-@njit
+# @njit
 def sleep_func(
     weights,  # shape = (N_pre, N_post)
     max_sum_exc,
@@ -19,6 +19,7 @@ def sleep_func(
     weight_decay_rate_inh,
     baseline_sum_exc,
     baseline_sum_inh,
+    non_weight_mask,
 ):
     """
     Optimized, vectorized version:
@@ -31,25 +32,26 @@ def sleep_func(
     # Instead of nested loops, use slicing for excitatory/inhibitory sums.
     # According to your code, columns [0, N_exc+N_x) are excitatory,
     # and columns [N_exc+N_x, N_post) are inhibitory.
-    sum_weights_exc = np.sum(np.abs(weights[:-N_inh]))
-    sum_weights_inh = np.sum(np.abs(weights[-N_inh:, N_x:-N_inh]))
+    if not sleep_now_inh or not sleep_now_exc:
+        sum_weights_exc = np.sum(np.abs(weights[:-N_inh]))
+        sum_weights_inh = np.sum(np.abs(weights[-N_inh:, N_x:-N_inh]))
+        print(sum_weights_exc, max_sum_exc, sum_weights_inh, max_sum_inh)
+        if sum_weights_exc > max_sum_exc:
+            # print("sleepy exc!")
+            sleep_now_exc = True
+        else:
+            sleep_now_exc = False
+        if sum_weights_inh > max_sum_inh:
+            sleep_now_inh = True
+            # print("sleepy inh!")
+        else:
+            sleep_now_inh = False
 
-    if sum_weights_exc > max_sum_exc:
-        print("sleepy exc!")
-        sleep_now_exc = True
-    else:
-        sleep_now_exc = False
-    if sum_weights_inh > max_sum_inh:
-        sleep_now_inh = True
-        print("sleepy inh!")
-    else:
-        sleep_now_inh = False
+        # If no sleep is needed, return immediately.
+        if not sleep_now_inh and not sleep_now_exc:
+            return weights, sleep_now_inh, sleep_now_exc
 
-    # If no sleep is needed, return immediately.
-    if not sleep_now_inh and not sleep_now_exc:
-        return weights, sleep_now_inh, sleep_now_exc
-
-    # --- Decay excitatory weights ---
+    # --- Decay excitatory weights --
     if sleep_now_exc:
         # Apply decay to columns [N_x, N_post] in a vectorized way.
         # (Assuming w_target_exc is nonzero and weights are nonnegative.)
@@ -73,6 +75,10 @@ def sleep_func(
         sum_weights_inh2 = np.sum(np.abs(weights[-N_inh:]))
         if sum_weights_inh2 <= baseline_sum_inh:
             sleep_now_inh = False
+
+    if sleep_now_exc or sleep_now_inh:
+        # Apply the non-weight mask to the decayed weights
+        weights[non_weight_mask] = 0
 
     return weights, sleep_now_inh, sleep_now_exc
 

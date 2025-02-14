@@ -70,23 +70,29 @@ def create_data(
 
         # convert to spikes with progress bar
         print("Converting images to spike trains...")
-        spike_data_train = spikegen.rate(
-            limited_images_train,
-            num_steps=num_steps,
-            gain=gain,
-            offset=offset,
-            first_spike_time=first_spike_time,
-            time_var_input=time_var_input,
-        )
+        spike_data_train = torch.zeros(size=limited_images_train.shape)
+        spike_data_train = spike_data_train.repeat(num_steps, 1, 1, 1)
+        for i in range(num_images):
+            spike_data_train[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
+                limited_images_train[i],
+                num_steps=num_steps,
+                gain=gain,
+                offset=offset,
+                first_spike_time=first_spike_time,
+                time_var_input=time_var_input,
+            )
 
-        spike_data_test = spikegen.rate(
-            limited_images_test,
-            num_steps=num_steps,
-            gain=gain,
-            offset=offset,
-            first_spike_time=first_spike_time,
-            time_var_input=time_var_input,
-        )
+        spike_data_test = torch.zeros(size=limited_images_test.shape)
+        spike_data_test = spike_data_test.repeat(num_steps, 1, 1, 1)
+        for i in range(test_images):
+            spike_data_test[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
+                limited_images_test[i],
+                num_steps=num_steps,
+                gain=gain,
+                offset=offset,
+                first_spike_time=first_spike_time,
+                time_var_input=time_var_input,
+            )
 
         # extend labels based on num_steps
         spike_labels_train = limited_labels_train.numpy().repeat(num_steps)
