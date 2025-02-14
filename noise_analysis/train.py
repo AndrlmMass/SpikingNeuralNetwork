@@ -194,7 +194,7 @@ def update_weights(
             weights[-N_inh:], a_min=min_weight_inh, a_max=max_weight_inh
         )
 
-    weights[non_weight_mask] = 0
+    # weights[non_weight_mask] = 0
 
     return weights, pre_trace, post_trace, sleep_now_inh, sleep_now_exc
 
@@ -361,12 +361,12 @@ def train_network(
     )
 
     sum_weights_exc = np.sum(np.abs(weights[:-N_inh]))
-    sum_weights_inh = np.sum(np.abs(weights[-N_inh:]))
+    sum_weights_inh = np.sum(np.abs(weights[-N_inh:, N_x:-N_inh]))
 
     baseline_sum_exc = sum_weights_exc * beta
     baseline_sum_inh = sum_weights_inh * beta
-    max_sum_exc = baseline_sum_exc * alpha
-    max_sum_inh = baseline_sum_inh * alpha
+    max_sum_exc = sum_weights_exc * alpha
+    max_sum_inh = sum_weights_inh * alpha
     delta_w = np.zeros(shape=weights.shape)
 
     nz_rows, nz_cols = np.nonzero(weights)
@@ -381,12 +381,10 @@ def train_network(
     else:
         desc = "Testing network:"
 
-    # Create a typed list to hold, for each post neuron, the indices of pre neurons
+    # Compute for neurons N_x to N_post-1
     nonzero_pre_idx = List()
-    for i in range(N_post):
-        # np.nonzero returns a tuple; we take the first element (the indices)
+    for i in range(N_x, N_post):
         pre_idx = np.nonzero(weights[:, i])[0]
-        # Ensure the pre_idx array is of type int64 (or another fixed int type)
         nonzero_pre_idx.append(pre_idx.astype(np.int64))
 
     for t in tqdm(range(1, T), desc=desc):
@@ -488,10 +486,7 @@ def train_network(
                     dt=dt,
                 )
             )
-            sum_weights_exc = np.sum(weights[:-N_inh])
-            sum_weights_inh = np.sum(np.abs(weights[-N_inh:, N_x:-N_inh]))
-            print(sum_weights_exc, max_sum_exc, sum_weights_inh, max_sum_inh)
-            # print(f"\r{np.max(weights[:N_exc])}, {np.min(weights[N_exc:])}", end="")
+        # print(f"\r{np.max(weights[:N_exc])}, {np.min(weights[N_exc:])}", end="")
 
         # save weights for plotting
         if t % interval == 0 and t != T:
