@@ -35,15 +35,14 @@ def sleep_func(
     if not sleep_now_inh or not sleep_now_exc:
         sum_weights_exc = np.sum(np.abs(weights[:-N_inh]))
         sum_weights_inh = np.sum(np.abs(weights[-N_inh:, N_x:-N_inh]))
-        print(sum_weights_exc, max_sum_exc, sum_weights_inh, max_sum_inh)
         if sum_weights_exc > max_sum_exc:
-            # print("sleepy exc!")
+            print("sleepy exc!")
             sleep_now_exc = True
         else:
             sleep_now_exc = False
         if sum_weights_inh > max_sum_inh:
             sleep_now_inh = True
-            # print("sleepy inh!")
+            print("sleepy inh!")
         else:
             sleep_now_inh = False
 
@@ -262,15 +261,14 @@ def spike_timing(
     nonzero_pre_idx,  # Typed list: for each post neuron, an array of nonzero pre indices
 ):
     n_neurons = spike_times.shape[0]
-    n_post = weights.shape[1]  # number of postsynaptic neurons
 
     # Loop over postsynaptic neurons, parallelized.
-    for i in prange(N_x, n_post):
+    for i in prange(N_x, n_neurons):
         t_post = spike_times[i]
         # Retrieve the pre-synaptic indices that have a nonzero connection to neuron i.
         # Note: We assume the nonzero_pre_idx list is indexed relative to the postsynaptic
         # neurons starting at N_x (i.e., index 0 in the list corresponds to neuron N_x)
-        pre_indices = nonzero_pre_idx[i]
+        pre_indices = nonzero_pre_idx[i - N_x]
 
         # Iterate only over connections that exist.
         for j in pre_indices:

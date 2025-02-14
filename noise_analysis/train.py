@@ -185,13 +185,13 @@ def update_weights(
     # )
 
     if clip_exc_weights:
-        weights[:-N_inh] = np.clip(
-            weights[:-N_inh], a_min=min_weight_exc, a_max=max_weight_exc
+        weights[:-N_inh][weight_mask] = np.clip(
+            weights[:-N_inh][weight_mask], a_min=min_weight_exc, a_max=max_weight_exc
         )
 
     if clip_inh_weights:
-        weights[-N_inh:] = np.clip(
-            weights[-N_inh:], a_min=min_weight_inh, a_max=max_weight_inh
+        weights[-N_inh:][weight_mask] = np.clip(
+            weights[-N_inh:][weight_mask], a_min=min_weight_inh, a_max=max_weight_inh
         )
 
     # weights[non_weight_mask] = 0
@@ -375,7 +375,7 @@ def train_network(
 
     # Suppose weights is your initial 2D numpy array of weights.
     # Here, we assume that the columns correspond to post-neurons.
-    N, N_post = weights.shape
+    N = weights.shape[0]
     if train_weights:
         desc = "Training network:"
     else:
@@ -383,7 +383,7 @@ def train_network(
 
     # Compute for neurons N_x to N_post-1
     nonzero_pre_idx = List()
-    for i in range(N_x, N_post):
+    for i in range(N_x, N):
         pre_idx = np.nonzero(weights[:, i])[0]
         nonzero_pre_idx.append(pre_idx.astype(np.int64))
 
