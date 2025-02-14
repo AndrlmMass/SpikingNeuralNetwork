@@ -74,13 +74,17 @@ def t_SNE(
         random_state=random_state,
     )
     tsne_results = tsne.fit_transform(features)
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(projection="3d")
 
     # Visualize the results:
-    plt.figure(figsize=(10, 8))
     for label in np.unique(segment_labels):
         indices = segment_labels == label
-        plt.scatter(
-            tsne_results[indices, 0], tsne_results[indices, 1], label=f"Class {label}"
+        ax.scatter(
+            tsne_results[indices, 0],
+            tsne_results[indices, 1],
+            tsne_results[indices, 2],
+            label=f"Class {label}",
         )
     plt.title("t-SNE results")
     plt.xlabel("t-SNE dimension 1")
@@ -106,14 +110,18 @@ def PCA_analysis(
     pca_results = pca.fit_transform(features)
 
     # Visualize the results (assuming 2 components for scatter plot)
-    plt.figure(figsize=(10, 8))
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(projection="3d")
     for label in np.unique(segment_labels):
         indices = segment_labels == label
-        plt.scatter(
-            pca_results[indices, 0], pca_results[indices, 1], label=f"Class {label}"
+        ax.scatter(
+            pca_results[indices, 0],
+            pca_results[indices, 1],
+            pca_results[indices, 2],
+            label=f"Class {label}",
         )
-    plt.title("PCA Results")
-    plt.xlabel("Principal Component 1")
-    plt.ylabel("Principal Component 2")
+    ax.set_title("PCA Results")
+    ax.set_xlabel("Principal Component 1")
+    ax.set_ylabel("Principal Component 2")
     plt.legend()
     plt.show()

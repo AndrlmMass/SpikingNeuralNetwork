@@ -21,11 +21,11 @@ snn_N.prepare_data(
 # set up network for training
 snn_N.prepare_training(
     plot_weights=False,
-    neg_weight=-0.4,
+    neg_weight=-0.2,
     pos_weight=0.4,
-    weight_affinity_hidden_exc=0.1,
+    weight_affinity_hidden_exc=0.2,
     weight_affinity_hidden_inh=0.1,
-    weight_affinity_input=0.1,
+    weight_affinity_input=0.05,
 )
 
 # train network
@@ -38,8 +38,8 @@ snn_N.train(
     plot_threshold=True,
     plot_traces_=False,
     train_weights=True,
-    learning_rate_exc=0.0001,
-    learning_rate_inh=0.0005,
+    learning_rate_exc=0.0003,
+    learning_rate_inh=0.0003,
     w_target_exc=0.05,
     w_target_inh=-0.05,
     var_noise=1,
@@ -72,10 +72,10 @@ snn_N.train(
     A_plus=0.25,
     A_minus=0.5,
     test=True,
-    tau_LTD=20,
-    tau_LTP=10,
+    tau_LTD=10,
+    tau_LTP=20,
 )
 
 
 # analyze results
-snn_N.analysis(t_sne=True, pls=True)
+snn_N.analysis(t_sne=True, pls=True, n_components=3)

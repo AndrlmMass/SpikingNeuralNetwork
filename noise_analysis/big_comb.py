@@ -476,7 +476,7 @@ class SNN_noisy:
         if t_sne:
             if t_sne_train:
                 t_SNE(
-                    spikes=self.spikes_train[:, self.N_x : -self.N_inh],
+                    spikes=self.spikes_train[:, self.N_x :],
                     labels_spike=self.labels_train,
                     n_components=n_components,
                     perplexity=perplexity,
@@ -485,7 +485,7 @@ class SNN_noisy:
                 )
             if t_sne_test:
                 t_SNE(
-                    spikes=self.spikes_test[:, self.N_x : -self.N_inh],
+                    spikes=self.spikes_test[:, self.N_x :],
                     labels_spike=self.labels_test,
                     n_components=n_components,
                     perplexity=perplexity,
@@ -495,14 +495,14 @@ class SNN_noisy:
         if pls:
             if pls_train:
                 PCA_analysis(
-                    spikes=self.spikes_train,
+                    spikes=self.spikes_train[:, self.N_x :],
                     labels_spike=self.labels_train,
                     n_components=n_components,
                     random_state=random_state,
                 )
             if pls_test:
                 PCA_analysis(
-                    spikes=self.spikes_test,
+                    spikes=self.spikes_test[:, self.N_x :],
                     labels_spike=self.labels_test,
                     n_components=n_components,
                     random_state=random_state,
