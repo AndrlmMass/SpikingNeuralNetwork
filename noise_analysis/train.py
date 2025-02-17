@@ -1,9 +1,37 @@
 from numba.typed import List
+from numba import njit
 from tqdm import tqdm
 import pickle as pkl
 import numpy as np
 import os
 from weight_funcs import sleep_func, spike_timing, vectorized_trace_func, trace_STDP
+
+
+@njit()
+def clip_weights(
+    weights,
+    nz_cols_exc,
+    nz_cols_inh,
+    nz_rows_exc,
+    nz_rows_inh,
+    min_weight_exc,
+    max_weight_exc,
+    min_weight_inh,
+    max_weight_inh,
+):
+    for i in nz_rows_exc:
+        for j in nz_cols_exc:
+            if weights[i, j] < min_weight_exc:
+                weights[i, j] = min_weight_exc
+            elif weights[i, j] > max_weight_exc:
+                weights[i, j] = max_weight_exc
+    for i in nz_rows_inh:
+        for j in nz_cols_inh:
+            if weights[i, j] < min_weight_inh:
+                weights[i, j] = min_weight_inh
+            elif weights[i, j] > max_weight_inh:
+                weights[i, j] = max_weight_inh
+    return weights
 
 
 def update_weights(
@@ -40,6 +68,8 @@ def update_weights(
     baseline_sum_exc,
     baseline_sum_inh,
     check_sleep_interval,
+    indices_inh,
+    indices_exc,
     spikes,
     N_inh,
     N,
@@ -51,6 +81,10 @@ def update_weights(
     N_x,
     nz_cols,
     nz_rows,
+    nz_cols_exc,
+    nz_cols_inh,
+    nz_rows_exc,
+    nz_rows_inh,
     t,
     dt,
     A_plus,
@@ -178,23 +212,33 @@ def update_weights(
         )
         weights += delta_weight_noise
 
-    # Update weights
-    # print(
-    #     f"\rexc weight change:{np.round(np.mean(delta_weights_exc),6)}, inh weight change:{np.round(np.mean(delta_weights_inh),6)}",
-    #     end="",
-    # )
+        # Update weights
+        # print(
+        #     f"\rexc weight change:{np.round(np.mean(delta_weights_exc),6)}, inh weight change:{np.round(np.mean(delta_weights_inh),6)}",
+        #     end="",
+        # )
+    # if t % 100:
+    #     weights[indices_exc] = np.clip(
+    #         weights[indices_exc], a_max=max_weight_exc, a_min=min_weight_exc
+    #     )
 
-    if clip_exc_weights:
-        weights[weight_mask][:-N_inh] = np.clip(
-            weights[weight_mask][:-N_inh], a_min=min_weight_exc, a_max=max_weight_exc
+    #     weights[indices_inh] = np.clip(
+    #         weights[indices_inh], a_max=max_weight_inh, a_min=min_weight_inh
+    #     )
+    if t % 10000 == 0:
+        weights = clip_weights(
+            weights=weights,
+            nz_cols_exc=nz_cols_exc,
+            nz_cols_inh=nz_cols_inh,
+            nz_rows_exc=nz_rows_exc,
+            nz_rows_inh=nz_rows_inh,
+            min_weight_exc=min_weight_exc,
+            max_weight_exc=max_weight_exc,
+            min_weight_inh=min_weight_inh,
+            max_weight_inh=max_weight_inh,
         )
 
-    if clip_inh_weights:
-        weights[weight_mask][-N_inh:] = np.clip(
-            weights[weight_mask][-N_inh:], a_min=min_weight_inh, a_max=max_weight_inh
-        )
-
-    # weights[non_weight_mask] = 0
+    weights[non_weight_mask] = 0
 
     return weights, pre_trace, post_trace, sleep_now_inh, sleep_now_exc
 
@@ -369,6 +413,8 @@ def train_network(
     max_sum_inh = sum_weights_inh * alpha
     delta_w = np.zeros(shape=weights.shape)
 
+    nz_rows_inh, nz_cols_inh = np.nonzero(weights[-N_inh:, N_x:-N_inh])
+    nz_rows_exc, nz_cols_exc = np.nonzero(weights[:-N_inh])
     nz_rows, nz_cols = np.nonzero(weights)
     sleep_now_inh = False
     sleep_now_exc = False
@@ -380,6 +426,10 @@ def train_network(
         desc = "Training network:"
     else:
         desc = "Testing network:"
+
+    indices = np.nonzero(weight_mask)[0]
+    indices_exc = indices[:-N_inh]
+    indices_inh = indices[-N_inh:]
 
     # Compute for neurons N_x to N_post-1
     nonzero_pre_idx = List()
@@ -474,8 +524,12 @@ def train_network(
                     sleep_now_exc=sleep_now_exc,
                     t=t,
                     N=N,
-                    nz_cols=nz_cols,
                     nz_rows=nz_rows,
+                    nz_cols=nz_cols,
+                    nz_cols_exc=nz_cols_exc,
+                    nz_cols_inh=nz_cols_inh,
+                    nz_rows_exc=nz_rows_exc,
+                    nz_rows_inh=nz_rows_inh,
                     N_inh=N_inh,
                     A_plus=A_plus,
                     A_minus=A_minus,
@@ -484,9 +538,10 @@ def train_network(
                     tau_LTP=tau_LTP,
                     tau_LTD=tau_LTD,
                     dt=dt,
+                    indices_exc=indices_exc,
+                    indices_inh=indices_inh,
                 )
             )
-        # print(f"\r{np.max(weights[:N_exc])}, {np.min(weights[N_exc:])}", end="")
 
         # save weights for plotting
         if t % interval == 0 and t != T:
@@ -495,12 +550,11 @@ def train_network(
             pre_trace_4_plot[t // interval] = pre_trace
             post_trace_4_plot[t // interval] = post_trace
 
-        if sleep_now_exc and t != T:
-            spikes[t, :N_x] = 0
-            spike_labels[t] = -2
-        elif sleep_now_inh and t != T:
-            spike_labels[t] = -2
-            spikes[t, :N_x] = 0
+        # remove training data during sleep
+        if sleep:
+            if (sleep_now_exc or sleep_now_inh) and t > T - 2:
+                spikes[t + 1, :N_x] = 0
+                spike_labels[t] = -2
 
     if save:
         file_name = "trained_weights/weights.pkl"

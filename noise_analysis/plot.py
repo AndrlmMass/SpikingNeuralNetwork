@@ -44,28 +44,29 @@ def spike_plot(data, labels):
         if labels[i] != current_label:
             if current_label != -1:
                 if current_label == -2:
-                    # Plot from segment_start to i for current_label
+                    # For sleep segments, label as "Sleep" only once
+                    label_text = "Sleep" if current_label not in drawn_labels else None
                     ax.hlines(
                         y=y_offset,
                         xmin=segment_start,
                         xmax=i,  # up to but not including i
                         color=label_colors.get(current_label, "blue"),
                         linewidth=6,
-                        label=("Sleep"),
+                        label=label_text,
                     )
                 else:
-                    # Plot from segment_start to i for current_label
+                    label_text = (
+                        f"Class {current_label}"
+                        if current_label not in drawn_labels
+                        else None
+                    )
                     ax.hlines(
                         y=y_offset,
                         xmin=segment_start,
                         xmax=i,  # up to but not including i
                         color=label_colors.get(current_label, "black"),
                         linewidth=6,
-                        label=(
-                            None
-                            if current_label in drawn_labels
-                            else f"Class {current_label}"
-                        ),
+                        label=label_text,
                     )
                 drawn_labels.add(current_label)
 
@@ -75,14 +76,28 @@ def spike_plot(data, labels):
 
     # Handle the last segment after exiting the loop
     if current_label != -1:
-        ax.hlines(
-            y=y_offset,
-            xmin=segment_start,
-            xmax=len(labels),
-            color=label_colors.get(current_label, "black"),
-            linewidth=6,
-            label=None if current_label in drawn_labels else f"Class {current_label}",
-        )
+        if current_label == -2:
+            label_text = "Sleep" if current_label not in drawn_labels else None
+            ax.hlines(
+                y=y_offset,
+                xmin=segment_start,
+                xmax=len(labels),
+                color=label_colors.get(current_label, "blue"),
+                linewidth=6,
+                label=label_text,
+            )
+        else:
+            label_text = (
+                f"Class {current_label}" if current_label not in drawn_labels else None
+            )
+            ax.hlines(
+                y=y_offset,
+                xmin=segment_start,
+                xmax=len(labels),
+                color=label_colors.get(current_label, "black"),
+                linewidth=6,
+                label=label_text,
+            )
         drawn_labels.add(current_label)
 
     # Create a legend from the existing artists

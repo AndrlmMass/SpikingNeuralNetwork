@@ -3,7 +3,7 @@ import numpy as np
 from numba import njit, prange
 
 
-# @njit
+@njit
 def sleep_func(
     weights,  # shape = (N_pre, N_post)
     max_sum_exc,
@@ -36,13 +36,13 @@ def sleep_func(
         sum_weights_exc = np.sum(np.abs(weights[:-N_inh]))
         sum_weights_inh = np.sum(np.abs(weights[-N_inh:, N_x:-N_inh]))
         if sum_weights_exc > max_sum_exc:
-            print("sleepy exc!")
+            print("sleepy exc!: ", sum_weights_exc)
             sleep_now_exc = True
         else:
             sleep_now_exc = False
         if sum_weights_inh > max_sum_inh:
             sleep_now_inh = True
-            print("sleepy inh!")
+            print("sleepy inh!", sum_weights_inh)
         else:
             sleep_now_inh = False
 
@@ -74,10 +74,6 @@ def sleep_func(
         sum_weights_inh2 = np.sum(np.abs(weights[-N_inh:]))
         if sum_weights_inh2 <= baseline_sum_inh:
             sleep_now_inh = False
-
-    if sleep_now_exc or sleep_now_inh:
-        # Apply the non-weight mask to the decayed weights
-        weights[non_weight_mask] = 0
 
     return weights, sleep_now_inh, sleep_now_exc
 
