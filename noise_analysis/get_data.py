@@ -124,7 +124,7 @@ def create_data(
 
         if plot_comparison:
             plot_floats_and_spikes(
-                images, S_data_train_conv, spike_labels_train, labels
+                images, S_data_train_conv, spike_labels_train, labels, num_steps
             )
 
         if add_breaks:

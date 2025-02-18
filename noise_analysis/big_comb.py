@@ -98,6 +98,7 @@ class SNN_noisy:
         pos_weight=0.5,
         neg_weight=-2,
         plot_weights=False,
+        plot_network=False,
         retur=False,
     ):
         # create weights
@@ -111,6 +112,7 @@ class SNN_noisy:
             pos_weight=pos_weight,
             neg_weight=neg_weight,
             plot_weights=plot_weights,
+            plot_network=plot_network,
         )
         self.resting_potential = resting_membrane
         self.max_time = max_time

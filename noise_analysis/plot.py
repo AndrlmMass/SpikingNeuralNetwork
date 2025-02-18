@@ -129,7 +129,7 @@ def get_contiguous_segment(indices):
     return max(segments, key=len)
 
 
-def plot_floats_and_spikes(images, spikes, spike_labels, img_labels):
+def plot_floats_and_spikes(images, spikes, spike_labels, img_labels, num_steps):
     """
     Given:
       - images: an array of MNIST images (e.g., shape [num_images, H, W])
@@ -162,7 +162,7 @@ def plot_floats_and_spikes(images, spikes, spike_labels, img_labels):
         ax_img.axis("off")
 
         # Find all time indices in the spiking data that belong to this label.
-        spike_idx_all = np.where(np.array(spike_labels) == label)[0]
+        spike_idx_all = np.where(np.array(spike_labels) == label)[0][:num_steps]
         if len(spike_idx_all) == 0:
             print(f"No spiking data found for label {label}.")
             continue

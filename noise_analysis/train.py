@@ -7,7 +7,7 @@ import os
 from weight_funcs import sleep_func, spike_timing, vectorized_trace_func, trace_STDP
 
 
-@njit()
+@njit
 def clip_weights(
     weights,
     nz_cols_exc,
@@ -19,18 +19,18 @@ def clip_weights(
     min_weight_inh,
     max_weight_inh,
 ):
-    for i in nz_rows_exc:
-        for j in nz_cols_exc:
-            if weights[i, j] < min_weight_exc:
-                weights[i, j] = min_weight_exc
-            elif weights[i, j] > max_weight_exc:
-                weights[i, j] = max_weight_exc
-    for i in nz_rows_inh:
-        for j in nz_cols_inh:
-            if weights[i, j] < min_weight_inh:
-                weights[i, j] = min_weight_inh
-            elif weights[i, j] > max_weight_inh:
-                weights[i, j] = max_weight_inh
+    for i_ in range(nz_rows_exc.shape[0]):
+        i, j = nz_rows_exc[i_], nz_cols_exc[i_]
+        if weights[i, j] < min_weight_exc:
+            weights[i, j] = min_weight_exc
+        elif weights[i, j] > max_weight_exc:
+            weights[i, j] = max_weight_exc
+    for i_ in range(nz_rows_inh.shape[0]):
+        i, j = nz_rows_inh[i_], nz_cols_inh[i_]
+        if weights[i, j] < min_weight_inh:
+            weights[i, j] = min_weight_inh
+        elif weights[i, j] > max_weight_inh:
+            weights[i, j] = max_weight_inh
     return weights
 
 
@@ -116,18 +116,18 @@ def update_weights(
                 weights=weights,
                 max_sum_exc=max_sum_exc,
                 max_sum_inh=max_sum_inh,
-                sleep_now_exc=sleep_now_exc,
                 sleep_now_inh=sleep_now_inh,
-                N_inh=N_inh,
-                N_exc=N_exc,
-                N_x=N_x,
+                sleep_now_exc=sleep_now_exc,
                 w_target_exc=w_target_exc,
                 w_target_inh=w_target_inh,
                 weight_decay_rate_exc=weight_decay_rate_exc,
                 weight_decay_rate_inh=weight_decay_rate_inh,
                 baseline_sum_exc=baseline_sum_exc,
                 baseline_sum_inh=baseline_sum_inh,
-                non_weight_mask=non_weight_mask,
+                nz_rows_exc=nz_rows_exc,
+                nz_rows_inh=nz_rows_inh,
+                nz_cols_exc=nz_cols_exc,
+                nz_cols_inh=nz_cols_inh,
             )
 
     # Find the neurons that spiked in the current timestep
@@ -225,18 +225,17 @@ def update_weights(
     #     weights[indices_inh] = np.clip(
     #         weights[indices_inh], a_max=max_weight_inh, a_min=min_weight_inh
     #     )
-    if t % 10000 == 0:
-        weights = clip_weights(
-            weights=weights,
-            nz_cols_exc=nz_cols_exc,
-            nz_cols_inh=nz_cols_inh,
-            nz_rows_exc=nz_rows_exc,
-            nz_rows_inh=nz_rows_inh,
-            min_weight_exc=min_weight_exc,
-            max_weight_exc=max_weight_exc,
-            min_weight_inh=min_weight_inh,
-            max_weight_inh=max_weight_inh,
-        )
+    weights = clip_weights(
+        weights=weights,
+        nz_cols_exc=nz_cols_exc,
+        nz_cols_inh=nz_cols_inh,
+        nz_rows_exc=nz_rows_exc,
+        nz_rows_inh=nz_rows_inh,
+        min_weight_exc=min_weight_exc,
+        max_weight_exc=max_weight_exc,
+        min_weight_inh=min_weight_inh,
+        max_weight_inh=max_weight_inh,
+    )
 
     weights[non_weight_mask] = 0
 
@@ -415,9 +414,18 @@ def train_network(
 
     nz_rows_inh, nz_cols_inh = np.nonzero(weights[-N_inh:, N_x:-N_inh])
     nz_rows_exc, nz_cols_exc = np.nonzero(weights[:-N_inh])
+    nz_rows_inh += weights.shape[0] - N_inh
+    nz_cols_inh += N_x
     nz_rows, nz_cols = np.nonzero(weights)
     sleep_now_inh = False
     sleep_now_exc = False
+    sum_weights_exc2 = 0
+    for i in range(nz_cols_exc.size):
+        sum_weights_exc2 += np.abs(weights[nz_rows_exc[i], nz_cols_exc[i]])
+
+    sum_weights_inh2 = 0
+    for i in range(nz_cols_inh.size):
+        sum_weights_inh2 += np.abs(weights[nz_rows_inh[i], nz_cols_inh[i]])
 
     # Suppose weights is your initial 2D numpy array of weights.
     # Here, we assume that the columns correspond to post-neurons.
