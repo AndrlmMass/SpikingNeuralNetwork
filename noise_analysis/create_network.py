@@ -33,6 +33,9 @@ def create_weights(
     weights[-N_inh:, N_x:-N_inh][mask_hidden_inh[-N_inh:, N_x:-N_inh]] = neg_weight
     # remove self-connections (diagonal) to 0 for excitatory weights
     np.fill_diagonal(weights[N_x:-N_inh, N_x:-N_inh], 0)
+    # remove recurrent connections from exc to inh
+    inh_mask = weights[N_x:-N_inh, -N_inh:].T == 1
+    weights[-N_inh:, N_x:-N_inh][inh_mask] = 0
 
     if plot_weights:
         plt.imshow(weights)

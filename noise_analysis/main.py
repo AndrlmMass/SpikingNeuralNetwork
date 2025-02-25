@@ -21,7 +21,7 @@ snn_N.prepare_data(
 
 # set up network for training
 snn_N.prepare_training(
-    plot_weights=False,
+    plot_weights=True,
     plot_network=False,
     neg_weight=-0.4,
     pos_weight=0.3,
