@@ -47,6 +47,7 @@ class SNN_noisy:
 
         self.num_steps = num_steps
         self.num_items = num_images
+        self.N_classes = len(classes)
         self.data_train, self.labels_train, self.data_test, self.labels_test = (
             create_data(
                 pixel_size=int(np.sqrt(self.N_x)),
@@ -92,6 +93,7 @@ class SNN_noisy:
         self,
         weight_affinity_hidden_exc=0.1,
         weight_affinity_hidden_inh=0.2,
+        weight_affinity_output_exc=0.1,
         weight_affinity_input=0.05,
         resting_membrane=-70,
         max_time=100,
@@ -106,8 +108,12 @@ class SNN_noisy:
             N_exc=self.N_exc,
             N_inh=self.N_inh,
             N_x=self.N_x,
+            N_classes=self.N_classes,
+            supervised=True,
+            true2pred_weight=1.0,
             weight_affinity_hidden_exc=weight_affinity_hidden_exc,
             weight_affinity_hidden_inh=weight_affinity_hidden_inh,
+            weight_affinity_output_exc=weight_affinity_hidden_exc,
             weight_affinity_input=weight_affinity_input,
             pos_weight=pos_weight,
             neg_weight=neg_weight,
@@ -133,6 +139,8 @@ class SNN_noisy:
             total_time_test=self.T_test,
             data_train=self.data_train,
             data_test=self.data_test,
+            supervised=True,
+            N_classes=self.N_classes,
             N_x=self.N_x,
             max_time=self.max_time,
         )

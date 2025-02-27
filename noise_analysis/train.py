@@ -217,14 +217,7 @@ def update_weights(
         #     f"\rexc weight change:{np.round(np.mean(delta_weights_exc),6)}, inh weight change:{np.round(np.mean(delta_weights_inh),6)}",
         #     end="",
         # )
-    # if t % 100:
-    #     weights[indices_exc] = np.clip(
-    #         weights[indices_exc], a_max=max_weight_exc, a_min=min_weight_exc
-    #     )
 
-    #     weights[indices_inh] = np.clip(
-    #         weights[indices_inh], a_max=max_weight_inh, a_min=min_weight_inh
-    #     )
     weights = clip_weights(
         weights=weights,
         nz_cols_exc=nz_cols_exc,
@@ -237,7 +230,7 @@ def update_weights(
         max_weight_inh=max_weight_inh,
     )
 
-    weights[non_weight_mask] = 0
+    # weights[non_weight_mask] = 0
 
     return weights, pre_trace, post_trace, sleep_now_inh, sleep_now_exc
 
