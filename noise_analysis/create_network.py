@@ -82,7 +82,7 @@ def create_weights(
             val = boundaries[n]
             key = class_names[n]
             start_val = 20.5
-            if key == N_x + N_exc:
+            if key == "N_inh":
                 col = "blue"
             else:
                 col = "green"

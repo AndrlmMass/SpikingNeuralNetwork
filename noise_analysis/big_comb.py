@@ -113,7 +113,7 @@ class SNN_noisy:
             true2pred_weight=1.0,
             weight_affinity_hidden_exc=weight_affinity_hidden_exc,
             weight_affinity_hidden_inh=weight_affinity_hidden_inh,
-            weight_affinity_output_exc=weight_affinity_hidden_exc,
+            weight_affinity_output_exc=weight_affinity_output_exc,
             weight_affinity_input=weight_affinity_input,
             pos_weight=pos_weight,
             neg_weight=neg_weight,

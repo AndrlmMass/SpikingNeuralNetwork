@@ -27,6 +27,7 @@ snn_N.prepare_training(
     pos_weight=0.3,
     weight_affinity_hidden_exc=0.1,
     weight_affinity_hidden_inh=0.1,
+    weight_affinity_output_exc=0.33,
     weight_affinity_input=0.05,
 )
 
