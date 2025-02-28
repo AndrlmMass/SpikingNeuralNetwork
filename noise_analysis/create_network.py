@@ -23,42 +23,51 @@ def create_weights(
     plot_network,
 ):
     if supervised:
-        N = N_exc + N_inh + N_x + N_classes * 2
+        """
+        In the supervised version, we have the following stucture:
+        N_x: input neurons
+        N_exc: excitatory neurons
+        N_y_pred: N_classes
+        N_inh: inhibitory neurons
+        N_y_true: N_classes
+        """
 
+        N = N_exc + N_inh + N_x + N_classes * 2
+        weights = np.zeros(shape=(N, N))
+        o0 = N_x
+        o1 = N_x + N_exc
+        o2 = N_x + N_exc + N_classes
+        o3 = N_x + N_exc + N_classes + N_inh
+
+        mask_output_exc = np.random.random((N, N)) < weight_affinity_output_exc
+        weights[o0:o1, o1:o2][mask_output_exc[o0:o1, o1:o2]] = pos_weight
+        true_weights = np.zeros((N_classes, N_classes))
+        np.fill_diagonal(true_weights, true2pred_weight)
+        weights[o3:, o1:o2] = true_weights
     else:
-        N = N_exc + N_inh + N_x
+        N = N_exc + N_inh + o0
+        weights = np.zeros(shape=(N, N))
+        o0 = o0
+        o1 = o0 + N_exc
+        o2 = o1
+        o3 = o1 + N_inh
 
     # Create weights based on affinity rate
     mask_hidden_exc = np.random.random((N, N)) < weight_affinity_hidden_exc
     mask_hidden_inh = np.random.random((N, N)) < weight_affinity_hidden_inh
-    mask_output_exc = np.random.random((N, N)) < weight_affinity_output_exc
     mask_input = np.random.random((N, N)) < weight_affinity_input
-    weights = np.zeros(shape=(N, N))
 
     # input_weights
-    weights[:N_x, N_x : N_x + N_exc][mask_input[:N_x, N_x : N_x + N_exc]] = pos_weight
+    weights[:o0, o0:o1][mask_input[:o0, o0:o1]] = pos_weight
     # hidden excitatory weights
-    weights[N_x : N_x + N_exc, N_x : N_x + N_exc + N_inh][
-        mask_hidden_exc[N_x : N_x + N_exc, N_x : N_x + N_exc + N_inh]
-    ] = pos_weight
+    weights[o0:o1, o0:o3][mask_hidden_exc[o0:o1, o0:o3]] = pos_weight
     # hidden inhibitory weights
-    weights[N_x + N_exc : N_x + N_exc + N_inh, N_x : N_x + N_exc][
-        mask_hidden_inh[N_x + N_exc : N_x + N_exc + N_inh, N_x : N_x + N_exc]
-    ] = neg_weight
+    weights[o2:o3, o0:o1][mask_hidden_inh[o2:o3, o0:o1]] = neg_weight
     # remove self-connections (diagonal) to 0 for excitatory weights
-    np.fill_diagonal(weights[N_x : N_x + N_exc, N_x : N_x + N_exc], 0)
+    np.fill_diagonal(weights[o0:o1, o0:o1], 0)
     # remove recurrent connections from exc to inh
-    inh_mask = weights[N_x : N_x + N_exc, N_x + N_exc : N_x + N_exc + N_inh].T == 1
-    weights[N_x + N_exc : N_x + N_exc + N_inh, N_x : N_x + N_exc][inh_mask] = 0
-
-    # readout weights
-    if supervised:
-        weights[N_x : N_x + N_exc, -N_classes * 2 : -N_classes][
-            mask_output_exc[N_x : N_x + N_exc, -N_classes * 2 : -N_classes]
-        ] = pos_weight
-        true_weights = np.zeros((N_classes, N_classes))
-        np.fill_diagonal(true_weights, true2pred_weight)
-        weights[-N_classes:, -N_classes * 2 : -N_classes] = true_weights
+    inh_mask = weights[o0:o1, o2:o3].T == 1
+    weights[o2:o3, o0:o1][inh_mask] = 0
 
     if plot_weights:
         boundaries = [np.min(weights), -0.001, 0.001, np.max(weights)]
@@ -72,7 +81,7 @@ def create_weights(
         plt.imshow(weights, cmap=cmap, norm=norm)
 
         # Plot the data
-        boundaries = [N_x, N_x + N_exc, N - 2 * N_classes]
+        boundaries = [o1, o2, o3]
         class_names = ["N_exc", "N_inh", "N_out"]
 
         bbox_props = dict(facecolor="white", edgecolor="none", boxstyle="round,pad=0.2")

@@ -14,11 +14,16 @@ from create_network import create_weights, create_arrays
 
 
 class SNN_noisy:
-    def __init__(self, N_exc=200, N_inh=50, N_x=100):
+    def __init__(self, N_exc=200, N_inh=50, N_x=100, classes=[1, 2], supervised=True):
         self.N_exc = N_exc
         self.N_inh = N_inh
         self.N_x = N_x
-        self.N = N_exc + N_inh + N_x
+        self.N_classes = len(classes)
+        self.classes = classes
+        if supervised:
+            self.N = N_exc + N_inh + N_x + self.N_classes * 2
+        else:
+            self.N = N_exc + N_inh + N_x
 
     # acquire data
     def prepare_data(
@@ -41,13 +46,11 @@ class SNN_noisy:
         break_lengths=[500, 400, 300],
         noisy_data=True,
         noise_level=0.05,
-        classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         test_data_ratio=0.2,
     ):
 
         self.num_steps = num_steps
         self.num_items = num_images
-        self.N_classes = len(classes)
         self.data_train, self.labels_train, self.data_test, self.labels_test = (
             create_data(
                 pixel_size=int(np.sqrt(self.N_x)),
@@ -64,7 +67,7 @@ class SNN_noisy:
                 break_lengths=break_lengths,
                 noisy_data=noisy_data,
                 noise_level=noise_level,
-                classes=classes,
+                classes=self.classes,
                 test_data_ratio=test_data_ratio,
             )
         )
@@ -241,6 +244,8 @@ class SNN_noisy:
         ) = train_network(
             weights=self.weights,
             spike_labels=self.labels_train,
+            N_classes=self.N_classes,
+            supervised=True,
             mp=self.mp_train,
             sleep=sleep,
             alpha=alpha,

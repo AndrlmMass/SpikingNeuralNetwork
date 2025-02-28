@@ -68,8 +68,6 @@ def update_weights(
     baseline_sum_exc,
     baseline_sum_inh,
     check_sleep_interval,
-    indices_inh,
-    indices_exc,
     spikes,
     N_inh,
     N,
@@ -230,8 +228,6 @@ def update_weights(
         max_weight_inh=max_weight_inh,
     )
 
-    # weights[non_weight_mask] = 0
-
     return weights, pre_trace, post_trace, sleep_now_inh, sleep_now_exc
 
 
@@ -365,6 +361,8 @@ def train_network(
     timing_update,
     trace_update,
     w_interval,
+    N_classes,
+    supervised,
     interval,
     save,
     N_x,
@@ -378,26 +376,44 @@ def train_network(
     weight_mask = weights != 0
     non_weight_mask = weights == 0
 
-    exc_interval = np.arange(0, N - N_inh)
-    inh_interval = np.arange(N - N_inh, N)
+    if supervised:
+        """
+        In the supervised version, we have the following stucture:
+        N_x: input neurons
+        N_exc: excitatory neurons
+        N_y_pred: N_classes
+        N_inh: inhibitory neurons
+        N_y_true: N_classes
+        """
+        o0 = N_x
+        o1 = o0 + N_exc
+        o2 = o1 + N_classes
+        o3 = o2 + N_inh
+    else:
+        o0 = o0
+        o1 = o0 + N_exc
+        o2 = o1
+        o3 = o1 + N_inh
+    exc_interval = np.arange(0, o2)
+    inh_interval = np.arange(o2, o3)
     idx_exc = np.random.choice(exc_interval, size=num_exc, replace=False)
     idx_inh = np.random.choice(inh_interval, size=num_inh, replace=False)
 
     # create weights_plotting_array
-    weights_4_plotting_exc = np.zeros((T // interval, num_exc, N))
-    weights_4_plotting_inh = np.zeros((T // interval, num_inh, N - N_inh))
-    weights_4_plotting_exc[0] = weights[idx_exc]
-    weights_4_plotting_inh[0] = weights[idx_inh, :-N_inh]
-    pre_trace_4_plot = np.zeros((T // interval, N))
-    post_trace_4_plot = np.zeros((T // interval, N - N_x))
+    weights_4_plotting_exc = np.zeros((T // interval, num_exc, o2 - o0))
+    weights_4_plotting_inh = np.zeros((T // interval, num_inh, o1 - o0))
+    weights_4_plotting_exc[0] = weights[idx_exc, o0:o2]
+    weights_4_plotting_inh[0] = weights[idx_inh, o0:o1]
+    pre_trace_4_plot = np.zeros((T // interval, o3))
+    post_trace_4_plot = np.zeros((T // interval, o3))
 
     # create spike threshold array
     spike_threshold = np.full(
-        shape=(T, N - N_x), fill_value=spike_threshold_default, dtype=float
+        shape=(T, o3), fill_value=spike_threshold_default, dtype=float
     )
 
-    sum_weights_exc = np.sum(np.abs(weights[:-N_inh]))
-    sum_weights_inh = np.sum(np.abs(weights[-N_inh:, N_x:-N_inh]))
+    sum_weights_exc = np.sum(np.abs(weights[:o2, o0:o3]))
+    sum_weights_inh = np.sum(np.abs(weights[o2:o3, o0:o1]))
 
     baseline_sum_exc = sum_weights_exc * beta
     baseline_sum_inh = sum_weights_inh * beta
@@ -405,32 +421,20 @@ def train_network(
     max_sum_inh = sum_weights_inh * alpha
     delta_w = np.zeros(shape=weights.shape)
 
-    nz_rows_inh, nz_cols_inh = np.nonzero(weights[-N_inh:, N_x:-N_inh])
-    nz_rows_exc, nz_cols_exc = np.nonzero(weights[:-N_inh])
+    nz_rows_inh, nz_cols_inh = np.nonzero(weights[o2:o3, o0:o1])
+    nz_rows_exc, nz_cols_exc = np.nonzero(weights[:o2, o0:o3])
     nz_rows_inh += weights.shape[0] - N_inh
     nz_cols_inh += N_x
     nz_rows, nz_cols = np.nonzero(weights)
     sleep_now_inh = False
     sleep_now_exc = False
-    sum_weights_exc2 = 0
-    for i in range(nz_cols_exc.size):
-        sum_weights_exc2 += np.abs(weights[nz_rows_exc[i], nz_cols_exc[i]])
-
-    sum_weights_inh2 = 0
-    for i in range(nz_cols_inh.size):
-        sum_weights_inh2 += np.abs(weights[nz_rows_inh[i], nz_cols_inh[i]])
 
     # Suppose weights is your initial 2D numpy array of weights.
     # Here, we assume that the columns correspond to post-neurons.
-    N = weights.shape[0]
     if train_weights:
         desc = "Training network:"
     else:
         desc = "Testing network:"
-
-    indices = np.nonzero(weight_mask)[0]
-    indices_exc = indices[:-N_inh]
-    indices_inh = indices[-N_inh:]
 
     # Compute for neurons N_x to N_post-1
     nonzero_pre_idx = List()
