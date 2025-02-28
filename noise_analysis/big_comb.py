@@ -14,11 +14,16 @@ from create_network import create_weights, create_arrays
 
 
 class SNN_noisy:
-    def __init__(self, N_exc=200, N_inh=50, N_x=100):
+    def __init__(self, N_exc=200, N_inh=50, N_x=100, classes=[1, 2], supervised=True):
         self.N_exc = N_exc
         self.N_inh = N_inh
         self.N_x = N_x
-        self.N = N_exc + N_inh + N_x
+        self.N_classes = len(classes)
+        self.classes = classes
+        if supervised:
+            self.N = N_exc + N_inh + N_x + self.N_classes * 2
+        else:
+            self.N = N_exc + N_inh + N_x
 
     # acquire data
     def prepare_data(
@@ -41,7 +46,6 @@ class SNN_noisy:
         break_lengths=[500, 400, 300],
         noisy_data=True,
         noise_level=0.05,
-        classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         test_data_ratio=0.2,
     ):
 
@@ -63,7 +67,7 @@ class SNN_noisy:
                 break_lengths=break_lengths,
                 noisy_data=noisy_data,
                 noise_level=noise_level,
-                classes=classes,
+                classes=self.classes,
                 test_data_ratio=test_data_ratio,
             )
         )
@@ -92,6 +96,7 @@ class SNN_noisy:
         self,
         weight_affinity_hidden_exc=0.1,
         weight_affinity_hidden_inh=0.2,
+        weight_affinity_output_exc=0.1,
         weight_affinity_input=0.05,
         resting_membrane=-70,
         max_time=100,
@@ -106,8 +111,12 @@ class SNN_noisy:
             N_exc=self.N_exc,
             N_inh=self.N_inh,
             N_x=self.N_x,
+            N_classes=self.N_classes,
+            supervised=True,
+            true2pred_weight=1.0,
             weight_affinity_hidden_exc=weight_affinity_hidden_exc,
             weight_affinity_hidden_inh=weight_affinity_hidden_inh,
+            weight_affinity_output_exc=weight_affinity_output_exc,
             weight_affinity_input=weight_affinity_input,
             pos_weight=pos_weight,
             neg_weight=neg_weight,
@@ -133,6 +142,8 @@ class SNN_noisy:
             total_time_test=self.T_test,
             data_train=self.data_train,
             data_test=self.data_test,
+            supervised=True,
+            N_classes=self.N_classes,
             N_x=self.N_x,
             max_time=self.max_time,
         )
@@ -233,6 +244,8 @@ class SNN_noisy:
         ) = train_network(
             weights=self.weights,
             spike_labels=self.labels_train,
+            N_classes=self.N_classes,
+            supervised=True,
             mp=self.mp_train,
             sleep=sleep,
             alpha=alpha,

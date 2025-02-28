@@ -1,19 +1,18 @@
 from big_comb import SNN_noisy
 
 # init class
-snn_N = SNN_noisy(N_exc=200, N_inh=50, N_x=100)
+snn_N = SNN_noisy(N_exc=200, N_inh=50, N_x=225, classes=[0, 1, 2, 3])
 
 # acquire data
 snn_N.prepare_data(
     num_images=500,
-    recreate=True,
+    recreate=False,
     plot_comparison=False,
     plot_spikes=False,
     noisy_data=True,
     noise_level=0.005,
     add_breaks=False,
     break_lengths=[500, 1500, 1000],
-    classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
     gain=1.0,
     test_data_ratio=0.5,
     max_time=2000,
@@ -21,12 +20,13 @@ snn_N.prepare_data(
 
 # set up network for training
 snn_N.prepare_training(
-    plot_weights=True,
+    plot_weights=False,
     plot_network=False,
     neg_weight=-0.4,
     pos_weight=0.3,
     weight_affinity_hidden_exc=0.1,
     weight_affinity_hidden_inh=0.1,
+    weight_affinity_output_exc=0.33,
     weight_affinity_input=0.05,
 )
 
