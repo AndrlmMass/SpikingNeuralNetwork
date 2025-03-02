@@ -258,7 +258,8 @@ def update_membrane_potential(
 
 
 def update_spikes(
-    N_x,
+    o0,
+    o3,
     mp,
     dt,
     spikes,
@@ -278,7 +279,7 @@ def update_spikes(
 
     # update spikes array
     mp = np.clip(mp, a_min=min_mp, a_max=max_mp)
-    spikes[N_x:][mp > spike_threshold] = 1
+    spikes[o0:o3][mp > spike_threshold] = 1
 
     # Add Solve's noisy membrane potential
     if noisy_threshold:
@@ -287,17 +288,17 @@ def update_spikes(
             1 + np.exp(spike_slope * delta_potential + spike_intercept)
         )
         additional_spikes = np.random.binomial(n=1, p=p_fire)
-        spikes[N_x:] = spikes[N_x:] | additional_spikes
+        spikes[o0:o3] = spikes[o0:o3] | additional_spikes
 
     # add spike adaption
     if spike_adaption:
         spike_threshold += (spike_threshold_default - spike_threshold) / tau_adaption
         delta_adapt_dt = delta_adaption * dt
-        delta_spike_threshold = spike_threshold[spikes[N_x:] == 1] * delta_adapt_dt
-        spike_threshold[spikes[N_x:] == 1] -= delta_spike_threshold
+        delta_spike_threshold = spike_threshold[spikes[o0:o3] == 1] * delta_adapt_dt
+        spike_threshold[spikes[o0:o3] == 1] -= delta_spike_threshold
         # print(f"\r{np.mean(spike_threshold)}", end="")
 
-    mp[spikes[N_x:] == 1] = reset_potential
+    mp[spikes[o0:o3] == 1] = reset_potential
     spike_times = np.where(spikes == 1, 0, spike_times + 1)
 
     return mp, spikes, spike_times, spike_threshold
@@ -364,7 +365,6 @@ def train_network(
     N_classes,
     supervised,
     interval,
-    save,
     N_x,
     T,
     beta,
@@ -447,7 +447,7 @@ def train_network(
         # update membrane potential
         mp[t] = update_membrane_potential(
             mp=mp[t - 1],
-            weights=weights[:, N_x:],
+            weights=weights[:, o0:o3],
             spikes=spikes[t - 1],
             resting_potential=resting_potential,
             membrane_resistance=membrane_resistance,
@@ -465,7 +465,8 @@ def train_network(
             spike_times,
             spike_threshold[t],
         ) = update_spikes(
-            N_x=N_x,
+            o0=o0,
+            o3=o3,
             mp=mp[t],
             dt=dt,
             spikes=spikes[t],
@@ -543,8 +544,6 @@ def train_network(
                     tau_LTP=tau_LTP,
                     tau_LTD=tau_LTD,
                     dt=dt,
-                    indices_exc=indices_exc,
-                    indices_inh=indices_inh,
                 )
             )
 
@@ -560,15 +559,6 @@ def train_network(
             if (sleep_now_exc or sleep_now_inh) and t > T - 2:
                 spikes[t + 1, :N_x] = 0
                 spike_labels[t] = -2
-
-    if save:
-        file_name = "trained_weights/weights.pkl"
-
-        if not os.path.exists(file_name):
-            os.makedirs("trained_weights")
-
-        with open(file_name, "wb") as file:
-            pkl.dump(weights, file)
 
     return (
         weights,

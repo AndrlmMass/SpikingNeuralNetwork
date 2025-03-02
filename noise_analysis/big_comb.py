@@ -1,4 +1,7 @@
 import numpy as np
+import os
+import json
+import random
 from train import train_network
 from get_data import create_data
 from plot import (
@@ -20,10 +23,210 @@ class SNN_noisy:
         self.N_x = N_x
         self.N_classes = len(classes)
         self.classes = classes
-        if supervised:
+        self.supervised = supervised
+        if self.supervised:
             self.N = N_exc + N_inh + N_x + self.N_classes * 2
         else:
             self.N = N_exc + N_inh + N_x
+
+    def process(
+        self,
+        load_data: bool = False,
+        save_data: bool = False,
+        load_model: bool = False,
+        save_model: bool = False,
+        data_parameters: dict = None,
+        model_parameters: dict = None,
+    ):
+
+        # Add checks
+        if load_data and save_data:
+            raise ValueError("load and save data cannot both be True")
+
+        ########## load or save data ##########
+        if save_data:
+            if not os.path.exists("data/sdata"):
+                os.makedirs("data/sdata")
+            if save_data:
+                # generate random number to create unique folder
+                rand_nums = np.random.randint(low=0, high=9, size=5)
+
+                # Check if folder already exists
+                while any(item in os.listdir("data") for item in rand_nums):
+                    rand_nums = random.randint(low=0, high=9, size=5)[0]
+
+                # Create folder to store data
+                data_dir = os.path.join("data/sdata", str(rand_nums))
+                os.makedirs(data_dir)
+
+                # Save training data and labels
+                np.save(os.path.join(data_dir, "data_train.npy"), self.data_train)
+                np.save(os.path.join(data_dir, "labels_train.npy"), self.labels_train)
+                np.save(os.path.join(data_dir, "data_test.npy"), self.data_test)
+                np.save(os.path.join(data_dir, "labels_test.npy"), self.labels_test)
+                filepath = os.path.join(data_dir, "data_parameters.json")
+
+                with open(filepath, "w") as outfile:
+                    json.dump(data_parameters, outfile)
+
+                print("\rdata saved", end="")
+                return
+
+        if load_data:
+            # Define folder to load data
+            folders = os.listdir("data/sdata")
+
+            # Search for existing data gens
+            if len(folders) > 0:
+                for folder in folders:
+                    json_file_path = os.path.join(
+                        "data/sdata", folder, "data_parameters.json"
+                    )
+
+                    with open(json_file_path, "r") as j:
+                        ex_params = json.loads(j.read())
+
+                    # Check if parameters are the same as the current ones
+                    if ex_params == data_parameters:
+                        self.data_train = np.load(
+                            os.path.join("data/sdata", folder, "data_train.npy")
+                        )
+                        self.labels_train = np.load(
+                            os.path.join("data/sdata", folder, "labels_train.npy")
+                        )
+                        self.data_test = np.load(
+                            os.path.join("data/sdata", folder, "data_test.npy")
+                        )
+                        self.labels_test = np.load(
+                            os.path.join("data/sdata", folder, "labels_test.npy")
+                        )
+
+                        print("data loaded", end="\r")
+
+                        return
+
+        ########## load or save data ##########
+        if save_model and load_model:
+            raise ValueError("load and save model cannot both be True")
+
+        if save_model:
+            if not os.path.exists("model"):
+                os.makedirs("model")
+            if save_model:
+                # generate random number to create unique folder
+                rand_nums = np.random.randint(low=0, high=9, size=5)
+
+                # Check if folder already exists
+                while any(item in os.listdir("data") for item in rand_nums):
+                    rand_nums = random.randint(low=0, high=9, size=5)[0]
+
+                # Create folder to store data
+                model_dir = os.path.join("model", str(rand_nums))
+                os.makedirs(model_dir)
+
+                # Save training data and labels
+                np.save(os.path.join(model_dir, "weights.npy"), self.weights)
+                np.save(os.path.join(model_dir, "spikes_train.npy"), self.spikes_train)
+                np.save(os.path.join(model_dir, "pre_trace.npy"), self.pre_trace)
+                np.save(os.path.join(model_dir, "post_trace.npy"), self.post_trace)
+                np.save(os.path.join(model_dir, "mp_train.npy"), self.mp_train)
+                np.save(
+                    os.path.join(model_dir, "weights2plot_exc.npy"),
+                    self.weights2plot_exc,
+                )
+                np.save(
+                    os.path.join(model_dir, "weights2plot_inh.npy"),
+                    self.weights2plot_inh,
+                )
+                np.save(
+                    os.path.join(model_dir, "pre_trace_plot.npy"), self.pre_trace_plot
+                )
+                np.save(
+                    os.path.join(model_dir, "post_trace_plot.npy"), self.post_trace_plot
+                )
+                np.save(
+                    os.path.join(model_dir, "spike_threshold.npy"), self.spike_threshold
+                )
+                np.save(os.path.join(model_dir, "weight_mask.npy"), self.weight_mask)
+                np.save(
+                    os.path.join(model_dir, "max_weight_sum_inh.npy"),
+                    self.max_weight_sum_inh,
+                )
+                np.save(
+                    os.path.join(model_dir, "max_weight_sum_exc.npy"),
+                    self.max_weight_sum_exc,
+                )
+
+                filepath = os.path.join(model_dir, "model_parameters.json")
+
+                with open(filepath, "w") as outfile:
+                    json.dump(model_parameters, outfile)
+
+                print("\rmodel saved", end="")
+                return
+
+        if load_model:
+            self.model_loaded = False
+            # Define folder to load data
+            folders = os.listdir("model")
+
+            # Search for existing data gens
+            if len(folders) > 0:
+                for folder in folders:
+                    json_file_path = os.path.join(
+                        "model", folder, "model_parameters.json"
+                    )
+
+                    with open(json_file_path, "r") as j:
+                        ex_params = json.loads(j.read())
+
+                    # Check if parameters are the same as the current ones
+                    if ex_params == model_parameters:
+                        self.weights = np.load(
+                            os.path.join("model", folder, "weights.npy")
+                        )
+                        self.spikes_train = np.load(
+                            os.path.join("model", folder, "spikes_train.npy")
+                        )
+                        self.pre_trace = np.load(
+                            os.path.join("model", folder, "pre_trace.npy")
+                        )
+                        self.post_trace = np.load(
+                            os.path.join("model", folder, "post_trace.npy")
+                        )
+                        self.mp_train = np.load(
+                            os.path.join("model", folder, "mp_train.npy")
+                        )
+                        self.weights2plot_exc = np.load(
+                            os.path.join("model", folder, "weights2plot_exc.npy")
+                        )
+                        self.weights2plot_inh = np.load(
+                            os.path.join("model", folder, "weights2plot_inh.npy")
+                        )
+                        self.pre_trace_plot = np.load(
+                            os.path.join("model", folder, "pre_trace_plot.npy")
+                        )
+                        self.post_trace_plot = np.load(
+                            os.path.join("model", folder, "post_trace_plot.npy")
+                        )
+                        self.spike_threshold = np.load(
+                            os.path.join("model", folder, "spike_threshold.npy")
+                        )
+                        self.weight_mask = np.load(
+                            os.path.join("model", folder, "weight_mask.npy")
+                        )
+                        self.max_weight_sum_inh = np.load(
+                            os.path.join("model", folder, "max_weight_sum_inh.npy")
+                        )
+                        self.max_weight_sum_exc = np.load(
+                            os.path.join("model", folder, "max_weight_sum_exc.npy")
+                        )
+
+                        print("\rmodel loaded", end="")
+                        self.model_loaded = True
+                        return
+            else:
+                print("No model found to load. Will train new model from scratch.")
 
     # acquire data
     def prepare_data(
@@ -33,44 +236,71 @@ class SNN_noisy:
         plot_comparison=False,
         retur=False,
         num_steps=1000,
+        train_=True,
         gain=1,
         offset=0,
         first_spike_time=0,
         time_var_input=False,
-        download=True,
         num_images=20,
         min_time=None,
         max_time=None,
-        recreate=False,
+        force_recreate=False,
         add_breaks=True,
         break_lengths=[500, 400, 300],
         noisy_data=True,
         noise_level=0.05,
         test_data_ratio=0.2,
     ):
+        # Save current parameters
+        self.data_parameters = {**locals()}
 
+        # Copy and remove class element to dict
+        list = [
+            "plot_spikes",
+            "plot_heat_map",
+            "plot_comparison",
+            "retur",
+            "force_recreate",
+            "self",
+        ]
+
+        # Remove elements from data_parameters
+        for element in list:
+            del self.data_parameters[element]
+
+        # Update model
+        self.data_parameters.update()
+
+        # set parameters
         self.num_steps = num_steps
         self.num_items = num_images
-        self.data_train, self.labels_train, self.data_test, self.labels_test = (
-            create_data(
-                pixel_size=int(np.sqrt(self.N_x)),
-                num_steps=num_steps,
-                plot_comparison=plot_comparison,
-                gain=gain,
-                offset=offset,
-                first_spike_time=first_spike_time,
-                time_var_input=time_var_input,
-                download=download,
-                num_images=num_images,
-                recreate=recreate,
-                add_breaks=add_breaks,
-                break_lengths=break_lengths,
-                noisy_data=noisy_data,
-                noise_level=noise_level,
-                classes=self.classes,
-                test_data_ratio=test_data_ratio,
+
+        # create data
+        if force_recreate:
+            self.data_train, self.labels_train, self.data_test, self.labels_test = (
+                create_data(
+                    pixel_size=int(np.sqrt(self.N_x)),
+                    num_steps=num_steps,
+                    plot_comparison=plot_comparison,
+                    gain=gain,
+                    train_=train_,
+                    offset=offset,
+                    first_spike_time=first_spike_time,
+                    time_var_input=time_var_input,
+                    num_images=num_images,
+                    add_breaks=add_breaks,
+                    break_lengths=break_lengths,
+                    noisy_data=noisy_data,
+                    noise_level=noise_level,
+                    classes=self.classes,
+                    test_data_ratio=test_data_ratio,
+                )
             )
-        )
+            self.process(save_data=True, data_parameters=self.data_parameters)
+        else:
+            self.process(load_data=True, data_parameters=self.data_parameters)
+
+        # get data shape
         self.T_train = self.data_train.shape[0]
         self.T_test = self.data_test.shape[0]
 
@@ -112,7 +342,7 @@ class SNN_noisy:
             N_inh=self.N_inh,
             N_x=self.N_x,
             N_classes=self.N_classes,
-            supervised=True,
+            supervised=self.supervised,
             true2pred_weight=1.0,
             weight_affinity_hidden_exc=weight_affinity_hidden_exc,
             weight_affinity_hidden_inh=weight_affinity_hidden_inh,
@@ -142,7 +372,7 @@ class SNN_noisy:
             total_time_test=self.T_test,
             data_train=self.data_train,
             data_test=self.data_test,
-            supervised=True,
+            supervised=self.supervised,
             N_classes=self.N_classes,
             N_x=self.N_x,
             max_time=self.max_time,
@@ -215,106 +445,127 @@ class SNN_noisy:
         w_target_exc=0.1,
         w_target_inh=-0.1,
         random_selection_weight_plot=True,
-        num_exc_weight_plot=50,
-        num_inh_weight_plot=10,
         beta=0.75,
-        retur=False,
         sleep=False,
-        save=True,
         test=False,
         num_inh=10,
         num_exc=50,
-        save_weights=False,
+        force_train=False,
+        save_model=False,
     ):
         self.dt = dt
-        (
-            self.weights,
-            self.spikes_train,
-            self.pre_trace,
-            self.post_trace,
-            self.mp_train,
-            self.weights2plot_exc,
-            self.weights2plot_inh,
-            self.pre_trace_plot,
-            self.post_trace_plot,
-            self.spike_threshold,
-            self.weight_mask,
-            self.max_weight_sum_inh,
-            self.max_weight_sum_exc,
-        ) = train_network(
-            weights=self.weights,
-            spike_labels=self.labels_train,
-            N_classes=self.N_classes,
-            supervised=True,
-            mp=self.mp_train,
-            sleep=sleep,
-            alpha=alpha,
-            timing_update=timing_update,
-            spikes=self.spikes_train,
-            pre_trace=self.pre_trace,
-            post_trace=self.post_trace,
-            check_sleep_interval=check_sleep_interval,
-            tau_pre_trace_exc=tau_pre_trace_exc,
-            tau_pre_trace_inh=tau_pre_trace_inh,
-            tau_post_trace_exc=tau_post_trace_exc,
-            tau_post_trace_inh=tau_post_trace_inh,
-            resting_potential=self.resting_potential,
-            membrane_resistance=membrane_resistance,
-            min_weight_exc=min_weight_exc,
-            max_weight_exc=max_weight_exc,
-            min_weight_inh=min_weight_inh,
-            max_weight_inh=max_weight_inh,
-            N_inh=self.N_inh,
-            N_exc=self.N_exc,
-            beta=beta,
-            num_exc=num_exc,
-            num_inh=num_inh,
-            weight_decay=weight_decay,
-            weight_decay_rate_exc=weight_decay_rate_exc,
-            weight_decay_rate_inh=weight_decay_rate_inh,
-            train_weights=train_weights,
-            learning_rate_exc=learning_rate_exc,
-            learning_rate_inh=learning_rate_inh,
-            w_interval=w_interval,
-            interval=interval,
-            w_target_exc=w_target_exc,
-            w_target_inh=w_target_inh,
-            tau_LTP=tau_LTP,
-            tau_LTD=tau_LTD,
-            tau_m=tau_m,
-            max_mp=max_mp,
-            min_mp=min_mp,
-            dt=self.dt,
-            N=self.N,
-            clip_exc_weights=clip_exc_weights,
-            clip_inh_weights=clip_inh_weights,
-            A_plus=A_plus,
-            A_minus=A_minus,
-            trace_update=trace_update,
-            spike_adaption=spike_adaption,
-            delta_adaption=delta_adaption,
-            tau_adaption=tau_adaption,
-            spike_threshold_default=spike_threshold_default,
-            spike_intercept=spike_intercept,
-            spike_slope=spike_slope,
-            noisy_threshold=noisy_threshold,
-            reset_potential=reset_potential,
-            spike_times=self.spike_times,
-            noisy_potential=noisy_potential,
-            noisy_weights=noisy_weights,
-            weight_mean_noise=weight_mean_noise,
-            weight_var_noise=weight_var_noise,
-            vectorized_trace=vectorized_trace,
-            save=save,
-            N_x=self.N_x,
-            T=self.T_train,
-            mean_noise=mean_noise,
-            var_noise=var_noise,
-        )
 
-        if save_weights:
-            ...
-            # add logic
+        # Save current parameters
+        self.model_parameters = {**locals()}
+        remove = [
+            "self",
+            "force_train",
+            "save_model",
+            "test",
+            "plot_mp_train",
+            "plot_mp_test",
+            "plot_spikes_train",
+            "plot_spikes_test",
+            "plot_weights",
+            "plot_threshold",
+            "plot_traces_",
+            "random_selection_weight_plot",
+            "train_weights",
+        ]
+
+        # Remove elements from model_parameters
+        for element in remove:
+            self.model_parameters.pop(element)
+
+        if not force_train:
+            self.process(load_model=True, model_parameters=self.model_parameters)
+        if not self.model_loaded:
+            (
+                self.weights,
+                self.spikes_train,
+                self.pre_trace,
+                self.post_trace,
+                self.mp_train,
+                self.weights2plot_exc,
+                self.weights2plot_inh,
+                self.pre_trace_plot,
+                self.post_trace_plot,
+                self.spike_threshold,
+                self.weight_mask,
+                self.max_weight_sum_inh,
+                self.max_weight_sum_exc,
+            ) = train_network(
+                weights=self.weights,
+                spike_labels=self.labels_train,
+                N_classes=self.N_classes,
+                supervised=self.supervised,
+                mp=self.mp_train,
+                sleep=sleep,
+                alpha=alpha,
+                timing_update=timing_update,
+                spikes=self.spikes_train,
+                pre_trace=self.pre_trace,
+                post_trace=self.post_trace,
+                check_sleep_interval=check_sleep_interval,
+                tau_pre_trace_exc=tau_pre_trace_exc,
+                tau_pre_trace_inh=tau_pre_trace_inh,
+                tau_post_trace_exc=tau_post_trace_exc,
+                tau_post_trace_inh=tau_post_trace_inh,
+                resting_potential=self.resting_potential,
+                membrane_resistance=membrane_resistance,
+                min_weight_exc=min_weight_exc,
+                max_weight_exc=max_weight_exc,
+                min_weight_inh=min_weight_inh,
+                max_weight_inh=max_weight_inh,
+                N_inh=self.N_inh,
+                N_exc=self.N_exc,
+                beta=beta,
+                num_exc=num_exc,
+                num_inh=num_inh,
+                weight_decay=weight_decay,
+                weight_decay_rate_exc=weight_decay_rate_exc,
+                weight_decay_rate_inh=weight_decay_rate_inh,
+                train_weights=train_weights,
+                learning_rate_exc=learning_rate_exc,
+                learning_rate_inh=learning_rate_inh,
+                w_interval=w_interval,
+                interval=interval,
+                w_target_exc=w_target_exc,
+                w_target_inh=w_target_inh,
+                tau_LTP=tau_LTP,
+                tau_LTD=tau_LTD,
+                tau_m=tau_m,
+                max_mp=max_mp,
+                min_mp=min_mp,
+                dt=self.dt,
+                N=self.N,
+                clip_exc_weights=clip_exc_weights,
+                clip_inh_weights=clip_inh_weights,
+                A_plus=A_plus,
+                A_minus=A_minus,
+                trace_update=trace_update,
+                spike_adaption=spike_adaption,
+                delta_adaption=delta_adaption,
+                tau_adaption=tau_adaption,
+                spike_threshold_default=spike_threshold_default,
+                spike_intercept=spike_intercept,
+                spike_slope=spike_slope,
+                noisy_threshold=noisy_threshold,
+                reset_potential=reset_potential,
+                spike_times=self.spike_times,
+                noisy_potential=noisy_potential,
+                noisy_weights=noisy_weights,
+                weight_mean_noise=weight_mean_noise,
+                weight_var_noise=weight_var_noise,
+                vectorized_trace=vectorized_trace,
+                N_x=self.N_x,
+                T=self.T_train,
+                mean_noise=mean_noise,
+                var_noise=var_noise,
+            )
+
+        if save_model:
+            self.process(save_model=True, model_parameters=self.model_parameters)
 
         if plot_spikes_train:
             if start_time_spike_plot == None:

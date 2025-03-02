@@ -1,12 +1,12 @@
 from big_comb import SNN_noisy
 
 # init class
-snn_N = SNN_noisy(N_exc=200, N_inh=50, N_x=225, classes=[0, 1, 2, 3])
+snn_N = SNN_noisy(N_exc=200, N_inh=50, N_x=225, classes=[0, 1, 2, 3], supervised=True)
 
 # acquire data
 snn_N.prepare_data(
-    num_images=500,
-    recreate=False,
+    num_images=5,
+    force_recreate=False,
     plot_comparison=False,
     plot_spikes=False,
     noisy_data=True,
@@ -39,7 +39,7 @@ snn_N.train(
     plot_weights=True,
     plot_threshold=False,
     plot_traces_=False,
-    train_weights=True,
+    train_weights=False,
     learning_rate_exc=0.0008,
     learning_rate_inh=0.005,
     w_target_exc=0.1,
@@ -54,6 +54,7 @@ snn_N.train(
     interval=100,
     min_mp=-100,
     sleep=True,
+    save_model=True,
     weight_decay=False,
     weight_decay_rate_exc=0.9999,
     weight_decay_rate_inh=0.9999,
@@ -63,7 +64,6 @@ snn_N.train(
     spike_adaption=True,
     delta_adaption=0.5,
     tau_adaption=100,
-    save_weights=True,
     trace_update=False,
     timing_update=True,
     vectorized_trace=False,
