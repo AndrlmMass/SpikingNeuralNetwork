@@ -400,16 +400,16 @@ def train_network(
     idx_inh = np.random.choice(inh_interval, size=num_inh, replace=False)
 
     # create weights_plotting_array
-    weights_4_plotting_exc = np.zeros((T // interval, num_exc, o2 - o0))
+    weights_4_plotting_exc = np.zeros((T // interval, num_exc, o3 - o0))
     weights_4_plotting_inh = np.zeros((T // interval, num_inh, o1 - o0))
-    weights_4_plotting_exc[0] = weights[idx_exc, o0:o2]
+    weights_4_plotting_exc[0] = weights[idx_exc, o0:o3]
     weights_4_plotting_inh[0] = weights[idx_inh, o0:o1]
     pre_trace_4_plot = np.zeros((T // interval, o3))
-    post_trace_4_plot = np.zeros((T // interval, o3))
+    post_trace_4_plot = np.zeros((T // interval, o3 - o0))
 
     # create spike threshold array
     spike_threshold = np.full(
-        shape=(T, o3), fill_value=spike_threshold_default, dtype=float
+        shape=(T, o3 - o0), fill_value=spike_threshold_default, dtype=float
     )
 
     sum_weights_exc = np.sum(np.abs(weights[:o2, o0:o3]))
@@ -549,8 +549,8 @@ def train_network(
 
         # save weights for plotting
         if t % interval == 0 and t != T:
-            weights_4_plotting_exc[t // interval] = weights[idx_exc]
-            weights_4_plotting_inh[t // interval] = weights[idx_inh, :-N_inh]
+            weights_4_plotting_exc[t // interval] = weights[idx_exc, o0:o3]
+            weights_4_plotting_inh[t // interval] = weights[idx_inh, o0:o1]
             pre_trace_4_plot[t // interval] = pre_trace
             post_trace_4_plot[t // interval] = post_trace
 

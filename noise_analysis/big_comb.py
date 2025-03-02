@@ -42,6 +42,8 @@ class SNN_noisy:
         # Add checks
         if load_data and save_data:
             raise ValueError("load and save data cannot both be True")
+        self.data_loaded = False
+        self.model_loaded = False
 
         ########## load or save data ##########
         if save_data:
@@ -102,7 +104,7 @@ class SNN_noisy:
                         )
 
                         print("data loaded", end="\r")
-
+                        self.data_loaded = True
                         return
 
         ########## load or save data ##########
@@ -166,7 +168,6 @@ class SNN_noisy:
                 return
 
         if load_model:
-            self.model_loaded = False
             # Define folder to load data
             folders = os.listdir("model")
 
@@ -276,7 +277,10 @@ class SNN_noisy:
         self.num_items = num_images
 
         # create data
-        if force_recreate:
+        if not force_recreate:
+            self.process(load_data=True, data_parameters=self.data_parameters)
+
+        if force_recreate or not self.data_loaded:
             self.data_train, self.labels_train, self.data_test, self.labels_test = (
                 create_data(
                     pixel_size=int(np.sqrt(self.N_x)),
@@ -297,8 +301,6 @@ class SNN_noisy:
                 )
             )
             self.process(save_data=True, data_parameters=self.data_parameters)
-        else:
-            self.process(load_data=True, data_parameters=self.data_parameters)
 
         # get data shape
         self.T_train = self.data_train.shape[0]
@@ -635,10 +637,10 @@ class SNN_noisy:
             ) = train_network(
                 weights=self.weights,
                 spike_labels=self.labels_test,
+                N_classes=self.N_classes,
+                supervised=self.supervised,
                 mp=self.mp_test,
-                num_exc=num_exc,
-                num_inh=num_inh,
-                sleep=False,
+                sleep=sleep,
                 alpha=alpha,
                 timing_update=timing_update,
                 spikes=self.spikes_test,
@@ -658,6 +660,8 @@ class SNN_noisy:
                 N_inh=self.N_inh,
                 N_exc=self.N_exc,
                 beta=beta,
+                num_exc=num_exc,
+                num_inh=num_inh,
                 weight_decay=weight_decay,
                 weight_decay_rate_exc=weight_decay_rate_exc,
                 weight_decay_rate_inh=weight_decay_rate_inh,
@@ -694,7 +698,6 @@ class SNN_noisy:
                 weight_mean_noise=weight_mean_noise,
                 weight_var_noise=weight_var_noise,
                 vectorized_trace=vectorized_trace,
-                save=save,
                 N_x=self.N_x,
                 T=self.T_test,
                 mean_noise=mean_noise,
@@ -708,8 +711,8 @@ class SNN_noisy:
                     stop_time_spike_plot = self.T
 
                 spike_plot(
-                    self.spikes_train[start_time_spike_plot:stop_time_spike_plot],
-                    self.labels_train,
+                    self.spikes_test[start_time_spike_plot:stop_time_spike_plot],
+                    self.labels_test,
                 )
 
             if plot_mp_test:
@@ -723,7 +726,7 @@ class SNN_noisy:
                     time_stop_mp = self.T_test
 
                 mp_plot(
-                    mp=self.mp_train[time_start_mp:time_stop_mp],
+                    mp=self.mp_test[time_start_mp:time_stop_mp],
                     N_exc=self.N_exc,
                 )
 

@@ -5,7 +5,7 @@ snn_N = SNN_noisy(N_exc=200, N_inh=50, N_x=225, classes=[0, 1, 2, 3], supervised
 
 # acquire data
 snn_N.prepare_data(
-    num_images=5,
+    num_images=50,
     force_recreate=False,
     plot_comparison=False,
     plot_spikes=False,
