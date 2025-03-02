@@ -281,6 +281,52 @@ class SNN_noisy:
             self.process(load_data=True, data_parameters=self.data_parameters)
 
         if force_recreate or not self.data_loaded:
+            # Define data parameters
+            data_parameters = {"pixel_size": int(np.sqrt(self.N_x)), "train_": train_}
+
+            # Define folder to load data
+            folders = os.listdir("data/mdata")
+
+            # Search for existing data
+            if len(folders) > 0:
+                for folder in folders:
+                    json_file_path = os.path.join(
+                        "data", "mdata", folder, "data_parameters.json"
+                    )
+
+                    with open(json_file_path, "r") as j:
+                        ex_params = json.loads(j.read())
+
+                    # Check if parameters are the same as the current ones
+                    if ex_params == data_parameters:
+                        data_dir = os.path.join("data/mdata", folder)
+                        download = False
+                        break
+                else:
+                    download = True
+            else:
+                download = True
+
+            # get dataset with progress bar
+            print("Downloading MNIST dataset...")
+            if download == True:
+                # generate random number to create unique folder
+                rand_nums = np.random.randint(low=0, high=9, size=5)
+
+                # Check if folder already exists
+                while any(item in os.listdir("data") for item in rand_nums):
+                    rand_nums = np.random.randint(low=0, high=9, size=5)
+
+                # Create folder to store data
+                data_dir = os.path.join("data/mdata", str(rand_nums))
+                os.makedirs(data_dir)
+
+                # Save data parameters
+                filepath = os.path.join(data_dir, "data_parameters.json")
+
+                with open(filepath, "w") as outfile:
+                    json.dump(data_parameters, outfile)
+
             self.data_train, self.labels_train, self.data_test, self.labels_test = (
                 create_data(
                     pixel_size=int(np.sqrt(self.N_x)),
@@ -289,6 +335,8 @@ class SNN_noisy:
                     gain=gain,
                     train_=train_,
                     offset=offset,
+                    download=download,
+                    data_dir=data_dir,
                     first_spike_time=first_spike_time,
                     time_var_input=time_var_input,
                     num_images=num_images,
@@ -381,7 +429,18 @@ class SNN_noisy:
         )
         # return results if retur == True
         if retur:
-            return self.weights, self.mp, self.elig_trace, self.spike_times
+            return (
+                self.weights,
+                self.spikes_train,
+                self.spikes_test,
+                self.mp_train,
+                self.mp_test,
+                self.pre_trace,
+                self.post_trace,
+                self.spike_times,
+                self.resting_potential,
+                self.max_time,
+            )
 
     def train(
         self,
@@ -481,7 +540,7 @@ class SNN_noisy:
 
         if not force_train:
             self.process(load_model=True, model_parameters=self.model_parameters)
-        if not self.model_loaded:
+        if not self.model_loaded or force_train:
             (
                 self.weights,
                 self.spikes_train,

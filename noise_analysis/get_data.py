@@ -23,34 +23,10 @@ def create_data(
     classes,
     plot_comparison,
     test_data_ratio,
+    download,
+    data_dir,
     train_,
 ):
-    # Define data parameters
-    data_parameters = {"pixel_size": pixel_size, "train_": train_}
-
-    # Define folder to load data
-    folders = os.listdir("data/mdata")
-
-    # Search for existing data gens
-    if len(folders) > 0:
-        for folder in folders:
-            json_file_path = os.path.join(
-                "data", "mdata", folder, "data_parameters.json"
-            )
-
-            with open(json_file_path, "r") as j:
-                ex_params = json.loads(j.read())
-
-            # Check if parameters are the same as the current ones
-            if ex_params == data_parameters:
-                data_dir = os.path.join("data/mdata", folder)
-                download = False
-                break
-        else:
-            download = True
-    else:
-        download = True
-
     # set transform rule
     transform = transforms.Compose(
         [
@@ -62,23 +38,6 @@ def create_data(
 
     # get dataset with progress bar
     print("Downloading MNIST dataset...")
-    if download == True:
-        # generate random number to create unique folder
-        rand_nums = np.random.randint(low=0, high=9, size=5)
-
-        # Check if folder already exists
-        while any(item in os.listdir("data") for item in rand_nums):
-            rand_nums = np.random.randint(low=0, high=9, size=5)
-
-        # Create folder to store data
-        data_dir = os.path.join("data/mdata", str(rand_nums))
-        os.makedirs(data_dir)
-
-        # Save data parameters
-        filepath = os.path.join(data_dir, "data_parameters.json")
-
-        with open(filepath, "w") as outfile:
-            json.dump(data_parameters, outfile)
 
     # Fetch MNIST dataset
     with tqdm(total=1, desc="Downloading MNIST") as pbar:
