@@ -17,14 +17,29 @@ from create_network import create_weights, create_arrays
 
 
 class SNN_noisy:
-    def __init__(self, N_exc=200, N_inh=50, N_x=100, classes=[1, 2], supervised=True):
+    def __init__(
+        self,
+        N_exc=200,
+        N_inh=50,
+        N_x=100,
+        classes=[1, 2],
+        supervised=True,
+        unsupervised=False,
+    ):
         self.N_exc = N_exc
         self.N_inh = N_inh
         self.N_x = N_x
         self.N_classes = len(classes)
         self.classes = classes
         self.supervised = supervised
+        self.unsupervised = unsupervised
+
+        if self.unsupervised and supervised:
+            raise ValueError("Unsupervised and supervised cannot both be true.")
+
         if self.supervised:
+            self.N = N_exc + N_inh + N_x + self.N_classes * 7
+        elif self.unsupervised:
             self.N = N_exc + N_inh + N_x + self.N_classes * 2
         else:
             self.N = N_exc + N_inh + N_x
@@ -327,26 +342,37 @@ class SNN_noisy:
                 with open(filepath, "w") as outfile:
                     json.dump(data_parameters, outfile)
 
-            self.data_train, self.labels_train, self.data_test, self.labels_test = (
-                create_data(
-                    pixel_size=int(np.sqrt(self.N_x)),
-                    num_steps=num_steps,
-                    plot_comparison=plot_comparison,
-                    gain=gain,
-                    train_=train_,
-                    offset=offset,
-                    download=download,
-                    data_dir=data_dir,
-                    first_spike_time=first_spike_time,
-                    time_var_input=time_var_input,
-                    num_images=num_images,
-                    add_breaks=add_breaks,
-                    break_lengths=break_lengths,
-                    noisy_data=noisy_data,
-                    noise_level=noise_level,
-                    classes=self.classes,
-                    test_data_ratio=test_data_ratio,
-                )
+            if self.unsupervised or self.supervised:
+                true_labels = True
+            else:
+                true_labels = False
+
+            (
+                self.data_train,
+                self.labels_train,
+                self.data_test,
+                self.labels_test,
+                self.labels_true,
+            ) = create_data(
+                pixel_size=int(np.sqrt(self.N_x)),
+                num_steps=num_steps,
+                plot_comparison=plot_comparison,
+                gain=gain,
+                train_=train_,
+                offset=offset,
+                download=download,
+                data_dir=data_dir,
+                true_labels=true_labels,
+                N_classes=self.N_classes,
+                first_spike_time=first_spike_time,
+                time_var_input=time_var_input,
+                num_images=num_images,
+                add_breaks=add_breaks,
+                break_lengths=break_lengths,
+                noisy_data=noisy_data,
+                noise_level=noise_level,
+                classes=self.classes,
+                test_data_ratio=test_data_ratio,
             )
             self.process(save_data=True, data_parameters=self.data_parameters)
 
@@ -561,6 +587,7 @@ class SNN_noisy:
                 N_classes=self.N_classes,
                 supervised=self.supervised,
                 mp=self.mp_train,
+                labels_true=self.labels_true,
                 sleep=sleep,
                 alpha=alpha,
                 timing_update=timing_update,

@@ -1,10 +1,9 @@
 from torchvision import datasets, transforms
 from plot import plot_floats_and_spikes
+import torch.nn.functional as F
 from snntorch import spikegen
 from tqdm import tqdm
 import numpy as np
-import json
-import os
 import torch
 
 
@@ -21,8 +20,10 @@ def create_data(
     noisy_data,
     noise_level,
     classes,
+    N_classes,
     plot_comparison,
     test_data_ratio,
+    true_labels,
     download,
     data_dir,
     train_,
@@ -65,8 +66,27 @@ def create_data(
     limited_images_test = images[num_images : test_images + num_images]
     limited_labels_test = labels[num_images : test_images + num_images]
 
-    # convert to spikes with progress bar
-    print("Converting images to spike trains...")
+    # one-hot encode labels
+    if true_labels:
+
+        one_hot_train_pos = F.one_hot(limited_labels_train, num_classes=N_classes)
+        one_hot_train_neg = 1 - one_hot_train_pos
+        labels_true = torch.concatenate([one_hot_train_pos, one_hot_train_neg], axis=1)
+
+        # create true spiking labels train
+        labels_true_r = np.zeros((num_images * num_steps, 2 * N_classes))
+        for i in range(num_images):
+            labels_true_r[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
+                labels_true[i],
+                num_steps=num_steps,
+                gain=gain,
+                offset=offset,
+                first_spike_time=first_spike_time,
+                time_var_input=time_var_input,
+            )
+    else:
+        labels_true_r = None
+
     spike_data_train = torch.zeros(size=limited_images_train.shape)
     spike_data_train = spike_data_train.repeat(num_steps, 1, 1, 1)
     for i in range(num_images):
@@ -84,19 +104,6 @@ def create_data(
     for i in range(test_images):
         spike_data_test[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
             limited_images_test[i],
-            num_steps=num_steps,
-            gain=gain,
-            offset=offset,
-            first_spike_time=first_spike_time,
-            time_var_input=time_var_input,
-        )
-
-    # create true spiking labels
-    spike_data_train = torch.zeros(size=limited_images_train.shape)
-    spike_data_train = spike_data_train.repeat(num_steps, 1, 1, 1)
-    for i in range(num_images):
-        spike_data_train[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
-            limited_images_train[i],
             num_steps=num_steps,
             gain=gain,
             offset=offset,
@@ -129,12 +136,12 @@ def create_data(
     )
 
     # convert S_data to numpy array
-    S_data_train_conv = S_data_train.numpy()
-    S_data_test_conv = S_data_test.numpy()
+    S_data_train = S_data_train.numpy()
+    S_data_test = S_data_test.numpy()
 
     if plot_comparison:
         plot_floats_and_spikes(
-            images, S_data_train_conv, spike_labels_train, labels, num_steps
+            images, S_data_train, spike_labels_train, labels, num_steps
         )
 
     if add_breaks:
@@ -155,29 +162,35 @@ def create_data(
             start = img * num_steps + offset
 
             # IMPORTANT: reassign the output of np.insert
-            S_data_train_conv = np.insert(
-                S_data_train_conv, start, break_activity, axis=0
-            )
+            S_data_train = np.insert(S_data_train, start, break_activity, axis=0)
             spike_labels_train = np.insert(
                 spike_labels_train, start, break_labels, axis=0
             )
+            if true_labels:
+                # create break labels
+                break_true_labels = np.concatenate(
+                    [np.zeros(length, N_classes), np.ones(length, N_classes)], axis=1
+                )
+                labels_true_r = np.insert(labels_true_r, start, break_true_labels)
 
             # update offset since we have inserted 'length' steps of break
             offset += length
     if noisy_data:
         # Convert the float array to an integer array first
-        S_data_train_conv = S_data_train_conv.astype(int)
+        S_data_train = S_data_train.astype(int)
+
         # create break activity
         break_activity = (
-            np.random.random(size=S_data_train_conv.shape) < noise_level
+            np.random.random(size=S_data_train.shape) < noise_level
         ).astype(int)
-        S_data_train_conv = S_data_train_conv | break_activity
+        S_data_train = S_data_train | break_activity
 
         # save training data in binary format with progress bar
 
     return (
-        S_data_train_conv,
+        S_data_train,
         spike_labels_train,
-        S_data_test_conv,
+        S_data_test,
         spike_labels_test,
+        labels_true_r,
     )

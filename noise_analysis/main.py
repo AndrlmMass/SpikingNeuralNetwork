@@ -1,7 +1,13 @@
 from big_comb import SNN_noisy
 
 # init class
-snn_N = SNN_noisy(N_exc=200, N_inh=50, N_x=225, classes=[0, 1, 2, 3], supervised=True)
+snn_N = SNN_noisy(
+    N_exc=200,
+    N_inh=50,
+    N_x=225,
+    classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    supervised=True,
+)
 
 # acquire data
 snn_N.prepare_data(
@@ -54,6 +60,7 @@ snn_N.train(
     interval=100,
     min_mp=-100,
     sleep=True,
+    force_train=True,
     save_model=True,
     weight_decay=False,
     weight_decay_rate_exc=0.9999,
