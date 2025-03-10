@@ -62,33 +62,30 @@ class SNN_noisy:
 
         ########## load or save data ##########
         if save_data:
-            if not os.path.exists("data/sdata"):
-                os.makedirs("data/sdata")
-            if save_data:
-                # generate random number to create unique folder
-                rand_nums = np.random.randint(low=0, high=9, size=5)
+            # generate random number to create unique folder
+            rand_nums = np.random.randint(low=0, high=9, size=5)
 
-                # Check if folder already exists
-                while any(item in os.listdir("data") for item in rand_nums):
-                    rand_nums = random.randint(low=0, high=9, size=5)[0]
+            # Check if folder already exists
+            while any(item in os.listdir("data") for item in rand_nums):
+                rand_nums = random.randint(low=0, high=9, size=5)[0]
 
-                # Create folder to store data
-                data_dir = os.path.join("data/sdata", str(rand_nums))
-                os.makedirs(data_dir)
+            # Create folder to store data
+            data_dir = os.path.join("data/sdata", str(rand_nums))
+            os.makedirs(data_dir)
 
-                # Save training data and labels
-                np.save(os.path.join(data_dir, "data_train.npy"), self.data_train)
-                np.save(os.path.join(data_dir, "labels_train.npy"), self.labels_train)
-                np.save(os.path.join(data_dir, "data_test.npy"), self.data_test)
-                np.save(os.path.join(data_dir, "labels_test.npy"), self.labels_test)
-                np.save(os.path.join(data_dir, "labels_true.npy"), self.labels_true)
-                filepath = os.path.join(data_dir, "data_parameters.json")
+            # Save training data and labels
+            np.save(os.path.join(data_dir, "data_train.npy"), self.data_train)
+            np.save(os.path.join(data_dir, "labels_train.npy"), self.labels_train)
+            np.save(os.path.join(data_dir, "data_test.npy"), self.data_test)
+            np.save(os.path.join(data_dir, "labels_test.npy"), self.labels_test)
+            np.save(os.path.join(data_dir, "labels_true.npy"), self.labels_true)
+            filepath = os.path.join(data_dir, "data_parameters.json")
 
-                with open(filepath, "w") as outfile:
-                    json.dump(data_parameters, outfile)
+            with open(filepath, "w") as outfile:
+                json.dump(data_parameters, outfile)
 
-                print("\rdata saved", end="")
-                return
+            print("\rdata saved", end="")
+            return
 
         if load_data:
             # Define folder to load data
