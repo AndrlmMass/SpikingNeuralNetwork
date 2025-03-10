@@ -355,6 +355,7 @@ def train_network(
     noisy_threshold,
     noisy_weights,
     vectorized_trace,
+    labels_true,
     spike_labels,
     alpha,
     weight_mean_noise,

@@ -13,43 +13,43 @@ def create_weights(
     unsupervised,
     N_x,
     N,
-    true2pred_weight,
     weight_affinity_hidden_exc,
     weight_affinity_hidden_inh,
-    weight_affinity_output_exc,
+    weight_affinity_output,
     weight_affinity_input,
     pos_weight,
     neg_weight,
     plot_weights,
     plot_network,
+    pp_weight,
+    pn_weight,
+    tp_weight,
+    tn_weight,
+    fp_weight,
+    fn_weight,
+    tl_weight,
+    fl_weight,
 ):
     weights = np.zeros(shape=(N, N))
 
     if supervised:
-        """
-        In the supervised version, we have the following stucture:
-        st: input neurons
-        N_exc: excitatory neurons
-        N_y_pred: N_classes*2
-        N_inh: inhibitory neurons
-        N_correction: N_classes*4
-        N_true: N_classes*2
-        """
-
-        st = N_x
-        ex = st + N_exc
-        ih = ex + N_inh
-        pp = ih + N_classes
-        pn = pp + N_classes
-        tp = pn + N_classes
-        tn = tp + N_classes
-        fp = tp + N_classes
-        fn = fp + N_classes
-        tr = fn + N_classes
-        fa = tr + N_classes
+        st = N_x  # stimulation
+        ex = st + N_exc  # excitatory
+        ih = ex + N_inh  # inhibitory
+        pp = ih + N_classes  # predicted positive
+        pn = pp + N_classes  # predicted negative
+        tp = pn + N_classes  # true positive
+        tn = tp + N_classes  # true negative
+        fp = tn + N_classes  # false positive
+        fn = fp + N_classes  # false negative
+        tl = fn + N_classes  # true label
+        fl = tl + N_classes  # false label
 
         # Create weights based on affinity rates
-        mask_output_exc = np.random.random((N, N)) < weight_affinity_output_exc
+        mask_label = np.zeros((N_classes, N_classes))
+        np.fill_diagonal(mask_label, val=1)
+        mask_label = mask_label.astype(bool)
+        mask_output = np.random.random((N_exc, N_classes)) < weight_affinity_output
         mask_hidden_exc = np.random.random((N, N)) < weight_affinity_hidden_exc
         mask_hidden_inh = np.random.random((N, N)) < weight_affinity_hidden_inh
         mask_input = np.random.random((N, N)) < weight_affinity_input
@@ -63,7 +63,7 @@ def create_weights(
         # hidden inhibitory weights
         weights[ex:ih, st:ex][mask_hidden_inh[ex:ih, st:ex]] = neg_weight
 
-        # remove self-connections (diagonal) to 0 for excitatory weights
+        # remove excitatory self-connecting (diagonal) weights
         np.fill_diagonal(weights[st:ex, st:ex], 0)
 
         # remove recurrent connections from exc to inh
@@ -71,79 +71,83 @@ def create_weights(
         weights[ex:ih, st:ex][inh_mask] = 0
 
         # update weights from excitatory-to-predictors (pos and negative)
-        weights[st:ex, ih:pp] = pos_weight
-        weights[st:ex, pp:pn] = pos_weight
+        weights[st:ex, ih:pp][mask_output] = pos_weight
+        weights[st:ex, pp:pn][mask_output] = pos_weight
 
         # update weights from predictors-to-excitatory
-        weights[ih:pp, st:ex] = pos_weight
-        weights[pp:pn, st:ex] = neg_weight
+        weights[ih:pp, st:ex][mask_output.T] = pp_weight
+        weights[pp:pn, st:ex][mask_output.T] = pn_weight  # negative weight
 
         # update weights from true-to-predictors
-        weights[pn:tp, ih:pp] = pos_weight
-        weights[tp:tn, pp:pn] = neg_weight
+        weights[pn:tp, ih:pp][mask_label] = tp_weight
+        weights[tp:tn, pp:pn][mask_label] = tn_weight
 
         # update weights from false-to-predictors
-        weights[tn:fp, pp:pn] = pos_weight
-        weights[fp:fn, ih:pp] = neg_weight
+        weights[tn:fp, pp:pn][mask_label] = fp_weight  # negative weight
+        weights[fp:fn, ih:pp][mask_label] = fn_weight  # negative weight
 
-        # update weights from true-
+        # update weights from label-to-true
+        weights[fn:tl, pn:tp][mask_label] = tl_weight
+        weights[fn:tl, tn:fp][mask_label] = tl_weight
 
-        """
-        OBS: The mask is incorrect here. It needs to be the same across the predictions 
-        """
+        # update weights from label-to-false
+        weights[tl:fl, tp:tn][mask_label] = fl_weight
+        weights[tl:fl, fp:fn][mask_label] = fl_weight
 
     elif unsupervised:
-        st = N_x
-        ex = st + N_exc
-        pp = ex + N_classes
-        pn = pp
-        ih = pn + N_inh
-        tp = ih
-        tn = ih
-        tr = tn + N_classes
+        # st = N_x
+        # ex = st + N_exc
+        # pp = ex + N_classes
+        # pn = pp
+        # ih = pn + N_inh
+        # tp = ih
+        # tn = ih
+        # tr = tn + N_classes
 
-        # Create weights based on affinity rate
-        mask_hidden_exc = np.random.random((N, N)) < weight_affinity_hidden_exc
-        mask_hidden_inh = np.random.random((N, N)) < weight_affinity_hidden_inh
-        mask_input = np.random.random((N, N)) < weight_affinity_input
+        # # Create weights based on affinity rate
+        # mask_hidden_exc = np.random.random((N, N)) < weight_affinity_hidden_exc
+        # mask_hidden_inh = np.random.random((N, N)) < weight_affinity_hidden_inh
+        # mask_input = np.random.random((N, N)) < weight_affinity_input
 
-        # input_weights
-        weights[:o0, o0:o1][mask_input[:o0, o0:o1]] = pos_weight
-        # hidden excitatory weights
-        weights[o0:o1, o0:o3][mask_hidden_exc[o0:o1, o0:o3]] = pos_weight
-        # hidden inhibitory weights
-        weights[o2:o3, o0:o1][mask_hidden_inh[o2:o3, o0:o1]] = neg_weight
-        # remove self-connections (diagonal) to 0 for excitatory weights
-        np.fill_diagonal(weights[o0:o1, o0:o1], 0)
-        # remove recurrent connections from exc to inh
-        inh_mask = weights[o0:o1, o2:o3].T == 1
-        weights[o2:o3, o0:o1][inh_mask] = 0
+        # # input_weights
+        # weights[:o0, o0:o1][mask_input[:o0, o0:o1]] = pos_weight
+        # # hidden excitatory weights
+        # weights[o0:o1, o0:o3][mask_hidden_exc[o0:o1, o0:o3]] = pos_weight
+        # # hidden inhibitory weights
+        # weights[o2:o3, o0:o1][mask_hidden_inh[o2:o3, o0:o1]] = neg_weight
+        # # remove self-connections (diagonal) to 0 for excitatory weights
+        # np.fill_diagonal(weights[o0:o1, o0:o1], 0)
+        # # remove recurrent connections from exc to inh
+        # inh_mask = weights[o0:o1, o2:o3].T == 1
+        # weights[o2:o3, o0:o1][inh_mask] = 0
+        ...
     else:
-        st = N_x
-        ex = st + N_exc
-        pp = ex
-        pn = ex
-        ih = ex + N_inh
-        tp = ih
-        tn = ih
-        tr = ih
+        # st = N_x
+        # ex = st + N_exc
+        # pp = ex
+        # pn = ex
+        # ih = ex + N_inh
+        # tp = ih
+        # tn = ih
+        # tr = ih
 
-        # Create weights based on affinity rate
-        mask_hidden_exc = np.random.random((N, N)) < weight_affinity_hidden_exc
-        mask_hidden_inh = np.random.random((N, N)) < weight_affinity_hidden_inh
-        mask_input = np.random.random((N, N)) < weight_affinity_input
+        # # Create weights based on affinity rate
+        # mask_hidden_exc = np.random.random((N, N)) < weight_affinity_hidden_exc
+        # mask_hidden_inh = np.random.random((N, N)) < weight_affinity_hidden_inh
+        # mask_input = np.random.random((N, N)) < weight_affinity_input
 
-        # input_weights
-        weights[:o0, o0:o1][mask_input[:o0, o0:o1]] = pos_weight
-        # hidden excitatory weights
-        weights[o0:o1, o0:o3][mask_hidden_exc[o0:o1, o0:o3]] = pos_weight
-        # hidden inhibitory weights
-        weights[o2:o3, o0:o1][mask_hidden_inh[o2:o3, o0:o1]] = neg_weight
-        # remove self-connections (diagonal) to 0 for excitatory weights
-        np.fill_diagonal(weights[o0:o1, o0:o1], 0)
-        # remove recurrent connections from exc to inh
-        inh_mask = weights[o0:o1, o2:o3].T == 1
-        weights[o2:o3, o0:o1][inh_mask] = 0
+        # # input_weights
+        # weights[:o0, o0:o1][mask_input[:o0, o0:o1]] = pos_weight
+        # # hidden excitatory weights
+        # weights[o0:o1, o0:o3][mask_hidden_exc[o0:o1, o0:o3]] = pos_weight
+        # # hidden inhibitory weights
+        # weights[o2:o3, o0:o1][mask_hidden_inh[o2:o3, o0:o1]] = neg_weight
+        # # remove self-connections (diagonal) to 0 for excitatory weights
+        # np.fill_diagonal(weights[o0:o1, o0:o1], 0)
+        # # remove recurrent connections from exc to inh
+        # inh_mask = weights[o0:o1, o2:o3].T == 1
+        # weights[o2:o3, o0:o1][inh_mask] = 0
+        ...
 
     if plot_weights:
         boundaries = [np.min(weights), -0.001, 0.001, np.max(weights)]
@@ -156,43 +160,55 @@ def create_weights(
 
         plt.imshow(weights, cmap=cmap, norm=norm)
 
+        st = N_x  # stimulation
+        ex = st + N_exc  # excitatory
+        ih = ex + N_inh  # inhibitory
+        pp = ih + N_classes  # predicted positive
+        pn = pp + N_classes  # predicted negative
+        tp = pn + N_classes  # true positive
+        tn = tp + N_classes  # true negative
+        fp = tn + N_classes  # false positive
+        fn = fp + N_classes  # false negative
+        tl = fn + N_classes  # true label
+        fl = tl + N_classes  # false label
+
         # Plot the data
-        boundaries = [o1, o2, o3]
-        class_names = ["N_exc", "N_inh", "N_out"]
+        # boundaries = [st, ex, ih, ]
+        # class_names = ["N_exc", "N_inh", "N_out"]
 
-        bbox_props = dict(facecolor="white", edgecolor="none", boxstyle="round,pad=0.2")
+        # bbox_props = dict(facecolor="white", edgecolor="none", boxstyle="round,pad=0.2")
 
-        # Draw boundary lines using axhline and axvline. We subtract 0.5 to align with pixel edges.
-        for n in range(len(boundaries)):
-            val = boundaries[n]
-            key = class_names[n]
-            start_val = 20.5
-            if key == "N_inh":
-                col = "blue"
-            else:
-                col = "green"
-            plt.axhline(val, color=col, linestyle="--", linewidth=2)
-            plt.axvline(val, color=col, linestyle="--", linewidth=2)
-            plt.text(
-                val,
-                start_val,
-                key,
-                ha="center",
-                va="bottom",
-                color=col,
-                size=13,
-                bbox=bbox_props,
-            )
-            plt.text(
-                start_val,
-                val,
-                key,
-                ha="center",
-                va="bottom",
-                color=col,
-                size=13,
-                bbox=bbox_props,
-            )
+        # # Draw boundary lines using axhline and axvline. We subtract 0.5 to align with pixel edges.
+        # for n in range(len(boundaries)):
+        #     val = boundaries[n]
+        #     key = class_names[n]
+        #     start_val = 20.5
+        #     if key == "N_inh":
+        #         col = "blue"
+        #     else:
+        #         col = "green"
+        #     plt.axhline(val, color=col, linestyle="--", linewidth=2)
+        #     plt.axvline(val, color=col, linestyle="--", linewidth=2)
+        #     plt.text(
+        #         val,
+        #         start_val,
+        #         key,
+        #         ha="center",
+        #         va="bottom",
+        #         color=col,
+        #         size=13,
+        #         bbox=bbox_props,
+        #     )
+        #     plt.text(
+        #         start_val,
+        #         val,
+        #         key,
+        #         ha="center",
+        #         va="bottom",
+        #         color=col,
+        #         size=13,
+        #         bbox=bbox_props,
+        #     )
 
         plt.gca().invert_yaxis()
         plt.title("Weights")
@@ -208,9 +224,6 @@ def create_weights(
         # For demonstration, we generate a random matrix.
         np.random.seed(42)
         A = weights
-
-        # Optionally, if your matrix is supposed to be symmetric, you could do:
-        # A = (A + A.T) / 2
 
         # --- Create the NetworkX graph from the numpy array ---
         G = nx.from_numpy_array(A)

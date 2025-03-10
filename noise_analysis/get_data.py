@@ -1,5 +1,5 @@
 from torchvision import datasets, transforms
-from plot import plot_floats_and_spikes
+from plot import plot_floats_and_spikes, spike_plot
 import torch.nn.functional as F
 from snntorch import spikegen
 from tqdm import tqdm
@@ -16,6 +16,7 @@ def create_data(
     time_var_input,
     num_images,
     add_breaks,
+    gain_labels,
     break_lengths,
     noisy_data,
     noise_level,
@@ -79,7 +80,7 @@ def create_data(
             labels_true_r[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
                 labels_true[i],
                 num_steps=num_steps,
-                gain=gain,
+                gain=gain_labels,
                 offset=offset,
                 first_spike_time=first_spike_time,
                 time_var_input=time_var_input,
@@ -169,12 +170,17 @@ def create_data(
             if true_labels:
                 # create break labels
                 break_true_labels = np.concatenate(
-                    [np.zeros(length, N_classes), np.ones(length, N_classes)], axis=1
+                    [np.zeros((length, N_classes)), np.ones((length, N_classes))],
+                    axis=1,
                 )
                 labels_true_r = np.insert(labels_true_r, start, break_true_labels)
 
             # update offset since we have inserted 'length' steps of break
             offset += length
+
+    # plot target labels
+    spike_plot(labels_true_r[:10000], spike_labels_train[:10000])
+
     if noisy_data:
         # Convert the float array to an integer array first
         S_data_train = S_data_train.astype(int)

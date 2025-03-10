@@ -21,8 +21,8 @@ class SNN_noisy:
         self,
         N_exc=200,
         N_inh=50,
-        N_x=100,
-        classes=[1, 2],
+        N_x=225,
+        classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         supervised=True,
         unsupervised=False,
     ):
@@ -38,7 +38,7 @@ class SNN_noisy:
             raise ValueError("Unsupervised and supervised cannot both be true.")
 
         if self.supervised:
-            self.N = N_exc + N_inh + N_x + self.N_classes * 7
+            self.N = N_exc + N_inh + N_x + self.N_classes * 8
         elif self.unsupervised:
             self.N = N_exc + N_inh + N_x + self.N_classes * 2
         else:
@@ -81,6 +81,7 @@ class SNN_noisy:
                 np.save(os.path.join(data_dir, "labels_train.npy"), self.labels_train)
                 np.save(os.path.join(data_dir, "data_test.npy"), self.data_test)
                 np.save(os.path.join(data_dir, "labels_test.npy"), self.labels_test)
+                np.save(os.path.join(data_dir, "labels_true.npy"), self.labels_true)
                 filepath = os.path.join(data_dir, "data_parameters.json")
 
                 with open(filepath, "w") as outfile:
@@ -118,11 +119,15 @@ class SNN_noisy:
                             os.path.join("data/sdata", folder, "labels_test.npy")
                         )
 
+                        self.labels_true = np.load(
+                            os.path.join("data/sdata", folder, "labels_true.npy")
+                        )
+
                         print("data loaded", end="\r")
                         self.data_loaded = True
                         return
 
-        ########## load or save data ##########
+        ########## load or save model ##########
         if save_model and load_model:
             raise ValueError("load and save model cannot both be True")
 
@@ -247,25 +252,27 @@ class SNN_noisy:
     # acquire data
     def prepare_data(
         self,
-        plot_spikes=False,
-        plot_heat_map=False,
+        num_images=50,
+        force_recreate=True,
         plot_comparison=False,
+        inspect_spike_plot=True,
+        plot_spikes=True,
+        noisy_data=False,
+        noise_level=0.005,
+        add_breaks=False,
+        break_lengths=[500, 1500, 1000],
+        gain=1.0,
+        test_data_ratio=0.5,
+        max_time=2000,
+        plot_heat_map=False,
         retur=False,
         num_steps=1000,
         train_=True,
-        gain=1,
         offset=0,
         first_spike_time=0,
         time_var_input=False,
-        num_images=20,
         min_time=None,
-        max_time=None,
-        force_recreate=False,
-        add_breaks=True,
-        break_lengths=[500, 400, 300],
-        noisy_data=True,
-        noise_level=0.05,
-        test_data_ratio=0.2,
+        gain_labels=0.5,
     ):
         # Save current parameters
         self.data_parameters = {**locals()}
@@ -358,6 +365,7 @@ class SNN_noisy:
                 num_steps=num_steps,
                 plot_comparison=plot_comparison,
                 gain=gain,
+                gain_labels=gain_labels,
                 train_=train_,
                 offset=offset,
                 download=download,
@@ -390,6 +398,10 @@ class SNN_noisy:
                 self.data_train[min_time:max_time], self.labels_train[min_time:max_time]
             )
 
+        # inspect spike labels
+        if inspect_spike_plot:
+            spike_plot(data=self.labels_true, labels=None)
+
         # plot heatmap of activity
         if plot_heat_map:
             heat_map(self.data_train, pixel_size=10)
@@ -400,34 +412,51 @@ class SNN_noisy:
 
     def prepare_training(
         self,
+        plot_weights=False,
+        plot_network=False,
+        neg_weight=-0.4,
+        pos_weight=0.3,
         weight_affinity_hidden_exc=0.1,
-        weight_affinity_hidden_inh=0.2,
-        weight_affinity_output_exc=0.1,
+        weight_affinity_hidden_inh=0.1,
+        weight_affinity_output=0.33,
         weight_affinity_input=0.05,
         resting_membrane=-70,
         max_time=100,
-        pos_weight=0.5,
-        neg_weight=-2,
-        plot_weights=False,
-        plot_network=False,
         retur=False,
+        pp_weight=1,
+        pn_weight=-1,
+        tp_weight=1,
+        tn_weight=1,
+        fp_weight=-1,
+        fn_weight=-1,
+        tl_weight=1,
+        fl_weight=1,
     ):
         # create weights
         self.weights = create_weights(
             N_exc=self.N_exc,
             N_inh=self.N_inh,
+            unsupervised=self.unsupervised,
+            N=self.N,
             N_x=self.N_x,
             N_classes=self.N_classes,
             supervised=self.supervised,
-            true2pred_weight=1.0,
             weight_affinity_hidden_exc=weight_affinity_hidden_exc,
             weight_affinity_hidden_inh=weight_affinity_hidden_inh,
-            weight_affinity_output_exc=weight_affinity_output_exc,
+            weight_affinity_output=weight_affinity_output,
             weight_affinity_input=weight_affinity_input,
             pos_weight=pos_weight,
             neg_weight=neg_weight,
             plot_weights=plot_weights,
             plot_network=plot_network,
+            pp_weight=pp_weight,
+            pn_weight=pn_weight,
+            tp_weight=tp_weight,
+            tn_weight=tn_weight,
+            fp_weight=fp_weight,
+            fn_weight=fn_weight,
+            tl_weight=tl_weight,
+            fl_weight=fl_weight,
         )
         self.resting_potential = resting_membrane
         self.max_time = max_time
@@ -470,75 +499,75 @@ class SNN_noisy:
 
     def train(
         self,
-        dt=1,
-        tau_m=30,
-        A_plus=0.001,
-        A_minus=0.001,
-        membrane_resistance=100,
-        spike_threshold_default=int(-65),
-        reset_potential=-80,
-        noisy_threshold=False,
-        spike_slope=-0.1,
-        spike_intercept=-4,
         plot_spikes_train=False,
         plot_spikes_test=False,
-        plot_weights=False,
-        plot_traces_=False,
-        check_sleep_interval=100,
         plot_mp_train=False,
         plot_mp_test=False,
+        plot_weights=True,
         plot_threshold=False,
-        min_weight_exc=0.01,
-        max_weight_exc=2,
-        min_weight_inh=-4,
-        max_weight_inh=-0.01,
-        learning_rate_exc=0.5,
-        learning_rate_inh=0.5,
-        train_weights=True,
-        tau_LTP=100,
-        tau_LTD=100,
-        w_interval=5,
+        plot_traces_=False,
+        train_weights=False,
+        learning_rate_exc=0.0008,
+        learning_rate_inh=0.005,
+        w_target_exc=0.1,
+        w_target_inh=-0.1,
+        var_noise=1,
+        min_weight_inh=-25,
+        max_weight_inh=0,
+        max_weight_exc=25,
+        min_weight_exc=0,
+        spike_threshold_default=-55,
+        check_sleep_interval=10000,
         interval=100,
-        spike_adaption=False,
-        delta_adaption=0.3,
-        trace_update=True,
-        tau_adaption=1,
-        timing_update=False,
+        min_mp=-100,
+        sleep=True,
+        force_train=True,
+        save_model=True,
+        weight_decay=False,
+        weight_decay_rate_exc=0.9999,
+        weight_decay_rate_inh=0.9999,
+        noisy_potential=True,
+        noisy_threshold=False,
+        noisy_weights=False,
+        spike_adaption=True,
+        delta_adaption=0.5,
+        tau_adaption=100,
+        trace_update=False,
+        timing_update=True,
+        vectorized_trace=False,
+        clip_exc_weights=False,
+        clip_inh_weights=False,
+        alpha=1.25,
+        beta=0.8,
+        A_plus=0.25,
+        A_minus=0.5,
+        test=True,
+        tau_LTD=10,
+        tau_LTP=10,
+        dt=1,
+        tau_m=30,
+        membrane_resistance=100,
+        reset_potential=-80,
+        spike_slope=-0.1,
+        spike_intercept=-4,
+        w_interval=5,
         start_time_spike_plot=None,
         stop_time_spike_plot=None,
         start_index_mp=None,
         stop_index_mp=None,
         time_start_mp=None,
         time_stop_mp=None,
-        noisy_potential=False,
-        clip_exc_weights=True,
-        clip_inh_weights=True,
-        alpha=1.25,
         mean_noise=0,
-        var_noise=0.01,
         max_mp=40,
-        min_mp=-100,
-        vectorized_trace=False,
         tau_pre_trace_exc=1,
         tau_pre_trace_inh=1,
         tau_post_trace_exc=1,
         tau_post_trace_inh=1,
-        weight_decay=False,
-        weight_decay_rate_exc=0.5,
-        weight_decay_rate_inh=0.5,
-        noisy_weights=False,
         weight_mean_noise=0.05,
         weight_var_noise=0.005,
-        w_target_exc=0.1,
-        w_target_inh=-0.1,
         random_selection_weight_plot=True,
-        beta=0.75,
-        sleep=False,
-        test=False,
         num_inh=10,
         num_exc=50,
-        force_train=False,
-        save_model=False,
     ):
         self.dt = dt
 
@@ -822,12 +851,12 @@ class SNN_noisy:
         max_iter=1000,
         random_state=48,
         n_components=2,
-        t_sne=True,
+        t_sne=False,
         t_sne_train=False,
-        t_sne_test=True,
+        t_sne_test=False,
         pls=False,
         pls_train=False,
-        pls_test=True,
+        pls_test=False,
         log_reg=False,
     ):
         if t_sne:
