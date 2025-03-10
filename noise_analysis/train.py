@@ -339,6 +339,7 @@ def train_network(
     check_sleep_interval,
     w_target_exc,
     w_target_inh,
+    unsupervised,
     dt,
     N,
     A_plus,
@@ -355,7 +356,6 @@ def train_network(
     noisy_threshold,
     noisy_weights,
     vectorized_trace,
-    labels_true,
     spike_labels,
     alpha,
     weight_mean_noise,
@@ -377,44 +377,51 @@ def train_network(
     weight_mask = weights != 0
     non_weight_mask = weights == 0
 
-    if supervised:
-        """
-        In the supervised version, we have the following stucture:
-        N_x: input neurons
-        N_exc: excitatory neurons
-        N_y_pred: N_classes
-        N_inh: inhibitory neurons
-        N_y_true: N_classes
-        """
-        o0 = N_x
-        o1 = o0 + N_exc
-        o2 = o1 + N_classes
-        o3 = o2 + N_inh
+    if supervised or unsupervised:
+        st = N_x  # stimulation
+        ex = st + N_exc  # excitatory
+        ih = ex + N_inh  # inhibitory
+        pp = ih + N_classes  # predicted positive
+        pn = pp + N_classes  # predicted negative
+        tp = pn + N_classes  # true positive
+        tn = tp + N_classes  # true negative
+        fp = tn + N_classes  # false positive
+        fn = fp + N_classes  # false negative
+        tl = fn + N_classes  # true label
+        fl = tl + N_classes  # false label
     else:
-        o0 = o0
-        o1 = o0 + N_exc
-        o2 = o1
-        o3 = o1 + N_inh
-    exc_interval = np.arange(0, o2)
-    inh_interval = np.arange(o2, o3)
+        st = N_x  # stimulation
+        ex = st + N_exc  # excitatory
+        ih = ex + N_inh  # inhibitory
+        pp = ih  # predicted positive
+        pn = ih  # predicted negative
+        tp = ih  # true positive
+        tn = ih  # true negative
+        fp = ih  # false positive
+        fn = ih  # false negative
+        tl = ih  # true label
+        fl = ih  # false label
+    exc_interval = np.arange(st, ex)
+    inh_interval = np.arange(ex, ih)
     idx_exc = np.random.choice(exc_interval, size=num_exc, replace=False)
     idx_inh = np.random.choice(inh_interval, size=num_inh, replace=False)
 
     # create weights_plotting_array
-    weights_4_plotting_exc = np.zeros((T // interval, num_exc, o3 - o0))
-    weights_4_plotting_inh = np.zeros((T // interval, num_inh, o1 - o0))
-    weights_4_plotting_exc[0] = weights[idx_exc, o0:o3]
-    weights_4_plotting_inh[0] = weights[idx_inh, o0:o1]
-    pre_trace_4_plot = np.zeros((T // interval, o3))
-    post_trace_4_plot = np.zeros((T // interval, o3 - o0))
+    weights_4_plotting_exc = np.zeros((T // interval, num_exc, pn - st))
+    weights_4_plotting_inh = np.zeros((T // interval, num_inh, ex - st))
+    weights_4_plotting_exc[0] = weights[idx_exc, st:pn]
+    weights_4_plotting_inh[0] = weights[idx_inh, st:ex]
+    pre_trace_4_plot = np.zeros((T // interval, pn))
+    post_trace_4_plot = np.zeros((T // interval, pn - st))
 
     # create spike threshold array
     spike_threshold = np.full(
-        shape=(T, o3 - o0), fill_value=spike_threshold_default, dtype=float
+        shape=(T, fn - st), fill_value=spike_threshold_default, dtype=float
     )
 
-    sum_weights_exc = np.sum(np.abs(weights[:o2, o0:o3]))
-    sum_weights_inh = np.sum(np.abs(weights[o2:o3, o0:o1]))
+    # define which weights counts towards total sum of weights
+    sum_weights_exc = np.sum(np.abs(weights[:ex, st:ih]))
+    sum_weights_inh = np.sum(np.abs(weights[ex:ih, st:ex]))
 
     baseline_sum_exc = sum_weights_exc * beta
     baseline_sum_inh = sum_weights_inh * beta
@@ -422,10 +429,11 @@ def train_network(
     max_sum_inh = sum_weights_inh * alpha
     delta_w = np.zeros(shape=weights.shape)
 
-    nz_rows_inh, nz_cols_inh = np.nonzero(weights[o2:o3, o0:o1])
-    nz_rows_exc, nz_cols_exc = np.nonzero(weights[:o2, o0:o3])
-    nz_rows_inh += weights.shape[0] - N_inh
-    nz_cols_inh += N_x
+    nz_rows_inh, nz_cols_inh = np.nonzero(weights[ex:ih, st:ex])
+    nz_rows_exc, nz_cols_exc = np.nonzero(weights[:ex, st:pn])
+    nz_rows_inh += ex
+    nz_cols_inh += st
+    nz_cols_exc += st
     nz_rows, nz_cols = np.nonzero(weights)
     sleep_now_inh = False
     sleep_now_exc = False
@@ -439,7 +447,7 @@ def train_network(
 
     # Compute for neurons N_x to N_post-1
     nonzero_pre_idx = List()
-    for i in range(N_x, N):
+    for i in range(st, pn):
         pre_idx = np.nonzero(weights[:, i])[0]
         nonzero_pre_idx.append(pre_idx.astype(np.int64))
 
@@ -448,7 +456,7 @@ def train_network(
         # update membrane potential
         mp[t] = update_membrane_potential(
             mp=mp[t - 1],
-            weights=weights[:, o0:o3],
+            weights=weights[:, st:],
             spikes=spikes[t - 1],
             resting_potential=resting_potential,
             membrane_resistance=membrane_resistance,

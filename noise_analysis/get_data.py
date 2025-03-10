@@ -178,9 +178,6 @@ def create_data(
             # update offset since we have inserted 'length' steps of break
             offset += length
 
-    # plot target labels
-    spike_plot(labels_true_r[:10000], spike_labels_train[:10000])
-
     if noisy_data:
         # Convert the float array to an integer array first
         S_data_train = S_data_train.astype(int)

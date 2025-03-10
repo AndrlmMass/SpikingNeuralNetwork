@@ -253,10 +253,10 @@ class SNN_noisy:
     def prepare_data(
         self,
         num_images=50,
-        force_recreate=True,
+        force_recreate=False,
         plot_comparison=False,
-        inspect_spike_plot=True,
-        plot_spikes=True,
+        inspect_spike_plot=False,
+        plot_spikes=False,
         noisy_data=False,
         noise_level=0.005,
         add_breaks=False,
@@ -472,6 +472,8 @@ class SNN_noisy:
             self.spike_times,
         ) = create_arrays(
             N=self.N,
+            N_exc=self.N_exc,
+            N_inh=self.N_inh,
             resting_membrane=self.resting_potential,
             total_time_train=self.T_train,
             total_time_test=self.T_test,
@@ -481,6 +483,7 @@ class SNN_noisy:
             N_classes=self.N_classes,
             N_x=self.N_x,
             max_time=self.max_time,
+            labels_true=self.labels_true,
         )
         # return results if retur == True
         if retur:
@@ -616,7 +619,6 @@ class SNN_noisy:
                 N_classes=self.N_classes,
                 supervised=self.supervised,
                 mp=self.mp_train,
-                labels_true=self.labels_true,
                 sleep=sleep,
                 alpha=alpha,
                 timing_update=timing_update,
@@ -630,6 +632,7 @@ class SNN_noisy:
                 tau_post_trace_inh=tau_post_trace_inh,
                 resting_potential=self.resting_potential,
                 membrane_resistance=membrane_resistance,
+                unsupervised=self.unsupervised,
                 min_weight_exc=min_weight_exc,
                 max_weight_exc=max_weight_exc,
                 min_weight_inh=min_weight_inh,
@@ -761,6 +764,7 @@ class SNN_noisy:
                 spikes=self.spikes_test,
                 pre_trace=self.pre_trace,
                 post_trace=self.post_trace,
+                unsupervised=self.unsupervised,
                 check_sleep_interval=check_sleep_interval,
                 tau_pre_trace_exc=tau_pre_trace_exc,
                 tau_pre_trace_inh=tau_pre_trace_inh,

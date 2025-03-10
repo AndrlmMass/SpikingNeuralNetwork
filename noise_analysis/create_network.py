@@ -122,14 +122,17 @@ def create_weights(
         # weights[o2:o3, o0:o1][inh_mask] = 0
         ...
     else:
-        # st = N_x
-        # ex = st + N_exc
-        # pp = ex
-        # pn = ex
-        # ih = ex + N_inh
-        # tp = ih
-        # tn = ih
-        # tr = ih
+        # st = N_x  # stimulation
+        # ex = st + N_exc  # excitatory
+        # ih = ex + N_inh  # inhibitory
+        # pp = ih  # predicted positive
+        # pn = ih  # predicted negative
+        # tp = ih  # true positive
+        # tn = ih  # true negative
+        # fp = ih  # false positive
+        # fn = ih  # false negative
+        # tl = ih  # true label
+        # fl = ih  # false label
 
         # # Create weights based on affinity rate
         # mask_hidden_exc = np.random.random((N, N)) < weight_affinity_hidden_exc
@@ -295,24 +298,48 @@ def create_arrays(
     N_classes,
     data_train,
     data_test,
+    labels_true,
     N_x,
+    N_exc,
+    N_inh,
 ):
     if supervised:
-        add = N_classes
+        st = N_x  # stimulation
+        ex = st + N_exc  # excitatory
+        ih = ex + N_inh  # inhibitory
+        pp = ih + N_classes  # predicted positive
+        pn = pp + N_classes  # predicted negative
+        tp = pn + N_classes  # true positive
+        tn = tp + N_classes  # true negative
+        fp = tn + N_classes  # false positive
+        fn = fp + N_classes  # false negative
+        tl = fn + N_classes  # true label
+        fl = tl + N_classes  # false label
     else:
-        add = 0
+        st = N_x  # stimulation
+        ex = st + N_exc  # excitatory
+        ih = ex + N_inh  # inhibitory
+        pp = ih  # predicted positive
+        pn = ih  # predicted negative
+        tp = ih  # true positive
+        tn = ih  # true negative
+        fp = ih  # false positive
+        fn = ih  # false negative
+        tl = ih  # true label
+        fl = ih  # false label
 
-    membrane_potential_train = np.zeros((total_time_train, N - N_x - add))
+    membrane_potential_train = np.zeros((total_time_train, fn - st))
     membrane_potential_train[0] = resting_membrane
 
-    membrane_potential_test = np.zeros((total_time_test, N - N_x - add))
+    membrane_potential_test = np.zeros((total_time_test, fn - st))
     membrane_potential_test[0] = resting_membrane
 
-    pre_trace = np.zeros((N - add))
-    post_trace = np.zeros((N - N_x - add))
+    pre_trace = np.zeros((pn))
+    post_trace = np.zeros((pn - st))
 
     spikes_train = np.zeros((total_time_train, N), dtype="int64")
-    spikes_train[:, :N_x] = data_train
+    spikes_train[:, :st] = data_train
+    spikes_train[:, fn:] = labels_true
 
     spikes_test = np.zeros((total_time_test, N), dtype="int64")
     spikes_test[:, :N_x] = data_test
