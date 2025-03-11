@@ -5,6 +5,28 @@ import matplotlib
 matplotlib.use("TkAgg")
 
 
+def plot_accuracy(spikes, ih, pp, pn, tp, tn, fp, fn):
+    """
+    spikes have shape: pp-pn-tp-tn-fp-fn
+    """
+    pp_ = spikes[:, ih:pp]
+    pn_ = spikes[:, pp:pn]
+    tp_ = spikes[:, pn:tp]
+    tn_ = spikes[:, tp:tn]
+    fp_ = spikes[:, tn:fp]
+    fn_ = spikes[:, fp:fn]
+
+    #### calculate precision (accuracy) ###
+
+    ## true positive ##
+    acc_hit_positive = np.count_nonzero(pp_ == tp_) / (tp_.shape[0] * tp_.shape[1])
+
+    ## true negative ##
+    acc_hit_negative = np.count_nonzero(pn_ == tn_) / (tn_.shape[0] * tn_.shape[1])
+
+    # estimate loss (?)
+
+
 def spike_plot(data, labels):
     # Validate dimensions
     if len(labels) != data.shape[0]:

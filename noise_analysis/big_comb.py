@@ -11,6 +11,7 @@ from plot import (
     weights_plot,
     spike_threshold_plot,
     plot_traces,
+    plot_accuracy,
 )
 from analysis import t_SNE, PCA_analysis
 from create_network import create_weights, create_arrays
@@ -33,6 +34,17 @@ class SNN_noisy:
         self.classes = classes
         self.supervised = supervised
         self.unsupervised = unsupervised
+
+        if self.unsupervised or self.supervised:
+            self.st = N_x  # stimulation
+            self.ex = self.st + N_exc  # excitatory
+            self.ih = self.ex + N_inh  # inhibitory
+            self.pp = self.ih + self.N_classes  # predicted positive
+            self.pn = self.pp + self.N_classes  # predicted negative
+            self.tp = self.pn + self.N_classes  # true positive
+            self.tn = self.tp + self.N_classes  # true negative
+            self.fp = self.tn + self.N_classes  # false positive
+            self.fn = self.fp + self.N_classes  # false negative
 
         if self.unsupervised and supervised:
             raise ValueError("Unsupervised and supervised cannot both be true.")
@@ -558,6 +570,7 @@ class SNN_noisy:
         time_stop_mp=None,
         mean_noise=0,
         max_mp=40,
+        plot_accuracy_=True,
         tau_pre_trace_exc=1,
         tau_pre_trace_inh=1,
         tau_post_trace_exc=1,
@@ -682,6 +695,18 @@ class SNN_noisy:
 
         if save_model:
             self.process(save_model=True, model_parameters=self.model_parameters)
+
+        if plot_accuracy_:
+            plot_accuracy(
+                spikes=self.spikes_train,
+                ih=self.ih,
+                pp=self.pp,
+                pn=self.pn,
+                tp=self.tp,
+                tn=self.tn,
+                fp=self.fn,
+                fn=self.fn,
+            )
 
         if plot_spikes_train:
             if start_time_spike_plot == None:
@@ -852,11 +877,11 @@ class SNN_noisy:
         random_state=48,
         n_components=2,
         t_sne=False,
-        t_sne_train=False,
+        t_sne_train=True,
         t_sne_test=False,
         pls=False,
         pls_train=False,
-        pls_test=False,
+        pls_test=True,
         log_reg=False,
     ):
         if t_sne:

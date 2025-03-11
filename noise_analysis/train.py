@@ -77,6 +77,9 @@ def update_weights(
     sleep_now_exc,
     delta_w,
     N_x,
+    ex,
+    st,
+    ih,
     nz_cols,
     nz_rows,
     nz_cols_exc,
@@ -154,9 +157,10 @@ def update_weights(
             tau_LTD=tau_LTD,
             learning_rate_exc=learning_rate_exc,
             learning_rate_inh=learning_rate_inh,
-            N_inh=N_inh,
+            ex=ex,
             weights=weights,
-            N_x=N_x,
+            st=st,
+            ih=ih,
             spikes=spikes,
             nonzero_pre_idx=nonzero_pre_idx,
         )
@@ -170,7 +174,7 @@ def update_weights(
             learning_rate_exc=learning_rate_exc,
             learning_rate_inh=learning_rate_inh,
             dt=dt,
-            N_x=N_x,
+            N_x=st,
             A_plus=A_plus,
             A_minus=A_minus,
             N_inh=N_inh,
@@ -397,6 +401,7 @@ def train_network(
         tn = ih  # true negative
         fp = ih  # false positive
         fn = ih  # false negative
+
     exc_interval = np.arange(st, ex)
     inh_interval = np.arange(ex, ih)
     idx_exc = np.random.choice(exc_interval, size=num_exc, replace=False)
@@ -443,8 +448,8 @@ def train_network(
 
     # Compute for neurons N_x to N_post-1
     nonzero_pre_idx = List()
-    for i in range(st, pn):
-        pre_idx = np.nonzero(weights[:, i])[0]
+    for i in range(st, ih):
+        pre_idx = np.nonzero(weights[:ih, i])[0]
         nonzero_pre_idx.append(pre_idx.astype(np.int64))
 
     for t in tqdm(range(1, T), desc=desc):
@@ -490,10 +495,10 @@ def train_network(
 
         # update weights
         if train_weights:
-            weights, pre_trace, post_trace, sleep_now_inh, sleep_now_exc = (
+            weights[:pn, :pn], pre_trace, post_trace, sleep_now_inh, sleep_now_exc = (
                 update_weights(
                     spikes=spikes[t - 1],
-                    weights=weights,
+                    weights=weights[:pn, :pn],
                     max_sum_exc=max_sum_exc,
                     max_sum_inh=max_sum_inh,
                     non_weight_mask=non_weight_mask,
@@ -534,6 +539,9 @@ def train_network(
                     sleep_now_exc=sleep_now_exc,
                     t=t,
                     N=N,
+                    ex=ex,
+                    st=st,
+                    ih=ih,
                     nz_rows=nz_rows,
                     nz_cols=nz_cols,
                     nz_cols_exc=nz_cols_exc,
