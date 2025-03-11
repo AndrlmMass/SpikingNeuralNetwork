@@ -5,6 +5,9 @@ import matplotlib
 matplotlib.use("TkAgg")
 
 
+def plot_accuracy(spikes): ...
+
+
 def spike_plot(data, labels):
     # Validate dimensions
     if len(labels) != data.shape[0]:

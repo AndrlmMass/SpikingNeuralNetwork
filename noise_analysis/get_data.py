@@ -169,11 +169,10 @@ def create_data(
             )
             if true_labels:
                 # create break labels
-                break_true_labels = np.concatenate(
-                    [np.zeros((length, N_classes)), np.ones((length, N_classes))],
-                    axis=1,
+                break_true_labels = np.zeros((length, N_classes * 2))
+                labels_true_r = np.insert(
+                    labels_true_r, start, break_true_labels, axis=0
                 )
-                labels_true_r = np.insert(labels_true_r, start, break_true_labels)
 
             # update offset since we have inserted 'length' steps of break
             offset += length

@@ -33,6 +33,16 @@ class SNN_noisy:
         self.classes = classes
         self.supervised = supervised
         self.unsupervised = unsupervised
+        if self.unsupervised or self.supervised:
+            self.st = N_x  # stimulation
+            self.ex = self.st + N_exc  # excitatory
+            self.ih = self.ex + N_inh  # inhibitory
+            self.pp = self.ih + self.N_classes  # predicted positive
+            self.pn = self.pp + self.N_classes  # predicted negative
+            self.tp = self.pn + self.N_classes  # true positive
+            self.tn = self.tp + self.N_classes  # true negative
+            self.fp = self.tn + self.N_classes  # false positive
+            self.fn = self.fp + self.N_classes  # false negative
 
         if self.unsupervised and supervised:
             raise ValueError("Unsupervised and supervised cannot both be true.")
@@ -567,6 +577,7 @@ class SNN_noisy:
         random_selection_weight_plot=True,
         num_inh=10,
         num_exc=50,
+        plot_accuracy=True,
     ):
         self.dt = dt
 
@@ -683,6 +694,9 @@ class SNN_noisy:
         if save_model:
             self.process(save_model=True, model_parameters=self.model_parameters)
 
+        if plot_accuracy:
+            ...
+
         if plot_spikes_train:
             if start_time_spike_plot == None:
                 start_time_spike_plot = 0
@@ -690,7 +704,9 @@ class SNN_noisy:
                 stop_time_spike_plot = self.T_train
 
             spike_plot(
-                self.spikes_train[start_time_spike_plot:stop_time_spike_plot],
+                self.spikes_train[
+                    start_time_spike_plot:stop_time_spike_plot, self.st :
+                ],
                 self.labels_train,
             )
 
@@ -853,10 +869,10 @@ class SNN_noisy:
         n_components=2,
         t_sne=False,
         t_sne_train=False,
-        t_sne_test=False,
-        pls=False,
-        pls_train=False,
-        pls_test=False,
+        t_sne_test=True,
+        pca=False,
+        pca_train=False,
+        pca_test=True,
         log_reg=False,
     ):
         if t_sne:
@@ -878,15 +894,15 @@ class SNN_noisy:
                     max_iter=max_iter,
                     random_state=random_state,
                 )
-        if pls:
-            if pls_train:
+        if pca:
+            if pca_train:
                 PCA_analysis(
                     spikes=self.spikes_train[:, self.N_x :],
                     labels_spike=self.labels_train,
                     n_components=n_components,
                     random_state=random_state,
                 )
-            if pls_test:
+            if pca_test:
                 PCA_analysis(
                     spikes=self.spikes_test[:, self.N_x :],
                     labels_spike=self.labels_test,
