@@ -452,8 +452,6 @@ class SNN_noisy:
             tn_weight=tn_weight,
             fp_weight=fp_weight,
             fn_weight=fn_weight,
-            tl_weight=tl_weight,
-            fl_weight=fl_weight,
         )
         self.resting_potential = resting_membrane
         self.max_time = max_time
@@ -477,6 +475,7 @@ class SNN_noisy:
             data_train=self.data_train,
             data_test=self.data_test,
             supervised=self.supervised,
+            unsupervised=self.unsupervised,
             N_classes=self.N_classes,
             N_x=self.N_x,
             max_time=self.max_time,
@@ -521,7 +520,7 @@ class SNN_noisy:
         interval=100,
         min_mp=-100,
         sleep=True,
-        force_train=True,
+        force_train=False,
         save_model=True,
         weight_decay=False,
         weight_decay_rate_exc=0.9999,

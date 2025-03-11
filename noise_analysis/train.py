@@ -258,8 +258,8 @@ def update_membrane_potential(
 
 
 def update_spikes(
-    o0,
-    o3,
+    st,
+    pn,
     mp,
     dt,
     spikes,
@@ -279,7 +279,7 @@ def update_spikes(
 
     # update spikes array
     mp = np.clip(mp, a_min=min_mp, a_max=max_mp)
-    spikes[o0:o3][mp > spike_threshold] = 1
+    spikes[st:pn][mp > spike_threshold] = 1
 
     # Add Solve's noisy membrane potential
     if noisy_threshold:
@@ -288,17 +288,17 @@ def update_spikes(
             1 + np.exp(spike_slope * delta_potential + spike_intercept)
         )
         additional_spikes = np.random.binomial(n=1, p=p_fire)
-        spikes[o0:o3] = spikes[o0:o3] | additional_spikes
+        spikes[st:pn] = spikes[st:pn] | additional_spikes
 
     # add spike adaption
     if spike_adaption:
         spike_threshold += (spike_threshold_default - spike_threshold) / tau_adaption
         delta_adapt_dt = delta_adaption * dt
-        delta_spike_threshold = spike_threshold[spikes[o0:o3] == 1] * delta_adapt_dt
-        spike_threshold[spikes[o0:o3] == 1] -= delta_spike_threshold
+        delta_spike_threshold = spike_threshold[spikes[st:pn] == 1] * delta_adapt_dt
+        spike_threshold[spikes[st:pn] == 1] -= delta_spike_threshold
         # print(f"\r{np.mean(spike_threshold)}", end="")
 
-    mp[spikes[o0:o3] == 1] = reset_potential
+    mp[spikes[st:pn] == 1] = reset_potential
     spike_times = np.where(spikes == 1, 0, spike_times + 1)
 
     return mp, spikes, spike_times, spike_threshold
@@ -387,8 +387,6 @@ def train_network(
         tn = tp + N_classes  # true negative
         fp = tn + N_classes  # false positive
         fn = fp + N_classes  # false negative
-        tl = fn + N_classes  # true label
-        fl = tl + N_classes  # false label
     else:
         st = N_x  # stimulation
         ex = st + N_exc  # excitatory
@@ -399,8 +397,6 @@ def train_network(
         tn = ih  # true negative
         fp = ih  # false positive
         fn = ih  # false negative
-        tl = ih  # true label
-        fl = ih  # false label
     exc_interval = np.arange(st, ex)
     inh_interval = np.arange(ex, ih)
     idx_exc = np.random.choice(exc_interval, size=num_exc, replace=False)
@@ -416,7 +412,7 @@ def train_network(
 
     # create spike threshold array
     spike_threshold = np.full(
-        shape=(T, fn - st), fill_value=spike_threshold_default, dtype=float
+        shape=(T, pn - st), fill_value=spike_threshold_default, dtype=float
     )
 
     # define which weights counts towards total sum of weights
@@ -452,11 +448,10 @@ def train_network(
         nonzero_pre_idx.append(pre_idx.astype(np.int64))
 
     for t in tqdm(range(1, T), desc=desc):
-
         # update membrane potential
         mp[t] = update_membrane_potential(
             mp=mp[t - 1],
-            weights=weights[:, st:],
+            weights=weights[:, st:pn],
             spikes=spikes[t - 1],
             resting_potential=resting_potential,
             membrane_resistance=membrane_resistance,
@@ -474,8 +469,8 @@ def train_network(
             spike_times,
             spike_threshold[t],
         ) = update_spikes(
-            o0=o0,
-            o3=o3,
+            st=st,
+            pn=pn,
             mp=mp[t],
             dt=dt,
             spikes=spikes[t],
@@ -558,8 +553,8 @@ def train_network(
 
         # save weights for plotting
         if t % interval == 0 and t != T:
-            weights_4_plotting_exc[t // interval] = weights[idx_exc, o0:o3]
-            weights_4_plotting_inh[t // interval] = weights[idx_inh, o0:o1]
+            weights_4_plotting_exc[t // interval] = weights[idx_exc, st:pn]
+            weights_4_plotting_inh[t // interval] = weights[idx_inh, st:ex]
             pre_trace_4_plot[t // interval] = pre_trace
             post_trace_4_plot[t // interval] = post_trace
 
