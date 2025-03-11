@@ -1,7 +1,7 @@
 from big_comb import SNN_noisy
 
 # init class
-snn_N = SNN_noisy(N_x=100)
+snn_N = SNN_noisy(N_x=100, classes=[1, 0])
 
 # acquire data
 snn_N.prepare_data(num_images=100)

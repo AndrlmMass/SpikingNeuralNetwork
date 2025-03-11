@@ -143,58 +143,55 @@ class SNN_noisy:
         if save_model:
             if not os.path.exists("model"):
                 os.makedirs("model")
-            if save_model:
-                # generate random number to create unique folder
-                rand_nums = np.random.randint(low=0, high=9, size=5)
+            # generate random number to create unique folder
+            rand_nums = np.random.randint(low=0, high=9, size=5)
 
-                # Check if folder already exists
-                while any(item in os.listdir("data") for item in rand_nums):
-                    rand_nums = random.randint(low=0, high=9, size=5)[0]
+            # Check if folder already exists
+            while any(item in os.listdir("data") for item in rand_nums):
+                rand_nums = random.randint(low=0, high=9, size=5)[0]
 
-                # Create folder to store data
-                model_dir = os.path.join("model", str(rand_nums))
-                os.makedirs(model_dir)
+            # Create folder to store data
+            model_dir = os.path.join("model", str(rand_nums))
+            os.makedirs(model_dir)
 
-                # Save training data and labels
-                np.save(os.path.join(model_dir, "weights.npy"), self.weights)
-                np.save(os.path.join(model_dir, "spikes_train.npy"), self.spikes_train)
-                np.save(os.path.join(model_dir, "pre_trace.npy"), self.pre_trace)
-                np.save(os.path.join(model_dir, "post_trace.npy"), self.post_trace)
-                np.save(os.path.join(model_dir, "mp_train.npy"), self.mp_train)
-                np.save(
-                    os.path.join(model_dir, "weights2plot_exc.npy"),
-                    self.weights2plot_exc,
-                )
-                np.save(
-                    os.path.join(model_dir, "weights2plot_inh.npy"),
-                    self.weights2plot_inh,
-                )
-                np.save(
-                    os.path.join(model_dir, "pre_trace_plot.npy"), self.pre_trace_plot
-                )
-                np.save(
-                    os.path.join(model_dir, "post_trace_plot.npy"), self.post_trace_plot
-                )
-                np.save(
-                    os.path.join(model_dir, "spike_threshold.npy"), self.spike_threshold
-                )
-                np.save(os.path.join(model_dir, "weight_mask.npy"), self.weight_mask)
-                np.save(
-                    os.path.join(model_dir, "max_weight_sum_inh.npy"),
-                    self.max_weight_sum_inh,
-                )
-                np.save(
-                    os.path.join(model_dir, "max_weight_sum_exc.npy"),
-                    self.max_weight_sum_exc,
-                )
+            # Save training data and labels
+            np.save(os.path.join(model_dir, "weights.npy"), self.weights)
+            np.save(os.path.join(model_dir, "spikes_train.npy"), self.spikes_train)
+            np.save(os.path.join(model_dir, "pre_trace.npy"), self.pre_trace)
+            np.save(os.path.join(model_dir, "post_trace.npy"), self.post_trace)
+            np.save(os.path.join(model_dir, "mp_train.npy"), self.mp_train)
+            np.save(
+                os.path.join(model_dir, "weights2plot_exc.npy"),
+                self.weights2plot_exc,
+            )
+            np.save(
+                os.path.join(model_dir, "weights2plot_inh.npy"),
+                self.weights2plot_inh,
+            )
+            np.save(os.path.join(model_dir, "pre_trace_plot.npy"), self.pre_trace_plot)
+            np.save(
+                os.path.join(model_dir, "post_trace_plot.npy"), self.post_trace_plot
+            )
+            np.save(
+                os.path.join(model_dir, "spike_threshold.npy"), self.spike_threshold
+            )
+            np.save(os.path.join(model_dir, "weight_mask.npy"), self.weight_mask)
+            np.save(
+                os.path.join(model_dir, "max_weight_sum_inh.npy"),
+                self.max_weight_sum_inh,
+            )
+            np.save(
+                os.path.join(model_dir, "max_weight_sum_exc.npy"),
+                self.max_weight_sum_exc,
+            )
 
-                filepath = os.path.join(model_dir, "model_parameters.json")
+            filepath = os.path.join(model_dir, "model_parameters.json")
 
-                with open(filepath, "w") as outfile:
-                    json.dump(model_parameters, outfile)
+            with open(filepath, "w") as outfile:
+                json.dump(model_parameters, outfile)
 
-                print("\rmodel saved", end="")
-                return
+            print("\rmodel saved", end="")
+            return
 
         if load_model:
             # Define folder to load data
@@ -302,6 +299,7 @@ class SNN_noisy:
 
         # Update model
         self.data_parameters.update()
+        self.data_parameters["classes"] = self.classes
 
         # set parameters
         self.num_steps = num_steps
@@ -313,7 +311,11 @@ class SNN_noisy:
 
         if force_recreate or not self.data_loaded:
             # Define data parameters
-            data_parameters = {"pixel_size": int(np.sqrt(self.N_x)), "train_": train_}
+            data_parameters = {
+                "pixel_size": int(np.sqrt(self.N_x)),
+                "train_": train_,
+                "classes": self.classes,
+            }
 
             # Define folder to load data
             folders = os.listdir("data/mdata")
@@ -604,6 +606,8 @@ class SNN_noisy:
         # Remove elements from model_parameters
         for element in remove:
             self.model_parameters.pop(element)
+
+        self.model_parameters["classes"] = self.classes
 
         if not force_train:
             self.process(load_model=True, model_parameters=self.model_parameters)
