@@ -902,7 +902,7 @@ class SNN_noisy:
             if t_sne_test:
                 t_SNE(
                     test=True,
-                    spikes=self.spikes_test[:, self.st : self.ih],
+                    spikes=self.spikes_train[:, self.st : self.ih],
                     labels_spike=self.labels_test,
                     n_components=n_components,
                     perplexity=perplexity,
