@@ -54,6 +54,7 @@ def bin_spikes_by_label_no_breaks(spikes, labels):
 
 
 def t_SNE(
+    test,
     spikes,
     labels_spike,
     n_components,
@@ -87,7 +88,11 @@ def t_SNE(
             tsne_results[indices, 1],
             label=f"Class {label}",
         )
-    plt.title("t-SNE results")
+    if test:
+        title = "t-SNE results test"
+    else:
+        title = "t-SNE results train"
+    plt.title(title)
     plt.xlabel("t-SNE dimension 1")
     plt.ylabel("t-SNE dimension 2")
     plt.legend()

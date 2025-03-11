@@ -266,24 +266,18 @@ def spike_timing(
     tau_LTD,
     learning_rate_exc,
     learning_rate_inh,
-    N_inh,
+    ex,
+    st,
+    ih,
     weights,  # Weight matrix (pre x post)
-    N_x,  # Starting index for postsynaptic neurons
     spikes,  # Binary spike indicator array
     nonzero_pre_idx,  # Typed list: for each post neuron, an array of nonzero pre indices
 ):
-    n_neurons = spike_times.shape[0]
-
     # Loop over postsynaptic neurons, parallelized.
-    for i in prange(N_x, n_neurons):
+    for i in prange(st, ih):
         t_post = spike_times[i]
-        # Retrieve the pre-synaptic indices that have a nonzero connection to neuron i.
-        # Note: We assume the nonzero_pre_idx list is indexed relative to the postsynaptic
-        # neurons starting at N_x (i.e., index 0 in the list corresponds to neuron N_x)
-        pre_indices = nonzero_pre_idx[i - N_x]
-
         # Iterate only over connections that exist.
-        for j in pre_indices:
+        for j in nonzero_pre_idx[i - st]:
             # Skip if the presynaptic neuron did not spike
             if spikes[j] == 0 and spikes[i] == 0:
                 continue
@@ -292,7 +286,7 @@ def spike_timing(
             dt = t_post - t_pre
 
             # Determine if the connection is excitatory or inhibitory.
-            if j < (n_neurons - N_inh):  # excitatory pre–synaptic neuron
+            if j < ex:  # excitatory pre–synaptic neuron
                 if dt >= 0:
                     weights[j, i] += math.exp(-dt / tau_LTP) * learning_rate_exc
                 else:
