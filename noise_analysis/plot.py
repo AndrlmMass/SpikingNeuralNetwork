@@ -5,7 +5,7 @@ import matplotlib
 matplotlib.use("TkAgg")
 
 
-def plot_accuracy(spikes, ih, pp, pn, tp, tn, fp, fn):
+def plot_accuracy(spikes, ih, pp, pn, tp, tn, fp, fn, labels):
     """
     spikes have shape: pp-pn-tp-tn-fp-fn
     """
@@ -19,12 +19,23 @@ def plot_accuracy(spikes, ih, pp, pn, tp, tn, fp, fn):
     #### calculate precision (accuracy) ###
 
     ## true positive ##
+    # get max response from to each class and remove breaks or sleep
+    indices = np.where((labels != -1) & (labels != -2))
+    current_class = labels[indices[0]]
+
+    for t in range(
+        indices.shape[0],
+    ):
+        ...
+        np.max
+
     acc_hit_positive = np.count_nonzero(pp_ == tp_) / (tp_.shape[0] * tp_.shape[1])
 
     ## true negative ##
     acc_hit_negative = np.count_nonzero(pn_ == tn_) / (tn_.shape[0] * tn_.shape[1])
 
     # estimate loss (?)
+    b = 3
 
 
 def spike_plot(data, labels):
