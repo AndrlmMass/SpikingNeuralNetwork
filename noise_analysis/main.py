@@ -10,9 +10,7 @@ snn_N.prepare_data(num_images=100)
 snn_N.prepare_training(tp_weight=100, tn_weight=100, fp_weight=-10, fn_weight=-10)
 
 # train network
-snn_N.train(
-    plot_accuracy_=False, train_weights=True, plot_spikes_test=True, force_train=False
-)
+snn_N.train(train_weights=True, plot_spikes_test=False, plot_spikes_train=False)
 
 # analyze results
 snn_N.analysis(t_sne=True, t_sne_test=True, t_sne_train=True, pls=False)

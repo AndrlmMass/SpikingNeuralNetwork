@@ -572,7 +572,7 @@ class SNN_noisy:
         time_stop_mp=None,
         mean_noise=0,
         max_mp=40,
-        plot_accuracy_=True,
+        plot_accuracy_=False,
         tau_pre_trace_exc=1,
         tau_pre_trace_inh=1,
         tau_post_trace_exc=1,
@@ -891,6 +891,7 @@ class SNN_noisy:
         if t_sne:
             if t_sne_train:
                 t_SNE(
+                    test=False,
                     spikes=self.spikes_train[:, self.st : self.ih],
                     labels_spike=self.labels_train,
                     n_components=n_components,
@@ -900,6 +901,7 @@ class SNN_noisy:
                 )
             if t_sne_test:
                 t_SNE(
+                    test=True,
                     spikes=self.spikes_test[:, self.st : self.ih],
                     labels_spike=self.labels_test,
                     n_components=n_components,
