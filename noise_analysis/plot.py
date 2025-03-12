@@ -5,37 +5,41 @@ import matplotlib
 matplotlib.use("TkAgg")
 
 
-def plot_accuracy(spikes, ih, pp, pn, tp, tn, fp, fn, labels):
+def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps):
     """
     spikes have shape: pp-pn-tp-tn-fp-fn
     """
     pp_ = spikes[:, ih:pp]
-    pn_ = spikes[:, pp:pn]
     tp_ = spikes[:, pn:tp]
-    tn_ = spikes[:, tp:tn]
-    fp_ = spikes[:, tn:fp]
-    fn_ = spikes[:, fp:fn]
 
     #### calculate precision (accuracy) ###
 
-    ## true positive ##
-    # get max response from to each class and remove breaks or sleep
-    indices = np.where((labels != -1) & (labels != -2))
-    current_class = labels[indices[0]]
+    # remove data from all breaks
+    indices = labels == -2
+    if any(indices):
+        labels = np.delete(labels, np.where(indices)[0])
+        pp_ = np.delete(pp_, np.where(indices)[0])
+        tp_ = np.delete(tp_, np.where(indices)[0])
 
-    for t in range(
-        indices.shape[0],
-    ):
-        ...
-        np.max
+    # loop through every num_steps time units and compare activity
+    total_images = 0
+    current_accuracy = 0
+    accuracy = np.zeros(labels.shape[0] // num_steps)
+    for t in range(0, labels.shape[0] - num_steps - 1, num_steps):
+        ind = labels[t : t + num_steps] != -1
+        pp_label = np.argmax(pp_[t : t + num_steps][ind], axis=0)
+        tp_label = np.argmax(tp_[t : t + num_steps][ind], axis=0)
+        pp_label_pop = np.argmax(pp_label)
+        tp_label_pop = np.argmax(tp_label)
+        total_images += 1
+        current_accuracy += int(pp_label_pop == tp_label_pop)
+        accuracy[t // num_steps] = current_accuracy / total_images
+        print(pp_label_pop, tp_label_pop)
 
-    acc_hit_positive = np.count_nonzero(pp_ == tp_) / (tp_.shape[0] * tp_.shape[1])
+    plt.plot(accuracy)
+    plt.show()
 
-    ## true negative ##
-    acc_hit_negative = np.count_nonzero(pn_ == tn_) / (tn_.shape[0] * tn_.shape[1])
-
-    # estimate loss (?)
-    b = 3
+    ### estimate loss ###
 
 
 def spike_plot(data, labels):

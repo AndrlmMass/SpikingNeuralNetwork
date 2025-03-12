@@ -267,34 +267,49 @@ def spike_timing(
     learning_rate_exc,
     learning_rate_inh,
     ex,
-    st,
-    ih,
     weights,  # Weight matrix (pre x post)
-    spikes,  # Binary spike indicator array
-    nonzero_pre_idx,  # Typed list: for each post neuron, an array of nonzero pre indices
+    spikes,  # Binary spike indicator array (0 or 1)
+    nonzero_pre_idx,  # For each post neuron, an array of nonzero pre indices
+    post_id,
+    spike_indices,
 ):
-    # Loop over postsynaptic neurons, parallelized.
-    for i in prange(st, ih):
+
+    for i_ in prange(post_id):
+        i = int(i_)
         t_post = spike_times[i]
-        # Iterate only over connections that exist.
-        for j in nonzero_pre_idx[i - st]:
-            # Skip if the presynaptic neuron did not spike
-            if spikes[j] == 0 and spikes[i] == 0:
-                continue
+        post_spike = spikes[i]
+        if post_spike == 0:
+            # Only consider presynaptic neurons that spiked.
+            for j in nonzero_pre_idx[i]:
+                if spikes[j] == 0:
+                    continue
 
-            t_pre = spike_times[j]
-            dt = t_post - t_pre
-
-            # Determine if the connection is excitatory or inhibitory.
-            if j < ex:  # excitatory pre–synaptic neuron
-                if dt >= 0:
-                    weights[j, i] += math.exp(-dt / tau_LTP) * learning_rate_exc
-                else:
-                    weights[j, i] -= math.exp(dt / tau_LTD) * learning_rate_exc
-            else:  # inhibitory pre–synaptic neuron
-                if dt >= 0:
-                    weights[j, i] -= math.exp(-dt / tau_LTP) * learning_rate_inh
-                else:
-                    weights[j, i] += math.exp(dt / tau_LTD) * learning_rate_inh
+                t_pre = spike_times[j]
+                dt = t_post - t_pre
+                if j < ex:  # excitatory pre–synaptic neuron
+                    if dt >= 0:
+                        weights[j, i] += math.exp(-dt / tau_LTP) * learning_rate_exc
+                    else:
+                        weights[j, i] -= math.exp(dt / tau_LTD) * learning_rate_exc
+                else:  # inhibitory pre–synaptic neuron
+                    if dt >= 0:
+                        weights[j, i] -= math.exp(-dt / tau_LTP) * learning_rate_inh
+                    else:
+                        weights[j, i] += math.exp(dt / tau_LTD) * learning_rate_inh
+        else:
+            # Postsynaptic neuron spiked, so all connections are considered.
+            for j in nonzero_pre_idx[i]:
+                t_pre = spike_times[j]
+                dt = t_post - t_pre
+                if j < ex:  # excitatory pre–synaptic neuron
+                    if dt >= 0:
+                        weights[j, i] += math.exp(-dt / tau_LTP) * learning_rate_exc
+                    else:
+                        weights[j, i] -= math.exp(dt / tau_LTD) * learning_rate_exc
+                else:  # inhibitory pre–synaptic neuron
+                    if dt >= 0:
+                        weights[j, i] -= math.exp(-dt / tau_LTP) * learning_rate_inh
+                    else:
+                        weights[j, i] += math.exp(dt / tau_LTD) * learning_rate_inh
 
     return weights

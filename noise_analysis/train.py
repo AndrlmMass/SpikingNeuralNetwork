@@ -1,9 +1,7 @@
 from numba.typed import List
 from numba import njit
 from tqdm import tqdm
-import pickle as pkl
 import numpy as np
-import os
 from weight_funcs import sleep_func, spike_timing, vectorized_trace_func, trace_STDP
 
 
@@ -48,6 +46,7 @@ def update_weights(
     max_weight_inh,
     nonzero_pre_idx,
     weight_decay,
+    post_id,
     weight_decay_rate_exc,
     weight_decay_rate_inh,
     tau_pre_trace_exc,
@@ -94,6 +93,7 @@ def update_weights(
     learning_rate_inh,
     tau_LTP,
     tau_LTD,
+    spike_indices,
 ):
     """
     Apply the STDP rule to update synaptic weights using a fully vectorized approach.
@@ -159,10 +159,10 @@ def update_weights(
             learning_rate_inh=learning_rate_inh,
             ex=ex,
             weights=weights,
-            st=st,
-            ih=ih,
             spikes=spikes,
             nonzero_pre_idx=nonzero_pre_idx,
+            post_id=post_id,
+            spike_indices=spike_indices,
         )
 
     if trace_update:
@@ -303,9 +303,11 @@ def update_spikes(
         # print(f"\r{np.mean(spike_threshold)}", end="")
 
     mp[spikes[st:pn] == 1] = reset_potential
-    spike_times = np.where(spikes == 1, 0, spike_times + 1)
+    spike_indices = np.where(spikes == 1)
+    spike_times[spike_indices] = 0
+    spike_times[not spike_indices] += 1
 
-    return mp, spikes, spike_times, spike_threshold
+    return mp, spikes, spike_indices, spike_times, spike_threshold
 
 
 def train_network(
@@ -402,6 +404,7 @@ def train_network(
         fp = ih  # false positive
         fn = ih  # false negative
 
+    post_id = ih - st
     exc_interval = np.arange(st, ex)
     inh_interval = np.arange(ex, ih)
     idx_exc = np.random.choice(exc_interval, size=num_exc, replace=False)
@@ -471,6 +474,7 @@ def train_network(
         (
             mp[t],
             spikes[t],
+            spike_indices,
             spike_times,
             spike_threshold[t],
         ) = update_spikes(
@@ -511,6 +515,7 @@ def train_network(
                     vectorized_trace=vectorized_trace,
                     delta_w=delta_w,
                     N_exc=N_exc,
+                    post_id=post_id,
                     weight_mask=weight_mask,
                     pre_trace=pre_trace,
                     post_trace=post_trace,
@@ -542,6 +547,7 @@ def train_network(
                     ex=ex,
                     st=st,
                     ih=ih,
+                    spike_indices=spike_indices,
                     nz_rows=nz_rows,
                     nz_cols=nz_cols,
                     nz_cols_exc=nz_cols_exc,
@@ -568,7 +574,7 @@ def train_network(
 
         # remove training data during sleep
         if sleep:
-            if (sleep_now_exc or sleep_now_inh) and t > T - 2:
+            if (sleep_now_exc or sleep_now_inh) and t < T - 1:
                 spikes[t + 1, :N_x] = 0
                 spike_labels[t] = -2
 

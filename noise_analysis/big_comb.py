@@ -600,16 +600,13 @@ class SNN_noisy:
             "plot_threshold",
             "plot_traces_",
             "random_selection_weight_plot",
-            "train_weights",
         ]
 
         # Remove elements from model_parameters
         for element in remove:
             self.model_parameters.pop(element)
 
-        self.model_parameters["classes"] = self.classes
-
-        if not force_train:
+        if not force_train and self.data_loaded:
             self.process(load_model=True, model_parameters=self.model_parameters)
         if not self.model_loaded or force_train:
             (
@@ -697,7 +694,7 @@ class SNN_noisy:
                 var_noise=var_noise,
             )
 
-        if save_model:
+        if save_model and self.model_loaded == False:
             self.process(save_model=True, model_parameters=self.model_parameters)
 
         if plot_accuracy_:
@@ -707,9 +704,8 @@ class SNN_noisy:
                 pp=self.pp,
                 pn=self.pn,
                 tp=self.tp,
-                tn=self.tn,
-                fp=self.fn,
-                fn=self.fn,
+                labels=self.labels_train,
+                num_steps=self.num_steps,
             )
 
         if plot_spikes_train:
@@ -902,7 +898,7 @@ class SNN_noisy:
             if t_sne_test:
                 t_SNE(
                     test=True,
-                    spikes=self.spikes_train[:, self.st : self.ih],
+                    spikes=self.spikes_test[:, self.st : self.ih],
                     labels_spike=self.labels_test,
                     n_components=n_components,
                     perplexity=perplexity,
