@@ -22,7 +22,7 @@ class SNN_noisy:
         self,
         N_exc=200,
         N_inh=50,
-        N_x=225,
+        N_x=100,
         classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         supervised=True,
         unsupervised=False,

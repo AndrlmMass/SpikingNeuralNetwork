@@ -28,7 +28,6 @@ def clip_weights(
 
 
 # @njit(parallel=True)
-@profile
 def update_weights(
     weights,
     spike_times,
@@ -56,10 +55,8 @@ def update_weights(
     learning_rate_inh,
     tau_LTP,
     tau_LTD,
-    spiking_posts_exc,
-    spiking_pres_exc,
-    spiking_posts_inh,
-    spiking_pres_inh,
+    spiking_nzw_exc,
+    spiking_nzw_inh,
 ):
     """
     Apply the STDP rule to update synaptic weights using a fully vectorized approach.
@@ -97,26 +94,17 @@ def update_weights(
                 nz_cols_inh=nz_cols_inh,
             )
 
-    # Find the neurons that spiked in the current timestep
-    spike_idx = spikes == 1
-
-    # If no neurons spiked, return weights unchanged
-    if not np.any(spike_idx):
-        return weights, sleep_now_inh, sleep_now_exc
-
     # if timing_update:
-    weights = spike_timing(
-        spike_times=spike_times,
-        tau_LTP=tau_LTP,
-        tau_LTD=tau_LTD,
-        learning_rate_exc=learning_rate_exc,
-        learning_rate_inh=learning_rate_inh,
-        weights=weights,
-        spiking_posts_exc=spiking_posts_exc,
-        spiking_pres_exc=spiking_pres_exc,
-        spiking_posts_inh=spiking_posts_inh,
-        spiking_pres_inh=spiking_pres_inh,
-    )
+    # weights = spike_timing(
+    #     spike_times=spike_times,
+    #     tau_LTP=tau_LTP,
+    #     tau_LTD=tau_LTD,
+    #     learning_rate_exc=learning_rate_exc,
+    #     learning_rate_inh=learning_rate_inh,
+    #     weights=weights,
+    #     spiking_nzw_exc=spiking_nzw_exc,
+    #     spiking_nzw_inh=spiking_nzw_inh,
+    # )
 
     # if trace_update:
     #     post_trace, pre_trace, weights = trace_STDP(
@@ -173,15 +161,15 @@ def update_weights(
     #     end="",
     # )
 
-    weights = clip_weights(
-        weights=weights,
-        nz_cols_exc=nz_cols_exc,
-        nz_cols_inh=nz_cols_inh,
-        nz_rows_exc=nz_rows_exc,
-        nz_rows_inh=nz_rows_inh,
-        min_weight_exc=min_weight_exc,
-        max_weight_inh=max_weight_inh,
-    )
+    # weights = clip_weights(
+    #     weights=weights,
+    #     nz_cols_exc=nz_cols_exc,
+    #     nz_cols_inh=nz_cols_inh,
+    #     nz_rows_exc=nz_rows_exc,
+    #     nz_rows_inh=nz_rows_inh,
+    #     min_weight_exc=min_weight_exc,
+    #     max_weight_inh=max_weight_inh,
+    # )
 
     return weights, sleep_now_inh, sleep_now_exc
 
@@ -205,7 +193,7 @@ def update_membrane_potential(
     else:
         gaussian_noise = 0
 
-    I_in = np.dot(weights.T, spikes)
+    I_in = np.dot(weights.T, spikes)  # this part slows down computation significantly
     mp += (
         gaussian_noise
         + (-(mp - resting_potential) + membrane_resistance * I_in) / tau_m * dt
@@ -213,12 +201,43 @@ def update_membrane_potential(
     return mp
 
 
+@njit
+def binary_search(a, x):
+    lo = 0
+    hi = len(a) - 1
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if a[mid] == x:
+            return True
+        elif a[mid] < x:
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return False
+
+
+@njit
+def filter_array(arr, sorted_filter):
+    # First, count how many elements are allowed:
+    count = 0
+    for x in arr:
+        if binary_search(sorted_filter, x):
+            count += 1
+    # Allocate output array:
+    out = np.empty(count, arr.dtype)
+    j = 0
+    for x in arr:
+        if binary_search(sorted_filter, x):
+            out[j] = x
+            j += 1
+    return out
+
+
 # @njit(parallel=True)
+# @profile
 def update_spikes(
     st,
     pn,
-    ex,
-    ih,
     mp,
     dt,
     spikes,
@@ -234,7 +253,10 @@ def update_spikes(
     spike_threshold,
     spike_threshold_default,
     reset_potential,
-    nonzero_pre_idx,
+    weights_exc,
+    weights_inh,
+    spiking_nzw_exc,
+    spiking_nzw_inh,
 ):
     # update spikes array
     mp = np.clip(mp, a_min=min_mp, a_max=max_mp)
@@ -257,17 +279,22 @@ def update_spikes(
         spike_threshold[spikes[st:pn] == 1] -= delta_spike_threshold
         # print(f"\r{np.mean(spike_threshold)}", end="")
 
+    spike_indices = np.where(spikes[:pn] == 1)[0]
     mp[spikes[st:pn] == 1] = reset_potential
-    spike_times[spikes == 1] = 0
-    spike_times[spikes == 0] += 1
+    spike_times[spike_indices] = 0
+    spike_times[spikes == 0] += dt
 
-    """
-    Add method to track which neurons spiked (and their group, exc or inh)
-    """
-    spiking_posts_exc = np.where(spikes[st:ex] == 1)[0]
-    spiking_pres_exc = np.where(spikes[:ih] == 1)[0]
+    # spiking_nzw_exc = [filter_array(arr, spike_indices) for arr in weights_exc]
+    # spiking_nzw_inh = [filter_array(arr, spike_indices) for arr in weights_inh]
 
-    return mp, spikes, spike_times, spike_threshold, spiking_posts_exc, spiking_pres_exc
+    return (
+        mp,
+        spikes,
+        spike_times,
+        spike_threshold,
+        spiking_nzw_exc,
+        spiking_nzw_inh,
+    )
 
 
 def train_network(
@@ -396,7 +423,7 @@ def train_network(
     nz_cols_inh = np.concatenate((nz_cols_inh1 + st, nz_cols_inh2 + st))
     nz_rows_exc1, nz_cols_exc1 = np.nonzero(weights[:ex, st:pn])
     nz_rows_exc2, nz_cols_exc2 = np.nonzero(weights[ih:pp, st:ex])
-    nz_rows_exc = np.concatenate((nz_rows_exc1, nz_rows_exc2+ih))
+    nz_rows_exc = np.concatenate((nz_rows_exc1, nz_rows_exc2 + ih))
     nz_cols_exc = np.concatenate((nz_cols_exc1 + st, nz_cols_exc2 + st))
     sleep_now_inh = False
     sleep_now_exc = False
@@ -415,20 +442,23 @@ def train_network(
 
     # post exc
     weights_exc = []
-    for post_id in range(st, ex):
-        idx = np.nonzero(weights[:ex, post_id])[0]
-        weights_exc.append(idx.astype(np.int64))
-    for pre_id in range(st, ex):
-        idx = np.nonzero(weights[pre_id, i])[0]
-        weights_exc.append(idx.astype(np.int64))
+    for post_id in range(st, pn):
+        idx1 = np.nonzero(weights[:ex, post_id])[0]
+        idx2 = np.nonzero(weights[ih:pp, post_id])[0] + ih
+        weights_exc.append(np.concatenate((idx1, idx2)))
 
     # post inh
-    for i in range(st,ex):
-        post_idx = np.nonzero(weights[st:ex, i])[0]
-        nonzero_pre_idx_inh.append(post_idx.astype(np.int64))    
-    for i in range(st, ex):
+    weights_inh = []
+    for post_id in range(st, ex):
+        idx1 = np.nonzero(weights[ex:ih, post_id])[0] + ex
+        idx2 = np.nonzero(weights[pp:pn, post_id])[0] + pp
+        weights_inh.append(np.concatenate((idx1, idx2)))
+
+    spiking_nzw_exc = weights_exc.copy()
+    spiking_nzw_inh = weights_inh.copy()
 
     for t in tqdm(range(1, T), desc=desc):
+        # print(f"\r{desc} {t}/{T}", end="")
         # update membrane potential
         mp[t] = update_membrane_potential(
             mp=mp[t - 1],
@@ -449,10 +479,8 @@ def train_network(
             spikes[t],
             spike_times,
             spike_threshold[t],
-            spiking_posts_exc,
-            spiking_pres_exc,
-            spiking_posts_inh,
-            spiking_pres_inh,
+            spiking_nzw_exc,
+            spiking_nzw_inh,
         ) = update_spikes(
             st=st,
             pn=pn,
@@ -460,7 +488,10 @@ def train_network(
             dt=dt,
             spikes=spikes[t],
             spike_times=spike_times,
-            nonzero_pre_idx=nonzero_pre_idx,
+            weights_exc=weights_exc,
+            weights_inh=weights_inh,
+            spiking_nzw_exc=spiking_nzw_exc,
+            spiking_nzw_inh=spiking_nzw_inh,
             spike_intercept=spike_intercept,
             spike_slope=spike_slope,
             noisy_threshold=noisy_threshold,
@@ -503,10 +534,8 @@ def train_network(
                 learning_rate_inh=learning_rate_inh,
                 tau_LTP=tau_LTP,
                 tau_LTD=tau_LTD,
-                spiking_posts_exc=spiking_posts_exc,
-                spiking_pres_exc=spiking_pres_exc,
-                spiking_posts_inh=spiking_posts_inh,
-                spiking_pres_inh=spiking_pres_inh,
+                spiking_nzw_exc=spiking_nzw_exc,
+                spiking_nzw_inh=spiking_nzw_inh,
             )
 
         # save weights for plotting

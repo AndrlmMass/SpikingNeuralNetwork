@@ -1,9 +1,9 @@
 import math
 import numpy as np
-from numba import njit, prange
+from numba import njit
 
 
-@njit
+# @profile
 def sleep_func(
     weights,  # shape = (N_pre, N_post)
     max_sum_exc,
@@ -260,7 +260,6 @@ def trace_STDP(
 
 
 # @profile
-@njit(parallel=True, fastmath=True)
 def spike_timing(
     spike_times,  # Array of spike times
     tau_LTP,
@@ -268,27 +267,33 @@ def spike_timing(
     learning_rate_exc,
     learning_rate_inh,
     weights,  # Weight matrix (pre x post)
-    spiking_weights_exc,  # List of post-synaptic neurons
-    spiking_weights_inh,  # List of post-synaptic neurons
+    spiking_nzw_exc,  # List of post-synaptic neurons
+    spiking_nzw_inh,  # List of post-synaptic neurons
 ):
     # Excitatory weight update
-    for i in prange(spiking_weights_exc.shape[0]):
-        t_post = spike_times[i]
-        for j in spiking_weights_exc[i]:
-            dt = t_post - spike_times[j]
-            if dt >= 0:
-                weights[j, i] += math.exp(-dt / tau_LTP) * learning_rate_exc
-            else:
-                weights[j, i] -= math.exp(dt / tau_LTD) * learning_rate_exc
+    for i in range(len(spiking_nzw_exc)):
+        indices = np.array(spiking_nzw_exc[i])
+        dt = spike_times[i] - spike_times[indices]
+        pos_mask = dt >= 0
+        neg_mask = ~pos_mask
+        weights[indices[pos_mask], i] += (
+            np.exp(-dt[pos_mask] / tau_LTP) * learning_rate_exc
+        )
+        weights[indices[neg_mask], i] -= (
+            np.exp(dt[neg_mask] / tau_LTD) * learning_rate_exc
+        )
 
     # Inhibitory weight update
-    for i in prange(spiking_weights_inh.shape[0]):
-        t_post = spike_times[i]
-        for j in spiking_weights_inh[i]:
-            dt = t_post - spike_times[j]
-            if dt >= 0:
-                weights[j, i] -= math.exp(-dt / tau_LTP) * learning_rate_inh
-            else:
-                weights[j, i] += math.exp(dt / tau_LTD) * learning_rate_inh
+    for i in range(len(spiking_nzw_inh)):
+        indices = np.array(spiking_nzw_inh[i])
+        dt = spike_times[i] - spike_times[indices]
+        pos_mask = dt >= 0
+        neg_mask = ~pos_mask
+        weights[indices[pos_mask], i] -= (
+            np.exp(-dt[pos_mask] / tau_LTP) * learning_rate_inh
+        )
+        weights[indices[neg_mask], i] += (
+            np.exp(dt[neg_mask] / tau_LTD) * learning_rate_inh
+        )
 
     return weights
