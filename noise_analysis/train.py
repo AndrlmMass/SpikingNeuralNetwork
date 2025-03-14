@@ -414,13 +414,13 @@ def train_network(
     """
 
     # post exc
-    nonzero_post_idx_exc = []
-    for i in range(st, pn):
-        post_idx = np.nonzero(weights[st:ex, i])[0]
-        nonzero_post_idx_exc.append(post_idx.astype(np.int64))
-    for i in range(ih, pn):
-        post_idx = np.nonzero(weights[ih:pp, i])[0]
-        nonzero_post_idx_exc.append(post_idx.astype(np.int64))
+    weights_exc = []
+    for post_id in range(st, ex):
+        idx = np.nonzero(weights[:ex, post_id])[0]
+        weights_exc.append(idx.astype(np.int64))
+    for pre_id in range(st, ex):
+        idx = np.nonzero(weights[pre_id, i])[0]
+        weights_exc.append(idx.astype(np.int64))
 
     # post inh
     for i in range(st,ex):
