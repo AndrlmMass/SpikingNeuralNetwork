@@ -32,8 +32,6 @@ def clip_weights(
 def update_weights(
     weights,
     spike_times,
-    pre_trace,
-    post_trace,
     min_weight_exc,
     max_weight_inh,
     weight_decay_rate_exc,
@@ -49,10 +47,10 @@ def update_weights(
     sleep,
     sleep_now_inh,
     sleep_now_exc,
-    nz_cols_exc,
-    nz_cols_inh,
-    nz_rows_exc,
-    nz_rows_inh,
+    nz_cols_exc,  # maybe wasteful
+    nz_cols_inh,  # maybe wasteful
+    nz_rows_exc,  # maybe wasteful
+    nz_rows_inh,  # maybe wasteful
     t,
     learning_rate_exc,
     learning_rate_inh,
@@ -104,7 +102,7 @@ def update_weights(
 
     # If no neurons spiked, return weights unchanged
     if not np.any(spike_idx):
-        return weights, pre_trace, post_trace, sleep_now_inh, sleep_now_exc
+        return weights, sleep_now_inh, sleep_now_exc
 
     # if timing_update:
     weights = spike_timing(
@@ -185,7 +183,7 @@ def update_weights(
         max_weight_inh=max_weight_inh,
     )
 
-    return weights, pre_trace, post_trace, sleep_now_inh, sleep_now_exc
+    return weights, sleep_now_inh, sleep_now_exc
 
 
 def update_membrane_potential(
@@ -219,6 +217,8 @@ def update_membrane_potential(
 def update_spikes(
     st,
     pn,
+    ex,
+    ih,
     mp,
     dt,
     spikes,
@@ -234,6 +234,7 @@ def update_spikes(
     spike_threshold,
     spike_threshold_default,
     reset_potential,
+    nonzero_pre_idx,
 ):
     # update spikes array
     mp = np.clip(mp, a_min=min_mp, a_max=max_mp)
@@ -257,14 +258,18 @@ def update_spikes(
         # print(f"\r{np.mean(spike_threshold)}", end="")
 
     mp[spikes[st:pn] == 1] = reset_potential
-    spike_indices = np.where(spikes == 1)
-    spike_times[spike_indices] = 0
-    spike_times[not spike_indices] += 1
+    spike_times[spikes == 1] = 0
+    spike_times[spikes == 0] += 1
 
-    return mp, spikes, spike_indices, spike_times, spike_threshold
+    """
+    Add method to track which neurons spiked (and their group, exc or inh)
+    """
+    spiking_posts_exc = np.where(spikes[st:ex] == 1)[0]
+    spiking_pres_exc = np.where(spikes[:ih] == 1)[0]
+
+    return mp, spikes, spike_times, spike_threshold, spiking_posts_exc, spiking_pres_exc
 
 
-@profile
 def train_network(
     weights,
     mp,
@@ -336,7 +341,6 @@ def train_network(
     num_inh,
 ):
     weight_mask = weights != 0
-    non_weight_mask = weights == 0
 
     if supervised or unsupervised:
         st = N_x  # stimulation
@@ -359,7 +363,6 @@ def train_network(
         fp = ih  # false positive
         fn = ih  # false negative
 
-    post_id = ih - st
     exc_interval = np.arange(st, ex)
     inh_interval = np.arange(ex, ih)
     idx_exc = np.random.choice(exc_interval, size=num_exc, replace=False)
@@ -386,14 +389,15 @@ def train_network(
     baseline_sum_inh = sum_weights_inh * beta
     max_sum_exc = sum_weights_exc * alpha
     max_sum_inh = sum_weights_inh * alpha
-    delta_w = np.zeros(shape=weights.shape)
 
-    nz_rows_inh, nz_cols_inh = np.nonzero(weights[ex:ih, st:ex])
-    nz_rows_exc, nz_cols_exc = np.nonzero(weights[:ex, st:pn])
-    nz_rows_inh += ex
-    nz_cols_inh += st
-    nz_cols_exc += st
-    nz_rows, nz_cols = np.nonzero(weights)
+    nz_rows_inh1, nz_cols_inh1 = np.nonzero(weights[ex:ih, st:ex])
+    nz_rows_inh2, nz_cols_inh2 = np.nonzero(weights[pp:pn, st:ex])
+    nz_rows_inh = np.concatenate((nz_rows_inh1 + ex, nz_rows_inh2 + pp))
+    nz_cols_inh = np.concatenate((nz_cols_inh1 + st, nz_cols_inh2 + st))
+    nz_rows_exc1, nz_cols_exc1 = np.nonzero(weights[:ex, st:pn])
+    nz_rows_exc2, nz_cols_exc2 = np.nonzero(weights[ih:pp, st:ex])
+    nz_rows_exc = np.concatenate((nz_rows_exc1, nz_rows_exc2+ih))
+    nz_cols_exc = np.concatenate((nz_cols_exc1 + st, nz_cols_exc2 + st))
     sleep_now_inh = False
     sleep_now_exc = False
 
@@ -405,10 +409,24 @@ def train_network(
         desc = "Testing network:"
 
     # Compute for neurons N_x to N_post-1
-    nonzero_pre_idx = List()
-    for i in range(st, ih):
-        pre_idx = np.nonzero(weights[:ih, i])[0]
-        nonzero_pre_idx.append(pre_idx.astype(np.int64))
+    """
+    Look over the part below. It is not quite right:
+    """
+
+    # post exc
+    nonzero_post_idx_exc = []
+    for i in range(st, pn):
+        post_idx = np.nonzero(weights[st:ex, i])[0]
+        nonzero_post_idx_exc.append(post_idx.astype(np.int64))
+    for i in range(ih, pn):
+        post_idx = np.nonzero(weights[ih:pp, i])[0]
+        nonzero_post_idx_exc.append(post_idx.astype(np.int64))
+
+    # post inh
+    for i in range(st,ex):
+        post_idx = np.nonzero(weights[st:ex, i])[0]
+        nonzero_pre_idx_inh.append(post_idx.astype(np.int64))    
+    for i in range(st, ex):
 
     for t in tqdm(range(1, T), desc=desc):
         # update membrane potential
@@ -429,9 +447,12 @@ def train_network(
         (
             mp[t],
             spikes[t],
-            spike_indices,
             spike_times,
             spike_threshold[t],
+            spiking_posts_exc,
+            spiking_pres_exc,
+            spiking_posts_inh,
+            spiking_pres_inh,
         ) = update_spikes(
             st=st,
             pn=pn,
@@ -439,6 +460,7 @@ def train_network(
             dt=dt,
             spikes=spikes[t],
             spike_times=spike_times,
+            nonzero_pre_idx=nonzero_pre_idx,
             spike_intercept=spike_intercept,
             spike_slope=spike_slope,
             noisy_threshold=noisy_threshold,
@@ -454,70 +476,37 @@ def train_network(
 
         # update weights
         if train_weights:
-            weights[:pn, :pn], pre_trace, post_trace, sleep_now_inh, sleep_now_exc = (
-                update_weights(
-                    spikes=spikes[t - 1],
-                    weights=weights[:pn, :pn],
-                    max_sum_exc=max_sum_exc,
-                    max_sum_inh=max_sum_inh,
-                    non_weight_mask=non_weight_mask,
-                    baseline_sum_exc=baseline_sum_exc,
-                    baseline_sum_inh=baseline_sum_inh,
-                    check_sleep_interval=check_sleep_interval,
-                    sleep=sleep,
-                    nonzero_pre_idx=nonzero_pre_idx,
-                    N_x=N_x,
-                    vectorized_trace=vectorized_trace,
-                    delta_w=delta_w,
-                    N_exc=N_exc,
-                    post_id=post_id,
-                    weight_mask=weight_mask,
-                    pre_trace=pre_trace,
-                    post_trace=post_trace,
-                    timing_update=timing_update,
-                    trace_update=trace_update,
-                    spike_times=spike_times,
-                    weight_decay=weight_decay,
-                    weight_decay_rate_exc=weight_decay_rate_exc,
-                    weight_decay_rate_inh=weight_decay_rate_inh,
-                    min_weight_exc=min_weight_exc,
-                    max_weight_exc=max_weight_exc,
-                    min_weight_inh=min_weight_inh,
-                    max_weight_inh=max_weight_inh,
-                    tau_pre_trace_exc=tau_pre_trace_exc,
-                    tau_pre_trace_inh=tau_pre_trace_inh,
-                    tau_post_trace_exc=tau_post_trace_exc,
-                    tau_post_trace_inh=tau_post_trace_inh,
-                    noisy_weights=noisy_weights,
-                    weight_mean_noise=weight_mean_noise,
-                    weight_var_noise=weight_var_noise,
-                    w_target_exc=w_target_exc,
-                    w_target_inh=w_target_inh,
-                    clip_exc_weights=clip_exc_weights,
-                    clip_inh_weights=clip_inh_weights,
-                    sleep_now_inh=sleep_now_inh,
-                    sleep_now_exc=sleep_now_exc,
-                    t=t,
-                    N=N,
-                    ex=ex,
-                    st=st,
-                    ih=ih,
-                    spike_indices=spike_indices,
-                    nz_rows=nz_rows,
-                    nz_cols=nz_cols,
-                    nz_cols_exc=nz_cols_exc,
-                    nz_cols_inh=nz_cols_inh,
-                    nz_rows_exc=nz_rows_exc,
-                    nz_rows_inh=nz_rows_inh,
-                    N_inh=N_inh,
-                    A_plus=A_plus,
-                    A_minus=A_minus,
-                    learning_rate_exc=learning_rate_exc,
-                    learning_rate_inh=learning_rate_inh,
-                    tau_LTP=tau_LTP,
-                    tau_LTD=tau_LTD,
-                    dt=dt,
-                )
+            weights[:pn, :pn], sleep_now_inh, sleep_now_exc = update_weights(
+                weights=weights[:pn, :pn],
+                spike_times=spike_times,  # maybe need differentiate between exc and inh
+                min_weight_exc=min_weight_exc,
+                max_weight_inh=max_weight_inh,
+                weight_decay_rate_exc=weight_decay_rate_exc,
+                weight_decay_rate_inh=weight_decay_rate_inh,
+                w_target_exc=w_target_exc,
+                w_target_inh=w_target_inh,
+                max_sum_exc=max_sum_exc,
+                max_sum_inh=max_sum_inh,
+                baseline_sum_exc=baseline_sum_exc,
+                baseline_sum_inh=baseline_sum_inh,
+                check_sleep_interval=check_sleep_interval,
+                spikes=spikes[t],  # maybe wasteful
+                sleep=sleep,  # maybe wasteful
+                sleep_now_inh=sleep_now_inh,
+                sleep_now_exc=sleep_now_exc,
+                nz_cols_exc=nz_cols_exc,  # maybe wasteful
+                nz_cols_inh=nz_cols_inh,  # maybe wasteful
+                nz_rows_exc=nz_rows_exc,  # maybe wasteful
+                nz_rows_inh=nz_rows_inh,  # maybe wasteful
+                t=t,
+                learning_rate_exc=learning_rate_exc,
+                learning_rate_inh=learning_rate_inh,
+                tau_LTP=tau_LTP,
+                tau_LTD=tau_LTD,
+                spiking_posts_exc=spiking_posts_exc,
+                spiking_pres_exc=spiking_pres_exc,
+                spiking_posts_inh=spiking_posts_inh,
+                spiking_pres_inh=spiking_pres_inh,
             )
 
         # save weights for plotting

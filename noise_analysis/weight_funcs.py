@@ -268,15 +268,13 @@ def spike_timing(
     learning_rate_exc,
     learning_rate_inh,
     weights,  # Weight matrix (pre x post)
-    spiking_posts_exc,  # List of post-synaptic neurons
-    spiking_pres_exc,  # List of pre-synaptic neurons
-    spiking_posts_inh,  # List of post-synaptic neurons
-    spiking_pres_inh,  # List of pre-synaptic neurons
+    spiking_weights_exc,  # List of post-synaptic neurons
+    spiking_weights_inh,  # List of post-synaptic neurons
 ):
     # Excitatory weight update
-    for i in prange(spiking_posts_exc.shape[0]):
+    for i in prange(spiking_weights_exc.shape[0]):
         t_post = spike_times[i]
-        for j in spiking_pres_exc[i]:
+        for j in spiking_weights_exc[i]:
             dt = t_post - spike_times[j]
             if dt >= 0:
                 weights[j, i] += math.exp(-dt / tau_LTP) * learning_rate_exc
@@ -284,9 +282,9 @@ def spike_timing(
                 weights[j, i] -= math.exp(dt / tau_LTD) * learning_rate_exc
 
     # Inhibitory weight update
-    for i in prange(spiking_posts_inh.shape[0]):
+    for i in prange(spiking_weights_inh.shape[0]):
         t_post = spike_times[i]
-        for j in spiking_pres_inh[i]:
+        for j in spiking_weights_inh[i]:
             dt = t_post - spike_times[j]
             if dt >= 0:
                 weights[j, i] -= math.exp(-dt / tau_LTP) * learning_rate_inh
