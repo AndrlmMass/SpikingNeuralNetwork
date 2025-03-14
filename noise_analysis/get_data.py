@@ -7,6 +7,11 @@ import numpy as np
 import torch
 
 
+def normalize_image(img, target_sum=1.0):
+    current_sum = img.sum()
+    return img * (target_sum / current_sum) if current_sum > 0 else img
+
+
 def create_data(
     pixel_size,
     num_steps,
@@ -66,6 +71,18 @@ def create_data(
     limited_labels_train = labels[:num_images]
     limited_images_test = images[num_images : test_images + num_images]
     limited_labels_test = labels[num_images : test_images + num_images]
+
+    # normalize spike intensity for each image
+    target_sum = (pixel_size**2) * 0.1
+    limited_images_train = torch.stack(
+        [
+            normalize_image(img=img, target_sum=target_sum)
+            for img in limited_images_train
+        ]
+    )
+    limited_images_test = torch.stack(
+        [normalize_image(img=img, target_sum=target_sum) for img in limited_images_test]
+    )
 
     # one-hot encode labels
     if true_labels:
@@ -139,6 +156,25 @@ def create_data(
     # convert S_data to numpy array
     S_data_train = S_data_train.numpy()
     S_data_test = S_data_test.numpy()
+
+    # print sum spikes for each class to compare
+    """
+    This will take the sum of all the training, not just the first example
+    """
+    # for cl in classes:
+    #     indices = spike_labels_train == cl
+    #     sum_ = np.sum(S_data_train[indices])
+    #     print(cl, sum_)
+
+    # limited_images_train_ = limited_images_train.squeeze(1).flatten(start_dim=2).numpy()
+    # limited_labels_train_ = limited_labels_train.numpy()
+    # for cl in classes:
+    #     indices = limited_labels_train_ == cl
+    #     ind = np.where(indices == True)[0]
+    #     sum_ = np.sum(limited_images_train_[ind[0]])
+    #     print(cl, sum_)
+
+    # d = 4
 
     if plot_comparison:
         plot_floats_and_spikes(

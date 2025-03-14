@@ -4,18 +4,18 @@ from big_comb import SNN_noisy
 snn_N = SNN_noisy(N_x=100, classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
 
 # acquire data
-snn_N.prepare_data(num_images=300)
+snn_N.prepare_data(num_images=50)
 
 # set up network for training
 snn_N.prepare_training(tp_weight=100, tn_weight=100, fp_weight=-100, fn_weight=-100)
 
 # train network
 snn_N.train(
-    train_weights=False,
-    sleep=True,
-    force_train=False,
+    train_weights=True,
+    sleep=False,
     timing_update=True,
     plot_accuracy_=True,
+    force_train=True,
 )
 
 # analyze results

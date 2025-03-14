@@ -2,10 +2,11 @@ from numba.typed import List
 from numba import njit
 from tqdm import tqdm
 import numpy as np
+from numba import prange
 from weight_funcs import sleep_func, spike_timing, vectorized_trace_func, trace_STDP
 
 
-@njit
+@njit(parallel=True)
 def clip_weights(
     weights,
     nz_cols_exc,
@@ -13,87 +14,54 @@ def clip_weights(
     nz_rows_exc,
     nz_rows_inh,
     min_weight_exc,
-    max_weight_exc,
-    min_weight_inh,
     max_weight_inh,
 ):
-    for i_ in range(nz_rows_exc.shape[0]):
+    for i_ in prange(nz_rows_exc.shape[0]):
         i, j = nz_rows_exc[i_], nz_cols_exc[i_]
         if weights[i, j] < min_weight_exc:
             weights[i, j] = min_weight_exc
-        elif weights[i, j] > max_weight_exc:
-            weights[i, j] = max_weight_exc
-    for i_ in range(nz_rows_inh.shape[0]):
+    for i_ in prange(nz_rows_inh.shape[0]):
         i, j = nz_rows_inh[i_], nz_cols_inh[i_]
-        if weights[i, j] < min_weight_inh:
-            weights[i, j] = min_weight_inh
-        elif weights[i, j] > max_weight_inh:
+        if weights[i, j] > max_weight_inh:
             weights[i, j] = max_weight_inh
     return weights
 
 
+# @njit(parallel=True)
+@profile
 def update_weights(
     weights,
     spike_times,
-    timing_update,
-    non_weight_mask,
     pre_trace,
     post_trace,
-    trace_update,
     min_weight_exc,
-    max_weight_exc,
-    min_weight_inh,
     max_weight_inh,
-    nonzero_pre_idx,
-    weight_decay,
-    post_id,
     weight_decay_rate_exc,
     weight_decay_rate_inh,
-    tau_pre_trace_exc,
-    tau_pre_trace_inh,
-    tau_post_trace_exc,
-    tau_post_trace_inh,
-    noisy_weights,
-    weight_mean_noise,
-    weight_var_noise,
-    weight_mask,
     w_target_exc,
     w_target_inh,
     max_sum_exc,
     max_sum_inh,
-    clip_exc_weights,
-    clip_inh_weights,
-    vectorized_trace,
     baseline_sum_exc,
     baseline_sum_inh,
     check_sleep_interval,
     spikes,
-    N_inh,
-    N,
-    N_exc,
     sleep,
     sleep_now_inh,
     sleep_now_exc,
-    delta_w,
-    N_x,
-    ex,
-    st,
-    ih,
-    nz_cols,
-    nz_rows,
     nz_cols_exc,
     nz_cols_inh,
     nz_rows_exc,
     nz_rows_inh,
     t,
-    dt,
-    A_plus,
-    A_minus,
     learning_rate_exc,
     learning_rate_inh,
     tau_LTP,
     tau_LTD,
-    spike_indices,
+    spiking_posts_exc,
+    spiking_pres_exc,
+    spiking_posts_inh,
+    spiking_pres_inh,
 ):
     """
     Apply the STDP rule to update synaptic weights using a fully vectorized approach.
@@ -136,89 +104,76 @@ def update_weights(
 
     # If no neurons spiked, return weights unchanged
     if not np.any(spike_idx):
-        # Precompute exponential decay factors
-        decay_pre_exc = np.exp(-dt / tau_pre_trace_exc)
-        decay_pre_inh = np.exp(-dt / tau_pre_trace_inh)
-        decay_post_exc = np.exp(-dt / tau_post_trace_exc)
-        decay_post_inh = np.exp(-dt / tau_post_trace_inh)
-
-        # Update eligibility traces
-        pre_trace[:-N_inh] *= decay_pre_exc
-        pre_trace[-N_inh:] *= decay_pre_inh
-        post_trace[:-N_inh] *= decay_post_exc
-        post_trace[-N_inh:] *= decay_post_inh
-
         return weights, pre_trace, post_trace, sleep_now_inh, sleep_now_exc
 
-    if timing_update:
-        weights = spike_timing(
-            spike_times=spike_times,
-            tau_LTP=tau_LTP,
-            tau_LTD=tau_LTD,
-            learning_rate_exc=learning_rate_exc,
-            learning_rate_inh=learning_rate_inh,
-            ex=ex,
-            weights=weights,
-            spikes=spikes,
-            nonzero_pre_idx=nonzero_pre_idx,
-            post_id=post_id,
-            spike_indices=spike_indices,
-        )
+    # if timing_update:
+    weights = spike_timing(
+        spike_times=spike_times,
+        tau_LTP=tau_LTP,
+        tau_LTD=tau_LTD,
+        learning_rate_exc=learning_rate_exc,
+        learning_rate_inh=learning_rate_inh,
+        weights=weights,
+        spiking_posts_exc=spiking_posts_exc,
+        spiking_pres_exc=spiking_pres_exc,
+        spiking_posts_inh=spiking_posts_inh,
+        spiking_pres_inh=spiking_pres_inh,
+    )
 
-    if trace_update:
-        post_trace, pre_trace, weights = trace_STDP(
-            spikes=spikes,
-            weights=weights,
-            pre_trace=pre_trace,
-            post_trace=post_trace,
-            learning_rate_exc=learning_rate_exc,
-            learning_rate_inh=learning_rate_inh,
-            dt=dt,
-            N_x=st,
-            A_plus=A_plus,
-            A_minus=A_minus,
-            N_inh=N_inh,
-            N=N,
-            N_exc=N_exc,
-            nonzero_pre_idx=nonzero_pre_idx,
-            tau_pre_trace_exc=tau_pre_trace_exc,
-            tau_pre_trace_inh=tau_pre_trace_inh,
-            tau_post_trace_exc=tau_post_trace_exc,
-            tau_post_trace_inh=tau_post_trace_inh,
-        )
+    # if trace_update:
+    #     post_trace, pre_trace, weights = trace_STDP(
+    #         spikes=spikes,
+    #         weights=weights,
+    #         pre_trace=pre_trace,
+    #         post_trace=post_trace,
+    #         learning_rate_exc=learning_rate_exc,
+    #         learning_rate_inh=learning_rate_inh,
+    #         dt=dt,
+    #         N_x=st,
+    #         A_plus=A_plus,
+    #         A_minus=A_minus,
+    #         N_inh=N_inh,
+    #         N=N,
+    #         N_exc=N_exc,
+    #         nonzero_pre_idx=nonzero_pre_idx,
+    #         tau_pre_trace_exc=tau_pre_trace_exc,
+    #         tau_pre_trace_inh=tau_pre_trace_inh,
+    #         tau_post_trace_exc=tau_post_trace_exc,
+    #         tau_post_trace_inh=tau_post_trace_inh,
+    #     )
 
-    if vectorized_trace:
-        weights, pre_trace, post_trace = vectorized_trace_func(
-            check_sleep_interval=check_sleep_interval,
-            spikes=spikes,
-            N_x=N_x,
-            nz_rows=nz_rows,
-            nz_cols=nz_cols,
-            delta_w=delta_w,
-            A_plus=A_plus,
-            dt=dt,
-            A_minus=A_minus,
-            pre_trace=pre_trace,
-            post_trace=post_trace,
-            tau_pre_trace_exc=tau_pre_trace_exc,
-            tau_pre_trace_inh=tau_pre_trace_inh,
-            tau_post_trace_exc=tau_post_trace_exc,
-            tau_post_trace_inh=tau_post_trace_inh,
-            N_inh=N_inh,
-        )
+    # if vectorized_trace:
+    #     weights, pre_trace, post_trace = vectorized_trace_func(
+    #         check_sleep_interval=check_sleep_interval,
+    #         spikes=spikes,
+    #         N_x=N_x,
+    #         nz_rows=nz_rows,
+    #         nz_cols=nz_cols,
+    #         delta_w=delta_w,
+    #         A_plus=A_plus,
+    #         dt=dt,
+    #         A_minus=A_minus,
+    #         pre_trace=pre_trace,
+    #         post_trace=post_trace,
+    #         tau_pre_trace_exc=tau_pre_trace_exc,
+    #         tau_pre_trace_inh=tau_pre_trace_inh,
+    #         tau_post_trace_exc=tau_post_trace_exc,
+    #         tau_post_trace_inh=tau_post_trace_inh,
+    #         N_inh=N_inh,
+    #     )
 
     # add noise to weights if desired
-    if noisy_weights:
-        delta_weight_noise = np.random.normal(
-            loc=weight_mean_noise, scale=weight_var_noise, size=weights.shape
-        )
-        weights += delta_weight_noise
+    # if noisy_weights:
+    #     delta_weight_noise = np.random.normal(
+    #         loc=weight_mean_noise, scale=weight_var_noise, size=weights.shape
+    #     )
+    #     weights += delta_weight_noise
 
-        # Update weights
-        # print(
-        #     f"\rexc weight change:{np.round(np.mean(delta_weights_exc),6)}, inh weight change:{np.round(np.mean(delta_weights_inh),6)}",
-        #     end="",
-        # )
+    # Update weights
+    # print(
+    #     f"\rexc weight change:{np.round(np.mean(delta_weights_exc),6)}, inh weight change:{np.round(np.mean(delta_weights_inh),6)}",
+    #     end="",
+    # )
 
     weights = clip_weights(
         weights=weights,
@@ -227,8 +182,6 @@ def update_weights(
         nz_rows_exc=nz_rows_exc,
         nz_rows_inh=nz_rows_inh,
         min_weight_exc=min_weight_exc,
-        max_weight_exc=max_weight_exc,
-        min_weight_inh=min_weight_inh,
         max_weight_inh=max_weight_inh,
     )
 
@@ -254,13 +207,15 @@ def update_membrane_potential(
     else:
         gaussian_noise = 0
 
-    mp_new = mp.copy()
     I_in = np.dot(weights.T, spikes)
-    mp_delta = (-(mp - resting_potential) + membrane_resistance * I_in) / tau_m * dt
-    mp_new += mp_delta + gaussian_noise
-    return mp_new
+    mp += (
+        gaussian_noise
+        + (-(mp - resting_potential) + membrane_resistance * I_in) / tau_m * dt
+    )
+    return mp
 
 
+# @njit(parallel=True)
 def update_spikes(
     st,
     pn,
@@ -280,7 +235,6 @@ def update_spikes(
     spike_threshold_default,
     reset_potential,
 ):
-
     # update spikes array
     mp = np.clip(mp, a_min=min_mp, a_max=max_mp)
     spikes[st:pn][mp > spike_threshold] = 1
@@ -310,6 +264,7 @@ def update_spikes(
     return mp, spikes, spike_indices, spike_times, spike_threshold
 
 
+@profile
 def train_network(
     weights,
     mp,
