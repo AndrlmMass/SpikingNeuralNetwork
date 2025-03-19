@@ -603,6 +603,8 @@ class SNN_noisy:
         for element in remove:
             self.model_parameters.pop(element)
 
+        self.model_parameters[self.num_items]
+
         if not force_train:
             self.process(load_model=True, model_parameters=self.model_parameters)
         if not self.model_loaded or force_train:
