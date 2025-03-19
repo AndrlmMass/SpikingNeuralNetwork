@@ -16,7 +16,7 @@ snn_N.train(
     plot_accuracy_=True,
     noisy_potential=True,
     plot_weights=True,
-    force_train=True,
+    force_train=False,
 )
 
 # analyze results
