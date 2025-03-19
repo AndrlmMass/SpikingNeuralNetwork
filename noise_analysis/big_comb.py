@@ -11,12 +11,13 @@ from plot import (
     weights_plot,
     spike_threshold_plot,
     plot_traces,
+    plot_accuracy,
 )
 from analysis import t_SNE, PCA_analysis
 from create_network import create_weights, create_arrays
 
 
-class SNN_noisy:
+class snn_sleepy:
     def __init__(
         self,
         N_exc=200,
@@ -436,8 +437,6 @@ class SNN_noisy:
         tn_weight=1,
         fp_weight=-1,
         fn_weight=-1,
-        tl_weight=1,
-        fl_weight=1,
     ):
         # create weights
         self.weights = create_weights(
@@ -577,7 +576,7 @@ class SNN_noisy:
         random_selection_weight_plot=True,
         num_inh=10,
         num_exc=50,
-        plot_accuracy=True,
+        plot_accuracy_=True,
     ):
         self.dt = dt
 
@@ -603,10 +602,11 @@ class SNN_noisy:
         for element in remove:
             self.model_parameters.pop(element)
 
-        self.model_parameters[self.num_items]
+        self.model_parameters["num_items"] = self.num_items
 
-        if not force_train:
+        if not force_train and self.data_loaded:
             self.process(load_model=True, model_parameters=self.model_parameters)
+
         if not self.model_loaded or force_train:
             (
                 self.weights,
@@ -696,8 +696,17 @@ class SNN_noisy:
         if save_model:
             self.process(save_model=True, model_parameters=self.model_parameters)
 
-        if plot_accuracy:
-            ...
+        if plot_accuracy_:
+            plot_accuracy(
+                spikes=self.spikes_train,
+                ih=self.ih,
+                pp=self.pp,
+                pn=self.pn,
+                tp=self.tp,
+                labels=self.labels_train,
+                num_steps=self.num_steps,
+                num_classes=self.N_classes,
+            )
 
         if plot_spikes_train:
             if start_time_spike_plot == None:

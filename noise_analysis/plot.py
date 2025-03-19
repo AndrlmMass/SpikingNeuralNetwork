@@ -1,11 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.signal import savgol_filter
 import matplotlib
 
 matplotlib.use("TkAgg")
-
-
-def plot_accuracy(spikes): ...
 
 
 def spike_plot(data, labels):
@@ -114,6 +112,90 @@ def spike_plot(data, labels):
     )
 
     plt.title("Spikes with Class-based Horizontal Lines")
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes):
+    """
+    spikes have shape: pp-pn-tp-tn-fp-fn
+    """
+    pp_ = spikes[:, ih:pp]
+    tp_ = spikes[:, pn:tp]
+
+    #### calculate precision (accuracy) ###
+
+    # remove data from all breaks
+    indices = labels == -2
+    if any(indices):
+        labels = np.delete(labels, np.where(indices)[0])
+        pp_ = np.delete(pp_, np.where(indices)[0])
+        tp_ = np.delete(tp_, np.where(indices)[0])
+
+    # loop through every num_steps time units and compare activity
+    total_images = 0
+    current_accuracy = 0
+    accuracy = np.zeros((labels.shape[0] // num_steps) - 1)
+    for t in range(0, labels.shape[0] - num_steps - 1, num_steps):
+        ind = labels[t : t + num_steps] != -1
+        pp_label = np.argmax(pp_[t : t + num_steps][ind], axis=0)
+        tp_label = np.argmax(tp_[t : t + num_steps][ind], axis=0)
+        pp_label_pop = np.argmax(pp_label)
+        tp_label_pop = np.argmax(tp_label)
+        total_images += 1
+        current_accuracy += int(pp_label_pop == tp_label_pop)
+        accuracy[t // num_steps] = current_accuracy / total_images
+        print(pp_label_pop, tp_label_pop)
+
+    plt.figure(figsize=(12, 6))
+    plt.grid(True)
+    plt.plot(accuracy)
+
+    total_images = np.zeros(num_classes)
+    current_accuracy = np.zeros(num_classes)
+    accuracy2 = np.zeros(((labels.shape[0] // num_steps) - 1, num_classes))
+    for t in range(0, labels.shape[0] - num_steps - 1, num_steps):
+        # find non-sleeping indices
+        ind = labels[t : t + num_steps] != -1
+
+        # calculate most popular class for each t
+        pp_label = np.argmax(pp_[t : t + num_steps][ind], axis=0)
+        tp_label = np.argmax(tp_[t : t + num_steps][ind], axis=0)
+
+        # most popular class across all num_steps
+        pp_label_pop = np.argmax(pp_label)
+        tp_label_pop = np.argmax(tp_label)
+
+        # update number of data points and accumulated accuracy
+        total_images[pp_label_pop] += 1
+        current_accuracy[pp_label_pop] += int(pp_label_pop == tp_label_pop)
+
+        accuracy2[t // num_steps :, pp_label_pop] = (
+            current_accuracy[pp_label_pop] / total_images[pp_label_pop]
+        )
+
+    # smooth out graphs
+
+    window_length = 11
+    colors = plt.cm.tab10(np.linspace(0, 1, num_classes))
+    for c in range(num_classes):
+        class_accuracy = accuracy2[:, c]
+        if (
+            len(class_accuracy) > window_length
+        ):  # apply smoothing only if there are enough points
+            class_accuracy = savgol_filter(class_accuracy, window_length, polyorder=3)
+        plt.plot(
+            class_accuracy,
+            label=f"class:{c}",
+            color=colors[c],
+            linewidth=0.8,
+            linestyle="dashed",
+        )
+
+    plt.plot(accuracy, label="All classes", linewidth=5, color="black")
+    plt.legend(bbox_to_anchor=(1.1, 0.9), loc="upper right")
+    plt.ylabel("Accuracy")
+    plt.xlabel("Time (t)")
     plt.tight_layout()
     plt.show()
 
