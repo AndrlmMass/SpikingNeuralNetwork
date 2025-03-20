@@ -1,5 +1,5 @@
 from torchvision import datasets, transforms
-from plot import plot_floats_and_spikes, spike_plot
+from plot import plot_floats_and_spikes
 import torch.nn.functional as F
 from snntorch import spikegen
 from tqdm import tqdm
@@ -65,6 +65,11 @@ def create_data(
     images = torch.stack(images)  # Shape: [num_samples, 1, 28, 28]
     labels = torch.tensor(labels)  # Shape: [num_samples]
     test_images = int(num_images * test_data_ratio)
+
+    # Apply the permutation to both images and labels
+    perm_train = torch.randperm(images.size(0))
+    limited_images_train = images[perm_train]
+    limited_labels_train = labels[perm_train]
 
     # Limit number of images
     limited_images_train = images[:num_images]
@@ -220,8 +225,6 @@ def create_data(
             np.random.random(size=S_data_train.shape) < noise_level
         ).astype(int)
         S_data_train = S_data_train | break_activity
-
-        # save training data in binary format with progress bar
 
     return (
         S_data_train,

@@ -126,17 +126,17 @@ def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes):
     #### calculate precision (accuracy) ###
 
     # remove data from all breaks
-    indices = labels == -2
-    if any(indices):
-        labels = np.delete(labels, np.where(indices)[0])
-        pp_ = np.delete(pp_, np.where(indices)[0])
-        tp_ = np.delete(tp_, np.where(indices)[0])
+    mask = labels != -1
+    if mask.size != 0:
+        labels = labels[mask]
+        pp_ = pp_[mask]
+        tp_ = tp_[mask]
 
     # loop through every num_steps time units and compare activity
     total_images = 0
     current_accuracy = 0
-    accuracy = np.zeros((labels.shape[0] // num_steps) - 1)
-    for t in range(0, labels.shape[0] - num_steps - 1, num_steps):
+    accuracy = np.zeros((labels.shape[0] // num_steps))
+    for t in range(0, labels.shape[0], num_steps):
         ind = labels[t : t + num_steps] != -1
         pp_label = np.argmax(pp_[t : t + num_steps][ind], axis=0)
         tp_label = np.argmax(tp_[t : t + num_steps][ind], axis=0)
@@ -153,8 +153,8 @@ def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes):
 
     total_images = np.zeros(num_classes)
     current_accuracy = np.zeros(num_classes)
-    accuracy2 = np.zeros(((labels.shape[0] // num_steps) - 1, num_classes))
-    for t in range(0, labels.shape[0] - num_steps - 1, num_steps):
+    accuracy2 = np.zeros(((labels.shape[0] // num_steps), num_classes))
+    for t in range(0, labels.shape[0], num_steps):
         # find non-sleeping indices
         ind = labels[t : t + num_steps] != -1
 

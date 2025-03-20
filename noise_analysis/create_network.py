@@ -296,12 +296,12 @@ def create_arrays(
     pre_trace = np.zeros((pn))
     post_trace = np.zeros((pn - st))
 
-    spikes_train = np.zeros((total_time_train, N), dtype="int64")
+    spikes_train = np.zeros((total_time_train, N), dtype=np.int8)
     spikes_train[:, :st] = data_train
     spikes_train[:, pn:tn] = labels_true
     spikes_train[:, tn:fn] = labels_true
 
-    spikes_test = np.zeros((total_time_test, N), dtype="int64")
+    spikes_test = np.zeros((total_time_test, N), dtype=np.int8)
     spikes_test[:, :st] = data_test
 
     spike_times = np.random.randint(low=max_time, high=max_time**2, size=N)

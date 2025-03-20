@@ -560,7 +560,7 @@ def train_network(
 
         # remove training data during sleep
         if sleep:
-            if (sleep_now_exc or sleep_now_inh) and t != T:
+            if sleep_now_exc and t != T:
                 spikes[t + 1, :st] = 0
                 spike_labels[t] = -2
 

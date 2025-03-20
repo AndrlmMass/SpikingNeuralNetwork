@@ -693,7 +693,7 @@ class snn_sleepy:
                 var_noise=var_noise,
             )
 
-        if save_model:
+        if save_model and not self.model_loaded:
             self.process(save_model=True, model_parameters=self.model_parameters)
 
         if plot_accuracy_:
