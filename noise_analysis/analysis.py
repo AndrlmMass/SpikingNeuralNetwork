@@ -60,6 +60,7 @@ def t_SNE(
     perplexity,
     max_iter,
     random_state,
+    accuracy,
 ):
     # Now, bin the spikes using the labels, skipping breaks:
     features, segment_labels = bin_spikes_by_label_no_breaks(spikes, labels_spike)
@@ -87,7 +88,7 @@ def t_SNE(
             tsne_results[indices, 1],
             label=f"Class {label}",
         )
-    plt.title("t-SNE results")
+    plt.title(f"t-SNE results (Accuracy={accuracy})")
     plt.xlabel("t-SNE dimension 1")
     plt.ylabel("t-SNE dimension 2")
     plt.legend()

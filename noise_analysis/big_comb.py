@@ -576,7 +576,8 @@ class snn_sleepy:
         random_selection_weight_plot=True,
         num_inh=10,
         num_exc=50,
-        plot_accuracy_=True,
+        plot_accuracy_train=True,
+        plot_accuracy_test=True,
     ):
         self.dt = dt
 
@@ -696,8 +697,8 @@ class snn_sleepy:
         if save_model and not self.model_loaded:
             self.process(save_model=True, model_parameters=self.model_parameters)
 
-        if plot_accuracy_:
-            plot_accuracy(
+        if plot_accuracy_train:
+            self.accuracy_train = plot_accuracy(
                 spikes=self.spikes_train,
                 ih=self.ih,
                 pp=self.pp,
@@ -846,6 +847,18 @@ class snn_sleepy:
                 var_noise=var_noise,
             )
 
+            if plot_accuracy_test:
+                self.accuracy_test = plot_accuracy(
+                    spikes=self.spikes_train,
+                    ih=self.ih,
+                    pp=self.pp,
+                    pn=self.pn,
+                    tp=self.tp,
+                    labels=self.labels_train,
+                    num_steps=self.num_steps,
+                    num_classes=self.N_classes,
+                )
+
             if plot_spikes_test:
                 if start_time_spike_plot == None:
                     start_time_spike_plot = 0
@@ -895,6 +908,7 @@ class snn_sleepy:
                     perplexity=perplexity,
                     max_iter=max_iter,
                     random_state=random_state,
+                    accuracy=self.accuracy_train,
                 )
             if t_sne_test:
                 t_SNE(
@@ -904,6 +918,7 @@ class snn_sleepy:
                     perplexity=perplexity,
                     max_iter=max_iter,
                     random_state=random_state,
+                    accuracy=self.accuracy_test,
                 )
         if pca:
             if pca_train:
@@ -920,5 +935,3 @@ class snn_sleepy:
                     n_components=n_components,
                     random_state=random_state,
                 )
-        if log_reg:
-            ...

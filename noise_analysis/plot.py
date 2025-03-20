@@ -137,7 +137,6 @@ def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes):
     current_accuracy = 0
     accuracy = np.zeros((labels.shape[0] // num_steps))
     for t in range(0, labels.shape[0], num_steps):
-        # ind = labels[t : t + num_steps] != -1
         pp_label = np.sum(pp_[t : t + num_steps], axis=0)
         tp_label = np.sum(tp_[t : t + num_steps], axis=0)
         pp_label_pop = np.argmax(pp_label)
@@ -146,10 +145,6 @@ def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes):
         current_accuracy += int(pp_label_pop == tp_label_pop)
         accuracy[t // num_steps] = current_accuracy / total_images
         print(pp_label_pop, tp_label_pop)
-
-    plt.figure(figsize=(12, 6))
-    plt.grid(True)
-    plt.plot(accuracy)
 
     total_images = np.zeros(num_classes)
     current_accuracy = np.zeros(num_classes)
@@ -171,16 +166,12 @@ def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes):
             current_accuracy[pp_label_pop] / total_images[pp_label_pop]
         )
 
-    # smooth out graphs
+    # plot
+    plt.figure(figsize=(12, 6))
 
-    window_length = 11
     colors = plt.cm.tab10(np.linspace(0, 1, num_classes))
     for c in range(num_classes):
         class_accuracy = accuracy2[:, c]
-        if (
-            len(class_accuracy) > window_length
-        ):  # apply smoothing only if there are enough points
-            class_accuracy = savgol_filter(class_accuracy, window_length, polyorder=3)
         plt.plot(
             class_accuracy,
             label=f"class:{c}",
@@ -195,6 +186,8 @@ def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes):
     plt.xlabel("Time (t)")
     plt.tight_layout()
     plt.show()
+
+    return accuracy[-1]
 
 
 def get_contiguous_segment(indices):
