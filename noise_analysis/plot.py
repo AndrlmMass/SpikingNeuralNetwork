@@ -116,7 +116,7 @@ def spike_plot(data, labels):
     plt.show()
 
 
-def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes):
+def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes, test):
     """
     spikes have shape: pp-pn-tp-tn-fp-fn
     """
@@ -184,7 +184,11 @@ def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes):
     plt.legend(bbox_to_anchor=(1.1, 0.9), loc="upper right")
     plt.ylabel("Accuracy")
     plt.xlabel("Time (t)")
-    plt.tight_layout()
+    if test:
+        title = f"Testing accuracy: {accuracy[-1]}"
+    else:
+        title = f"Training accuracy: {accuracy[-1]}"
+    plt.title(title)
     plt.show()
 
     return accuracy[-1]

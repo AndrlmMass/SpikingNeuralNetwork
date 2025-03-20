@@ -597,6 +597,14 @@ class snn_sleepy:
             "plot_traces_",
             "random_selection_weight_plot",
             "train_weights",
+            "plot_accuracy_train",
+            "plot_accuracy_test",
+            "start_time_spike_plot",
+            "stop_time_spike_plot",
+            "start_index_mp",
+            "stop_index_mp",
+            "time_start_mp",
+            "time_stop_mp",
         ]
 
         # Remove elements from model_parameters
@@ -707,6 +715,7 @@ class snn_sleepy:
                 labels=self.labels_train,
                 num_steps=self.num_steps,
                 num_classes=self.N_classes,
+                test=False,
             )
 
         if plot_spikes_train:
@@ -849,14 +858,15 @@ class snn_sleepy:
 
             if plot_accuracy_test:
                 self.accuracy_test = plot_accuracy(
-                    spikes=self.spikes_train,
+                    spikes=self.spikes_test,
                     ih=self.ih,
                     pp=self.pp,
                     pn=self.pn,
                     tp=self.tp,
-                    labels=self.labels_train,
+                    labels=self.labels_test,
                     num_steps=self.num_steps,
                     num_classes=self.N_classes,
+                    test=True,
                 )
 
             if plot_spikes_test:
