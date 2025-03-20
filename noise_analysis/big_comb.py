@@ -86,10 +86,16 @@ class snn_sleepy:
 
             # Save training data and labels
             np.save(os.path.join(data_dir, "data_train.npy"), self.data_train)
+            np.save(os.path.join(data_dir, "data_test.npy"), self.data_test)
             np.save(os.path.join(data_dir, "labels_train.npy"), self.labels_train)
             np.save(os.path.join(data_dir, "data_test.npy"), self.data_test)
             np.save(os.path.join(data_dir, "labels_test.npy"), self.labels_test)
-            np.save(os.path.join(data_dir, "labels_true.npy"), self.labels_true)
+            np.save(
+                os.path.join(data_dir, "labels_true_train.npy"), self.labels_true_train
+            )
+            np.save(
+                os.path.join(data_dir, "labels_true_test.npy"), self.labels_true_test
+            )
             filepath = os.path.join(data_dir, "data_parameters.json")
 
             with open(filepath, "w") as outfile:
@@ -127,8 +133,8 @@ class snn_sleepy:
                             os.path.join("data/sdata", folder, "labels_test.npy")
                         )
 
-                        self.labels_true = np.load(
-                            os.path.join("data/sdata", folder, "labels_true.npy")
+                        self.labels_true_train = np.load(
+                            os.path.join("data/sdata", folder, "labels_true_train.npy")
                         )
 
                         print("data loaded", end="\r")
@@ -367,7 +373,8 @@ class snn_sleepy:
                 self.labels_train,
                 self.data_test,
                 self.labels_test,
-                self.labels_true,
+                self.labels_true_train,
+                self.labels_true_test,
             ) = create_data(
                 pixel_size=int(np.sqrt(self.N_x)),
                 num_steps=num_steps,
@@ -408,7 +415,7 @@ class snn_sleepy:
 
         # inspect spike labels
         if inspect_spike_plot:
-            spike_plot(data=self.labels_true, labels=None)
+            spike_plot(data=self.labels_true_train, labels=None)
 
         # plot heatmap of activity
         if plot_heat_map:
@@ -488,7 +495,7 @@ class snn_sleepy:
             N_classes=self.N_classes,
             N_x=self.N_x,
             max_time=self.max_time,
-            labels_true=self.labels_true,
+            labels_true=self.labels_true_train,
         )
         # return results if retur == True
         if retur:
@@ -862,7 +869,7 @@ class snn_sleepy:
                     ih=self.ih,
                     pp=self.pp,
                     pn=self.pn,
-                    tp=self.tp,
+                    tp=self.labels_true_test,
                     labels=self.labels_test,
                     num_steps=self.num_steps,
                     num_classes=self.N_classes,

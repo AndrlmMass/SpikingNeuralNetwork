@@ -97,9 +97,23 @@ def create_data(
         labels_true = torch.concatenate([one_hot_train_pos, one_hot_train_neg], axis=1)
 
         # create true spiking labels train
-        labels_true_r = np.zeros((num_images * num_steps, 2 * N_classes))
+        labels_true_r_train = np.zeros((num_images * num_steps, 2 * N_classes))
         for i in range(num_images):
-            labels_true_r[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
+            labels_true_r_train[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
+                labels_true[i],
+                num_steps=num_steps,
+                gain=gain_labels,
+                offset=offset,
+                first_spike_time=first_spike_time,
+                time_var_input=time_var_input,
+            )
+
+        # create true spiking labels train
+        labels_true = F.one_hot(limited_labels_train, num_classes=N_classes)
+
+        labels_true_r_test = np.zeros((num_images * num_steps, N_classes))
+        for i in range(test_images):
+            labels_true_r_test[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
                 labels_true[i],
                 num_steps=num_steps,
                 gain=gain_labels,
@@ -108,7 +122,8 @@ def create_data(
                 time_var_input=time_var_input,
             )
     else:
-        labels_true_r = None
+        labels_true_r_train = None
+        labels_true_r_test = None
 
     spike_data_train = torch.zeros(size=limited_images_train.shape)
     spike_data_train = spike_data_train.repeat(num_steps, 1, 1, 1)
@@ -231,5 +246,6 @@ def create_data(
         spike_labels_train,
         S_data_test,
         spike_labels_test,
-        labels_true_r,
+        labels_true_r_train,
+        labels_true_r_test,
     )
