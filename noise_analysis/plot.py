@@ -137,9 +137,9 @@ def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes):
     current_accuracy = 0
     accuracy = np.zeros((labels.shape[0] // num_steps))
     for t in range(0, labels.shape[0], num_steps):
-        ind = labels[t : t + num_steps] != -1
-        pp_label = np.argmax(pp_[t : t + num_steps][ind], axis=0)
-        tp_label = np.argmax(tp_[t : t + num_steps][ind], axis=0)
+        # ind = labels[t : t + num_steps] != -1
+        pp_label = np.sum(pp_[t : t + num_steps], axis=0)
+        tp_label = np.sum(tp_[t : t + num_steps], axis=0)
         pp_label_pop = np.argmax(pp_label)
         tp_label_pop = np.argmax(tp_label)
         total_images += 1
@@ -155,12 +155,9 @@ def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes):
     current_accuracy = np.zeros(num_classes)
     accuracy2 = np.zeros(((labels.shape[0] // num_steps), num_classes))
     for t in range(0, labels.shape[0], num_steps):
-        # find non-sleeping indices
-        ind = labels[t : t + num_steps] != -1
-
         # calculate most popular class for each t
-        pp_label = np.argmax(pp_[t : t + num_steps][ind], axis=0)
-        tp_label = np.argmax(tp_[t : t + num_steps][ind], axis=0)
+        pp_label = np.sum(pp_[t : t + num_steps], axis=0)
+        tp_label = np.sum(tp_[t : t + num_steps], axis=0)
 
         # most popular class across all num_steps
         pp_label_pop = np.argmax(pp_label)
