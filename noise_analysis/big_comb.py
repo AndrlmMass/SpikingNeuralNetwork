@@ -2,6 +2,7 @@ import numpy as np
 import os
 import json
 import random
+import matplotlib.pyplot as plt
 from train import train_network
 from get_data import create_data
 from plot import (
@@ -135,6 +136,10 @@ class snn_sleepy:
 
                         self.labels_true_train = np.load(
                             os.path.join("data/sdata", folder, "labels_true_train.npy")
+                        )
+
+                        self.labels_true_test = np.load(
+                            os.path.join("data/sdata", folder, "labels_true_test.npy")
                         )
 
                         print("data loaded", end="\r")
@@ -533,7 +538,7 @@ class snn_sleepy:
         min_weight_exc=0,
         spike_threshold_default=-55,
         check_sleep_interval=10000,
-        interval=100,
+        interval=1000,
         min_mp=-100,
         sleep=True,
         force_train=False,
@@ -757,6 +762,9 @@ class snn_sleepy:
             )
 
         if plot_weights:
+            for l in range(self.weights2plot_exc.shape[1]):
+                plt.plot(self.weights2plot_exc[:, l, self.ih - self.st :])
+            plt.show()
             weights_plot(
                 weights_exc=self.weights2plot_exc,
                 weights_inh=self.weights2plot_inh,
@@ -864,12 +872,13 @@ class snn_sleepy:
             )
 
             if plot_accuracy_test:
+                self.spikes_test[:, self.pn : self.tp] = self.labels_true_test
                 self.accuracy_test = plot_accuracy(
                     spikes=self.spikes_test,
                     ih=self.ih,
                     pp=self.pp,
                     pn=self.pn,
-                    tp=self.labels_true_test,
+                    tp=self.tp,
                     labels=self.labels_test,
                     num_steps=self.num_steps,
                     num_classes=self.N_classes,
@@ -880,11 +889,11 @@ class snn_sleepy:
                 if start_time_spike_plot == None:
                     start_time_spike_plot = 0
                 if stop_time_spike_plot == None:
-                    stop_time_spike_plot = self.T
+                    stop_time_spike_plot = self.T_test
 
                 spike_plot(
                     self.spikes_test[start_time_spike_plot:stop_time_spike_plot],
-                    self.labels_test,
+                    self.labels_test[start_time_spike_plot:stop_time_spike_plot],
                 )
 
             if plot_mp_test:
@@ -914,12 +923,11 @@ class snn_sleepy:
         pca=False,
         pca_train=False,
         pca_test=True,
-        log_reg=False,
     ):
         if t_sne:
             if t_sne_train:
                 t_SNE(
-                    spikes=self.spikes_train[:, self.N_x :],
+                    spikes=self.spikes_train[:, self.ih : self.pp],
                     labels_spike=self.labels_train,
                     n_components=n_components,
                     perplexity=perplexity,
@@ -929,7 +937,7 @@ class snn_sleepy:
                 )
             if t_sne_test:
                 t_SNE(
-                    spikes=self.spikes_test[:, self.N_x :],
+                    spikes=self.spikes_test[:, self.ih : self.pp],
                     labels_spike=self.labels_test,
                     n_components=n_components,
                     perplexity=perplexity,

@@ -111,7 +111,7 @@ def create_data(
         # create true spiking labels train
         labels_true = F.one_hot(limited_labels_train, num_classes=N_classes)
 
-        labels_true_r_test = np.zeros((num_images * num_steps, N_classes))
+        labels_true_r_test = np.zeros((test_images * num_steps, N_classes))
         for i in range(test_images):
             labels_true_r_test[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
                 labels_true[i],

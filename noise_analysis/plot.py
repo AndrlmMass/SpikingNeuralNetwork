@@ -162,17 +162,23 @@ def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes, test):
         total_images[pp_label_pop] += 1
         current_accuracy[pp_label_pop] += int(pp_label_pop == tp_label_pop)
 
-        accuracy2[t // num_steps :, pp_label_pop] = (
-            current_accuracy[pp_label_pop] / total_images[pp_label_pop]
-        )
+        acc = current_accuracy[pp_label_pop] / total_images[pp_label_pop]
+
+        accuracy2[t // num_steps :, pp_label_pop] = acc
 
     # plot
     plt.figure(figsize=(12, 6))
 
     colors = plt.cm.tab10(np.linspace(0, 1, num_classes))
+    x = np.arange(accuracy2.shape[0])
+    jitter_std = 1  # adjust as needed
+
     for c in range(num_classes):
         class_accuracy = accuracy2[:, c]
+        # Add jitter to the x-values for this class
+        jitter = np.random.normal(0, jitter_std, size=x.shape)
         plt.plot(
+            x + jitter,
             class_accuracy,
             label=f"class:{c}",
             color=colors[c],
@@ -180,7 +186,7 @@ def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes, test):
             linestyle="dashed",
         )
 
-    plt.plot(accuracy, label="All classes", linewidth=5, color="black")
+    plt.plot(accuracy, label="All classes", linewidth=3, color="black")
     plt.legend(bbox_to_anchor=(1.1, 0.9), loc="upper right")
     plt.ylabel("Accuracy")
     plt.xlabel("Time (t)")
