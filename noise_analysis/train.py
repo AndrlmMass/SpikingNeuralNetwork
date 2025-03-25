@@ -426,7 +426,7 @@ def train_network(
     delta_w = np.zeros(shape=weights.shape)
 
     nz_rows_inh, nz_cols_inh = np.nonzero(weights[ex:ih, st:ex])
-    nz_rows_exc, nz_cols_exc = np.nonzero(weights[:ex, st:pn])
+    nz_rows_exc, nz_cols_exc = np.nonzero(weights[:ex, st:ih])
     nz_rows_inh += ex
     nz_cols_inh += st
     nz_cols_exc += st
@@ -443,7 +443,7 @@ def train_network(
 
     # Compute for neurons N_x to N_post-1
     nonzero_pre_idx = List()
-    for i in range(st, pn):
+    for i in range(st, ih):
         pre_idx = np.nonzero(weights[:, i])[0]
         nonzero_pre_idx.append(pre_idx.astype(np.int64))
 

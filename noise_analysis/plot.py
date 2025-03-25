@@ -136,50 +136,42 @@ def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes, test):
     total_images = 0
     current_accuracy = 0
     accuracy = np.zeros((labels.shape[0] // num_steps))
-    for t in range(0, labels.shape[0], num_steps):
-        pp_label = np.sum(pp_[t : t + num_steps], axis=0)
-        tp_label = np.sum(tp_[t : t + num_steps], axis=0)
-        pp_label_pop = np.argmax(pp_label)
-        tp_label_pop = np.argmax(tp_label)
-        total_images += 1
-        current_accuracy += int(pp_label_pop == tp_label_pop)
-        accuracy[t // num_steps] = current_accuracy / total_images
-        print(pp_label_pop, tp_label_pop)
-
-    total_images = np.zeros(num_classes)
-    current_accuracy = np.zeros(num_classes)
+    total_images2 = np.zeros(num_classes)
+    current_accuracy2 = np.zeros(num_classes)
     accuracy2 = np.zeros(((labels.shape[0] // num_steps), num_classes))
     for t in range(0, labels.shape[0], num_steps):
-        # calculate most popular class for each t
         pp_label = np.sum(pp_[t : t + num_steps], axis=0)
         tp_label = np.sum(tp_[t : t + num_steps], axis=0)
 
-        # most popular class across all num_steps
-        pp_label_pop = np.argmax(pp_label)
-        tp_label_pop = np.argmax(tp_label)
+        # check if there is no class preference
+        if np.sum(tp_label) == 0:
+            accuracy[t // num_steps] = accuracy[(t - 1) // num_steps]
+        else:
+            print(pp_label)
+            pp_label_pop = np.argmax(pp_label)
+            tp_label_pop = np.argmax(tp_label)
+            total_images += 1
+            current_accuracy += int(pp_label_pop == tp_label_pop)
+            accuracy[t // num_steps] = current_accuracy / total_images
+            print(pp_label_pop, tp_label_pop)
 
-        # update number of data points and accumulated accuracy
-        total_images[pp_label_pop] += 1
-        current_accuracy[pp_label_pop] += int(pp_label_pop == tp_label_pop)
-
-        acc = current_accuracy[pp_label_pop] / total_images[pp_label_pop]
-
-        accuracy2[t // num_steps :, pp_label_pop] = acc
+            # update number of data points and accumulated accuracy
+            total_images2[tp_label_pop] += 1
+            current_accuracy2[tp_label_pop] += int(pp_label_pop == tp_label_pop)
+            acc = current_accuracy2[tp_label_pop] / total_images2[tp_label_pop]
+            accuracy2[t // num_steps :, tp_label_pop] = acc
 
     # plot
     plt.figure(figsize=(12, 6))
 
     colors = plt.cm.tab10(np.linspace(0, 1, num_classes))
-    x = np.arange(accuracy2.shape[0])
-    jitter_std = 1  # adjust as needed
 
     for c in range(num_classes):
         class_accuracy = accuracy2[:, c]
         # Add jitter to the x-values for this class
-        jitter = np.random.normal(0, jitter_std, size=x.shape)
+        jitter = np.random.normal(0, 0.001, size=class_accuracy.shape[0])
         plt.plot(
-            x + jitter,
-            class_accuracy,
+            class_accuracy + jitter,
             label=f"class:{c}",
             color=colors[c],
             linewidth=0.8,

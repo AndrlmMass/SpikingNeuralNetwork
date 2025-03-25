@@ -761,10 +761,11 @@ class snn_sleepy:
                 N_exc=self.N_exc,
             )
 
+        for l in range(self.weights2plot_exc.shape[1]):
+            plt.plot(self.weights2plot_exc[:, l, self.ih - self.st :])
+        plt.show()
+
         if plot_weights:
-            for l in range(self.weights2plot_exc.shape[1]):
-                plt.plot(self.weights2plot_exc[:, l, self.ih - self.st :])
-            plt.show()
             weights_plot(
                 weights_exc=self.weights2plot_exc,
                 weights_inh=self.weights2plot_inh,

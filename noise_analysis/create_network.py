@@ -41,12 +41,17 @@ def create_weights(
         fp = tn + N_classes  # false positive
         fn = fp + N_classes  # false negative
 
-        # Create weights based on affinity rates
-        mask_output = np.random.random((N_exc, N_classes)) < weight_affinity_output
+        # For each column, randomly select exactly num_connections indices
+        num_connections = int(weight_affinity_output * N_exc)
+        mask_output = np.zeros((N_exc, N_classes), dtype=bool)
+        for col in range(N_classes):
+            selected_indices = np.random.choice(
+                N_exc, size=num_connections, replace=False
+            )
+            mask_output[selected_indices, col] = True
         mask_hidden_exc = np.random.random((N, N)) < weight_affinity_hidden_exc
         mask_hidden_inh = np.random.random((N, N)) < weight_affinity_hidden_inh
         mask_input = np.random.random((N, N)) < weight_affinity_input
-
         # input_weights
         weights[:st, st:ex][mask_input[:st, st:ex]] = pos_weight
 
