@@ -52,7 +52,7 @@ class snn_sleepy:
         if self.supervised:
             self.N = N_exc + N_inh + N_x + self.N_classes * 8
         elif self.unsupervised:
-            self.N = N_exc + N_inh + N_x + self.N_classes * 2
+            self.N = N_exc + N_inh + N_x + self.N_classes * 8
         else:
             self.N = N_exc + N_inh + N_x
 
@@ -309,6 +309,8 @@ class snn_sleepy:
         # Remove elements from data_parameters
         for element in list:
             del self.data_parameters[element]
+        self.data_parameters["supervised"] = self.supervised
+        self.data_parameters["unsupervised"] = self.unsupervised
 
         # Update model
         self.data_parameters.update()
@@ -443,6 +445,8 @@ class snn_sleepy:
         resting_membrane=-70,
         max_time=100,
         retur=False,
+        epp_weight=1,
+        epn_weight=1,
         pp_weight=1,
         pn_weight=-1,
         tp_weight=1,
@@ -467,6 +471,8 @@ class snn_sleepy:
             neg_weight=neg_weight,
             plot_weights=plot_weights,
             plot_network=plot_network,
+            epp_weight=epp_weight,
+            epn_weight=epn_weight,
             pp_weight=pp_weight,
             pn_weight=pn_weight,
             tp_weight=tp_weight,
@@ -624,6 +630,8 @@ class snn_sleepy:
             self.model_parameters.pop(element)
 
         self.model_parameters["num_items"] = self.num_items
+        self.model_parameters["supervised"] = self.supervised
+        self.model_parameters["unsupervised"] = self.unsupervised
 
         if not force_train and self.data_loaded:
             self.process(load_model=True, model_parameters=self.model_parameters)
@@ -873,7 +881,7 @@ class snn_sleepy:
             )
 
             if plot_accuracy_test:
-                self.spikes_test[:, self.pn : self.tp] = self.labels_true_test
+                self.spikes_test[:, self.pn : self.tn] = self.labels_true_test
                 self.accuracy_test = plot_accuracy(
                     spikes=self.spikes_test,
                     ih=self.ih,
@@ -885,6 +893,10 @@ class snn_sleepy:
                     num_classes=self.N_classes,
                     test=True,
                 )
+
+            for l in range(self.weights2plot_exc.shape[1]):
+                plt.plot(self.weights2plot_exc[:, l, self.ih - self.st :])
+            plt.show()
 
             if plot_spikes_test:
                 if start_time_spike_plot == None:

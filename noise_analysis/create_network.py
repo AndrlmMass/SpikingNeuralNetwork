@@ -21,6 +21,8 @@ def create_weights(
     neg_weight,
     plot_weights,
     plot_network,
+    epp_weight,
+    epn_weight,
     pp_weight,
     pn_weight,
     tp_weight,
@@ -69,14 +71,14 @@ def create_weights(
         weights[ex:ih, st:ex][inh_mask] = 0
 
         # update weights from excitatory-to-predictors (pos and negative)
-        weights[st:ex, ih:pp][mask_output] = pos_weight
-        weights[st:ex, pp:pn][mask_output] = pos_weight
-
-        # update weights from predictors-to-excitatory
-        weights[ih:pp, st:ex][mask_output.T] = pp_weight
-        weights[pp:pn, st:ex][mask_output.T] = pn_weight  # negative weight
+        weights[st:ex, ih:pp][mask_output] = epp_weight
+        weights[st:ex, pp:pn][mask_output] = epn_weight
 
         if supervised:
+            # update weights from predictors-to-excitatory
+            weights[ih:pp, st:ex][mask_output.T] = pp_weight
+            weights[pp:pn, st:ex][mask_output.T] = pn_weight  # negative weight
+
             mask_label = np.zeros((N_classes, N_classes))
             np.fill_diagonal(mask_label, val=1)
             mask_label = mask_label.astype(bool)

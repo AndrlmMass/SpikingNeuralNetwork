@@ -403,12 +403,12 @@ def train_network(
     idx_inh = np.random.choice(inh_interval, size=num_inh, replace=False)
 
     # create weights_plotting_array
-    weights_4_plotting_exc = np.zeros((T // interval, num_exc, pn - st))
-    weights_4_plotting_inh = np.zeros((T // interval, num_inh, ex - st))
+    weights_4_plotting_exc = np.zeros((T // interval + 1, num_exc, pn - st))
+    weights_4_plotting_inh = np.zeros((T // interval + 1, num_inh, ex - st))
     weights_4_plotting_exc[0] = weights[idx_exc, st:pn]
     weights_4_plotting_inh[0] = weights[idx_inh, st:ex]
-    pre_trace_4_plot = np.zeros((T // interval, pn))
-    post_trace_4_plot = np.zeros((T // interval, pn - st))
+    pre_trace_4_plot = np.zeros((T // interval + 1, pn))
+    post_trace_4_plot = np.zeros((T // interval + 1, pn - st))
 
     # create spike threshold array
     spike_threshold = np.full(
@@ -438,14 +438,21 @@ def train_network(
     # Here, we assume that the columns correspond to post-neurons.
     if train_weights:
         desc = "Training network:"
+        # remove recurrent connections
+        weights[ih:pn, :] = 0
     else:
         desc = "Testing network:"
 
     # Compute for neurons N_x to N_post-1
     nonzero_pre_idx = List()
-    for i in range(st, ih):
-        pre_idx = np.nonzero(weights[:, i])[0]
-        nonzero_pre_idx.append(pre_idx.astype(np.int64))
+    if supervised or unsupervised:
+        for i in range(st, ih):
+            pre_idx = np.nonzero(weights[:ih, i])[0]
+            nonzero_pre_idx.append(pre_idx.astype(np.int64))
+    else:
+        for i in range(st, pn):
+            pre_idx = np.nonzero(weights[:ih, i])[0]
+            nonzero_pre_idx.append(pre_idx.astype(np.int64))
 
     for t in tqdm(range(1, T), desc=desc):
         # update membrane potential
@@ -552,7 +559,7 @@ def train_network(
             )
 
         # save weights for plotting
-        if t % interval == 0 and t != T:
+        if t % interval == 0:
             weights_4_plotting_exc[t // interval] = weights[idx_exc, st:pn]
             weights_4_plotting_inh[t // interval] = weights[idx_inh, st:ex]
             pre_trace_4_plot[t // interval] = pre_trace

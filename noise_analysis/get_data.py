@@ -109,9 +109,11 @@ def create_data(
             )
 
         # create true spiking labels train
-        labels_true = F.one_hot(limited_labels_train, num_classes=N_classes)
+        one_hot_train_pos = F.one_hot(limited_labels_test, num_classes=N_classes)
+        one_hot_train_neg = 1 - one_hot_train_pos
+        labels_true = torch.concatenate([one_hot_train_pos, one_hot_train_neg], axis=1)
 
-        labels_true_r_test = np.zeros((test_images * num_steps, N_classes))
+        labels_true_r_test = np.zeros((test_images * num_steps, N_classes * 2))
         for i in range(test_images):
             labels_true_r_test[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
                 labels_true[i],
@@ -202,34 +204,87 @@ def create_data(
         )
 
     if add_breaks:
-        # Keep track of how much the array has grown so that the index is correct
+        train_data_list = []
+        train_labels_list = []
+        if true_labels:
+            train_true_labels_list = []
+
         offset = 0
-
         for img in range(num_images):
-            # choose random break length
+            # 1. Get the original slice for this image
+            image_slice = S_data_train[img * num_steps : (img + 1) * num_steps]
+            label_slice = spike_labels_train[img * num_steps : (img + 1) * num_steps]
+
+            # 2. Add them to our list
+            train_data_list.append(image_slice)
+            train_labels_list.append(label_slice)
+            if true_labels:
+                train_true_labels_list.append(
+                    labels_true_r_train[img * num_steps : (img + 1) * num_steps]
+                )
+
+            # 3. Create the break
             length = np.random.choice(break_lengths, size=1)[0]
-
-            # define break spiking activity
-            break_activity = np.zeros((length, int(pixel_size**2)), dtype=int)
-
-            # create break labels
+            break_activity = np.zeros((length, pixel_size**2), dtype=int)
             break_labels = np.full(length, fill_value=-1)
 
-            # compute the start position for inserting break
-            start = img * num_steps + offset
-
-            # IMPORTANT: reassign the output of np.insert
-            S_data_train = np.insert(S_data_train, start, break_activity, axis=0)
-            spike_labels_train = np.insert(
-                spike_labels_train, start, break_labels, axis=0
-            )
+            # 4. Append the break
+            train_data_list.append(break_activity)
+            train_labels_list.append(break_labels)
             if true_labels:
-                # create break labels
-                break_true_labels = np.zeros((length, N_classes * 2))
-                labels_true_r = np.insert(labels_true_r, start, break_true_labels)
+                break_true_labels1 = np.zeros((length, N_classes))
+                break_true_labels2 = np.ones((length, N_classes))
+                break_true_labels = np.concatenate(
+                    (break_true_labels1, break_true_labels2), axis=1
+                )
+                train_true_labels_list.append(break_true_labels)
 
-            # update offset since we have inserted 'length' steps of break
-            offset += length
+        # Finally, concatenate once
+        S_data_train = np.concatenate(train_data_list, axis=0)
+        spike_labels_train = np.concatenate(train_labels_list, axis=0)
+        if true_labels:
+            labels_true_r_train = np.concatenate(train_true_labels_list, axis=0)
+
+        test_data_list = []
+        test_labels_list = []
+        if true_labels:
+            test_true_labels_list = []
+
+        offset = 0
+        for img in range(test_images):
+            # 1. Get the original slice for this image
+            image_slice = S_data_test[img * num_steps : (img + 1) * num_steps]
+            label_slice = spike_labels_test[img * num_steps : (img + 1) * num_steps]
+
+            # 2. Add them to our list
+            test_data_list.append(image_slice)
+            test_labels_list.append(label_slice)
+            if true_labels:
+                test_true_labels_list.append(
+                    labels_true_r_test[img * num_steps : (img + 1) * num_steps]
+                )
+
+            # 3. Create the break
+            length = np.random.choice(break_lengths, size=1)[0]
+            break_activity = np.zeros((length, pixel_size**2), dtype=int)
+            break_labels = np.full(length, fill_value=-1)
+
+            # 4. Append the break
+            test_data_list.append(break_activity)
+            test_labels_list.append(break_labels)
+            if true_labels:
+                break_true_labels1 = np.zeros((length, N_classes))
+                break_true_labels2 = np.ones((length, N_classes))
+                break_true_labels = np.concatenate(
+                    (break_true_labels1, break_true_labels2), axis=1
+                )
+                test_true_labels_list.append(break_true_labels)
+
+        # Finally, concatenate once
+        S_data_test = np.concatenate(test_data_list, axis=0)
+        spike_labels_test = np.concatenate(test_labels_list, axis=0)
+        if true_labels:
+            labels_true_r_test = np.concatenate(test_true_labels_list, axis=0)
 
     if noisy_data:
         # Convert the float array to an integer array first

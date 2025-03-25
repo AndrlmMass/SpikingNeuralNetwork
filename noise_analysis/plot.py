@@ -135,11 +135,11 @@ def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes, test):
     # loop through every num_steps time units and compare activity
     total_images = 0
     current_accuracy = 0
-    accuracy = np.zeros((labels.shape[0] // num_steps))
+    accuracy = np.zeros((labels.shape[0] // num_steps) + 1)
     total_images2 = np.zeros(num_classes)
     current_accuracy2 = np.zeros(num_classes)
-    accuracy2 = np.zeros(((labels.shape[0] // num_steps), num_classes))
-    for t in range(0, labels.shape[0], num_steps):
+    accuracy2 = np.zeros(((labels.shape[0] // num_steps) + 1, num_classes))
+    for t in range(0, labels.shape[0] + 1, num_steps):
         pp_label = np.sum(pp_[t : t + num_steps], axis=0)
         tp_label = np.sum(tp_[t : t + num_steps], axis=0)
 
@@ -148,12 +148,12 @@ def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes, test):
             accuracy[t // num_steps] = accuracy[(t - 1) // num_steps]
         else:
             print(pp_label)
+            print(tp_label)
             pp_label_pop = np.argmax(pp_label)
             tp_label_pop = np.argmax(tp_label)
             total_images += 1
             current_accuracy += int(pp_label_pop == tp_label_pop)
             accuracy[t // num_steps] = current_accuracy / total_images
-            print(pp_label_pop, tp_label_pop)
 
             # update number of data points and accumulated accuracy
             total_images2[tp_label_pop] += 1
