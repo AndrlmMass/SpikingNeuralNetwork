@@ -319,6 +319,12 @@ class snn_sleepy:
         self.num_steps = num_steps
         self.num_items = num_images
 
+        # check correct num_images
+        if self.num_items % self.N_classes != 0:
+            raise ValueError(
+                f"The number of images are not divisible by the number classes without a remaining fraction. It should be divisble by {self.N_classes}"
+            )
+
         # create data
         if not force_recreate:
             self.process(load_data=True, data_parameters=self.data_parameters)
@@ -740,15 +746,16 @@ class snn_sleepy:
 
         if plot_spikes_train:
             if start_time_spike_plot == None:
-                start_time_spike_plot = 0
+                # plot last 5% of training period
+                start_time_spike_plot = int(self.spikes_train.shape[0] * 0.95)
             if stop_time_spike_plot == None:
-                stop_time_spike_plot = self.T_train
+                stop_time_spike_plot = self.spikes_train.shape[0]
 
             spike_plot(
                 self.spikes_train[
                     start_time_spike_plot:stop_time_spike_plot, self.st :
                 ],
-                self.labels_train,
+                self.labels_train[start_time_spike_plot:stop_time_spike_plot],
             )
 
         if plot_threshold:
@@ -775,8 +782,12 @@ class snn_sleepy:
 
         if plot_weights:
             weights_plot(
-                weights_exc=self.weights2plot_exc,
-                weights_inh=self.weights2plot_inh,
+                weights_exc=self.weights2plot_exc[
+                    int(self.weights2plot_exc.shape[0] * 0.80) :
+                ],
+                weights_inh=self.weights2plot_inh[
+                    int(self.weights2plot_inh.shape[0] * 0.80) :
+                ],
                 N=self.N,
                 N_x=self.N_x,
                 N_exc=self.N_exc,
@@ -900,7 +911,7 @@ class snn_sleepy:
 
             if plot_spikes_test:
                 if start_time_spike_plot == None:
-                    start_time_spike_plot = 0
+                    start_time_spike_plot = self.T_test * 0.95
                 if stop_time_spike_plot == None:
                     stop_time_spike_plot = self.T_test
 
@@ -940,7 +951,7 @@ class snn_sleepy:
         if t_sne:
             if t_sne_train:
                 t_SNE(
-                    spikes=self.spikes_train[:, self.ih : self.pp],
+                    spikes=self.spikes_train[:, self.st : self.ex],
                     labels_spike=self.labels_train,
                     n_components=n_components,
                     perplexity=perplexity,
@@ -950,7 +961,7 @@ class snn_sleepy:
                 )
             if t_sne_test:
                 t_SNE(
-                    spikes=self.spikes_test[:, self.ih : self.pp],
+                    spikes=self.spikes_test[:, self.st : self.ex],
                     labels_spike=self.labels_test,
                     n_components=n_components,
                     perplexity=perplexity,

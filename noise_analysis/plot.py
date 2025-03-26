@@ -351,8 +351,8 @@ def weights_plot(
         axs[0].plot(
             mu_weights_inh[:, i], color=cmap_inh(i / mu_weights_inh.shape[1]), alpha=0.7
         )
-    sum_weights_exc = np.nansum(np.abs(weights_exc), axis=0)
-    sum_weights_inh = np.nansum(np.abs(weights_inh), axis=0)
+    sum_weights_exc = np.nansum(np.abs(weights_exc), axis=1)
+    sum_weights_inh = np.nansum(np.abs(weights_inh), axis=1)
     # plot sum of weights
     axs[1].plot(sum_weights_exc, color="red")
     axs[1].plot(sum_weights_inh, color="blue")
