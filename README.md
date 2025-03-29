@@ -29,9 +29,9 @@ We have an `environment.yml` file that contains all packages to build and work w
 
 Navigate to the noise_analysis folder
 
-'''
+```
 cd noise_analysis
-'''
+```
 
 **Install** the `conda` environment:
 
