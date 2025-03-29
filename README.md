@@ -41,6 +41,6 @@ cd noise_analysis
 
     conda activate noise_testing
 
-**Update** the `environment.yml` with existing env by:
+**Update** the `environment.yml` with existing env by (if you add more libraries that are necessary for running the script):
 
     conda env update --name noise_testing --file environment.yml --prune'
