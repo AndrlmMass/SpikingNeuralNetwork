@@ -27,7 +27,11 @@ We have an `environment.yml` file that contains all packages to build and work w
 
 ### Noise & sleep
 
-Navigate to the 'SpikingNeuralNetwork/noise_analysis'-folder.
+Navigate to the noise_analysis folder
+
+'''
+cd noise_analysis
+'''
 
 **Install** the `conda` environment:
 
