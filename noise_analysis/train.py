@@ -403,12 +403,13 @@ def train_network(
     idx_inh = np.random.choice(inh_interval, size=num_inh, replace=False)
 
     # create weights_plotting_array
-    weights_4_plotting_exc = np.zeros((T // interval + 1, num_exc, pn - st))
-    weights_4_plotting_inh = np.zeros((T // interval + 1, num_inh, ex - st))
+    plot_positions = np.arange(1, T, interval)
+    weights_4_plotting_exc = np.zeros((plot_positions.shape[0], num_exc, pn - st))
+    weights_4_plotting_inh = np.zeros((plot_positions.shape[0], num_inh, ex - st))
     weights_4_plotting_exc[0] = weights[idx_exc, st:pn]
     weights_4_plotting_inh[0] = weights[idx_inh, st:ex]
-    pre_trace_4_plot = np.zeros((T // interval + 1, pn))
-    post_trace_4_plot = np.zeros((T // interval + 1, pn - st))
+    pre_trace_4_plot = np.zeros((plot_positions.shape[0], pn))
+    post_trace_4_plot = np.zeros((plot_positions.shape[0], pn - st))
 
     # create spike threshold array
     spike_threshold = np.full(
@@ -453,6 +454,8 @@ def train_network(
         for i in range(st, pn):
             pre_idx = np.nonzero(weights[:ih, i])[0]
             nonzero_pre_idx.append(pre_idx.astype(np.int64))
+
+    idx = 0
 
     for t in tqdm(range(1, T), desc=desc):
         # update membrane potential
@@ -559,11 +562,14 @@ def train_network(
             )
 
         # save weights for plotting
-        if t % interval == 0:
-            weights_4_plotting_exc[t // interval] = weights[idx_exc, st:pn]
-            weights_4_plotting_inh[t // interval] = weights[idx_inh, st:ex]
-            pre_trace_4_plot[t // interval] = pre_trace
-            post_trace_4_plot[t // interval] = post_trace
+        if t == plot_positions[idx]:
+            weights_4_plotting_exc[idx] = weights[idx_exc, st:pn]
+            weights_4_plotting_inh[idx] = weights[idx_inh, st:ex]
+            pre_trace_4_plot[idx] = pre_trace
+            post_trace_4_plot[idx] = post_trace
+            idx += 1
+            if plot_positions.size <= idx:
+                idx -= 1
 
         # remove training data during sleep
         if sleep:

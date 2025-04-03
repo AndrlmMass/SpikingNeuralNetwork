@@ -240,8 +240,6 @@ def create_data(
         sum_ = np.sum(limited_images_train_[ind])
         print(cl, sum_)
 
-    # d = 4
-
     if plot_comparison:
         plot_floats_and_spikes(
             images, S_data_train, spike_labels_train, labels, num_steps
@@ -329,6 +327,8 @@ def create_data(
         spike_labels_test = np.concatenate(test_labels_list, axis=0)
         if true_labels:
             labels_true_r_test = np.concatenate(test_true_labels_list, axis=0)
+        else:
+            labels_true_r_test = None
 
     if noisy_data:
         # Convert the float array to an integer array first

@@ -30,6 +30,10 @@ def spike_plot(data, labels):
     ax.set_ylabel(f"{data.shape[1]} Units")
     ax.set_xlabel("Time (ms)")
 
+    """
+    To plot the 
+    """
+
     # We'll collect which labels we've drawn (for legend) so we don't add duplicates
     drawn_labels = set()
 
@@ -129,8 +133,8 @@ def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes, test):
     mask = labels != -1
     if mask.size != 0:
         labels = labels[mask]
-        pp_ = pp_[mask]
-        tp_ = tp_[mask]
+        pp_ = pp_[mask, :]
+        tp_ = tp_[mask, :]
 
     # loop through every num_steps time units and compare activity
     total_images = 0
@@ -300,11 +304,11 @@ def heat_map(data, pixel_size):
 
 
 def mp_plot(mp, N_exc):
-    plt.plot(mp[:, :N_exc], color="green")
-    plt.title("excitatory membrane potential during training")
-    plt.xlabel("time (ms)")
-    plt.ylabel("membrane potential (mV)")
-    plt.show()
+    # plt.plot(mp[:, :N_exc], color="green")
+    # plt.title("excitatory membrane potential during training")
+    # plt.xlabel("time (ms)")
+    # plt.ylabel("membrane potential (mV)")
+    # plt.show()
 
     plt.plot(mp[:, N_exc:], color="red")
     plt.title("inhibitory membrane potential during training")
@@ -351,8 +355,8 @@ def weights_plot(
         axs[0].plot(
             mu_weights_inh[:, i], color=cmap_inh(i / mu_weights_inh.shape[1]), alpha=0.7
         )
-    sum_weights_exc = np.nansum(np.abs(weights_exc), axis=1)
-    sum_weights_inh = np.nansum(np.abs(weights_inh), axis=1)
+    sum_weights_exc = np.abs(np.sum(weights_exc, axis=2))
+    sum_weights_inh = np.abs(np.sum(weights_inh, axis=2))
     # plot sum of weights
     axs[1].plot(sum_weights_exc, color="red")
     axs[1].plot(sum_weights_inh, color="blue")
