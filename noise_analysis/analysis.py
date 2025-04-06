@@ -287,5 +287,6 @@ def Clustering_estimation(
     bcss = tss - wcss
 
     # calculate intra variance divided by inter variance
-    ssratio = wcss / bcss
+    ssratio = bcss / wcss
     print(ssratio)
+    return ssratio

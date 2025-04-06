@@ -33,4 +33,4 @@ snn_N.train(
 )
 
 # analyze results
-snn_N.analysis(t_sne=False, pca=False, t_sne_train=False, clustering_estimation=True)
+snn_N.analysis(clustering_estimation=True)
