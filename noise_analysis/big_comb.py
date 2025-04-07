@@ -12,6 +12,7 @@ from plot import (
     spike_threshold_plot,
     plot_traces,
     plot_accuracy,
+    get_elite_nodes,
 )
 from analysis import t_SNE, PCA_analysis, Clustering_estimation
 from create_network import create_weights, create_arrays
@@ -649,6 +650,8 @@ class snn_sleepy:
         plot_accuracy_train=True,
         plot_accuracy_test=True,
         save_test_data=True,
+        wide_top=0.3,
+        narrow_top=0.1,
     ):
         self.dt = dt
 
@@ -796,6 +799,14 @@ class snn_sleepy:
                 model_parameters=self.model_parameters,
                 load_test_model=False,
             )
+        # test get_elite_nodes function
+        get_elite_nodes(
+            spikes=self.spikes_train,
+            labels=self.labels_train,
+            num_classes=self.N_classes,
+            wide_top=wide_top,
+            narrow_top=narrow_top,
+        )
 
         if plot_accuracy_train and (self.supervised or self.unsupervised):
             self.accuracy_train = plot_accuracy(

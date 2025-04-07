@@ -6,6 +6,37 @@ import matplotlib
 matplotlib.use("TkAgg")
 
 
+def get_elite_nodes(spikes, labels, num_classes, wide_top, narrow_top):
+    # remove unnecessary data periods
+    mask_break = labels == -1 or labels == -2
+    spikes = spikes[mask_break, :]
+    labels = labels[mask_break]
+
+    # collect responses
+    responses = np.zeros((labels.shape[0], num_classes))
+    for cl in range(num_classes):
+        indices = np.where(labels == cl)[0]
+        responses[cl, :] = np.sum(spikes[indices], axis=1)
+
+    # compute discriminatory power
+    total_responses = np.sum(spikes, axis=1)
+    responses *= responses / total_responses
+
+    # sort performance
+    responses = np.argsort(responses, 1)
+
+    # remove overlapping top performers
+    unique_tops = np.unique(responses[: spikes.shape[1] * wide_top])
+
+    # select top performers
+    tops = [list(col[~np.isnan(col)]) for col in unique_tops.T]
+
+    # limit tops to narrow_top constraint
+    tops_restricted = [col[:narrow_top] for col in tops]
+
+    return tops_restricted
+
+
 def spike_plot(data, labels):
     # Validate dimensions
     if len(labels) != data.shape[0]:

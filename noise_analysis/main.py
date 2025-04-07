@@ -4,7 +4,7 @@ from big_comb import snn_sleepy
 snn_N = snn_sleepy(classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
 
 # acquire data
-snn_N.prepare_data(add_breaks=False, num_images=100, force_recreate=True)
+snn_N.prepare_data(add_breaks=False, num_images=10, force_recreate=False)
 
 # set up network for training
 snn_N.prepare_training(

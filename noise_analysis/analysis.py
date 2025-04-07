@@ -210,13 +210,13 @@ def Clustering_estimation(
     """
     This step might be unnecessary. At least I suspect it
     """
-    # spike_rates_std = StandardScaler().fit_transform(spike_rates)
+    spike_train_rates_std = StandardScaler().fit_transform(spike_train_rates)
 
     """ Perform PCA on the binned data """
     # Create a PCA instance.
     pca = PCA(n_components=n_components, random_state=random_state)
-    pca.fit(spike_train_rates)
-    scores_train_pca = pca.transform(spike_train_rates)
+    pca.fit(spike_train_rates_std)
+    scores_train_pca = pca.transform(spike_train_rates_std)
 
     # Calculate the centroids of each cluster using K-means
     kmeans_pca = KMeans(
@@ -266,11 +266,11 @@ def Clustering_estimation(
     """
     This step might be unnecessary. At least I suspect it
     """
-    # spike_rates_std = StandardScaler().fit_transform(spike_rates)
+    spike_rates_test_std = StandardScaler().fit_transform(spikes_test_rates)
 
     """ Perform PCA on the binned data """
     # Project onto PCA-structure
-    scores_test_pca = pca.transform(spikes_test_rates)
+    scores_test_pca = pca.transform(spike_rates_test_std)
 
     # Calculate the centroids of each cluster using K-means
     kmeans_pca.transform(scores_test_pca)
