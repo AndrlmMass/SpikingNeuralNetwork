@@ -577,6 +577,8 @@ def train_network(
                 spikes[t + 1, :st] = 0
                 spikes[t + 1, pn:] = 0
                 spike_labels[t] = -2
+            if sleep_now_inh and t < T - 2:
+                spike_labels[t] = -2
 
     return (
         weights,
@@ -592,4 +594,5 @@ def train_network(
         weight_mask,
         max_sum_inh,
         max_sum_exc,
+        spike_labels,
     )

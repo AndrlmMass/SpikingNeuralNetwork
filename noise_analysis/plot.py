@@ -6,35 +6,106 @@ import matplotlib
 matplotlib.use("TkAgg")
 
 
-def get_elite_nodes(spikes, labels, num_classes, wide_top, narrow_top):
+def get_elite_nodes(spikes, labels, num_classes, narrow_top, st, ih):
     # remove unnecessary data periods
-    mask_break = labels == -1 or labels == -2
+    mask_break = (labels != -1) & (labels != -2)
     spikes = spikes[mask_break, :]
     labels = labels[mask_break]
 
+    # remove poisson-input & inhibition
+    spikes = spikes[:, st:ih]
+
     # collect responses
-    responses = np.zeros((labels.shape[0], num_classes))
+    responses = np.zeros(
+        (spikes.shape[1], num_classes), dtype=float
+    )  # make responses float too
+
     for cl in range(num_classes):
         indices = np.where(labels == cl)[0]
-        responses[cl, :] = np.sum(spikes[indices], axis=1)
+        summed = np.sum(spikes[indices], axis=0)  # still int at this point
+        response = summed.astype(float)  # now convert to float
+        response[response == 0] = np.nan  # safe to assign NaN
+        responses[:, cl] = response
 
     # compute discriminatory power
-    total_responses = np.sum(spikes, axis=1)
-    responses *= responses / total_responses
+    total_responses = np.sum(spikes, axis=0, dtype=float)
+    total_responses[total_responses == 0] = np.nan
+    total_responses_reshaped = np.tile(total_responses, (num_classes, 1)).T
+    responses *= responses / total_responses_reshaped
 
     # sort performance
-    responses = np.argsort(responses, 1)
+    responses_indices = np.argsort(responses, 0)[::-1, :]
 
-    # remove overlapping top performers
-    unique_tops = np.unique(responses[: spikes.shape[1] * wide_top])
+    top_k = int(narrow_top * spikes.shape[1])
+    final_indices = []
 
-    # select top performers
-    tops = [list(col[~np.isnan(col)]) for col in unique_tops.T]
+    used_indices = set()
+    for c in range(num_classes):
+        col = responses_indices[:, c]
 
-    # limit tops to narrow_top constraint
-    tops_restricted = [col[:narrow_top] for col in tops]
+        # Remove indices already used in previous classes
+        unique = [idx for idx in col if idx not in used_indices]
 
-    return tops_restricted
+        # Keep only top_k
+        selected = unique[:top_k]
+
+        # Store and mark as used
+        final_indices.append(selected)
+        used_indices.update(selected)
+
+    return final_indices, spikes, labels
+
+
+def top_responders_plotted(
+    spikes, labels, ih, st, num_classes, narrow_top, smoothening, train
+):
+    # get indices
+    size = int(spikes.shape[0] * 0)
+    spikes = spikes[size:, :]
+    labels = labels[size:]
+    indices, spikes, labels = get_elite_nodes(
+        spikes=spikes,
+        labels=labels,
+        ih=ih,
+        st=st,
+        num_classes=num_classes,
+        narrow_top=narrow_top,
+    )
+
+    # reduce samples
+    cmap = plt.get_cmap("Set2", num_classes)
+    colors = cmap.colors
+
+    block_size = smoothening
+
+    # Calculate the number of complete blocks
+    num_blocks = spikes.shape[0] // block_size
+
+    # Initialize a list to hold the mean of each block
+    means = []
+
+    # Loop through each block, calculate mean along axis=0 (i.e. column-wise)
+    for i in range(num_blocks):
+        block = spikes[i * block_size : (i + 1) * block_size]
+        block_mean = np.mean(block, axis=0)
+        means.append(block_mean)
+
+    # Optionally convert to a NumPy array for further processing
+    spikes = np.array(means)
+
+    for c in range(num_classes):
+        activity = np.sum(spikes[:, indices[c]], axis=1)
+        plt.plot(activity, color=colors[c], label=c)
+
+    if train:
+        title = "Top responding nodes by class during training"
+    else:
+        title = "Top responding nodes by class during testing"
+    plt.title(title)
+    plt.xlabel(f"Time (intervals of {smoothening} )")
+    plt.ylabel("Spiking rate")
+    plt.legend()
+    plt.show()
 
 
 def spike_plot(data, labels):

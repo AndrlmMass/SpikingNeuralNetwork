@@ -12,7 +12,7 @@ from plot import (
     spike_threshold_plot,
     plot_traces,
     plot_accuracy,
-    get_elite_nodes,
+    top_responders_plotted,
 )
 from analysis import t_SNE, PCA_analysis, Clustering_estimation
 from create_network import create_weights, create_arrays
@@ -218,6 +218,8 @@ class snn_sleepy:
                 os.path.join(model_dir, "max_weight_sum_exc.npy"),
                 self.max_weight_sum_exc,
             )
+            np.save(os.path.join(model_dir, "labels_train"), self.labels_train)
+            np.save(os.path.join(model_dir, "labels_test"), self.labels_test)
 
             filepath = os.path.join(model_dir, "model_parameters.json")
 
@@ -293,6 +295,12 @@ class snn_sleepy:
                         self.max_weight_sum_exc = np.load(
                             os.path.join("model", folder, "max_weight_sum_exc.npy")
                         )
+                        self.labels_train = np.load(
+                            os.path.join("model", folder, "labels_train.npy")
+                        )
+                        self.labels_test = np.load(
+                            os.path.join("model", folder, "labels_test.npy")
+                        )
 
                         print("\rmodel loaded", end="")
                         self.model_loaded = True
@@ -325,6 +333,10 @@ class snn_sleepy:
         min_time=None,
         gain_labels=0.5,
     ):
+        if num_images <= self.N_classes:
+            raise ValueError(
+                f"num images {num_images} needs to be more than number of classes ({self.N_classes})"
+            )
         # Save current parameters
         self.data_parameters = {**locals()}
 
@@ -650,8 +662,10 @@ class snn_sleepy:
         plot_accuracy_train=True,
         plot_accuracy_test=True,
         save_test_data=True,
-        wide_top=0.3,
         narrow_top=0.1,
+        smoothening=350,
+        plot_top_response_train=False,
+        plot_top_response_test=False,
     ):
         self.dt = dt
 
@@ -722,6 +736,7 @@ class snn_sleepy:
                 self.weight_mask,
                 self.max_weight_sum_inh,
                 self.max_weight_sum_exc,
+                self.labels_train,
             ) = train_network(
                 weights=self.weights,
                 spike_labels=self.labels_train,
@@ -799,14 +814,21 @@ class snn_sleepy:
                 model_parameters=self.model_parameters,
                 load_test_model=False,
             )
-        # test get_elite_nodes function
-        get_elite_nodes(
-            spikes=self.spikes_train,
-            labels=self.labels_train,
-            num_classes=self.N_classes,
-            wide_top=wide_top,
-            narrow_top=narrow_top,
-        )
+        """
+        For some reason, labels_train has no "sleep" labels when I load it in. This makes no sense. 
+        
+        """
+        if plot_top_response_train:
+            top_responders_plotted(
+                spikes=self.spikes_train,
+                labels=self.labels_train,
+                ih=self.ih,
+                st=self.st,
+                num_classes=self.N_classes,
+                narrow_top=narrow_top,
+                smoothening=smoothening,
+                train=True,
+            )
 
         if plot_accuracy_train and (self.supervised or self.unsupervised):
             self.accuracy_train = plot_accuracy(
@@ -899,6 +921,7 @@ class snn_sleepy:
                     self.weight_mask,
                     self.max_weight_sum_inh,
                     self.max_weight_sum_exc,
+                    self.labels_test,
                 ) = train_network(
                     weights=self.weights,
                     spike_labels=self.labels_test,
@@ -972,6 +995,17 @@ class snn_sleepy:
                 if save_test_data:
                     self.process(
                         save_model=True, save_test_model=True, model_dir_=model_dir
+                    )
+                if plot_top_response_test:
+                    top_responders_plotted(
+                        spikes=self.spikes_test,
+                        labels=self.labels_test,
+                        ih=self.ih,
+                        st=self.st,
+                        num_classes=self.N_classes,
+                        narrow_top=narrow_top,
+                        smoothening=smoothening,
+                        train=False,
                     )
 
             if plot_accuracy_test and (self.unsupervised or self.supervised):
