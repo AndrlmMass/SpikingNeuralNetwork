@@ -1,4 +1,0 @@
-name: SNN_linux
-channels:
-  - defaults
-prefix: /home/andreas/anaconda3/envs/SNN_linux
