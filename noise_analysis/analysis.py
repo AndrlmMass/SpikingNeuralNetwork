@@ -1,7 +1,10 @@
+from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
 import matplotlib
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
@@ -60,6 +63,7 @@ def t_SNE(
     perplexity,
     max_iter,
     random_state,
+    accuracy,
 ):
     # Now, bin the spikes using the labels, skipping breaks:
     features, segment_labels = bin_spikes_by_label_no_breaks(spikes, labels_spike)
@@ -87,7 +91,7 @@ def t_SNE(
             tsne_results[indices, 1],
             label=f"Class {label}",
         )
-    plt.title("t-SNE results")
+    plt.title(f"t-SNE results (Accuracy={accuracy})")
     plt.xlabel("t-SNE dimension 1")
     plt.ylabel("t-SNE dimension 2")
     plt.legend()
@@ -145,3 +149,144 @@ def PCA_analysis(
     plt.ylabel("Principal Component 2")
     plt.legend()
     plt.show()
+
+
+def Clustering_estimation(
+    spikes_train,
+    spikes_test,
+    labels_test,
+    labels_train,
+    num_steps,
+    n_components,
+    random_state,
+    num_classes,
+):
+    """
+    Recipe:
+
+    First, fit training data to a PCA structure and create K-means centroids based on that data.
+
+    Then, project the test-data onto that PCA-structure with its respective K-means centroids.
+    """
+
+    """
+    First: Fit PCA and K-means to training data
+    """
+
+    """Calculate the spiking rates for each item presentation"""
+    # Remove break data
+    break_mask = labels_train != -1
+    labels_train = labels_train[break_mask]
+    spikes_train = spikes_train[break_mask, :]
+
+    # Calculate rate for each item
+    spike_train_rates = []
+    labels_train_unique = []
+
+    """
+    Note that we are currently skipping sleep-patterns. 
+    Maybe this should be its own array, but then we miss part of the sequence
+    """
+    for i in tqdm(
+        range(0, labels_train.shape[0], num_steps),
+        desc="Computing mean rates from training data",
+    ):
+        # Calculate non_sleep spiking activity
+        sleep_mask = labels_train != -2
+        if sleep_mask.size == 0:
+            continue
+        mean_spikes = np.mean(spikes_train[sleep_mask, :][i : i + num_steps], axis=0)
+        predom_label = np.argmax(
+            np.bincount(labels_train[sleep_mask][i : i + num_steps])
+        )
+        spike_train_rates.append(mean_spikes)
+        labels_train_unique.append(predom_label)
+
+    # convert to numpy array
+    spike_train_rates = np.array(spike_train_rates)
+    labels_train_unique = np.array(labels_train_unique)
+
+    # standardize rates
+    """
+    This step might be unnecessary. At least I suspect it
+    """
+    # spike_rates_std = StandardScaler().fit_transform(spike_rates)
+
+    """ Perform PCA on the binned data """
+    # Create a PCA instance.
+    pca = PCA(n_components=n_components, random_state=random_state)
+    pca.fit(spike_train_rates)
+    scores_train_pca = pca.transform(spike_train_rates)
+
+    # Calculate the centroids of each cluster using K-means
+    kmeans_pca = KMeans(
+        n_clusters=num_classes, init="k-means++", random_state=random_state
+    )
+    kmeans_pca.fit(scores_train_pca)
+
+    """
+    Second: Project test data onto precomputed PCA and K-means structures
+    """
+
+    """Calculate the spiking rates for each item presentation"""
+    # Remove break data
+    break_mask = labels_test != -1
+    labels_test = labels_test[break_mask]
+    spikes_test = spikes_test[break_mask, :]
+
+    # Calculate rate for each item
+    spikes_test_rates = []
+    labels_test_unique = []
+
+    """
+    Note that we are currently skipping sleep-patterns. 
+    Maybe this should be its own array, but then we miss part of the sequence
+    """
+    for i in tqdm(
+        range(0, labels_test.shape[0], num_steps), desc="Computing rates from test data"
+    ):
+        # Calculate non_sleep spiking activity
+        sleep_mask = labels_test != -2
+        if sleep_mask.size == 0:
+            continue
+        mean_spikes_test = np.mean(
+            spikes_test[sleep_mask, :][i : i + num_steps], axis=0
+        )
+        predom_label = np.argmax(
+            np.bincount(labels_test[sleep_mask][i : i + num_steps])
+        )
+        spikes_test_rates.append(mean_spikes_test)
+        labels_test_unique.append(predom_label)
+
+    # convert to numpy array
+    spikes_test_rates = np.array(spikes_test_rates)
+    labels_test_unique = np.array(labels_test_unique)
+
+    # standardize rates
+    """
+    This step might be unnecessary. At least I suspect it
+    """
+    # spike_rates_std = StandardScaler().fit_transform(spike_rates)
+
+    """ Perform PCA on the binned data """
+    # Project onto PCA-structure
+    scores_test_pca = pca.transform(spikes_test_rates)
+
+    # Calculate the centroids of each cluster using K-means
+    kmeans_pca.transform(scores_test_pca)
+
+    """Calculate the sums of squared distances to each centroid (within and between)"""
+    # calculate intra-cluster variance
+    wcss = kmeans_pca.inertia_
+
+    # calculate overall mean
+    overall_mean = np.mean(scores_test_pca, axis=0)
+    tss = np.sum((scores_test_pca - overall_mean) ** 2)
+
+    # extract inter-cluster variance from TSS
+    bcss = tss - wcss
+
+    # calculate intra variance divided by inter variance
+    ssratio = bcss / wcss
+    print(ssratio)
+    return ssratio

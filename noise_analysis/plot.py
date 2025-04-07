@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.signal import savgol_filter
 import matplotlib
 
 matplotlib.use("TkAgg")
@@ -28,6 +29,10 @@ def spike_plot(data, labels):
     ax.eventplot(positions, lineoffsets=np.arange(data.shape[1]), colors="black")
     ax.set_ylabel(f"{data.shape[1]} Units")
     ax.set_xlabel("Time (ms)")
+
+    """
+    To plot the 
+    """
 
     # We'll collect which labels we've drawn (for legend) so we don't add duplicates
     drawn_labels = set()
@@ -113,6 +118,82 @@ def spike_plot(data, labels):
     plt.title("Spikes with Class-based Horizontal Lines")
     plt.tight_layout()
     plt.show()
+
+
+def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes, test):
+    """
+    spikes have shape: pp-pn-tp-tn-fp-fn
+    """
+    pp_ = spikes[:, ih:pp]
+    tp_ = spikes[:, pn:tp]
+
+    #### calculate precision (accuracy) ###
+
+    # remove data from all breaks
+    mask = labels != -1
+    if mask.size != 0:
+        labels = labels[mask]
+        pp_ = pp_[mask, :]
+        tp_ = tp_[mask, :]
+
+    # loop through every num_steps time units and compare activity
+    total_images = 0
+    current_accuracy = 0
+    accuracy = np.zeros((labels.shape[0] // num_steps) + 1)
+    total_images2 = np.zeros(num_classes)
+    current_accuracy2 = np.zeros(num_classes)
+    accuracy2 = np.zeros(((labels.shape[0] // num_steps) + 1, num_classes))
+    for t in range(0, labels.shape[0] + 1, num_steps):
+        pp_label = np.sum(pp_[t : t + num_steps], axis=0)
+        tp_label = np.sum(tp_[t : t + num_steps], axis=0)
+
+        # check if there is no class preference
+        if np.sum(tp_label) == 0:
+            accuracy[t // num_steps] = accuracy[(t - 1) // num_steps]
+        else:
+            print(pp_label)
+            print(tp_label)
+            pp_label_pop = np.argmax(pp_label)
+            tp_label_pop = np.argmax(tp_label)
+            total_images += 1
+            current_accuracy += int(pp_label_pop == tp_label_pop)
+            accuracy[t // num_steps] = current_accuracy / total_images
+
+            # update number of data points and accumulated accuracy
+            total_images2[tp_label_pop] += 1
+            current_accuracy2[tp_label_pop] += int(pp_label_pop == tp_label_pop)
+            acc = current_accuracy2[tp_label_pop] / total_images2[tp_label_pop]
+            accuracy2[t // num_steps :, tp_label_pop] = acc
+
+    # plot
+    plt.figure(figsize=(12, 6))
+
+    colors = plt.cm.tab10(np.linspace(0, 1, num_classes))
+
+    for c in range(num_classes):
+        class_accuracy = accuracy2[:, c]
+        # Add jitter to the x-values for this class
+        jitter = np.random.normal(0, 0.001, size=class_accuracy.shape[0])
+        plt.plot(
+            class_accuracy + jitter,
+            label=f"class:{c}",
+            color=colors[c],
+            linewidth=0.8,
+            linestyle="dashed",
+        )
+
+    plt.plot(accuracy, label="All classes", linewidth=3, color="black")
+    plt.legend(bbox_to_anchor=(1.1, 0.9), loc="upper right")
+    plt.ylabel("Accuracy")
+    plt.xlabel("Time (t)")
+    if test:
+        title = f"Testing accuracy: {accuracy[-1]}"
+    else:
+        title = f"Training accuracy: {accuracy[-1]}"
+    plt.title(title)
+    plt.show()
+
+    return accuracy[-1]
 
 
 def get_contiguous_segment(indices):
@@ -223,11 +304,11 @@ def heat_map(data, pixel_size):
 
 
 def mp_plot(mp, N_exc):
-    plt.plot(mp[:, :N_exc], color="green")
-    plt.title("excitatory membrane potential during training")
-    plt.xlabel("time (ms)")
-    plt.ylabel("membrane potential (mV)")
-    plt.show()
+    # plt.plot(mp[:, :N_exc], color="green")
+    # plt.title("excitatory membrane potential during training")
+    # plt.xlabel("time (ms)")
+    # plt.ylabel("membrane potential (mV)")
+    # plt.show()
 
     plt.plot(mp[:, N_exc:], color="red")
     plt.title("inhibitory membrane potential during training")
@@ -274,8 +355,8 @@ def weights_plot(
         axs[0].plot(
             mu_weights_inh[:, i], color=cmap_inh(i / mu_weights_inh.shape[1]), alpha=0.7
         )
-    sum_weights_exc = np.nansum(np.abs(weights_exc), axis=0)
-    sum_weights_inh = np.nansum(np.abs(weights_inh), axis=0)
+    sum_weights_exc = np.abs(np.sum(weights_exc, axis=2))
+    sum_weights_inh = np.abs(np.sum(weights_inh, axis=2))
     # plot sum of weights
     axs[1].plot(sum_weights_exc, color="red")
     axs[1].plot(sum_weights_inh, color="blue")

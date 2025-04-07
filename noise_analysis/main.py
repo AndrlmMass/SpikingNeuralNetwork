@@ -1,83 +1,36 @@
-from big_comb import SNN_noisy
+from big_comb import snn_sleepy
 
 # init class
-snn_N = SNN_noisy(N_exc=200, N_inh=50, N_x=100)
+snn_N = snn_sleepy(classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
 
 # acquire data
-snn_N.prepare_data(
-    num_images=500,
-    recreate=True,
-    plot_comparison=False,
-    plot_spikes=False,
-    noisy_data=True,
-    noise_level=0.005,
-    add_breaks=False,
-    break_lengths=[500, 1500, 1000],
-    classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-    gain=1.0,
-    test_data_ratio=0.5,
-    max_time=2000,
-)
+snn_N.prepare_data(add_breaks=False, num_images=100, force_recreate=True)
 
 # set up network for training
 snn_N.prepare_training(
-    plot_weights=True,
-    plot_network=False,
-    neg_weight=-0.4,
-    pos_weight=0.3,
-    weight_affinity_hidden_exc=0.1,
-    weight_affinity_hidden_inh=0.1,
-    weight_affinity_input=0.05,
+    tp_weight=0.01,
+    tn_weight=0.01,
+    fp_weight=-0.01,
+    fn_weight=-0.01,
+    pn_weight=-1,
+    pp_weight=1,
+    epn_weight=1,
+    epp_weight=1,
+    ei_weights=0.5,
+    w_dense_ee=0.1,
+    w_dense_ei=0.1,
+    plot_weights=False,
+    weight_affinity_output=0.1,
 )
 
 # train network
 snn_N.train(
-    plot_spikes_train=False,
-    plot_spikes_test=False,
-    plot_mp_train=False,
-    plot_mp_test=False,
-    plot_weights=True,
-    plot_threshold=False,
-    plot_traces_=False,
     train_weights=True,
-    learning_rate_exc=0.0008,
-    learning_rate_inh=0.005,
-    w_target_exc=0.1,
-    w_target_inh=-0.1,
-    var_noise=1,
-    min_weight_inh=-25,
-    max_weight_inh=0,
-    max_weight_exc=25,
-    min_weight_exc=0,
-    spike_threshold_default=-55,
-    check_sleep_interval=10000,
-    interval=100,
-    min_mp=-100,
-    sleep=True,
-    weight_decay=False,
-    weight_decay_rate_exc=0.9999,
-    weight_decay_rate_inh=0.9999,
     noisy_potential=True,
-    noisy_threshold=False,
-    noisy_weights=False,
-    spike_adaption=True,
-    delta_adaption=0.5,
-    tau_adaption=100,
-    save_weights=True,
-    trace_update=False,
-    timing_update=True,
-    vectorized_trace=False,
-    clip_exc_weights=False,
-    clip_inh_weights=False,
-    alpha=1.25,
-    beta=0.8,
-    A_plus=0.25,
-    A_minus=0.5,
-    test=True,
-    tau_LTD=10,
-    tau_LTP=10,
+    force_train=False,
+    save_test_data=True,
+    plot_weights=False,
 )
 
-
 # analyze results
-snn_N.analysis(t_sne=True, pls=True, n_components=2)
+snn_N.analysis(clustering_estimation=True)
