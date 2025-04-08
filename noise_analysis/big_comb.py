@@ -662,7 +662,7 @@ class snn_sleepy:
         plot_accuracy_train=True,
         plot_accuracy_test=True,
         save_test_data=True,
-        narrow_top=0.1,
+        narrow_top=0.05,
         smoothening=350,
         plot_top_response_train=False,
         plot_top_response_test=False,
@@ -928,7 +928,7 @@ class snn_sleepy:
                     N_classes=self.N_classes,
                     supervised=self.supervised,
                     mp=self.mp_test,
-                    sleep=sleep,
+                    sleep=False,
                     alpha=alpha,
                     timing_update=timing_update,
                     spikes=self.spikes_test,
@@ -996,17 +996,17 @@ class snn_sleepy:
                     self.process(
                         save_model=True, save_test_model=True, model_dir_=model_dir
                     )
-                if plot_top_response_test:
-                    top_responders_plotted(
-                        spikes=self.spikes_test,
-                        labels=self.labels_test,
-                        ih=self.ih,
-                        st=self.st,
-                        num_classes=self.N_classes,
-                        narrow_top=narrow_top,
-                        smoothening=smoothening,
-                        train=False,
-                    )
+            if plot_top_response_test:
+                top_responders_plotted(
+                    spikes=self.spikes_test,
+                    labels=self.labels_test,
+                    ih=self.ih,
+                    st=self.st,
+                    num_classes=self.N_classes,
+                    narrow_top=narrow_top,
+                    smoothening=smoothening,
+                    train=False,
+                )
 
             if plot_accuracy_test and (self.unsupervised or self.supervised):
                 self.spikes_test[:, self.pn : self.tn] = self.labels_true_test

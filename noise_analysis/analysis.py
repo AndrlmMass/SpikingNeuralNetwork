@@ -202,6 +202,10 @@ def Clustering_estimation(
         spike_train_rates.append(mean_spikes)
         labels_train_unique.append(predom_label)
 
+    """'
+    create cutoff point, only for training!
+    """
+
     # convert to numpy array
     spike_train_rates = np.array(spike_train_rates)
     labels_train_unique = np.array(labels_train_unique)

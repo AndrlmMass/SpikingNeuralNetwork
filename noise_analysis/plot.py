@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import savgol_filter
+import matplotlib.patches as patches
 import matplotlib
 
 matplotlib.use("TkAgg")
@@ -31,27 +31,16 @@ def get_elite_nodes(spikes, labels, num_classes, narrow_top, st, ih):
     total_responses = np.sum(spikes, axis=0, dtype=float)
     total_responses[total_responses == 0] = np.nan
     total_responses_reshaped = np.tile(total_responses, (num_classes, 1)).T
-    responses *= responses / total_responses_reshaped
+    ratio = responses / total_responses_reshaped
+    responses *= ratio
 
     # sort performance
     responses_indices = np.argsort(responses, 0)[::-1, :]
 
     top_k = int(narrow_top * spikes.shape[1])
-    final_indices = []
+    final_indices = responses_indices[:top_k]
 
-    used_indices = set()
-    for c in range(num_classes):
-        col = responses_indices[:, c]
-
-        # Remove indices already used in previous classes
-        unique = [idx for idx in col if idx not in used_indices]
-
-        # Keep only top_k
-        selected = unique[:top_k]
-
-        # Store and mark as used
-        final_indices.append(selected)
-        used_indices.update(selected)
+    print(np.unique(final_indices).size / final_indices.size)
 
     return final_indices, spikes, labels
 
@@ -59,10 +48,9 @@ def get_elite_nodes(spikes, labels, num_classes, narrow_top, st, ih):
 def top_responders_plotted(
     spikes, labels, ih, st, num_classes, narrow_top, smoothening, train
 ):
+    fig, ax = plt.subplots()
+
     # get indices
-    size = int(spikes.shape[0] * 0)
-    spikes = spikes[size:, :]
-    labels = labels[size:]
     indices, spikes, labels = get_elite_nodes(
         spikes=spikes,
         labels=labels,
@@ -73,8 +61,16 @@ def top_responders_plotted(
     )
 
     # reduce samples
-    cmap = plt.get_cmap("Set2", num_classes)
+    cmap = plt.get_cmap("Set3", num_classes)
     colors = cmap.colors
+
+    # Define an intensity factor (values between 0 and 1)
+    intensity_factor = 0.5  # 70% of the original brightness
+
+    # Reduce the intensity of each color by scaling its RGB components
+    colors_adjusted = [
+        tuple(np.clip(np.array(color) * intensity_factor, 0, 1)) for color in colors
+    ]
 
     block_size = smoothening
 
@@ -83,28 +79,91 @@ def top_responders_plotted(
 
     # Initialize a list to hold the mean of each block
     means = []
+    labs = []
 
     # Loop through each block, calculate mean along axis=0 (i.e. column-wise)
     for i in range(num_blocks):
+        # add spikes
         block = spikes[i * block_size : (i + 1) * block_size]
         block_mean = np.mean(block, axis=0)
         means.append(block_mean)
+        # add labels
+        block_lab = labels[i * block_size : (i + 1) * block_size]
+        block_maj = np.argmax(np.bincount(block_lab))
+        labs.append(block_maj)
 
     # Optionally convert to a NumPy array for further processing
     spikes = np.array(means)
+    labels = np.array(labs)
+
+    # We'll collect which labels we've drawn (for legend) so we don't add duplicates
+    drawn_labels = set()
+
+    # Add the horizontal line below the spikes
+    y_offset = 0
+    box_height = 6
+
+    # We iterate through the time steps to identify contiguous segments
+    segment_start = 0
+    current_label = labels[0]
+    labeled_classes = set()
+
+    # Loop through the labels to draw segments
+    for i in range(1, len(labels)):
+        if labels[i] != current_label:
+            # Only assign a label to the patch if this class hasn't been labeled yet
+            patch_label = (
+                f"Class {current_label}"
+                if current_label not in labeled_classes
+                else None
+            )
+
+            # Draw a rectangle patch for the segment that just ended
+            rect = patches.Rectangle(
+                (segment_start, y_offset),
+                i - segment_start,  # width of the rectangle
+                box_height,  # height of the rectangle
+                linewidth=2,
+                edgecolor=colors_adjusted[current_label],
+                facecolor=colors_adjusted[current_label],
+                label=patch_label,
+            )
+            ax.add_patch(rect)
+
+            # Mark this class as having been labeled
+            labeled_classes.add(current_label)
+
+            # Update for the new segment
+            current_label = labels[i]
+            segment_start = i
+
+    # Handle the final segment
+    patch_label = (
+        f"Class {current_label}" if current_label not in labeled_classes else None
+    )
+    rect = patches.Rectangle(
+        (segment_start, y_offset),
+        len(labels) - segment_start,
+        box_height,
+        linewidth=2,
+        edgecolor=colors_adjusted[current_label],
+        facecolor=colors_adjusted[current_label],
+        label=patch_label,
+    )
+    ax.add_patch(rect)
 
     for c in range(num_classes):
-        activity = np.sum(spikes[:, indices[c]], axis=1)
-        plt.plot(activity, color=colors[c], label=c)
+        activity = np.sum(spikes[:, indices[:, c]], axis=1)
+        plt.plot(activity, color=colors[c])
 
     if train:
         title = "Top responding nodes by class during training"
     else:
         title = "Top responding nodes by class during testing"
     plt.title(title)
-    plt.xlabel(f"Time (intervals of {smoothening} )")
+    plt.xlabel(f"Time (intervals of {smoothening} ms)")
     plt.ylabel("Spiking rate")
-    plt.legend()
+    plt.legend(loc="upper right")
     plt.show()
 
 
@@ -253,6 +312,9 @@ def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes, test):
         if np.sum(tp_label) == 0:
             accuracy[t // num_steps] = accuracy[(t - 1) // num_steps]
         else:
+            """
+            Look over this logic again. I think argmax might be wrong.
+            """
             print(pp_label)
             print(tp_label)
             pp_label_pop = np.argmax(pp_label)
