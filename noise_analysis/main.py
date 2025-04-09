@@ -1,7 +1,7 @@
 from big_comb import snn_sleepy
 
 # init class
-snn_N = snn_sleepy(classes=[0, 1])
+snn_N = snn_sleepy(classes=[0, 1, 2, 3])
 
 # acquire data
 snn_N.prepare_data(

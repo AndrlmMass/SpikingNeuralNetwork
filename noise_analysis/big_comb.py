@@ -663,6 +663,7 @@ class snn_sleepy:
         plot_accuracy_test=True,
         save_test_data=True,
         narrow_top=0.05,
+        wide_top=0.15,
         smoothening=350,
         plot_top_response_train=False,
         plot_top_response_test=False,
@@ -828,6 +829,7 @@ class snn_sleepy:
                 narrow_top=narrow_top,
                 smoothening=smoothening,
                 train=True,
+                wide_top=wide_top,
             )
 
         if plot_accuracy_train and (self.supervised or self.unsupervised):
@@ -1006,6 +1008,7 @@ class snn_sleepy:
                     narrow_top=narrow_top,
                     smoothening=smoothening,
                     train=False,
+                    wide_top=wide_top,
                 )
 
             if plot_accuracy_test and (self.unsupervised or self.supervised):

@@ -6,7 +6,7 @@ import matplotlib
 matplotlib.use("TkAgg")
 
 
-def get_elite_nodes(spikes, labels, num_classes, narrow_top, st, ih):
+def get_elite_nodes(spikes, labels, num_classes, narrow_top, st, ih, wide_top):
     # remove unnecessary data periods
     mask_break = (labels != -1) & (labels != -2)
     spikes = spikes[mask_break, :]
@@ -36,21 +36,38 @@ def get_elite_nodes(spikes, labels, num_classes, narrow_top, st, ih):
 
     # sort performance
     responses_indices = np.argsort(responses, 0)[::-1, :]
+    top_k = int(spikes.shape[1] * narrow_top)
+    top_w = int(spikes.shape[1] * wide_top)
 
-    top_k = int(narrow_top * spikes.shape[1])
+    # # select performers
+    # selected_nodes = set()
+    # forbidden_nodes = set()
+    # unique, counts = np.unique(responses_indices[:top_w], return_counts=True)
+    # unique_values = unique[counts == 1]
+    # forbidden_nodes.update(unique_values)
+    # for c in range(num_classes):
+    #     selection = []
+    #     for candidate in responses_indices[:, c]:
+    #         if candidate not in selected_nodes and candidate in forbidden_nodes:
+    #             selection.append(candidate)
+    #         if len(selection) >= top_k:
+    #             break
+    #     selected_nodes.update(selection)
+    #     responses_indices[: len(selection), c] = selection
+
     final_indices = responses_indices[:top_k]
 
-    print(np.unique(final_indices).size / final_indices.size)
+    print(f"\r{np.unique(final_indices).size / final_indices.size}")
 
     return final_indices, spikes, labels
 
 
 def top_responders_plotted(
-    spikes, labels, ih, st, num_classes, narrow_top, smoothening, train
+    spikes, labels, ih, st, num_classes, narrow_top, wide_top, smoothening, train
 ):
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(2, 1)
 
-    # get indices
+    # get indicess
     indices, spikes, labels = get_elite_nodes(
         spikes=spikes,
         labels=labels,
@@ -58,6 +75,7 @@ def top_responders_plotted(
         st=st,
         num_classes=num_classes,
         narrow_top=narrow_top,
+        wide_top=wide_top,
     )
 
     # reduce samples
@@ -96,9 +114,6 @@ def top_responders_plotted(
     spikes = np.array(means)
     labels = np.array(labs)
 
-    # We'll collect which labels we've drawn (for legend) so we don't add duplicates
-    drawn_labels = set()
-
     # Add the horizontal line below the spikes
     y_offset = 0
     box_height = 6
@@ -111,24 +126,15 @@ def top_responders_plotted(
     # Loop through the labels to draw segments
     for i in range(1, len(labels)):
         if labels[i] != current_label:
-            # Only assign a label to the patch if this class hasn't been labeled yet
-            patch_label = (
-                f"Class {current_label}"
-                if current_label not in labeled_classes
-                else None
-            )
-
             # Draw a rectangle patch for the segment that just ended
             rect = patches.Rectangle(
                 (segment_start, y_offset),
                 i - segment_start,  # width of the rectangle
                 box_height,  # height of the rectangle
                 linewidth=2,
-                edgecolor=colors_adjusted[current_label],
                 facecolor=colors_adjusted[current_label],
-                label=patch_label,
             )
-            ax.add_patch(rect)
+            ax[0].add_patch(rect)
 
             # Mark this class as having been labeled
             labeled_classes.add(current_label)
@@ -151,18 +157,31 @@ def top_responders_plotted(
         label=patch_label,
     )
     ax.add_patch(rect)
-
+    acts = np.zeros((spikes.shape[0], num_classes))
     for c in range(num_classes):
         activity = np.sum(spikes[:, indices[:, c]], axis=1)
-        plt.plot(activity, color=colors[c])
+        acts[:, c] = activity
+        ax[0].plot(activity, color=colors[c], label=f"Class {c}")
 
     if train:
         title = "Top responding nodes by class during training"
     else:
         title = "Top responding nodes by class during testing"
-    plt.title(title)
-    plt.xlabel(f"Time (intervals of {smoothening} ms)")
-    plt.ylabel("Spiking rate")
+    ax[0].set_title(title)
+    ax[0].set_xlabel(f"Time (intervals of {smoothening} ms)")
+    ax[0].set_ylabel("Spiking rate")
+
+    """
+    Plot accuracy in second plot
+    """
+    predictions = np.argmax(acts, axis=1)
+    precision = np.zeros(spikes.shape[0])
+    hit = 0
+    for i in range(precision.shape[0]):
+        hit += predictions[i] == labels[i]
+        precision[i] = hit / i
+
+    ax[1].plot(precision)
     plt.legend(loc="upper right")
     plt.show()
 
