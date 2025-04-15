@@ -1,4 +1,3 @@
-from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
@@ -63,7 +62,7 @@ def t_SNE(
     perplexity,
     max_iter,
     random_state,
-    accuracy,
+    train,
 ):
     # Now, bin the spikes using the labels, skipping breaks:
     features, segment_labels = bin_spikes_by_label_no_breaks(spikes, labels_spike)
@@ -91,7 +90,12 @@ def t_SNE(
             tsne_results[indices, 1],
             label=f"Class {label}",
         )
-    plt.title(f"t-SNE results (Accuracy={accuracy})")
+    if train:
+        title = "from training"
+    else:
+        title = "from testing"
+
+    plt.title(f"t-SNE results ", title)
     plt.xlabel("t-SNE dimension 1")
     plt.ylabel("t-SNE dimension 2")
     plt.legend()
@@ -151,7 +155,7 @@ def PCA_analysis(
     plt.show()
 
 
-def Clustering_estimation(
+def calculate_phi(
     spikes_train,
     spikes_test,
     labels_test,
@@ -187,22 +191,30 @@ def Clustering_estimation(
     Note that we are currently skipping sleep-patterns. 
     Maybe this should be its own array, but then we miss part of the sequence
     """
-    for i in tqdm(
-        range(0, labels_train.shape[0], num_steps),
-        desc="Computing mean rates from training data",
-    ):
-        # Calculate non_sleep spiking activity
-        sleep_mask = labels_train != -2
-        if sleep_mask.size == 0:
+    sleep_mask = labels_train != -2
+    count = 0
+    for i in range(0, labels_train.shape[0], num_steps):
+        # skip non_sleep spiking activity
+        current_mask = sleep_mask[i : i + num_steps]
+        if not current_mask.all():
+            count += 1
             continue
-        mean_spikes = np.mean(spikes_train[sleep_mask, :][i : i + num_steps], axis=0)
+        mean_spikes = np.mean(spikes_train[i : i + num_steps][current_mask, :], axis=0)
         predom_label = np.argmax(
-            np.bincount(labels_train[sleep_mask][i : i + num_steps])
+            np.bincount(labels_train[i : i + num_steps][current_mask])
         )
         spike_train_rates.append(mean_spikes)
         labels_train_unique.append(predom_label)
 
-    """'
+    # count sleep amount
+    sleep_percent = np.bincount(sleep_mask)[1] / sleep_mask.shape[0]
+    print(sleep_percent)
+
+    # print(
+    #     f"\rout of {labels_train.shape[0]//num_steps} items, {len(spike_train_rates)} were counted and {count} were discounted.",
+    #     end="",
+    # )
+    """
     create cutoff point, only for training!
     """
 
@@ -217,19 +229,41 @@ def Clustering_estimation(
     spike_train_rates_std = StandardScaler().fit_transform(spike_train_rates)
 
     """ Perform PCA on the binned data """
-    # Create a PCA instance.
+    # Create a PCA instance
     pca = PCA(n_components=n_components, random_state=random_state)
     pca.fit(spike_train_rates_std)
     scores_train_pca = pca.transform(spike_train_rates_std)
 
-    # Calculate the centroids of each cluster using K-means
-    kmeans_pca = KMeans(
-        n_clusters=num_classes, init="k-means++", random_state=random_state
+    # Calculate centroids and WCSS
+    centroids = np.zeros((n_components, num_classes))
+    wcss_arr = np.zeros(num_classes)
+    for c in range(num_classes):
+        indices = np.where(labels_train_unique == c)[0]
+        centroids[:, c] = np.mean(scores_train_pca[indices], axis=0)
+        values = scores_train_pca[indices]
+        for dim in range(n_components):
+            delta_wcss = np.sum((centroids[dim, c] - values[:, dim]) ** 2)
+            wcss_arr[c] += delta_wcss
+    WCSS_train = np.sum(wcss_arr)
+
+    # Estimate BCSS
+    overall_mean = np.mean(scores_train_pca, axis=0)
+    BCSS_train = 0
+    for c in range(num_classes):
+        for dim in range(n_components):
+            delta_bcss = (centroids[dim, c] - overall_mean[dim]) ** 2
+            BCSS_train += delta_bcss
+
+    # Calculate clustering coefficient
+    """
+    phi = (BCSS / (k-1)) / (WCSS / (n-k))
+    """
+    phi_train = (BCSS_train / (num_classes - 1)) / (
+        WCSS_train / ((scores_train_pca.shape[0] - num_classes) * n_components)
     )
-    kmeans_pca.fit(scores_train_pca)
 
     """
-    Second: Project test data onto precomputed PCA and K-means structures
+    Second: Project test data onto precomputed PCA and K-means centroids
     """
 
     """Calculate the spiking rates for each item presentation"""
@@ -239,58 +273,85 @@ def Clustering_estimation(
     spikes_test = spikes_test[break_mask, :]
 
     # Calculate rate for each item
-    spikes_test_rates = []
+    spike_test_rates = []
     labels_test_unique = []
 
     """
     Note that we are currently skipping sleep-patterns. 
     Maybe this should be its own array, but then we miss part of the sequence
     """
-    for i in tqdm(
-        range(0, labels_test.shape[0], num_steps), desc="Computing rates from test data"
-    ):
-        # Calculate non_sleep spiking activity
-        sleep_mask = labels_test != -2
-        if sleep_mask.size == 0:
+    sleep_mask = labels_test != -2
+    for i in range(0, labels_test.shape[0], num_steps):
+        # skip non_sleep spiking activity
+        current_mask = sleep_mask[i : i + num_steps]
+        if not current_mask.all():
             continue
-        mean_spikes_test = np.mean(
-            spikes_test[sleep_mask, :][i : i + num_steps], axis=0
-        )
+        mean_spikes = np.mean(spikes_test[i : i + num_steps][current_mask, :], axis=0)
         predom_label = np.argmax(
-            np.bincount(labels_test[sleep_mask][i : i + num_steps])
+            np.bincount(labels_test[i : i + num_steps][current_mask])
         )
-        spikes_test_rates.append(mean_spikes_test)
+        spike_test_rates.append(mean_spikes)
         labels_test_unique.append(predom_label)
 
+    """'
+    create cutoff point, only for training!
+    """
+
     # convert to numpy array
-    spikes_test_rates = np.array(spikes_test_rates)
+    spike_test_rates = np.array(spike_test_rates)
     labels_test_unique = np.array(labels_test_unique)
 
     # standardize rates
     """
     This step might be unnecessary. At least I suspect it
     """
-    spike_rates_test_std = StandardScaler().fit_transform(spikes_test_rates)
+    spike_test_rates_std = StandardScaler().fit_transform(spike_test_rates)
 
     """ Perform PCA on the binned data """
-    # Project onto PCA-structure
-    scores_test_pca = pca.transform(spike_rates_test_std)
+    # Create a PCA instance.
+    scores_test_pca = pca.transform(spike_test_rates_std)
 
-    # Calculate the centroids of each cluster using K-means
-    kmeans_pca.transform(scores_test_pca)
+    # Calculate centroids and WCSS
+    wcss_arr = np.zeros(num_classes)
+    for c in range(num_classes):
+        indices = np.where(labels_test_unique == c)[0]
+        values = scores_test_pca[indices]
+        for dim in range(n_components):
+            delta_wcss = np.sum((values[:, dim] - centroids[dim, c]) ** 2)
+            wcss_arr[c] += delta_wcss
+    WCSS_test = np.sum(wcss_arr)
 
-    """Calculate the sums of squared distances to each centroid (within and between)"""
-    # calculate intra-cluster variance
-    wcss = kmeans_pca.inertia_
-
-    # calculate overall mean
+    # Estimate bcss
     overall_mean = np.mean(scores_test_pca, axis=0)
-    tss = np.sum((scores_test_pca - overall_mean) ** 2)
+    BCSS_test = 0
+    for c in range(num_classes):
+        for dim in range(n_components):
+            delta_bcss = (centroids[dim, c] - overall_mean[dim]) ** 2
+            BCSS_test += delta_bcss
 
-    # extract inter-cluster variance from TSS
-    bcss = tss - wcss
+    # Calculate clustering coefficient
+    """
+    phi = (BCSS / (k-1)) / (WCSS / (n-k))
+    """
+    phi_test = (BCSS_test / (num_classes - 1)) / (
+        WCSS_test / ((scores_test_pca.shape[0] - num_classes) * n_components)
+    )
 
-    # calculate intra variance divided by inter variance
-    ssratio = bcss / wcss
-    print(ssratio)
-    return ssratio
+    BCSS_test_scaled = BCSS_test / (num_classes - 1)
+    BCSS_train_scaled = BCSS_train / (num_classes - 1)
+    WCSS_test_scaled = WCSS_test / (
+        (scores_test_pca.shape[0] - num_classes) * n_components
+    )
+    WCSS_train_scaled = WCSS_train / (
+        (scores_train_pca.shape[0] - num_classes) * n_components
+    )
+
+    return (
+        phi_train,
+        phi_test,
+        sleep_percent,
+        WCSS_train_scaled,
+        WCSS_test_scaled,
+        BCSS_train_scaled,
+        BCSS_test_scaled,
+    )

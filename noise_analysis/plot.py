@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib
+from scipy import stats
 
 matplotlib.use("TkAgg")
 
@@ -37,7 +38,7 @@ def get_elite_nodes(spikes, labels, num_classes, narrow_top, st, ih, wide_top):
     # sort performance
     responses_indices = np.argsort(responses, 0)[::-1, :]
     top_k = int(spikes.shape[1] * narrow_top)
-    top_w = int(spikes.shape[1] * wide_top)
+    # top_w = int(spikes.shape[1] * wide_top)
 
     # # select performers
     # selected_nodes = set()
@@ -114,9 +115,15 @@ def top_responders_plotted(
     spikes = np.array(means)
     labels = np.array(labs)
 
+    acts = np.zeros((spikes.shape[0], num_classes))
+    for c in range(num_classes):
+        activity = np.sum(spikes[:, indices[:, c]], axis=1)
+        acts[:, c] = activity
+        ax[0].plot(activity, color=colors[c], label=f"Class {c}")
+
     # Add the horizontal line below the spikes
     y_offset = 0
-    box_height = 6
+    box_height = np.max(acts)
 
     # We iterate through the time steps to identify contiguous segments
     segment_start = 0
@@ -156,19 +163,12 @@ def top_responders_plotted(
         facecolor=colors_adjusted[current_label],
         label=patch_label,
     )
-    ax.add_patch(rect)
-    acts = np.zeros((spikes.shape[0], num_classes))
-    for c in range(num_classes):
-        activity = np.sum(spikes[:, indices[:, c]], axis=1)
-        acts[:, c] = activity
-        ax[0].plot(activity, color=colors[c], label=f"Class {c}")
+    ax[0].add_patch(rect)
 
     if train:
         title = "Top responding nodes by class during training"
     else:
         title = "Top responding nodes by class during testing"
-    ax[0].set_title(title)
-    ax[0].set_xlabel(f"Time (intervals of {smoothening} ms)")
     ax[0].set_ylabel("Spiking rate")
 
     """
@@ -179,10 +179,13 @@ def top_responders_plotted(
     hit = 0
     for i in range(precision.shape[0]):
         hit += predictions[i] == labels[i]
-        precision[i] = hit / i
+        precision[i] = hit / (i + 1)
 
     ax[1].plot(precision)
-    plt.legend(loc="upper right")
+    ax[1].set_ylabel("Accuracy (%)")
+    ax[1].set_xlabel(f"Time (intervals of {smoothening} ms)")
+    ax[0].set_title(title)
+    ax[0].legend(loc="upper right")
     plt.show()
 
 
@@ -586,3 +589,33 @@ def plot_traces(
         )
         axs[1, 1].set_title("inhbitiory post-trace")
         plt.show()
+
+
+def plot_phi_bars(phi_means, sleep_lengths, sleep_amount):
+    """
+    phi_results structure = (2, 6) # first dim: len(sleep_lengths), second dim: phi_train, phi_test, WCSS_train, WCSS_test, BCSS_train, BCSS_test
+    """
+    x = sleep_amount.astype(str)
+    y = phi_means[:, 1]
+    for i in range(sleep_amount.shape[0]):
+        plt.bar(x[i], y[i])
+    plt.ylabel("Clustering score (BCSS / WCSS)")
+    plt.xlabel("Sleep duration (decay rates)")
+    plt.show()
+
+
+def plot_phi_reg(phi_means, sleep_lengths, sleep_amount):
+    x = sleep_amount
+    y = phi_means[:, 1]
+    labels = sleep_lengths
+
+    slope, intercept, r, p, std_err = stats.linregress(x, y)
+
+    def myfunc(x):
+        return slope * x + intercept
+
+    mymodel = list(map(myfunc, x))
+
+    plt.scatter(x=x, y=y)
+    plt.plot(x, mymodel)
+    plt.show()
