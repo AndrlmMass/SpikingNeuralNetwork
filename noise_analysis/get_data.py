@@ -6,6 +6,10 @@ from tqdm import tqdm
 import numpy as np
 import torch
 
+import os
+
+os.environ["TQDM_DISABLE"] = "True"
+
 
 def normalize_image(img, target_sum=1.0):
     current_sum = img.sum()
@@ -43,21 +47,14 @@ def create_data(
         ]
     )
 
-    # get dataset with progress bar
-    print("Downloading MNIST dataset...")
-
     # Fetch MNIST dataset
-    with tqdm(total=1, desc="Downloading MNIST") as pbar:
-        mnist = datasets.MNIST(
-            root=data_dir, train=train_, transform=transform, download=download
-        )
-        pbar.update(1)  # Update progress bar when download completes
+    mnist = datasets.MNIST(
+        root=data_dir, train=train_, transform=transform, download=download
+    )
 
     # Filter the dataset so that only samples with allowed labels are included
     filtered_samples = [
-        (mnist[i][0], mnist[i][1])
-        for i in tqdm(range(len(mnist)), desc="Extracting samples")
-        if mnist[i][1] in classes
+        (mnist[i][0], mnist[i][1]) for i in range(len(mnist)) if mnist[i][1] in classes
     ]
 
     # Now unpack and convert to tensors
@@ -68,55 +65,41 @@ def create_data(
     if test_images % N_classes != 0:
         test_images = N_classes * round(test_images / N_classes)
 
-    # Build a balanced dataset
-    balanced_images = []
-    balanced_labels = []
-    num_images_per_class = num_images // N_classes
+    balanced_images_train = []
+    balanced_labels_train = []
+    balanced_images_test = []
+    balanced_labels_test = []
+
+    # how many per class
+    n_train = num_images // N_classes
+    n_test = test_images // N_classes
 
     for c in classes:
-        # indices for samples belonging to class c
-        c_indices = (labels == c).nonzero().flatten()
-        # shuffle these indices
-        c_indices = c_indices[torch.randperm(len(c_indices))]
-        # select the first N
-        c_indices = c_indices[:num_images_per_class]
+        # get all indices of class c, shuffle them
+        c_idxs = (labels == c).nonzero().flatten()
+        perm = torch.randperm(len(c_idxs))
+        c_idxs = c_idxs[perm]
 
-        balanced_images.append(images[c_indices])
-        balanced_labels.append(labels[c_indices])
+        # pick the first chunk for train, the next chunk for test
+        train_idxs = c_idxs[:n_train]
+        test_idxs = c_idxs[n_train : n_train + n_test]
 
-    # Concatenate images and labels from all classesbalanced_labels
-    balanced_images_train = torch.cat(balanced_images, dim=0)
-    balanced_labels_train = torch.cat(balanced_labels, dim=0)
+        # gather images & labels
+        balanced_images_train.append(images[train_idxs])
+        balanced_labels_train.append(labels[train_idxs])
+        balanced_images_test.append(images[test_idxs])
+        balanced_labels_test.append(labels[test_idxs])
 
-    # Shuffle everything again one last time
-    perm = torch.randperm(balanced_images_train.size(0))
-    limited_images_train = balanced_images_train[perm]
-    limited_labels_train = balanced_labels_train[perm]
+    # concatenate and shuffle your final splits
+    X_train = torch.cat(balanced_images_train, dim=0)
+    y_train = torch.cat(balanced_labels_train, dim=0)
+    perm = torch.randperm(X_train.size(0))
+    limited_images_train, limited_labels_train = X_train[perm], y_train[perm]
 
-    # Build a balanced dataset
-    balanced_images2 = []
-    balanced_labels2 = []
-    num_images_per_class_test = test_images // N_classes
-
-    for c in classes:
-        # indices for samples belonging to class c
-        c_indices = (labels == c).nonzero().flatten()
-        # shuffle these indices
-        c_indices = c_indices[torch.randperm(len(c_indices))]
-        # select the first N
-        c_indices = c_indices[num_images : num_images + num_images_per_class_test]
-
-        balanced_images2.append(images[c_indices])
-        balanced_labels2.append(labels[c_indices])
-
-    # Concatenate images and labels from all classesbalanced_labels
-    balanced_images_test = torch.cat(balanced_images2, dim=0)
-    balanced_labels_test = torch.cat(balanced_labels2, dim=0)
-
-    # Shuffle everything again one last time
-    perm = torch.randperm(balanced_images_test.size(0))
-    limited_images_test = balanced_images_test[perm]
-    limited_labels_test = balanced_labels_test[perm]
+    X_test = torch.cat(balanced_images_test, dim=0)
+    y_test = torch.cat(balanced_labels_test, dim=0)
+    perm = torch.randperm(X_test.size(0))
+    limited_images_test, limited_labels_test = X_test[perm], y_test[perm]
 
     # normalize spike intensity for each image
     target_sum = (pixel_size**2) * 0.1
@@ -226,19 +209,12 @@ def create_data(
     """
 
     # Check that all classes are presented equally in frequency
-
-    for cl in classes:
-        indices = spike_labels_train == cl
-        sum_ = np.sum(S_data_train[indices])
-        print(cl, sum_)
-
     limited_images_train_ = limited_images_train.squeeze(1).flatten(start_dim=2).numpy()
     limited_labels_train_ = limited_labels_train.numpy()
     for cl in classes:
         indices = limited_labels_train_ == cl
         ind = np.where(indices == True)[0]
         sum_ = np.sum(limited_images_train_[ind])
-        print(cl, sum_)
 
     if plot_comparison:
         plot_floats_and_spikes(
