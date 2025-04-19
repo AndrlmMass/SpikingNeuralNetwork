@@ -65,11 +65,15 @@ class snn_sleepy:
 
     def process(
         self,
+        sleep_scores: list = None,
         model_dir_: str = None,
         load_data: bool = False,
         save_data: bool = False,
         load_model: bool = False,
         save_model: bool = False,
+        phi_model: bool = False,
+        save_phi_model: bool = False,
+        load_phi_model: bool = False,
         save_test_model: bool = False,
         load_test_model: bool = False,
         data_parameters: dict = None,
@@ -82,6 +86,7 @@ class snn_sleepy:
         self.data_loaded = False
         self.model_loaded = False
         self.test_data_loaded = False
+        self.loaded_phi_model = False
 
         ########## load or save data ##########
         if save_data:
@@ -310,6 +315,40 @@ class snn_sleepy:
                         return os.path.join("model", folder)
             else:
                 print("No model found to load. Will train new model from scratch.")
+
+        if save_phi_model:
+            # create sub-folder in already created folder (model dir) for each sleep score
+            data_dir = os.path.join(model_dir_, str(sleep_scores))
+            os.makedirs(data_dir)
+
+            # save phi_all_scores
+            np.save(
+                os.path.join(data_dir, "phi_all_scores.npy"),
+                self.phi_all_scores,
+            )
+
+            # save phi_means
+            np.save(
+                os.path.join(data_dir, "phi_means.npy"),
+                self.phi_means,
+            )
+
+            print("phi data has been saved")
+
+        if load_phi_model:
+            # get directory
+            data_dir = os.path.join(model_dir_, str(sleep_scores))
+
+            # check if path exists
+            if os.path.exists(data_dir):
+                # load phi_all_scores
+                self.phi_all_scores = np.load(
+                    os.path.join(data_dir, "phi_all_scores.npy")
+                )
+                # load phi_means
+                self.phi_means = np.load(os.path.join(data_dir, "phi_means.npy"))
+                self.loaded_phi_model = True
+                print("phi data has been loaded")
 
     # acquire data
     def prepare_data(
@@ -727,243 +766,93 @@ class snn_sleepy:
                 model_parameters=self.model_parameters,
                 load_test_model=False,
             )
-
-        if compare_decay_rates:
-            phi_means = np.zeros(
-                (len(weight_decay_rate_exc), 7)
-            )  # phi_train, phi_test, WCSS_train, WCSS_test, BCSS_train, BCSS_test
-            phi_all_scores = np.zeros((len(weight_decay_rate_exc), samples, 7))
-            for r in tqdm(
-                range(len(weight_decay_rate_exc)),
-                desc="Training & testing network for phi comparison",
-            ):
-                for t in range(samples):
-                    # decay rate
-                    decay_rate_exc = weight_decay_rate_exc[r]
-                    decay_rate_inh = weight_decay_rate_inh[r]
-
-                    # train model
-                    (
-                        self.weights,
-                        self.spikes_train,
-                        self.pre_trace,
-                        self.post_trace,
-                        self.mp_train,
-                        self.weights2plot_exc,
-                        self.weights2plot_inh,
-                        self.pre_trace_plot,
-                        self.post_trace_plot,
-                        self.spike_threshold,
-                        self.weight_mask,
-                        self.max_weight_sum_inh,
-                        self.max_weight_sum_exc,
-                        self.labels_train,
-                    ) = train_network(
-                        weights=self.weights,
-                        spike_labels=self.labels_train,
-                        N_classes=self.N_classes,
-                        supervised=self.supervised,
-                        mp=self.mp_train,
-                        sleep=sleep,
-                        alpha=alpha,
-                        timing_update=timing_update,
-                        spikes=self.spikes_train,
-                        pre_trace=self.pre_trace,
-                        post_trace=self.post_trace,
-                        check_sleep_interval=check_sleep_interval,
-                        tau_pre_trace_exc=tau_pre_trace_exc,
-                        tau_pre_trace_inh=tau_pre_trace_inh,
-                        tau_post_trace_exc=tau_post_trace_exc,
-                        tau_post_trace_inh=tau_post_trace_inh,
-                        resting_potential=self.resting_potential,
-                        membrane_resistance=membrane_resistance,
-                        unsupervised=self.unsupervised,
-                        min_weight_exc=min_weight_exc,
-                        max_weight_exc=max_weight_exc,
-                        min_weight_inh=min_weight_inh,
-                        max_weight_inh=max_weight_inh,
-                        N_inh=self.N_inh,
-                        N_exc=self.N_exc,
-                        beta=beta,
-                        num_exc=num_exc,
-                        num_inh=num_inh,
-                        weight_decay=weight_decay,
-                        weight_decay_rate_exc=decay_rate_exc,
-                        weight_decay_rate_inh=decay_rate_inh,
-                        train_weights=train_weights,
-                        learning_rate_exc=learning_rate_exc,
-                        learning_rate_inh=learning_rate_inh,
-                        w_interval=w_interval,
-                        interval=interval,
-                        w_target_exc=w_target_exc,
-                        w_target_inh=w_target_inh,
-                        tau_LTP=tau_LTP,
-                        tau_LTD=tau_LTD,
-                        tau_m=tau_m,
-                        max_mp=max_mp,
-                        min_mp=min_mp,
-                        dt=self.dt,
-                        N=self.N,
-                        clip_exc_weights=clip_exc_weights,
-                        clip_inh_weights=clip_inh_weights,
-                        A_plus=A_plus,
-                        A_minus=A_minus,
-                        trace_update=trace_update,
-                        spike_adaption=spike_adaption,
-                        delta_adaption=delta_adaption,
-                        tau_adaption=tau_adaption,
-                        spike_threshold_default=spike_threshold_default,
-                        spike_intercept=spike_intercept,
-                        spike_slope=spike_slope,
-                        noisy_threshold=noisy_threshold,
-                        reset_potential=reset_potential,
-                        spike_times=self.spike_times,
-                        noisy_potential=noisy_potential,
-                        noisy_weights=noisy_weights,
-                        weight_mean_noise=weight_mean_noise,
-                        weight_var_noise=weight_var_noise,
-                        vectorized_trace=vectorized_trace,
-                        N_x=self.N_x,
-                        T=self.T_train,
-                        mean_noise=mean_noise,
-                        var_noise=var_noise,
-                    )
-
-                    (
-                        self.weights,
-                        self.spikes_test,
-                        self.pre_trace,
-                        self.post_trace,
-                        self.mp_test,
-                        self.weights2plot_exc,
-                        self.weights2plot_inh,
-                        self.pre_trace_plot,
-                        self.post_trace_plot,
-                        self.spike_threshold,
-                        self.weight_mask,
-                        self.max_weight_sum_inh,
-                        self.max_weight_sum_exc,
-                        self.labels_test,
-                    ) = train_network(
-                        weights=self.weights,
-                        spike_labels=self.labels_test,
-                        N_classes=self.N_classes,
-                        supervised=self.supervised,
-                        mp=self.mp_test,
-                        sleep=False,
-                        alpha=alpha,
-                        timing_update=timing_update,
-                        spikes=self.spikes_test,
-                        pre_trace=self.pre_trace,
-                        post_trace=self.post_trace,
-                        unsupervised=self.unsupervised,
-                        check_sleep_interval=check_sleep_interval,
-                        tau_pre_trace_exc=tau_pre_trace_exc,
-                        tau_pre_trace_inh=tau_pre_trace_inh,
-                        tau_post_trace_exc=tau_post_trace_exc,
-                        tau_post_trace_inh=tau_post_trace_inh,
-                        resting_potential=self.resting_potential,
-                        membrane_resistance=membrane_resistance,
-                        min_weight_exc=min_weight_exc,
-                        max_weight_exc=max_weight_exc,
-                        min_weight_inh=min_weight_inh,
-                        max_weight_inh=max_weight_inh,
-                        N_inh=self.N_inh,
-                        N_exc=self.N_exc,
-                        beta=beta,
-                        num_exc=num_exc,
-                        num_inh=num_inh,
-                        weight_decay=weight_decay,
-                        weight_decay_rate_exc=weight_decay_rate_exc,
-                        weight_decay_rate_inh=weight_decay_rate_inh,
-                        train_weights=False,
-                        learning_rate_exc=learning_rate_exc,
-                        learning_rate_inh=learning_rate_inh,
-                        w_interval=w_interval,
-                        interval=interval,
-                        w_target_exc=w_target_exc,
-                        w_target_inh=w_target_inh,
-                        tau_LTP=tau_LTP,
-                        tau_LTD=tau_LTD,
-                        tau_m=tau_m,
-                        max_mp=max_mp,
-                        min_mp=min_mp,
-                        dt=self.dt,
-                        N=self.N,
-                        clip_exc_weights=clip_exc_weights,
-                        clip_inh_weights=clip_inh_weights,
-                        A_plus=A_plus,
-                        A_minus=A_minus,
-                        trace_update=trace_update,
-                        spike_adaption=spike_adaption,
-                        delta_adaption=delta_adaption,
-                        tau_adaption=tau_adaption,
-                        spike_threshold_default=spike_threshold_default,
-                        spike_intercept=spike_intercept,
-                        spike_slope=spike_slope,
-                        noisy_threshold=noisy_threshold,
-                        reset_potential=reset_potential,
-                        spike_times=self.spike_times,
-                        noisy_potential=noisy_potential,
-                        noisy_weights=noisy_weights,
-                        weight_mean_noise=weight_mean_noise,
-                        weight_var_noise=weight_var_noise,
-                        vectorized_trace=vectorized_trace,
-                        N_x=self.N_x,
-                        T=self.T_test,
-                        mean_noise=mean_noise,
-                        var_noise=var_noise,
-                    )
-
-                    # calculate phi
-                    (
-                        phi_train,
-                        phi_test,
-                        sleep_percent,
-                        WCSS_train,
-                        WCSS_test,
-                        BCSS_train,
-                        BCSS_test,
-                    ) = calculate_phi(
-                        spikes_train=self.spikes_train,
-                        spikes_test=self.spikes_test,
-                        labels_test=self.labels_test,
-                        labels_train=self.labels_train,
-                        num_steps=self.num_steps,
-                        n_components=n_components,
-                        random_state=random_state,
-                        num_classes=self.N_classes,
-                    )
-
-                    phi_all_scores[r, t] = np.array(
-                        [
-                            phi_train,
-                            phi_test,
-                            sleep_percent,
-                            WCSS_train,
-                            WCSS_test,
-                            BCSS_train,
-                            BCSS_test,
-                        ]
-                    )
-
-                # update phi array
-                phi_means[r, :] = np.mean(phi_all_scores[r, :, 1], axis=0)
-
-            phi_all_scores = np.zeros((len(weight_decay_rate_exc), samples, 7))
-
-            # plot phi comparison
-            plot_phi_bars(
-                phi_means=phi_means,
-                sleep_lengths=np.array(weight_decay_rate_exc),
-                sleep_amount=np.mean(phi_all_scores[:, :, 2], axis=1),
-            )
-
-            # plot phi and sleep amounts with linear regression
-            plot_phi_reg(
-                phi_means=phi_means,
-                sleep_lengths=np.array(weight_decay_rate_exc),
-                sleep_amount=np.mean(phi_all_scores[:, :, 2], axis=1),
+        if not self.model_loaded:
+            # train model
+            (
+                self.weights,
+                self.spikes_train,
+                self.pre_trace,
+                self.post_trace,
+                self.mp_train,
+                self.weights2plot_exc,
+                self.weights2plot_inh,
+                self.pre_trace_plot,
+                self.post_trace_plot,
+                self.spike_threshold,
+                self.weight_mask,
+                self.max_weight_sum_inh,
+                self.max_weight_sum_exc,
+                self.labels_train,
+                self.sleep_amount_train,
+            ) = train_network(
+                weights=self.weights,
+                spike_labels=self.labels_train,
+                N_classes=self.N_classes,
+                supervised=self.supervised,
+                mp=self.mp_train,
+                sleep=sleep,
+                alpha=alpha,
+                timing_update=timing_update,
+                spikes=self.spikes_train,
+                pre_trace=self.pre_trace,
+                post_trace=self.post_trace,
+                check_sleep_interval=check_sleep_interval,
+                tau_pre_trace_exc=tau_pre_trace_exc,
+                tau_pre_trace_inh=tau_pre_trace_inh,
+                tau_post_trace_exc=tau_post_trace_exc,
+                tau_post_trace_inh=tau_post_trace_inh,
+                resting_potential=self.resting_potential,
+                membrane_resistance=membrane_resistance,
+                unsupervised=self.unsupervised,
+                min_weight_exc=min_weight_exc,
+                max_weight_exc=max_weight_exc,
+                min_weight_inh=min_weight_inh,
+                max_weight_inh=max_weight_inh,
+                N_inh=self.N_inh,
+                N_exc=self.N_exc,
+                beta=beta,
+                num_exc=num_exc,
+                num_inh=num_inh,
+                weight_decay=weight_decay,
+                weight_decay_rate_exc=weight_decay_rate_exc[0],
+                weight_decay_rate_inh=weight_decay_rate_inh[0],
+                train_weights=train_weights,
+                learning_rate_exc=learning_rate_exc,
+                learning_rate_inh=learning_rate_inh,
+                w_interval=w_interval,
+                interval=interval,
+                w_target_exc=w_target_exc,
+                w_target_inh=w_target_inh,
+                tau_LTP=tau_LTP,
+                tau_LTD=tau_LTD,
+                tau_m=tau_m,
+                max_mp=max_mp,
+                min_mp=min_mp,
+                dt=self.dt,
+                N=self.N,
+                clip_exc_weights=clip_exc_weights,
+                clip_inh_weights=clip_inh_weights,
+                A_plus=A_plus,
+                A_minus=A_minus,
+                trace_update=trace_update,
+                spike_adaption=spike_adaption,
+                delta_adaption=delta_adaption,
+                tau_adaption=tau_adaption,
+                spike_threshold_default=spike_threshold_default,
+                spike_intercept=spike_intercept,
+                spike_slope=spike_slope,
+                noisy_threshold=noisy_threshold,
+                reset_potential=reset_potential,
+                spike_times=self.spike_times,
+                noisy_potential=noisy_potential,
+                noisy_weights=noisy_weights,
+                weight_mean_noise=weight_mean_noise,
+                weight_var_noise=weight_var_noise,
+                vectorized_trace=vectorized_trace,
+                N_x=self.N_x,
+                T=self.T_train,
+                mean_noise=mean_noise,
+                var_noise=var_noise,
             )
 
         if save_model and not self.model_loaded:
@@ -1078,6 +967,7 @@ class snn_sleepy:
                     self.max_weight_sum_inh,
                     self.max_weight_sum_exc,
                     self.labels_test,
+                    self.sleep_amount_test,
                 ) = train_network(
                     weights=self.weights,
                     spike_labels=self.labels_test,
@@ -1205,56 +1095,311 @@ class snn_sleepy:
                     N_exc=self.N_exc,
                 )
 
+        if compare_decay_rates:
+            # try loading previous run
+            self.process(
+                sleep_scores=weight_decay_rate_exc,
+                model_dir_=model_dir,
+                load_phi_model=True,
+            )
+
+            # retrain if phi model not loaded
+            if not self.loaded_phi_model:
+                self.phi_means = np.zeros(
+                    (len(weight_decay_rate_exc), 8)
+                )  # phi_train, phi_test, WCSS_train, WCSS_test, BCSS_train, BCSS_test
+                self.phi_all_scores = np.zeros((len(weight_decay_rate_exc), samples, 8))
+                with tqdm(
+                    total=len(weight_decay_rate_exc) * samples, desc="Computing phi's"
+                ) as pbar:
+                    for r in range(len(weight_decay_rate_exc)):
+                        for t in range(samples):
+                            # decay rate
+                            decay_rate_exc = weight_decay_rate_exc[r]
+                            decay_rate_inh = weight_decay_rate_inh[r]
+
+                            # train model
+                            (
+                                self.weights_phi,
+                                self.spikes_train_phi,
+                                self.pre_trace_phi,
+                                self.post_trace_phi,
+                                self.mp_train_phi,
+                                self.weights2plot_exc_phi,
+                                self.weights2plot_inh_phi,
+                                self.pre_trace_plot_phi,
+                                self.post_trace_plot_phi,
+                                self.spike_threshold_phi,
+                                self.weight_mask_phi,
+                                self.max_weight_sum_inh_phi,
+                                self.max_weight_sum_exc_phi,
+                                self.labels_train_phi,
+                                self.sleep_amount_train_phi,
+                            ) = train_network(
+                                weights=self.weights.copy(),
+                                spike_labels=self.labels_train.copy(),
+                                N_classes=self.N_classes,
+                                supervised=self.supervised,
+                                mp=self.mp_train.copy(),
+                                sleep=sleep,
+                                alpha=alpha,
+                                timing_update=timing_update,
+                                spikes=self.spikes_train.copy(),
+                                pre_trace=self.pre_trace.copy(),
+                                post_trace=self.post_trace.copy(),
+                                check_sleep_interval=check_sleep_interval,
+                                tau_pre_trace_exc=tau_pre_trace_exc,
+                                tau_pre_trace_inh=tau_pre_trace_inh,
+                                tau_post_trace_exc=tau_post_trace_exc,
+                                tau_post_trace_inh=tau_post_trace_inh,
+                                resting_potential=self.resting_potential,
+                                membrane_resistance=membrane_resistance,
+                                unsupervised=self.unsupervised,
+                                min_weight_exc=min_weight_exc,
+                                max_weight_exc=max_weight_exc,
+                                min_weight_inh=min_weight_inh,
+                                max_weight_inh=max_weight_inh,
+                                N_inh=self.N_inh,
+                                N_exc=self.N_exc,
+                                beta=beta,
+                                num_exc=num_exc,
+                                num_inh=num_inh,
+                                weight_decay=weight_decay,
+                                weight_decay_rate_exc=decay_rate_exc,
+                                weight_decay_rate_inh=decay_rate_inh,
+                                train_weights=train_weights,
+                                learning_rate_exc=learning_rate_exc,
+                                learning_rate_inh=learning_rate_inh,
+                                w_interval=w_interval,
+                                interval=interval,
+                                w_target_exc=w_target_exc,
+                                w_target_inh=w_target_inh,
+                                tau_LTP=tau_LTP,
+                                tau_LTD=tau_LTD,
+                                tau_m=tau_m,
+                                max_mp=max_mp,
+                                min_mp=min_mp,
+                                dt=self.dt,
+                                N=self.N,
+                                clip_exc_weights=clip_exc_weights,
+                                clip_inh_weights=clip_inh_weights,
+                                A_plus=A_plus,
+                                A_minus=A_minus,
+                                trace_update=trace_update,
+                                spike_adaption=spike_adaption,
+                                delta_adaption=delta_adaption,
+                                tau_adaption=tau_adaption,
+                                spike_threshold_default=spike_threshold_default,
+                                spike_intercept=spike_intercept,
+                                spike_slope=spike_slope,
+                                noisy_threshold=noisy_threshold,
+                                reset_potential=reset_potential,
+                                spike_times=self.spike_times.copy(),
+                                noisy_potential=noisy_potential,
+                                noisy_weights=noisy_weights,
+                                weight_mean_noise=weight_mean_noise,
+                                weight_var_noise=weight_var_noise,
+                                vectorized_trace=vectorized_trace,
+                                N_x=self.N_x,
+                                T=self.T_train,
+                                mean_noise=mean_noise,
+                                var_noise=var_noise,
+                            )
+
+                            (
+                                self.weights_phi,
+                                self.spikes_test_phi,
+                                self.pre_trace_phi,
+                                self.post_trace_phi,
+                                self.mp_test_phi,
+                                self.weights2plot_exc_phi,
+                                self.weights2plot_inh_phi,
+                                self.pre_trace_plot_phi,
+                                self.post_trace_plot_phi,
+                                self.spike_threshold_phi,
+                                self.weight_mask_phi,
+                                self.max_weight_sum_inh_phi,
+                                self.max_weight_sum_exc_phi,
+                                self.labels_test_phi,
+                                self.sleep_amount_test_phi,
+                            ) = train_network(
+                                weights=self.weights_phi.copy(),
+                                spike_labels=self.labels_test.copy(),
+                                N_classes=self.N_classes,
+                                supervised=self.supervised,
+                                mp=self.mp_test.copy(),
+                                sleep=False,
+                                alpha=alpha,
+                                timing_update=timing_update,
+                                spikes=self.spikes_test.copy(),
+                                pre_trace=self.pre_trace_phi.copy(),
+                                post_trace=self.post_trace_phi.copy(),
+                                unsupervised=self.unsupervised,
+                                check_sleep_interval=check_sleep_interval,
+                                tau_pre_trace_exc=tau_pre_trace_exc,
+                                tau_pre_trace_inh=tau_pre_trace_inh,
+                                tau_post_trace_exc=tau_post_trace_exc,
+                                tau_post_trace_inh=tau_post_trace_inh,
+                                resting_potential=self.resting_potential,
+                                membrane_resistance=membrane_resistance,
+                                min_weight_exc=min_weight_exc,
+                                max_weight_exc=max_weight_exc,
+                                min_weight_inh=min_weight_inh,
+                                max_weight_inh=max_weight_inh,
+                                N_inh=self.N_inh,
+                                N_exc=self.N_exc,
+                                beta=beta,
+                                num_exc=num_exc,
+                                num_inh=num_inh,
+                                weight_decay=weight_decay,
+                                weight_decay_rate_exc=decay_rate_exc,
+                                weight_decay_rate_inh=decay_rate_inh,
+                                train_weights=False,
+                                learning_rate_exc=learning_rate_exc,
+                                learning_rate_inh=learning_rate_inh,
+                                w_interval=w_interval,
+                                interval=interval,
+                                w_target_exc=w_target_exc,
+                                w_target_inh=w_target_inh,
+                                tau_LTP=tau_LTP,
+                                tau_LTD=tau_LTD,
+                                tau_m=tau_m,
+                                max_mp=max_mp,
+                                min_mp=min_mp,
+                                dt=self.dt,
+                                N=self.N,
+                                clip_exc_weights=clip_exc_weights,
+                                clip_inh_weights=clip_inh_weights,
+                                A_plus=A_plus,
+                                A_minus=A_minus,
+                                trace_update=trace_update,
+                                spike_adaption=spike_adaption,
+                                delta_adaption=delta_adaption,
+                                tau_adaption=tau_adaption,
+                                spike_threshold_default=spike_threshold_default,
+                                spike_intercept=spike_intercept,
+                                spike_slope=spike_slope,
+                                noisy_threshold=noisy_threshold,
+                                reset_potential=reset_potential,
+                                spike_times=self.spike_times,
+                                noisy_potential=noisy_potential,
+                                noisy_weights=noisy_weights,
+                                weight_mean_noise=weight_mean_noise,
+                                weight_var_noise=weight_var_noise,
+                                vectorized_trace=vectorized_trace,
+                                N_x=self.N_x,
+                                T=self.T_test,
+                                mean_noise=mean_noise,
+                                var_noise=var_noise,
+                            )
+
+                            # calculate phi
+
+                            (
+                                phi_train,
+                                phi_test,
+                                WCSS_train,
+                                WCSS_test,
+                                BCSS_train,
+                                BCSS_test,
+                            ) = calculate_phi(
+                                spikes_train=self.spikes_train_phi,
+                                spikes_test=self.spikes_test_phi,
+                                labels_test=self.labels_test_phi,
+                                labels_train=self.labels_train_phi,
+                                num_steps=self.num_steps,
+                                n_components=n_components,
+                                random_state=random_state,
+                                num_classes=self.N_classes,
+                            )
+
+                            self.phi_all_scores[r, t] = np.array(
+                                [
+                                    phi_train,
+                                    phi_test,
+                                    decay_rate_exc,
+                                    self.sleep_amount_train_phi,
+                                    WCSS_train,
+                                    WCSS_test,
+                                    BCSS_train,
+                                    BCSS_test,
+                                ]
+                            )
+
+                            # update phi array
+                            self.phi_means[r, :] = np.mean(
+                                self.phi_all_scores[r, :, 1], axis=0
+                            )
+                            pbar.update(1)
+
+                # save phi scores, sleep lengths and amounts
+                self.process(
+                    save_phi_model=True,
+                    model_dir_=model_dir,
+                    sleep_scores=weight_decay_rate_exc,
+                )
+
+            # plot phi comparison
+            plot_phi_bars(
+                phi_means=self.phi_means,
+                sleep_lengths=np.array(weight_decay_rate_exc),
+                sleep_amount=np.mean(self.phi_all_scores[:, :, 3], axis=1),
+            )
+
+            # plot phi and sleep amounts with linear regression
+            plot_phi_reg(
+                phi_scores=self.phi_all_scores[:, :, 1],
+                sleep_rates=np.array(weight_decay_rate_exc),
+                labels=self.phi_all_scores[:, :, 2],
+                sleep_amount=self.phi_all_scores[:, :, 3],
+            )
+
     def analysis(
         self,
         perplexity=8,
         max_iter=1000,
         random_state=48,
         n_components=2,
-        t_sne=False,
         t_sne_train=False,
         t_sne_test=False,
-        pca=False,
         pca_train=False,
         pca_test=False,
         calculate_phi_=True,
     ):
-        if t_sne:
-            if t_sne_train:
-                t_SNE(
-                    spikes=self.spikes_train[:, self.st : self.ex],
-                    labels_spike=self.labels_train,
-                    n_components=n_components,
-                    perplexity=perplexity,
-                    max_iter=max_iter,
-                    random_state=random_state,
-                    train=True,
-                )
-            if t_sne_test:
-                t_SNE(
-                    spikes=self.spikes_test[:, self.st : self.ex],
-                    labels_spike=self.labels_test,
-                    n_components=n_components,
-                    perplexity=perplexity,
-                    max_iter=max_iter,
-                    random_state=random_state,
-                    train=False,
-                )
-        if pca:
-            if pca_train:
-                PCA_analysis(
-                    spikes=self.spikes_train[:, self.N_x :],
-                    labels_spike=self.labels_train,
-                    n_components=n_components,
-                    random_state=random_state,
-                )
-            if pca_test:
-                PCA_analysis(
-                    spikes=self.spikes_test[:, self.N_x :],
-                    labels_spike=self.labels_test,
-                    n_components=n_components,
-                    random_state=random_state,
-                )
+        if t_sne_train:
+            t_SNE(
+                spikes=self.spikes_train[:, self.st : self.ex],
+                labels_spike=self.labels_train,
+                n_components=n_components,
+                perplexity=perplexity,
+                max_iter=max_iter,
+                random_state=random_state,
+                train=True,
+            )
+        if t_sne_test:
+            t_SNE(
+                spikes=self.spikes_test[:, self.st : self.ex],
+                labels_spike=self.labels_test,
+                n_components=n_components,
+                perplexity=perplexity,
+                max_iter=max_iter,
+                random_state=random_state,
+                train=False,
+            )
+        if pca_train:
+            PCA_analysis(
+                spikes=self.spikes_train[:, self.N_x :],
+                labels_spike=self.labels_train,
+                n_components=n_components,
+                random_state=random_state,
+            )
+        if pca_test:
+            PCA_analysis(
+                spikes=self.spikes_test[:, self.N_x :],
+                labels_spike=self.labels_test,
+                n_components=n_components,
+                random_state=random_state,
+            )
         if calculate_phi_:
             calculate_phi(
                 spikes_train=self.spikes_train,

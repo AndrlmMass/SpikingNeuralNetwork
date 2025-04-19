@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -595,27 +596,60 @@ def plot_phi_bars(phi_means, sleep_lengths, sleep_amount):
     """
     phi_results structure = (2, 6) # first dim: len(sleep_lengths), second dim: phi_train, phi_test, WCSS_train, WCSS_test, BCSS_train, BCSS_test
     """
-    x = sleep_amount.astype(str)
+    x = np.char.mod("%.2f%%", sleep_amount)
     y = phi_means[:, 1]
-    for i in range(sleep_amount.shape[0]):
-        plt.bar(x[i], y[i])
-    plt.ylabel("Clustering score (BCSS / WCSS)")
-    plt.xlabel("Sleep duration (decay rates)")
+    colors = get_blue_colors(sleep_amount.shape[0])
+    for i in range(sleep_lengths.shape[0]):
+        plt.bar(x[i], y[i], label=f"$\\eta = {sleep_lengths[i]}$", color=colors[i])
+    plt.ylabel("Clustering score ($\\phi$)", fontsize=14)
+    plt.xlabel("Sleep amount ($\\%$)", fontsize=14)
+    plt.legend(loc=(0.97, 0.75))
+    plt.savefig("plot_phi_bars.png")
     plt.show()
 
 
-def plot_phi_reg(phi_means, sleep_lengths, sleep_amount):
-    x = sleep_amount
-    y = phi_means[:, 1]
-    labels = sleep_lengths
+def get_blue_colors(n):
+    # Using the reversed Blues colormap ensures that:
+    # - 0 -> darkest blue
+    # - 1 -> lightest blue
+    cmap = plt.cm.Blues_r
+    # Generate n values from 0 (dark) to 1 (light) and get the corresponding color for each
+    colors = [cmap(x) for x in np.linspace(0, 0.7, n)]
+    return colors
 
+
+def plot_phi_reg(phi_scores, sleep_rates, labels, sleep_amount):
+    x = sleep_amount.flatten()
+    y = phi_scores.flatten()
+    labels = labels.flatten()
+    colors = get_blue_colors(sleep_amount.shape[0])
+    print(x)
+    print(y)
+    print(labels)
     slope, intercept, r, p, std_err = stats.linregress(x, y)
 
     def myfunc(x):
         return slope * x + intercept
 
+    presented_classes = set()
     mymodel = list(map(myfunc, x))
+    for i in range(x.shape[0]):
+        if labels[i] in presented_classes:
+            idx = np.where(labels[i] == sleep_rates)[0][0]
+            plt.scatter(x=x[i], y=y[i], color=colors[idx])
+        else:
+            idx = np.where(labels[i] == sleep_rates)[0][0]
+            presented_classes.add(labels[i])
+            plt.scatter(
+                x=x[i], y=y[i], color=colors[idx], label=f"$\\eta = {labels[i]}$"
+            )
 
-    plt.scatter(x=x, y=y)
-    plt.plot(x, mymodel)
+    plt.plot(x, mymodel, label="regline")
+    plt.ylabel("Clustering score ($\\phi$)", fontsize=14)
+    plt.xlabel("Sleep amount ($\\%$)", fontsize=14)
+    plt.legend()
+    path = "figures"
+    if not os.path.exists(path):
+        os.makedirs("figures")
+    plt.savefig(os.path.join(path, "plot_phi_reg.png"))
     plt.show()

@@ -206,10 +206,6 @@ def calculate_phi(
         spike_train_rates.append(mean_spikes)
         labels_train_unique.append(predom_label)
 
-    # count sleep amount
-    sleep_percent = np.bincount(sleep_mask)[1] / sleep_mask.shape[0]
-    print(sleep_percent)
-
     # print(
     #     f"\rout of {labels_train.shape[0]//num_steps} items, {len(spike_train_rates)} were counted and {count} were discounted.",
     #     end="",
@@ -259,7 +255,7 @@ def calculate_phi(
     phi = (BCSS / (k-1)) / (WCSS / (n-k))
     """
     phi_train = (BCSS_train / (num_classes - 1)) / (
-        WCSS_train / ((scores_train_pca.shape[0] - num_classes) * n_components)
+        WCSS_train / (scores_train_pca.shape[0] - num_classes)
     )
 
     """
@@ -334,22 +330,17 @@ def calculate_phi(
     phi = (BCSS / (k-1)) / (WCSS / (n-k))
     """
     phi_test = (BCSS_test / (num_classes - 1)) / (
-        WCSS_test / ((scores_test_pca.shape[0] - num_classes) * n_components)
+        WCSS_test / (scores_test_pca.shape[0] - num_classes)
     )
 
     BCSS_test_scaled = BCSS_test / (num_classes - 1)
     BCSS_train_scaled = BCSS_train / (num_classes - 1)
-    WCSS_test_scaled = WCSS_test / (
-        (scores_test_pca.shape[0] - num_classes) * n_components
-    )
-    WCSS_train_scaled = WCSS_train / (
-        (scores_train_pca.shape[0] - num_classes) * n_components
-    )
+    WCSS_test_scaled = WCSS_test / (scores_test_pca.shape[0] - num_classes)
+    WCSS_train_scaled = WCSS_train / (scores_train_pca.shape[0] - num_classes)
 
     return (
         phi_train,
         phi_test,
-        sleep_percent,
         WCSS_train_scaled,
         WCSS_test_scaled,
         BCSS_train_scaled,

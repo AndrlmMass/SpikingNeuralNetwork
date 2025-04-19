@@ -456,8 +456,9 @@ def train_network(
             nonzero_pre_idx.append(pre_idx.astype(np.int64))
 
     idx = 0
-
-    for t in tqdm(range(1, T), desc=desc):
+    count = False
+    sleep_amount = 0
+    for t in tqdm(range(1, T), desc=desc, leave=False):
         # update membrane potential
         mp[t] = update_membrane_potential(
             mp=mp[t - 1],
@@ -577,8 +578,17 @@ def train_network(
                 spikes[t + 1, :st] = 0
                 spikes[t + 1, pn:] = 0
                 spike_labels[t] = -2
+                count = True
+            else:
+                count = False
             if sleep_now_inh and t < T - 2:
                 spike_labels[t] = -2
+                count = True
+            else:
+                count = False
+        if count:
+            sleep_amount += 1
+    sleep_percent = (sleep_amount / T) * 100
 
     return (
         weights,
@@ -595,4 +605,5 @@ def train_network(
         max_sum_inh,
         max_sum_exc,
         spike_labels,
+        sleep_percent,
     )
