@@ -1,9 +1,7 @@
 from numba.typed import List
 from numba import njit
 from tqdm import tqdm
-import pickle as pkl
 import numpy as np
-import os
 from weight_funcs import sleep_func, spike_timing, vectorized_trace_func, trace_STDP
 
 
@@ -578,16 +576,17 @@ def train_network(
                 spikes[t + 1, :st] = 0
                 spikes[t + 1, pn:] = 0
                 spike_labels[t] = -2
-                count = True
+                count1 = True
             else:
-                count = False
+                count1 = False
             if sleep_now_inh and t < T - 2:
                 spike_labels[t] = -2
-                count = True
+                count2 = True
             else:
-                count = False
-        if count:
-            sleep_amount += 1
+                count2 = False
+            if count1 or count2:
+                sleep_amount += 1
+
     sleep_percent = (sleep_amount / T) * 100
 
     return (

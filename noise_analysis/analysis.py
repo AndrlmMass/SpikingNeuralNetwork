@@ -105,14 +105,14 @@ def t_SNE(
 def PCA_analysis(
     spikes,
     labels_spike,
-    n_components,
+    pca_variance,
     random_state,
 ):
     # Bin the spikes using the labels (assuming this function is defined elsewhere)
     features, segment_labels = bin_spikes_by_label_no_breaks(spikes, labels_spike)
 
     # Create a PCA instance.
-    pca = PCA(n_components=n_components, random_state=random_state)
+    pca = PCA(n_components=pca_variance, random_state=random_state)
     pca_results = pca.fit_transform(features)
 
     clf = LogisticRegression(
@@ -161,7 +161,7 @@ def calculate_phi(
     labels_test,
     labels_train,
     num_steps,
-    n_components,
+    pca_variance,
     random_state,
     num_classes,
 ):
@@ -226,8 +226,9 @@ def calculate_phi(
 
     """ Perform PCA on the binned data """
     # Create a PCA instance
-    pca = PCA(n_components=n_components, random_state=random_state)
+    pca = PCA(n_components=2, random_state=random_state)
     pca.fit(spike_train_rates_std)
+    n_components = pca.n_components_
     scores_train_pca = pca.transform(spike_train_rates_std)
 
     # Calculate centroids and WCSS

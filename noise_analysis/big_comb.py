@@ -72,7 +72,6 @@ class snn_sleepy:
         save_data: bool = False,
         load_model: bool = False,
         save_model: bool = False,
-        phi_model: bool = False,
         save_phi_model: bool = False,
         load_phi_model: bool = False,
         save_test_model: bool = False,
@@ -167,7 +166,7 @@ class snn_sleepy:
                             self.labels_true_test = None
                             self.labels_true_train = None
 
-                        print("data loaded", end="\r")
+                        print("\rdata loaded", end="")
                         self.data_loaded = True
                         return
 
@@ -316,7 +315,10 @@ class snn_sleepy:
                         self.model_loaded = True
                         return os.path.join("model", folder)
             else:
-                print("No model found to load. Will train new model from scratch.")
+                print(
+                    "\rNo model found to load. Will train new model from scratch.",
+                    end="",
+                )
 
         if save_phi_model:
             # create sub-folder in already created folder (model dir) for each sleep score
@@ -335,7 +337,7 @@ class snn_sleepy:
                 self.phi_means,
             )
 
-            print("phi data has been saved")
+            print("\rphi data has been saved", end="")
 
         if load_phi_model:
             # get directory
@@ -350,7 +352,7 @@ class snn_sleepy:
                 # load phi_means
                 self.phi_means = np.load(os.path.join(data_dir, "phi_means.npy"))
                 self.loaded_phi_model = True
-                print("phi data has been loaded")
+                print("\rphi data has been loaded", end="")
 
     # acquire data
     def prepare_data(
@@ -456,7 +458,7 @@ class snn_sleepy:
                 download = True
 
             # get dataset with progress bar
-            print("Downloading MNIST dataset...")
+            print("\rDownloading MNIST dataset...", end="")
             if download == True:
                 # generate random number to create unique folder
                 rand_nums = np.random.randint(low=0, high=9, size=5)
@@ -498,7 +500,7 @@ class snn_sleepy:
                 train_=train_,
                 offset=offset,
                 download=download,
-                data_dir=data_dir,
+                data_dir=self.data_dir,
                 true_labels=true_labels,
                 N_classes=self.N_classes,
                 first_spike_time=first_spike_time,
@@ -686,8 +688,8 @@ class snn_sleepy:
         vectorized_trace=False,
         clip_exc_weights=False,
         clip_inh_weights=False,
-        alpha=1.25,
-        beta=0.8,
+        alpha=1.1,
+        beta=1.0,
         A_plus=0.25,
         A_minus=0.5,
         test=True,
@@ -699,6 +701,7 @@ class snn_sleepy:
         reset_potential=-80,
         spike_slope=-0.1,
         spike_intercept=-4,
+        pca_variance=0.95,
         w_interval=5,
         start_time_spike_plot=None,
         stop_time_spike_plot=None,
@@ -726,8 +729,6 @@ class snn_sleepy:
         plot_top_response_train=False,
         plot_top_response_test=False,
         random_state=48,
-        n_components=2,
-        calculate_phi_=True,
         samples=10,
     ):
         self.dt = dt
@@ -766,13 +767,14 @@ class snn_sleepy:
         self.model_parameters["supervised"] = self.supervised
         self.model_parameters["unsupervised"] = self.unsupervised
         self.model_parameters["w_dense_ee"] = self.w_dense_ee
-        self.model_parameters["w_dense_se"] = self.w_dense_se
         self.model_parameters["w_dense_ei"] = self.w_dense_ei
+        self.model_parameters["w_dense_se"] = self.w_dense_se
         self.model_parameters["w_dense_ie"] = self.w_dense_ie
         self.model_parameters["ie_weights"] = self.ie_weights
         self.model_parameters["ee_weights"] = self.ee_weights
         self.model_parameters["ei_weights"] = self.ei_weights
         self.model_parameters["se_weights"] = self.se_weights
+        self.model_parameters["classes"] = self.classes
         self.model_parameters["weight_affinity_output"] = self.weight_affinity_output
 
         if not force_train and self.data_loaded:
@@ -936,12 +938,8 @@ class snn_sleepy:
 
         if plot_weights:
             weights_plot(
-                weights_exc=self.weights2plot_exc[
-                    int(self.weights2plot_exc.shape[0] * 0.50) :
-                ],
-                weights_inh=self.weights2plot_inh[
-                    int(self.weights2plot_inh.shape[0] * 0.50) :
-                ],
+                weights_exc=self.weights2plot_exc,
+                weights_inh=self.weights2plot_inh,
                 N=self.N,
                 N_x=self.N_x,
                 N_exc=self.N_exc,
@@ -1120,15 +1118,17 @@ class snn_sleepy:
 
             # retrain if phi model not loaded
             if not self.loaded_phi_model:
-                phi_means = np.zeros(
-                    (len(weight_decay_rate_exc), 8)
-                )  # phi_train, phi_test, WCSS_train, WCSS_test, BCSS_train, BCSS_test
-                phi_all_scores = np.zeros((len(weight_decay_rate_exc), samples, 8))
+                # Pre-zip the decay rates (must be same length)
+                decay_pairs = list(zip(weight_decay_rate_exc, weight_decay_rate_inh))
+                # Allocate array: [n_decay_rates, n_samples, 8 metrics]
+                self.phi_all_scores = np.zeros((len(decay_pairs), samples, 8))
+
+                # Main loop: over samples and decay-rate settings
                 with tqdm(
-                    total=len(weight_decay_rate_exc) * samples, desc="Computing phi's"
+                    total=len(decay_pairs) * samples, desc="Computing φ scores"
                 ) as pbar:
                     for t in range(samples):
-                        # generate new training data
+                        # 1) Generate fresh data for this sample
                         (
                             data_train,
                             labels_train,
@@ -1159,15 +1159,15 @@ class snn_sleepy:
                             test_data_ratio=self.test_data_ratio,
                         )
 
-                        # convert to correct format
+                        # 2) Convert raw data into simulation arrays
                         (
-                            self.mp_train_phi,
-                            self.mp_test_phi,
-                            self.pre_trace_phi,
-                            self.post_trace_phi,
-                            self.spikes_train_phi,
-                            self.spikes_test_phi,
-                            self.spike_times_phi,
+                            mp_train,
+                            mp_test,
+                            pre_tr,
+                            post_tr,
+                            spikes_train_init,
+                            spikes_test_init,
+                            spike_times,
                         ) = create_arrays(
                             N=self.N,
                             N_exc=self.N_exc,
@@ -1184,61 +1184,32 @@ class snn_sleepy:
                             max_time=self.max_time,
                             labels_true=labels_true_train,
                         )
-                        for r in range(len(weight_decay_rate_exc)):
-                            # decay rate
-                            decay_rate_exc = weight_decay_rate_exc[r]
-                            decay_rate_inh = weight_decay_rate_inh[r]
 
-                            # train model
-                            (
-                                self.weights_phi,
-                                self.spikes_train_phi,
-                                self.pre_trace_phi,
-                                self.post_trace_phi,
-                                self.mp_train_phi,
-                                self.weights2plot_exc_phi,
-                                self.weights2plot_inh_phi,
-                                self.pre_trace_plot_phi,
-                                self.post_trace_plot_phi,
-                                self.spike_threshold_phi,
-                                self.weight_mask_phi,
-                                self.max_weight_sum_inh_phi,
-                                self.max_weight_sum_exc_phi,
-                                self.labels_train_phi,
-                                sleep_amount_train_phi,
-                            ) = train_network(
-                                weights=self.weights_phi.copy(),
-                                spike_labels=self.labels_train_phi.copy(),
+                        # 3) Loop over each pair of decay rates
+                        for r, (decay_exc, decay_inh) in enumerate(decay_pairs):
+                            # Bundle common training arguments
+                            common_args = dict(
                                 N_classes=self.N_classes,
                                 supervised=self.supervised,
-                                mp=self.mp_train_phi.copy(),
-                                sleep=sleep,
-                                alpha=alpha,
-                                timing_update=timing_update,
-                                spikes=self.spikes_train_phi.copy(),
-                                pre_trace=self.pre_trace_phi.copy(),
-                                post_trace=self.post_trace_phi.copy(),
-                                check_sleep_interval=check_sleep_interval,
+                                unsupervised=self.unsupervised,
                                 tau_pre_trace_exc=tau_pre_trace_exc,
                                 tau_pre_trace_inh=tau_pre_trace_inh,
                                 tau_post_trace_exc=tau_post_trace_exc,
                                 tau_post_trace_inh=tau_post_trace_inh,
                                 resting_potential=self.resting_potential,
                                 membrane_resistance=membrane_resistance,
-                                unsupervised=self.unsupervised,
                                 min_weight_exc=min_weight_exc,
                                 max_weight_exc=max_weight_exc,
                                 min_weight_inh=min_weight_inh,
                                 max_weight_inh=max_weight_inh,
-                                N_inh=self.N_inh,
                                 N_exc=self.N_exc,
+                                N_inh=self.N_inh,
                                 beta=beta,
                                 num_exc=num_exc,
                                 num_inh=num_inh,
                                 weight_decay=weight_decay,
-                                weight_decay_rate_exc=decay_rate_exc,
-                                weight_decay_rate_inh=decay_rate_inh,
-                                train_weights=train_weights,
+                                weight_decay_rate_exc=decay_exc,
+                                weight_decay_rate_inh=decay_inh,
                                 learning_rate_exc=learning_rate_exc,
                                 learning_rate_inh=learning_rate_inh,
                                 w_interval=w_interval,
@@ -1265,173 +1236,104 @@ class snn_sleepy:
                                 spike_slope=spike_slope,
                                 noisy_threshold=noisy_threshold,
                                 reset_potential=reset_potential,
-                                spike_times=self.spike_times_phi.copy(),
                                 noisy_potential=noisy_potential,
                                 noisy_weights=noisy_weights,
                                 weight_mean_noise=weight_mean_noise,
                                 weight_var_noise=weight_var_noise,
                                 vectorized_trace=vectorized_trace,
                                 N_x=self.N_x,
+                            )
+
+                            # 3a) Train on the training set
+                            (
+                                weights_tr,
+                                spikes_tr_out,
+                                *unused,
+                                labels_tr_out,
+                                sleep_tr_out,
+                            ) = train_network(
+                                weights=self.weights.copy(),
+                                spike_labels=labels_train.copy(),
+                                mp=mp_train.copy(),
+                                sleep=sleep,
+                                train_weights=train_weights,
                                 T=self.T_train,
                                 mean_noise=mean_noise,
                                 var_noise=var_noise,
-                            )
-
-                            (
-                                self.weights_phi,
-                                self.spikes_test_phi,
-                                self.pre_trace_phi,
-                                self.post_trace_phi,
-                                self.mp_test_phi,
-                                self.weights2plot_exc_phi,
-                                self.weights2plot_inh_phi,
-                                self.pre_trace_plot_phi,
-                                self.post_trace_plot_phi,
-                                self.spike_threshold_phi,
-                                self.weight_mask_phi,
-                                self.max_weight_sum_inh_phi,
-                                self.max_weight_sum_exc_phi,
-                                self.labels_test_phi,
-                                sleep_amount_test_phi,
-                            ) = train_network(
-                                weights=self.weights_phi.copy(),
-                                spike_labels=self.labels_test_phi.copy(),
-                                N_classes=self.N_classes,
-                                supervised=self.supervised,
-                                mp=self.mp_test_phi.copy(),
-                                sleep=False,
+                                spikes=spikes_train_init.copy(),
+                                pre_trace=pre_tr.copy(),
+                                post_trace=post_tr.copy(),
+                                check_sleep_interval=check_sleep_interval,
                                 alpha=alpha,
                                 timing_update=timing_update,
-                                spikes=self.spikes_test_phi.copy(),
-                                pre_trace=self.pre_trace_phi.copy(),
-                                post_trace=self.post_trace_phi.copy(),
-                                unsupervised=self.unsupervised,
-                                check_sleep_interval=check_sleep_interval,
-                                tau_pre_trace_exc=tau_pre_trace_exc,
-                                tau_pre_trace_inh=tau_pre_trace_inh,
-                                tau_post_trace_exc=tau_post_trace_exc,
-                                tau_post_trace_inh=tau_post_trace_inh,
-                                resting_potential=self.resting_potential,
-                                membrane_resistance=membrane_resistance,
-                                min_weight_exc=min_weight_exc,
-                                max_weight_exc=max_weight_exc,
-                                min_weight_inh=min_weight_inh,
-                                max_weight_inh=max_weight_inh,
-                                N_inh=self.N_inh,
-                                N_exc=self.N_exc,
-                                beta=beta,
-                                num_exc=num_exc,
-                                num_inh=num_inh,
-                                weight_decay=weight_decay,
-                                weight_decay_rate_exc=decay_rate_exc,
-                                weight_decay_rate_inh=decay_rate_inh,
+                                spike_times=spike_times.copy(),
+                                **common_args,
+                            )
+
+                            # 3b) Test on the test set
+                            (
+                                weights_te,
+                                spikes_te_out,
+                                *unused,
+                                labels_te_out,
+                                sleep_te_out,
+                            ) = train_network(
+                                weights=weights_tr.copy(),
+                                spike_labels=labels_test.copy(),
+                                mp=mp_test.copy(),
+                                sleep=False,
                                 train_weights=False,
-                                learning_rate_exc=learning_rate_exc,
-                                learning_rate_inh=learning_rate_inh,
-                                w_interval=w_interval,
-                                interval=interval,
-                                w_target_exc=w_target_exc,
-                                w_target_inh=w_target_inh,
-                                tau_LTP=tau_LTP,
-                                tau_LTD=tau_LTD,
-                                tau_m=tau_m,
-                                max_mp=max_mp,
-                                min_mp=min_mp,
-                                dt=self.dt,
-                                N=self.N,
-                                clip_exc_weights=clip_exc_weights,
-                                clip_inh_weights=clip_inh_weights,
-                                A_plus=A_plus,
-                                A_minus=A_minus,
-                                trace_update=trace_update,
-                                spike_adaption=spike_adaption,
-                                delta_adaption=delta_adaption,
-                                tau_adaption=tau_adaption,
-                                spike_threshold_default=spike_threshold_default,
-                                spike_intercept=spike_intercept,
-                                spike_slope=spike_slope,
-                                noisy_threshold=noisy_threshold,
-                                reset_potential=reset_potential,
-                                spike_times=self.spike_times,
-                                noisy_potential=noisy_potential,
-                                noisy_weights=noisy_weights,
-                                weight_mean_noise=weight_mean_noise,
-                                weight_var_noise=weight_var_noise,
-                                vectorized_trace=vectorized_trace,
-                                N_x=self.N_x,
                                 T=self.T_test,
                                 mean_noise=mean_noise,
                                 var_noise=var_noise,
+                                spikes=spikes_test_init.copy(),
+                                pre_trace=pre_tr.copy(),
+                                post_trace=post_tr.copy(),
+                                check_sleep_interval=check_sleep_interval,
+                                alpha=alpha,
+                                timing_update=timing_update,
+                                spike_times=spike_times.copy(),
+                                **common_args,
                             )
 
-                            # calculate phi
-
-                            (
-                                phi_train,
-                                phi_test,
-                                WCSS_train,
-                                WCSS_test,
-                                BCSS_train,
-                                BCSS_test,
-                            ) = calculate_phi(
-                                spikes_train=self.spikes_train_phi,
-                                spikes_test=self.spikes_test_phi,
-                                labels_test=self.labels_test_phi,
-                                labels_train=self.labels_train_phi,
-                                num_steps=self.num_steps,
-                                n_components=n_components,
-                                random_state=random_state,
-                                num_classes=self.N_classes,
+                            # 4) Compute phi metrics using the trained outputs
+                            phi_tr, phi_te, wcss_tr, wcss_te, bcss_tr, bcss_te = (
+                                calculate_phi(
+                                    spikes_train=spikes_tr_out,
+                                    spikes_test=spikes_te_out,
+                                    labels_train=labels_tr_out,
+                                    labels_test=labels_te_out,
+                                    num_steps=self.num_steps,
+                                    pca_variance=pca_variance,
+                                    random_state=random_state,
+                                    num_classes=self.N_classes,
+                                )
                             )
 
-                            self.phi_all_scores[r, t] = np.array(
-                                [
-                                    phi_train,
-                                    phi_test,
-                                    decay_rate_exc,
-                                    sleep_amount_train_phi,
-                                    WCSS_train,
-                                    WCSS_test,
-                                    BCSS_train,
-                                    BCSS_test,
-                                ]
-                            )
-
+                            # 5) Store results and update progress bar
+                            self.phi_all_scores[r, t] = [
+                                phi_tr,
+                                phi_te,
+                                decay_exc,
+                                sleep_tr_out,
+                                wcss_tr,
+                                wcss_te,
+                                bcss_tr,
+                                bcss_te,
+                            ]
                             pbar.update(1)
 
-                            # delete unnecessary variables
-                            del mp_train_phi
-                            del mp_test_phi
-                            del pre_trace_phi
-                            del post_trace_phi
-                            del spikes_train_phi
-                            del spikes_test_phi
-                            del spike_times_phi
-                            del weights_phi
-                            del weights2plot_exc_phi
-                            del weights2plot_inh_phi
-                            del pre_trace_plot_phi
-                            del post_trace_plot_phi
-                            del spike_threshold_phi
-                            del weight_mask_phi
-                            del max_weight_sum_inh_phi
-                            del max_weight_sum_exc_phi
-                            del labels_test_phi
-                            del sleep_amount_test_phi
-                            del sleep_amount_train_phi
-                            del data_train
-                            del labels_train
-                            del data_test
-                            del labels_test
-                            del labels_true_train
-                            del labels_true_test
+                        # 6) Clean up per-sample data to free memory
+                        del data_train, labels_train, data_test, labels_test
+                        del labels_true_train, labels_true_test
+                        del mp_train, mp_test, pre_tr, post_tr
+                        del spikes_train_init, spikes_test_init, spike_times
+                        gc.collect()
 
-                            gc.collect()
-
-            # compute the phi means
-            phi_means = np.mean(
-                phi_all_scores, axis=1
-            )  # shape will be (len(weight_decay), 8)
+                    # 7) Compute the mean φ scores across samples
+                    self.phi_means = self.phi_all_scores.mean(
+                        axis=1
+                    )  # shape: [n_decay_rates, 8]
 
             # save phi scores, sleep lengths and amounts
             self.process(

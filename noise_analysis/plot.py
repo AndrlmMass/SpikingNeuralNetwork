@@ -228,7 +228,7 @@ def spike_plot(data, labels):
     segment_start = 0
     current_label = labels[0]
 
-    for i in range(1, len(labels)):
+    for i in range(int(len(labels) * 0.1), len(labels)):
         # If the label changes, we close off the old segment (unless it was -1)
         if labels[i] != current_label:
             if current_label != -1:
