@@ -59,8 +59,6 @@ def get_elite_nodes(spikes, labels, num_classes, narrow_top, st, ih, wide_top):
 
     final_indices = responses_indices[:top_k]
 
-    print(f"\r{np.unique(final_indices).size / final_indices.size}")
-
     return final_indices, spikes, labels
 
 
@@ -228,7 +226,7 @@ def spike_plot(data, labels):
     segment_start = 0
     current_label = labels[0]
 
-    for i in range(int(len(labels) * 0.1), len(labels)):
+    for i in range(1, len(labels)):
         # If the label changes, we close off the old segment (unless it was -1)
         if labels[i] != current_label:
             if current_label != -1:
@@ -338,8 +336,6 @@ def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes, test):
             """
             Look over this logic again. I think argmax might be wrong.
             """
-            print(pp_label)
-            print(tp_label)
             pp_label_pop = np.argmax(pp_label)
             tp_label_pop = np.argmax(tp_label)
             total_images += 1
@@ -623,9 +619,6 @@ def plot_phi_reg(phi_scores, sleep_rates, labels, sleep_amount):
     y = phi_scores.flatten()
     labels = labels.flatten()
     colors = get_blue_colors(sleep_amount.shape[0])
-    print(x)
-    print(y)
-    print(labels)
     slope, intercept, r, p, std_err = stats.linregress(x, y)
 
     def myfunc(x):

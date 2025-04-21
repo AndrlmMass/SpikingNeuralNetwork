@@ -265,7 +265,7 @@ class snn_sleepy:
 
                     # Check if parameters are the same as the current ones
                     if ex_params == model_parameters:
-                        self.weights = np.load(
+                        self.weights_train = np.load(
                             os.path.join("model", folder, "weights.npy")
                         )
                         self.spikes_train = np.load(
@@ -881,8 +881,8 @@ class snn_sleepy:
 
         if plot_top_response_train:
             top_responders_plotted(
-                spikes=self.spikes_train[100 * self.num_steps :],
-                labels=self.labels_train[100 * self.num_steps :],
+                spikes=self.spikes_train,
+                labels=self.labels_train,
                 ih=self.ih,
                 st=self.st,
                 num_classes=self.N_classes,
