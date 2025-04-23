@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
-from sklearn.cluster import KMeans
 import matplotlib
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
@@ -95,7 +94,7 @@ def t_SNE(
     else:
         title = "from testing"
 
-    plt.title(f"t-SNE results ", title)
+    plt.title(f"t-SNE results " + title)
     plt.xlabel("t-SNE dimension 1")
     plt.ylabel("t-SNE dimension 2")
     plt.legend()
@@ -206,10 +205,6 @@ def calculate_phi(
         spike_train_rates.append(mean_spikes)
         labels_train_unique.append(predom_label)
 
-    # print(
-    #     f"\rout of {labels_train.shape[0]//num_steps} items, {len(spike_train_rates)} were counted and {count} were discounted.",
-    #     end="",
-    # )
     """
     create cutoff point, only for training!
     """
@@ -219,14 +214,11 @@ def calculate_phi(
     labels_train_unique = np.array(labels_train_unique)
 
     # standardize rates
-    """
-    This step might be unnecessary. At least I suspect it
-    """
     spike_train_rates_std = StandardScaler().fit_transform(spike_train_rates)
 
     """ Perform PCA on the binned data """
     # Create a PCA instance
-    pca = PCA(n_components=2, random_state=random_state)
+    pca = PCA(n_components=pca_variance, random_state=random_state)
     pca.fit(spike_train_rates_std)
     n_components = pca.n_components_
     scores_train_pca = pca.transform(spike_train_rates_std)
@@ -245,10 +237,11 @@ def calculate_phi(
 
     # Estimate BCSS
     overall_mean = np.mean(scores_train_pca, axis=0)
+    n_j = scores_train_pca.shape[0]
     BCSS_train = 0
     for c in range(num_classes):
         for dim in range(n_components):
-            delta_bcss = (centroids[dim, c] - overall_mean[dim]) ** 2
+            delta_bcss = n_j * (centroids[dim, c] - overall_mean[dim]) ** 2
             BCSS_train += delta_bcss
 
     # Calculate clustering coefficient
@@ -299,9 +292,6 @@ def calculate_phi(
     labels_test_unique = np.array(labels_test_unique)
 
     # standardize rates
-    """
-    This step might be unnecessary. At least I suspect it
-    """
     spike_test_rates_std = StandardScaler().fit_transform(spike_test_rates)
 
     """ Perform PCA on the binned data """
@@ -319,11 +309,12 @@ def calculate_phi(
     WCSS_test = np.sum(wcss_arr)
 
     # Estimate bcss
+    n_j = scores_test_pca.shape[0]
     overall_mean = np.mean(scores_test_pca, axis=0)
     BCSS_test = 0
     for c in range(num_classes):
         for dim in range(n_components):
-            delta_bcss = (centroids[dim, c] - overall_mean[dim]) ** 2
+            delta_bcss = n_j * (centroids[dim, c] - overall_mean[dim]) ** 2
             BCSS_test += delta_bcss
 
     # Calculate clustering coefficient

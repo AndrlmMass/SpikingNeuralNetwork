@@ -15,8 +15,7 @@ from plot import (
     plot_traces,
     plot_accuracy,
     top_responders_plotted,
-    plot_phi_bars,
-    plot_phi_reg,
+    plot_phi_acc,
 )
 from analysis import t_SNE, PCA_analysis, calculate_phi
 from create_network import create_weights, create_arrays
@@ -137,7 +136,6 @@ class snn_sleepy:
 
                     # Check if parameters are the same as the current ones
                     if ex_params == data_parameters:
-                        self.data_dir = os.path.join("data/mdata", folder)
                         self.data_train = np.load(
                             os.path.join("data/sdata", folder, "data_train.npy")
                         )
@@ -732,6 +730,7 @@ class snn_sleepy:
         samples=10,
     ):
         self.dt = dt
+        self.pca_variance = pca_variance
 
         # Save current parameters
         self.model_parameters = {**locals()}
@@ -831,8 +830,8 @@ class snn_sleepy:
                 num_exc=num_exc,
                 num_inh=num_inh,
                 weight_decay=weight_decay,
-                weight_decay_rate_exc=weight_decay_rate_exc[0],
-                weight_decay_rate_inh=weight_decay_rate_inh[0],
+                weight_decay_rate_exc=weight_decay_rate_exc[1],
+                weight_decay_rate_inh=weight_decay_rate_inh[1],
                 train_weights=train_weights,
                 learning_rate_exc=learning_rate_exc,
                 learning_rate_inh=learning_rate_inh,
@@ -1121,7 +1120,26 @@ class snn_sleepy:
                 # Pre-zip the decay rates (must be same length)
                 decay_pairs = list(zip(weight_decay_rate_exc, weight_decay_rate_inh))
                 # Allocate array: [n_decay_rates, n_samples, 8 metrics]
-                self.phi_all_scores = np.zeros((len(decay_pairs), samples, 8))
+                self.phi_all_scores = np.zeros((len(decay_pairs), samples, 9))
+                # Define data parameters
+                data_parameters = {"pixel_size": int(np.sqrt(self.N_x)), "train_": True}
+
+                # Define folder to load data
+                folders = os.listdir("data/mdata")
+
+                # Search for existing data
+                if len(folders) > 0:
+                    for folder in folders:
+                        json_file_path = os.path.join(
+                            "data", "mdata", folder, "data_parameters.json"
+                        )
+
+                        with open(json_file_path, "r") as j:
+                            ex_params = json.loads(j.read())
+
+                        # Check if parameters are the same as the current ones
+                        if ex_params == data_parameters:
+                            data_dir = os.path.join("data/mdata", folder)
 
                 # Main loop: over samples and decay-rate settings
                 with tqdm(
@@ -1144,8 +1162,8 @@ class snn_sleepy:
                             gain_labels=self.gain_labels,
                             train_=True,
                             offset=self.offset,
-                            download=True,
-                            data_dir=self.data_dir,
+                            download=False,
+                            data_dir=data_dir,
                             true_labels=False,
                             N_classes=self.N_classes,
                             first_spike_time=self.first_spike_time,
@@ -1299,17 +1317,31 @@ class snn_sleepy:
                             # 4) Compute phi metrics using the trained outputs
                             phi_tr, phi_te, wcss_tr, wcss_te, bcss_tr, bcss_te = (
                                 calculate_phi(
-                                    spikes_train=spikes_tr_out,
-                                    spikes_test=spikes_te_out,
+                                    spikes_train=spikes_tr_out[:, self.st :],
+                                    spikes_test=spikes_te_out[:, self.st :],
                                     labels_train=labels_tr_out,
                                     labels_test=labels_te_out,
                                     num_steps=self.num_steps,
-                                    pca_variance=pca_variance,
+                                    pca_variance=self.pca_variance,
                                     random_state=random_state,
                                     num_classes=self.N_classes,
                                 )
                             )
 
+                            # calculate accuracy
+                            acc_te = top_responders_plotted(
+                                spikes=spikes_te_out,
+                                labels=labels_te_out,
+                                ih=self.ih,
+                                st=self.st,
+                                num_classes=self.N_classes,
+                                narrow_top=narrow_top,
+                                smoothening=smoothening,
+                                train=False,
+                                compute_not_plot=True,
+                            )
+
+                            # Store acc
                             # 5) Store results and update progress bar
                             self.phi_all_scores[r, t] = [
                                 phi_tr,
@@ -1320,7 +1352,9 @@ class snn_sleepy:
                                 wcss_te,
                                 bcss_tr,
                                 bcss_te,
+                                acc_te,
                             ]
+
                             pbar.update(1)
 
                         # 6) Clean up per-sample data to free memory
@@ -1330,31 +1364,16 @@ class snn_sleepy:
                         del spikes_train_init, spikes_test_init, spike_times
                         gc.collect()
 
-                    # 7) Compute the mean φ scores across samples
-                    self.phi_means = self.phi_all_scores.mean(
-                        axis=1
-                    )  # shape: [n_decay_rates, 8]
-
-            # save phi scores, sleep lengths and amounts
-            self.process(
-                save_phi_model=True,
-                model_dir_=model_dir,
-                sleep_scores=weight_decay_rate_exc,
-            )
-
-            # plot phi comparison
-            plot_phi_bars(
-                phi_means=self.phi_means,
-                sleep_lengths=np.array(weight_decay_rate_exc),
-                sleep_amount=np.mean(self.phi_all_scores[:, :, 3], axis=1),
-            )
+                # save phi scores, sleep lengths and amounts
+                self.process(
+                    save_phi_model=True,
+                    model_dir_=model_dir,
+                    sleep_scores=weight_decay_rate_exc,
+                )
 
             # plot phi and sleep amounts with linear regression
-            plot_phi_reg(
-                phi_scores=self.phi_all_scores[:, :, 1],
-                sleep_rates=np.array(weight_decay_rate_exc),
-                labels=self.phi_all_scores[:, :, 2],
-                sleep_amount=self.phi_all_scores[:, :, 3],
+            plot_phi_acc(
+                all_scores=self.phi_all_scores,
             )
 
     def analysis(
@@ -1410,7 +1429,7 @@ class snn_sleepy:
                 labels_train=self.labels_train,
                 labels_test=self.labels_test,
                 num_steps=self.num_steps,
-                n_components=n_components,
+                pca_variance=self.pca_variance,
                 random_state=random_state,
                 num_classes=self.N_classes,
             )

@@ -3,12 +3,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib
-from scipy import stats
+from matplotlib.ticker import AutoMinorLocator
 
 matplotlib.use("TkAgg")
 
 
-def get_elite_nodes(spikes, labels, num_classes, narrow_top, st, ih, wide_top):
+def get_elite_nodes(spikes, labels, num_classes, narrow_top, st, ih):
     # remove unnecessary data periods
     mask_break = (labels != -1) & (labels != -2)
     spikes = spikes[mask_break, :]
@@ -39,23 +39,6 @@ def get_elite_nodes(spikes, labels, num_classes, narrow_top, st, ih, wide_top):
     # sort performance
     responses_indices = np.argsort(responses, 0)[::-1, :]
     top_k = int(spikes.shape[1] * narrow_top)
-    # top_w = int(spikes.shape[1] * wide_top)
-
-    # # select performers
-    # selected_nodes = set()
-    # forbidden_nodes = set()
-    # unique, counts = np.unique(responses_indices[:top_w], return_counts=True)
-    # unique_values = unique[counts == 1]
-    # forbidden_nodes.update(unique_values)
-    # for c in range(num_classes):
-    #     selection = []
-    #     for candidate in responses_indices[:, c]:
-    #         if candidate not in selected_nodes and candidate in forbidden_nodes:
-    #             selection.append(candidate)
-    #         if len(selection) >= top_k:
-    #             break
-    #     selected_nodes.update(selection)
-    #     responses_indices[: len(selection), c] = selection
 
     final_indices = responses_indices[:top_k]
 
@@ -63,7 +46,15 @@ def get_elite_nodes(spikes, labels, num_classes, narrow_top, st, ih, wide_top):
 
 
 def top_responders_plotted(
-    spikes, labels, ih, st, num_classes, narrow_top, wide_top, smoothening, train
+    spikes,
+    labels,
+    ih,
+    st,
+    num_classes,
+    narrow_top,
+    smoothening,
+    train,
+    compute_not_plot,
 ):
     fig, ax = plt.subplots(2, 1)
 
@@ -75,8 +66,46 @@ def top_responders_plotted(
         st=st,
         num_classes=num_classes,
         narrow_top=narrow_top,
-        wide_top=wide_top,
     )
+
+    if compute_not_plot:
+        block_size = smoothening
+
+        # Calculate the number of complete blocks
+        num_blocks = spikes.shape[0] // block_size
+
+        # Initialize a list to hold the mean of each block
+        means = []
+        labs = []
+
+        # Loop through each block, calculate mean along axis=0 (i.e. column-wise)
+        for i in range(num_blocks):
+            # add spikes
+            block = spikes[i * block_size : (i + 1) * block_size]
+            block_mean = np.mean(block, axis=0)
+            means.append(block_mean)
+            # add labels
+            block_lab = labels[i * block_size : (i + 1) * block_size]
+            block_maj = np.argmax(np.bincount(block_lab))
+            labs.append(block_maj)
+
+        # Optionally convert to a NumPy array for further processing
+        spikes = np.array(means)
+        labels = np.array(labs)
+
+        acts = np.zeros((spikes.shape[0], num_classes))
+        for c in range(num_classes):
+            acts[:, c] = np.sum(spikes[:, indices[:, c]], axis=1)
+
+        predictions = np.argmax(acts, axis=1)
+        precision = np.zeros(spikes.shape[0])
+        hit = 0
+        for i in range(precision.shape[0]):
+            hit += predictions[i] == labels[i]
+            precision[i] = hit / (i + 1)
+
+        # return the final accuracy measurement
+        return precision[-1]
 
     # reduce samples
     cmap = plt.get_cmap("Set3", num_classes)
@@ -614,35 +643,98 @@ def get_blue_colors(n):
     return colors
 
 
-def plot_phi_reg(phi_scores, sleep_rates, labels, sleep_amount):
-    x = sleep_amount.flatten()
-    y = phi_scores.flatten()
-    labels = labels.flatten()
-    colors = get_blue_colors(sleep_amount.shape[0])
-    slope, intercept, r, p, std_err = stats.linregress(x, y)
+def plot_phi_acc(all_scores):
+    fig, ax1 = plt.subplots(figsize=(8, 5))
+    ax2 = ax1.twinx()
+    phi_means = all_scores.mean(axis=1)
+    all_scores[:, :, 8] *= 100
+    phi_means[:, 8] *= 100
 
-    def myfunc(x):
-        return slope * x + intercept
+    # extract mean sleep period for each sleep rate
+    sleep_amount_mean = phi_means[:, 3]
+    labels = np.char.mod("%.2f%%", sleep_amount_mean)
+    y1 = all_scores[:, :, 1]
+    y2 = all_scores[:, :, 8]
+    c1 = "#FF6347"
+    c2 = "#06C2AC"
+    c11 = "#ff4d2d"
+    c22 = "#05af9b"
 
-    presented_classes = set()
-    mymodel = list(map(myfunc, x))
-    for i in range(x.shape[0]):
-        if labels[i] in presented_classes:
-            idx = np.where(labels[i] == sleep_rates)[0][0]
-            plt.scatter(x=x[i], y=y[i], color=colors[idx])
-        else:
-            idx = np.where(labels[i] == sleep_rates)[0][0]
-            presented_classes.add(labels[i])
-            plt.scatter(
-                x=x[i], y=y[i], color=colors[idx], label=f"$\\eta = {labels[i]}$"
-            )
+    # parameters for positioning
+    positions = np.arange(len(labels))
+    width1 = 0.35
+    width2 = 0.25
 
-    plt.plot(x, mymodel, label="regline")
-    plt.ylabel("Clustering score ($\\phi$)", fontsize=14)
-    plt.xlabel("Sleep amount ($\\%$)", fontsize=14)
-    plt.legend()
+    # prepare data lists
+    data1 = [y1[i] for i in range(len(labels))]
+    data2 = [y2[i] for i in range(len(labels))]
+    linewidth = 2
+    # boxplot on left axis
+    box1 = ax1.boxplot(
+        data1,
+        positions=positions - width1 / 2,
+        widths=width2,
+        patch_artist=True,
+        boxprops=dict(facecolor=c1, edgecolor=c11, linewidth=linewidth),
+        medianprops=dict(color=c11, linewidth=linewidth),
+        whiskerprops=dict(linewidth=linewidth),
+        capprops=dict(linewidth=linewidth),
+    )
+    # boxplot on right axis
+    box2 = ax2.boxplot(
+        data2,
+        positions=positions + width1 / 2,
+        widths=width2,
+        patch_artist=True,
+        boxprops=dict(facecolor=c2, edgecolor=c22, linewidth=linewidth),
+        medianprops=dict(color=c22, linewidth=linewidth),
+        whiskerprops=dict(linewidth=linewidth),
+        capprops=dict(linewidth=linewidth),
+    )
+
+    # Change outer box (edge) color
+    for element in ["whiskers", "caps"]:
+        for item in box1[element]:
+            item.set_color(c11)  # Change 'red' to your preferred color
+    for element in ["whiskers", "caps"]:
+        for item in box2[element]:
+            item.set_color(c22)  # Change 'red' to your preferred color
+
+    # labels, ticks, legends
+    ax1.set_xticks(positions)
+    ax1.set_xticklabels(labels)
+    ax1.set_xlabel("Sleep amount ($\\%$)")
+    ax1.set_ylabel("Clustering score ($\\phi$)", color=c11)
+    ax2.set_ylabel("Accuracy ($\\%$)", color=c22)
+    ax2.spines["left"].set_color(c11)
+    ax2.spines["right"].set_color(c22)
+    ax2.tick_params(axis="y", colors=c22)
+    ax1.tick_params(axis="y", colors=c11)
+    ax1.spines["top"].set_visible(False)
+    ax2.spines["top"].set_visible(False)
+
+    for side in ["left", "right"]:
+        ax1.spines[side].set_position(("outward", 10))
+
+    for side in ["left", "right"]:
+        ax2.spines[side].set_position(("outward", 10))
+
+    ax2.spines["bottom"].set_position(("outward", 15))
+    ax1.spines["bottom"].set_position(("outward", 15))
+    # get the current numeric tick locations
+    ticks1 = ax1.get_yticks()
+    ticks2 = ax2.get_yticks()
+
+    # set the y‐limits to the true ends of those ticks
+    ax1.set_ylim(ticks1.min(), ticks1.max())
+    ax2.set_ylim(ticks2.min(), ticks2.max())
+    ax1.spines["bottom"].set_bounds(0, phi_means.shape[0] - 1)
+    ax2.spines["bottom"].set_bounds(0, phi_means.shape[0] - 1)
+
     path = "figures"
     if not os.path.exists(path):
         os.makedirs("figures")
-    plt.savefig(os.path.join(path, "plot_phi_reg.png"))
+
+    plt.savefig(os.path.join(path, "sleep_subplots.png"))
+    plt.tight_layout()
     plt.show()
