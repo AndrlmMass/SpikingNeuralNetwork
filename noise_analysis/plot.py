@@ -635,8 +635,6 @@ def plot_phi_bars(phi_means, sleep_lengths, sleep_amount):
 
 def get_blue_colors(n):
     # Using the reversed Blues colormap ensures that:
-    # - 0 -> darkest blue
-    # - 1 -> lightest blue
     cmap = plt.cm.Blues_r
     # Generate n values from 0 (dark) to 1 (light) and get the corresponding color for each
     colors = [cmap(x) for x in np.linspace(0, 0.7, n)]
@@ -652,13 +650,15 @@ def plot_phi_acc(all_scores):
 
     # extract mean sleep period for each sleep rate
     sleep_amount_mean = phi_means[:, 3]
-    labels = np.char.mod("%.2f%%", sleep_amount_mean)
-    y1 = all_scores[:, :, 1]
-    y2 = all_scores[:, :, 8]
-    c1 = "#FF6347"
-    c2 = "#06C2AC"
-    c11 = "#ff4d2d"
-    c22 = "#05af9b"
+    labels = np.char.mod("%.1f", sleep_amount_mean)[::-1]
+    y1 = all_scores[:, :, 1][::-1]
+    y2 = all_scores[:, :, 8][::-1]
+    c1 = "#ffe5e1"
+    c2 = "#c7fdf7"
+    c11 = "#ffbfb3"
+    c22 = "#6afae9"
+    c111 = "#ff7f68"
+    c222 = "#05af9b"
 
     # parameters for positioning
     positions = np.arange(len(labels))
@@ -669,16 +669,22 @@ def plot_phi_acc(all_scores):
     data1 = [y1[i] for i in range(len(labels))]
     data2 = [y2[i] for i in range(len(labels))]
     linewidth = 2
+    flier_size = 3
+    marker_size = 5
     # boxplot on left axis
     box1 = ax1.boxplot(
         data1,
         positions=positions - width1 / 2,
         widths=width2,
+        showfliers=False,
         patch_artist=True,
         boxprops=dict(facecolor=c1, edgecolor=c11, linewidth=linewidth),
-        medianprops=dict(color=c11, linewidth=linewidth),
-        whiskerprops=dict(linewidth=linewidth),
-        capprops=dict(linewidth=linewidth),
+        medianprops=dict(color=c11, linewidth=linewidth, zorder=4),
+        whiskerprops=dict(linewidth=linewidth, zorder=2),
+        capprops=dict(linewidth=linewidth, zorder=2),
+        flierprops=dict(
+            markerfacecolor=c1, markersize=flier_size, markeredgecolor=c11, zorder=2
+        ),
     )
     # boxplot on right axis
     box2 = ax2.boxplot(
@@ -686,10 +692,14 @@ def plot_phi_acc(all_scores):
         positions=positions + width1 / 2,
         widths=width2,
         patch_artist=True,
+        showfliers=False,
         boxprops=dict(facecolor=c2, edgecolor=c22, linewidth=linewidth),
-        medianprops=dict(color=c22, linewidth=linewidth),
-        whiskerprops=dict(linewidth=linewidth),
-        capprops=dict(linewidth=linewidth),
+        medianprops=dict(color=c22, linewidth=linewidth, zorder=5),
+        whiskerprops=dict(linewidth=linewidth, zorder=3),
+        capprops=dict(linewidth=linewidth, zorder=3),
+        flierprops=dict(
+            markerfacecolor=c2, markersize=flier_size, markeredgecolor=c22, zorder=3
+        ),
     )
 
     # Change outer box (edge) color
@@ -700,12 +710,42 @@ def plot_phi_acc(all_scores):
         for item in box2[element]:
             item.set_color(c22)  # Change 'red' to your preferred color
 
+    # 1) calculate the medians yourself
+    medians1 = np.array([np.median(d) for d in data1])
+    medians2 = np.array([np.median(d) for d in data2])
+    pos1 = positions - width1 / 2
+    pos2 = positions + width1 / 2
+
+    # 2) plot group1’s median‐connecting line behind everything (low zorder)
+    ax1.plot(
+        pos1,
+        medians1,
+        linestyle="-",
+        marker="o",
+        markersize=marker_size,
+        color=c111,
+        linewidth=linewidth,
+        zorder=6,
+    )
+
+    # 3) plot group2’s median‐connecting line on top (high zorder)
+    ax2.plot(
+        pos2,
+        medians2,
+        linestyle="-",
+        marker="o",
+        markersize=marker_size,
+        color=c222,
+        linewidth=linewidth,
+        zorder=6,
+    )
+
     # labels, ticks, legends
     ax1.set_xticks(positions)
     ax1.set_xticklabels(labels)
-    ax1.set_xlabel("Sleep amount ($\\%$)")
-    ax1.set_ylabel("Clustering score ($\\phi$)", color=c11)
-    ax2.set_ylabel("Accuracy ($\\%$)", color=c22)
+    ax1.set_xlabel("Sleep amount ($\\%$)", fontsize=16)
+    ax1.set_ylabel("Clustering score ($\\phi$)", color=c11, fontsize=16)
+    ax2.set_ylabel("Accuracy ($\\%$)", color=c22, fontsize=16)
     ax2.spines["left"].set_color(c11)
     ax2.spines["right"].set_color(c22)
     ax2.tick_params(axis="y", colors=c22)

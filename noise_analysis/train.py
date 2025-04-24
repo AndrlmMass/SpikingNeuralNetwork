@@ -576,16 +576,9 @@ def train_network(
                 spikes[t + 1, :st] = 0
                 spikes[t + 1, pn:] = 0
                 spike_labels[t] = -2
-                count1 = True
-            else:
-                count1 = False
+                sleep_amount += 1
             if sleep_now_inh and t < T - 2:
                 spike_labels[t] = -2
-                count2 = True
-            else:
-                count2 = False
-            if count1 or count2:
-                sleep_amount += 1
 
     sleep_percent = (sleep_amount / T) * 100
 

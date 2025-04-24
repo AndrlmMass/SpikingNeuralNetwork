@@ -329,12 +329,6 @@ class snn_sleepy:
                 self.phi_all_scores,
             )
 
-            # save phi_means
-            np.save(
-                os.path.join(data_dir, "phi_means.npy"),
-                self.phi_means,
-            )
-
             print("\rphi data has been saved", end="")
 
         if load_phi_model:
@@ -347,8 +341,6 @@ class snn_sleepy:
                 self.phi_all_scores = np.load(
                     os.path.join(data_dir, "phi_all_scores.npy")
                 )
-                # load phi_means
-                self.phi_means = np.load(os.path.join(data_dir, "phi_means.npy"))
                 self.loaded_phi_model = True
                 print("\rphi data has been loaded", end="")
 
@@ -782,6 +774,76 @@ class snn_sleepy:
                 model_parameters=self.model_parameters,
                 load_test_model=False,
             )
+
+        # get data_dir for retrieving MNIST-images
+        data_parameters = {"pixel_size": int(np.sqrt(self.N_x)), "train_": True}
+
+        # Define folder to load data
+        folders = os.listdir("data/mdata")
+
+        # Search for existing data
+        if len(folders) > 0:
+            for folder in folders:
+                json_file_path = os.path.join(
+                    "data", "mdata", folder, "data_parameters.json"
+                )
+
+                with open(json_file_path, "r") as j:
+                    ex_params = json.loads(j.read())
+
+                # Check if parameters are the same as the current ones
+                if ex_params == data_parameters:
+                    data_dir = os.path.join("data/mdata", folder)
+            if data_dir is None:
+                print("Could not find the mdata directory.")
+                download = False
+
+        # get epochs
+        epochs = 60000 // self.num_items
+
+        # loop over epochs
+        for e in range(epochs):
+            # create data
+            (
+                data_train,
+                labels_train,
+                data_test,
+                labels_test,
+                labels_true_train,
+                labels_true_test,
+            ) = create_data(
+                pixel_size=int(np.sqrt(self.N_x)),
+                num_steps=self.num_steps,
+                plot_comparison=False,
+                gain=self.gain,
+                gain_labels=self.gain_labels,
+                train_=True,
+                offset=self.offset,
+                download=False,
+                data_dir=data_dir,
+                true_labels=False,
+                N_classes=self.N_classes,
+                first_spike_time=self.first_spike_time,
+                time_var_input=self.time_var_input,
+                num_images=self.num_images,
+                add_breaks=self.add_breaks,
+                break_lengths=self.break_lengths,
+                noisy_data=self.noisy_data,
+                noise_level=self.noise_level,
+                classes=self.classes,
+                test_data_ratio=self.test_data_ratio,
+            )
+
+            # Main loop over training
+
+            # Train model
+
+            # Test model
+
+            # Compute phi and accuracy scores
+
+            # Remove data
+
         if not self.model_loaded:
             # train model
             (
