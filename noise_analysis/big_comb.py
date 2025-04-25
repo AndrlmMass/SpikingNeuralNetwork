@@ -432,7 +432,7 @@ class snn_sleepy:
 
                     # Check if parameters are the same as the current ones
                     if ex_params == data_parameters:
-                        self.data_dir = os.path.join("data/mdata", folder)
+                        data_dir = os.path.join("data/mdata", folder)
                         download = False
                         break
                 else:
@@ -460,8 +460,6 @@ class snn_sleepy:
                 with open(filepath, "w") as outfile:
                     json.dump(data_parameters, outfile)
 
-                self.data_dir = data_dir
-
             if self.unsupervised or self.supervised:
                 true_labels = True
             else:
@@ -472,8 +470,6 @@ class snn_sleepy:
                 self.labels_train,
                 self.data_test,
                 self.labels_test,
-                self.labels_true_train,
-                self.labels_true_test,
             ) = create_data(
                 pixel_size=int(np.sqrt(self.N_x)),
                 num_steps=num_steps,
