@@ -38,30 +38,10 @@ class snn_sleepy:
         self.classes = classes
         self.supervised = supervised
         self.unsupervised = unsupervised
-        if self.unsupervised or self.supervised:
-            self.st = N_x  # stimulation
-            self.ex = self.st + N_exc  # excitatory
-            self.ih = self.ex + N_inh  # inhibitory
-            self.pp = self.ih + self.N_classes  # predicted positive
-            self.pn = self.pp + self.N_classes  # predicted negative
-            self.tp = self.pn + self.N_classes  # true positive
-            self.tn = self.tp + self.N_classes  # true negative
-            self.fp = self.tn + self.N_classes  # false positive
-            self.fn = self.fp + self.N_classes  # false negative
-        else:
-            self.st = N_x  # stimulation
-            self.ex = self.st + N_exc  # excitatory
-            self.ih = self.ex + N_inh  # inhibitory
-
-        if self.unsupervised and supervised:
-            raise ValueError("Unsupervised and supervised cannot both be true.")
-
-        if self.supervised:
-            self.N = N_exc + N_inh + N_x + self.N_classes * 8
-        elif self.unsupervised:
-            self.N = N_exc + N_inh + N_x + self.N_classes * 8
-        else:
-            self.N = N_exc + N_inh + N_x
+        self.st = N_x  # stimulation
+        self.ex = self.st + N_exc  # excitatory
+        self.ih = self.ex + N_inh  # inhibitory
+        self.N = N_exc + N_inh + N_x
 
     def process(
         self,
