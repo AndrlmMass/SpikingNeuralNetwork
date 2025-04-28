@@ -569,11 +569,8 @@ class snn_sleepy:
         self.weights = create_weights(
             N_exc=self.N_exc,
             N_inh=self.N_inh,
-            unsupervised=self.unsupervised,
             N=self.N,
             N_x=self.N_x,
-            N_classes=self.N_classes,
-            supervised=self.supervised,
             w_dense_ee=w_dense_ee,
             w_dense_ei=w_dense_ei,
             w_dense_se=w_dense_se,
@@ -582,17 +579,8 @@ class snn_sleepy:
             ee_weights=ee_weights,
             ei_weights=ei_weights,
             ie_weights=ie_weights,
-            weight_affinity_output=weight_affinity_output,
             plot_weights=plot_weights,
             plot_network=plot_network,
-            epp_weight=epp_weight,
-            epn_weight=epn_weight,
-            pp_weight=pp_weight,
-            pn_weight=pn_weight,
-            tp_weight=tp_weight,
-            tn_weight=tn_weight,
-            fp_weight=fp_weight,
-            fn_weight=fn_weight,
         )
         self.resting_potential = resting_membrane
         self.max_time = max_time
@@ -615,12 +603,8 @@ class snn_sleepy:
             total_time_test=self.T_test,
             data_train=self.data_train,
             data_test=self.data_test,
-            supervised=self.supervised,
-            unsupervised=self.unsupervised,
-            N_classes=self.N_classes,
             N_x=self.N_x,
             max_time=self.max_time,
-            labels_true=self.labels_true_train,
         )
         # return results if retur == True
         if retur:
@@ -801,16 +785,78 @@ class snn_sleepy:
         # get epochs
         epochs = 60000 // self.num_items
 
+        # Bundle common training arguments
+        common_args = dict(
+            N_classes=self.N_classes,
+            supervised=self.supervised,
+            unsupervised=self.unsupervised,
+            tau_pre_trace_exc=tau_pre_trace_exc,
+            tau_pre_trace_inh=tau_pre_trace_inh,
+            tau_post_trace_exc=tau_post_trace_exc,
+            tau_post_trace_inh=tau_post_trace_inh,
+            resting_potential=self.resting_potential,
+            membrane_resistance=membrane_resistance,
+            min_weight_exc=min_weight_exc,
+            max_weight_exc=max_weight_exc,
+            min_weight_inh=min_weight_inh,
+            max_weight_inh=max_weight_inh,
+            N_exc=self.N_exc,
+            N_inh=self.N_inh,
+            beta=beta,
+            num_exc=num_exc,
+            num_inh=num_inh,
+            weight_decay=weight_decay,
+            weight_decay_rate_exc=weight_decay_rate_exc[0],
+            weight_decay_rate_inh=weight_decay_rate_inh[0],
+            learning_rate_exc=learning_rate_exc,
+            learning_rate_inh=learning_rate_inh,
+            w_interval=w_interval,
+            interval=interval,
+            w_target_exc=w_target_exc,
+            w_target_inh=w_target_inh,
+            tau_LTP=tau_LTP,
+            tau_LTD=tau_LTD,
+            tau_m=tau_m,
+            max_mp=max_mp,
+            min_mp=min_mp,
+            dt=self.dt,
+            N=self.N,
+            clip_exc_weights=clip_exc_weights,
+            clip_inh_weights=clip_inh_weights,
+            A_plus=A_plus,
+            A_minus=A_minus,
+            trace_update=trace_update,
+            spike_adaption=spike_adaption,
+            delta_adaption=delta_adaption,
+            tau_adaption=tau_adaption,
+            spike_threshold_default=spike_threshold_default,
+            spike_intercept=spike_intercept,
+            spike_slope=spike_slope,
+            noisy_threshold=noisy_threshold,
+            reset_potential=reset_potential,
+            noisy_potential=noisy_potential,
+            noisy_weights=noisy_weights,
+            weight_mean_noise=weight_mean_noise,
+            weight_var_noise=weight_var_noise,
+            vectorized_trace=vectorized_trace,
+            N_x=self.N_x,
+        )
+
+        # pre-define performance tracking array
+        performance_tracker = np.zeros((epochs, 3))
+
+        # Define starting index
+        idx_train = 0
+        idx_test = 0
+
         # loop over epochs
-        for e in range(epochs):
-            # create data
+        for e in tqdm(range(epochs), "Epoch training"):
+            # create & fetch data
             (
                 data_train,
                 labels_train,
                 data_test,
                 labels_test,
-                labels_true_train,
-                labels_true_test,
             ) = create_data(
                 pixel_size=int(np.sqrt(self.N_x)),
                 num_steps=self.num_steps,
@@ -821,21 +867,222 @@ class snn_sleepy:
                 offset=self.offset,
                 download=download,
                 data_dir=data_dir,
-                true_labels=False,
-                N_classes=self.N_classes,
                 first_spike_time=self.first_spike_time,
                 time_var_input=self.time_var_input,
-                num_images=self.num_images,
+                num_images_train=self.num_images_train,
+                num_images_test=self.num_images_test,
                 add_breaks=self.add_breaks,
                 break_lengths=self.break_lengths,
                 noisy_data=self.noisy_data,
                 noise_level=self.noise_level,
-                classes=self.classes,
-                test_data_ratio=self.test_data_ratio,
+                idx_test=idx_test,
+                idx_train=idx_train,
+            )
+            idx_train += self.num_items_train
+            idx_train += self.num_images_test
+
+            # Create & fetch necessary arrays
+            (
+                mp_train,
+                mp_test,
+                pre_tr,
+                post_tr,
+                spikes_train,
+                spikes_test,
+                spike_times,
+            ) = create_arrays(
+                N=self.N,
+                N_exc=self.N_exc,
+                N_inh=self.N_inh,
+                resting_membrane=self.resting_potential,
+                total_time_train=self.T_train,
+                total_time_test=self.T_test,
+                data_train=data_train,
+                data_test=data_test,
+                supervised=self.supervised,
+                unsupervised=self.unsupervised,
+                N_classes=self.N_classes,
+                N_x=self.N_x,
+                max_time=self.max_time,
+                labels_true=labels_true_train,
             )
 
-            # Main loop over training
+            # 3a) Train on the training set
+            (
+                self.weights,
+                spikes_tr_out,
+                *unused,
+                labels_tr_out,
+                sleep_tr_out,
+            ) = train_network(
+                weights=self.weights.copy(),
+                spike_labels=labels_train.copy(),
+                mp=mp_train.copy(),
+                sleep=sleep,
+                train_weights=train_weights,
+                T=self.T_train,
+                mean_noise=mean_noise,
+                var_noise=var_noise,
+                spikes=spikes_train.copy(),
+                pre_trace=pre_tr.copy(),
+                post_trace=post_tr.copy(),
+                check_sleep_interval=check_sleep_interval,
+                alpha=alpha,
+                timing_update=timing_update,
+                spike_times=spike_times.copy(),
+                **common_args,
+            )
 
+            # 3b) Test on the test set
+            (
+                weights_te,
+                spikes_te_out,
+                *unused,
+                labels_te_out,
+                sleep_te_out,
+            ) = train_network(
+                weights=weights_tr.copy(),
+                spike_labels=labels_test.copy(),
+                mp=mp_test.copy(),
+                sleep=False,
+                train_weights=False,
+                T=self.T_test,
+                mean_noise=mean_noise,
+                var_noise=var_noise,
+                spikes=spikes_test.copy(),
+                pre_trace=pre_tr.copy(),
+                post_trace=post_tr.copy(),
+                check_sleep_interval=check_sleep_interval,
+                alpha=alpha,
+                timing_update=timing_update,
+                spike_times=spike_times.copy(),
+                **common_args,
+            )
+
+            # 4) Compute phi metrics using the trained outputs
+            phi_tr, phi_te, *unused = calculate_phi(
+                spikes_train=spikes_tr_out[:, self.st :],
+                spikes_test=spikes_te_out[:, self.st :],
+                labels_train=labels_tr_out,
+                labels_test=labels_te_out,
+                num_steps=self.num_steps,
+                pca_variance=self.pca_variance,
+                random_state=random_state,
+                num_classes=self.N_classes,
+            )
+
+            # calculate accuracy
+            acc_te = top_responders_plotted(
+                spikes=spikes_te_out,
+                labels=labels_te_out,
+                ih=self.ih,
+                st=self.st,
+                num_classes=self.N_classes,
+                narrow_top=narrow_top,
+                smoothening=smoothening,
+                train=False,
+                compute_not_plot=True,
+            )
+
+            # Update performance tracking
+            performance_tracker[e] = [
+                phi_tr,
+                phi_te,
+                acc_te,
+            ]
+
+            # Rinse memory
+            del data_train, labels_train, data_test, labels_test
+            del labels_true_train, labels_true_test
+            del mp_train, mp_test, pre_tr, post_tr
+            del spikes_train_init, spikes_test_init, spike_times
+            gc.collect()
+
+            if e == epochs - 1:
+                if save_model and not self.model_loaded:
+                    model_dir = self.process(
+                        save_model=True,
+                        model_parameters=self.model_parameters,
+                        load_test_model=False,
+                    )
+
+                if plot_top_response_train:
+                    top_responders_plotted(
+                        spikes=self.spikes_train,
+                        labels=self.labels_train,
+                        ih=self.ih,
+                        st=self.st,
+                        num_classes=self.N_classes,
+                        narrow_top=narrow_top,
+                        smoothening=smoothening,
+                        train=True,
+                        wide_top=wide_top,
+                    )
+
+                if plot_accuracy_train and (self.supervised or self.unsupervised):
+                    self.accuracy_train = plot_accuracy(
+                        spikes=self.spikes_train,
+                        ih=self.ih,
+                        pp=self.pp,
+                        pn=self.pn,
+                        tp=self.tp,
+                        labels=self.labels_train,
+                        num_steps=self.num_steps,
+                        num_classes=self.N_classes,
+                        test=False,
+                    )
+
+                if plot_spikes_train:
+                    if start_time_spike_plot == None:
+                        start_time_spike_plot = int(self.spikes_train.shape[0] * 0.95)
+                    if stop_time_spike_plot == None:
+                        stop_time_spike_plot = self.spikes_train.shape[0]
+
+                    spike_plot(
+                        self.spikes_train[
+                            start_time_spike_plot:stop_time_spike_plot, self.st :
+                        ],
+                        self.labels_train[start_time_spike_plot:stop_time_spike_plot],
+                    )
+
+                if plot_threshold:
+                    spike_threshold_plot(self.spike_threshold, self.N_exc)
+
+                if plot_mp_train:
+                    if start_index_mp == None:
+                        start_index_mp = self.ex
+                    if stop_index_mp == None:
+                        stop_index_mp = self.ih
+                    if time_start_mp == None:
+                        time_start_mp = int(self.T_train * 0.95)
+                    if time_stop_mp == None:
+                        time_stop_mp = self.T_train
+
+                    mp_plot(
+                        mp=self.mp_train[time_start_mp:time_stop_mp],
+                        N_exc=self.N_exc,
+                    )
+
+                if plot_weights:
+                    weights_plot(
+                        weights_exc=self.weights2plot_exc,
+                        weights_inh=self.weights2plot_inh,
+                        N=self.N,
+                        N_x=self.N_x,
+                        N_exc=self.N_exc,
+                        N_inh=self.N_inh,
+                        max_weight_sum_inh=self.max_weight_sum_inh,
+                        max_weight_sum_exc=self.max_weight_sum_exc,
+                        random_selection=random_selection_weight_plot,
+                    )
+
+                if plot_traces_:
+                    plot_traces(
+                        N_exc=self.N_exc,
+                        N_inh=self.N_inh,
+                        pre_traces=self.pre_trace_plot,
+                        post_traces=self.post_trace_plot,
+                    )
             # Train model
 
             # Test model
