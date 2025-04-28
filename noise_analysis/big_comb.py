@@ -784,15 +784,15 @@ class snn_sleepy:
                 # Check if parameters are the same as the current ones
                 if ex_params == data_parameters:
                     data_dir = os.path.join("data/mdata", folder)
-                    download=True,
+                    download = (True,)
             if data_dir is None:
                 print("Could not find the mdata directory.")
                 download = False
                 data_dir = None
 
         # define num items per epoch
-        n_by_e_train = self.num_items_train//epochs
-        n_by_e_train = self.num_items_test//epochs
+        n_by_e_train = self.num_items_train // epochs
+        n_by_e_train = self.num_items_test // epochs
 
         # Bundle common training arguments
         common_args = dict(
@@ -887,8 +887,8 @@ class snn_sleepy:
                 idx_test=idx_test,
                 idx_train=idx_train,
             )
-            idx_train += self.num_items
-            idx_train +=  
+            idx_train += self.num_items_train
+            idx_train += self.num_images_test
 
             # Create & fetch necessary arrays
             (
@@ -969,17 +969,15 @@ class snn_sleepy:
             )
 
             # 4) Compute phi metrics using the trained outputs
-            phi_tr, phi_te, *unused = (
-                calculate_phi(
-                    spikes_train=spikes_tr_out[:, self.st :],
-                    spikes_test=spikes_te_out[:, self.st :],
-                    labels_train=labels_tr_out,
-                    labels_test=labels_te_out,
-                    num_steps=self.num_steps,
-                    pca_variance=self.pca_variance,
-                    random_state=random_state,
-                    num_classes=self.N_classes,
-                )
+            phi_tr, phi_te, *unused = calculate_phi(
+                spikes_train=spikes_tr_out[:, self.st :],
+                spikes_test=spikes_te_out[:, self.st :],
+                labels_train=labels_tr_out,
+                labels_test=labels_te_out,
+                num_steps=self.num_steps,
+                pca_variance=self.pca_variance,
+                random_state=random_state,
+                num_classes=self.N_classes,
             )
 
             # calculate accuracy
@@ -1009,7 +1007,7 @@ class snn_sleepy:
             del spikes_train_init, spikes_test_init, spike_times
             gc.collect()
 
-            if e == epochs-1:
+            if e == epochs - 1:
                 if save_model and not self.model_loaded:
                     model_dir = self.process(
                         save_model=True,
