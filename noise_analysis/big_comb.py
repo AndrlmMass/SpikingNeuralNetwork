@@ -28,40 +28,16 @@ class snn_sleepy:
         N_inh=50,
         N_x=225,
         classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-        supervised=False,
-        unsupervised=False,
     ):
         self.N_exc = N_exc
         self.N_inh = N_inh
         self.N_x = N_x
         self.N_classes = len(classes)
         self.classes = classes
-        self.supervised = supervised
-        self.unsupervised = unsupervised
-        if self.unsupervised or self.supervised:
-            self.st = N_x  # stimulation
-            self.ex = self.st + N_exc  # excitatory
-            self.ih = self.ex + N_inh  # inhibitory
-            self.pp = self.ih + self.N_classes  # predicted positive
-            self.pn = self.pp + self.N_classes  # predicted negative
-            self.tp = self.pn + self.N_classes  # true positive
-            self.tn = self.tp + self.N_classes  # true negative
-            self.fp = self.tn + self.N_classes  # false positive
-            self.fn = self.fp + self.N_classes  # false negative
-        else:
-            self.st = N_x  # stimulation
-            self.ex = self.st + N_exc  # excitatory
-            self.ih = self.ex + N_inh  # inhibitory
-
-        if self.unsupervised and supervised:
-            raise ValueError("Unsupervised and supervised cannot both be true.")
-
-        if self.supervised:
-            self.N = N_exc + N_inh + N_x + self.N_classes * 8
-        elif self.unsupervised:
-            self.N = N_exc + N_inh + N_x + self.N_classes * 8
-        else:
-            self.N = N_exc + N_inh + N_x
+        self.st = N_x  # stimulation
+        self.ex = self.st + N_exc  # excitatory
+        self.ih = self.ex + N_inh  # inhibitory
+        self.N = N_exc + N_inh + N_x
 
     def process(
         self,
@@ -347,7 +323,8 @@ class snn_sleepy:
     # acquire data
     def prepare_data(
         self,
-        num_images=50,
+        num_images_train=50,
+        num_images_test=50,
         force_recreate=False,
         plot_comparison=False,
         inspect_spike_plot=False,
@@ -369,10 +346,6 @@ class snn_sleepy:
         min_time=None,
         gain_labels=0.5,
     ):
-        if num_images <= self.N_classes:
-            raise ValueError(
-                f"num images {num_images} needs to be more than number of classes ({self.N_classes})"
-            )
         # Save current parameters
         self.data_parameters = {**locals()}
 
@@ -397,13 +370,13 @@ class snn_sleepy:
 
         # set parameters
         self.num_steps = num_steps
-        self.num_items = num_images
         self.gain = gain
         self.gain_labels = gain_labels
         self.offset = offset
         self.first_spike_time = first_spike_time
         self.time_var_input = time_var_input
-        self.num_images = num_images
+        self.num_images_train = num_images_train
+        self.num_images_test = num_images_test
         self.add_breaks = add_breaks
         self.break_lengths = break_lengths
         self.noisy_data = noisy_data
@@ -469,18 +442,11 @@ class snn_sleepy:
 
                 self.data_dir = data_dir
 
-            if self.unsupervised or self.supervised:
-                true_labels = True
-            else:
-                true_labels = False
-
             (
                 self.data_train,
                 self.labels_train,
                 self.data_test,
                 self.labels_test,
-                self.labels_true_train,
-                self.labels_true_test,
             ) = create_data(
                 pixel_size=int(np.sqrt(self.N_x)),
                 num_steps=num_steps,
@@ -543,14 +509,6 @@ class snn_sleepy:
         resting_membrane=-70,
         max_time=100,
         retur=False,
-        epp_weight=1,
-        epn_weight=1,
-        pp_weight=1,
-        pn_weight=-1,
-        tp_weight=1,
-        tn_weight=1,
-        fp_weight=-1,
-        fn_weight=-1,
         se_weights=0.1,
         ee_weights=0.3,
         ei_weights=0.3,
@@ -899,12 +857,8 @@ class snn_sleepy:
                 total_time_test=self.T_test,
                 data_train=data_train,
                 data_test=data_test,
-                supervised=self.supervised,
-                unsupervised=self.unsupervised,
-                N_classes=self.N_classes,
                 N_x=self.N_x,
                 max_time=self.max_time,
-                labels_true=labels_true_train,
             )
 
             # 3a) Train on the training set
