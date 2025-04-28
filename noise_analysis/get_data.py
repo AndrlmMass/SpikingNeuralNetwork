@@ -22,20 +22,17 @@ def create_data(
     offset,
     first_spike_time,
     time_var_input,
-    num_images,
+    num_images_train,
+    num_images_test,
     add_breaks,
-    gain_labels,
     break_lengths,
     noisy_data,
     noise_level,
-    classes,
-    N_classes,
     plot_comparison,
-    test_data_ratio,
-    true_labels,
     download,
     data_dir,
-    train_,
+    idx_train,
+    idx_test,
 ):
     # set transform rule
     transform = transforms.Compose(
@@ -46,115 +43,79 @@ def create_data(
         ]
     )
 
+    # GET TRAINING DATA
+
     # Fetch MNIST dataset
-    mnist = datasets.MNIST(
-        root=data_dir, train=train_, transform=transform, download=download
+    # TRAIN#
+    mnist_train = datasets.MNIST(
+        root=data_dir, train=True, transform=transform, download=download
+    )
+    # TEST#
+    mnist_test = datasets.MNIST(
+        root=data_dir, train=False, transform=transform, download=download
     )
 
-    # Filter the dataset so that only samples with allowed labels are included
-    filtered_samples = [
-        (mnist[i][0], mnist[i][1]) for i in range(len(mnist)) if mnist[i][1] in classes
+    # Extract data
+    # TRAIN#
+    samples_train = [
+        (mnist_train[i][0], mnist_train[i][1]) for i in range(len(mnist_train))
+    ]
+    # TEST#
+    samples_test = [
+        (mnist_test[i][0], mnist_test[i][1]) for i in range(len(mnist_test))
     ]
 
-    # Now unpack and convert to tensors
-    images, labels = zip(*filtered_samples)
-    images = torch.stack(images)  # Shape: [num_samples, 1, 28, 28]
-    labels = torch.tensor(labels)  # Shape: [num_samples]
-    test_images = int(num_images * test_data_ratio)
-    if test_images % N_classes != 0:
-        test_images = N_classes * round(test_images / N_classes)
+    # Unpack and convert to tensors
+    # TRAIN#
+    images_train, labels_train = zip(*samples_train)
+    images_train = torch.stack(
+        images_train[idx_train : idx_train + num_images_train]
+    )  # Shape: [num_samples, 1, 28, 28]
+    labels_train = torch.tensor(
+        labels_train[idx_train : idx_train + num_images_train]
+    )  # Shape: [num_samples]
+    # TEST#
+    images_test, labels_test = zip(*samples_test)
+    images_test = torch.stack(
+        images_test[idx_test : idx_test + num_images_test]
+    )  # Shape: [num_samples, 1, 28, 28]
+    labels_test = torch.tensor(
+        labels_test[idx_test : idx_test + num_images_test]
+    )  # Shape: [num_samples]
+    k = 4
 
-    balanced_images_train = []
-    balanced_labels_train = []
-    balanced_images_test = []
-    balanced_labels_test = []
-
-    # how many per class
-    n_train = num_images // N_classes
-    n_test = test_images // N_classes
-
-    for c in classes:
-        # get all indices of class c, shuffle them
-        c_idxs = (labels == c).nonzero().flatten()
-        perm = torch.randperm(len(c_idxs))
-        c_idxs = c_idxs[perm]
-
-        # pick the first chunk for train, the next chunk for test
-        train_idxs = c_idxs[:n_train]
-        test_idxs = c_idxs[n_train : n_train + n_test]
-
-        # gather images & labels
-        balanced_images_train.append(images[train_idxs])
-        balanced_labels_train.append(labels[train_idxs])
-        balanced_images_test.append(images[test_idxs])
-        balanced_labels_test.append(labels[test_idxs])
-
-    # concatenate and shuffle your final splits
-    X_train = torch.cat(balanced_images_train, dim=0)
-    y_train = torch.cat(balanced_labels_train, dim=0)
-    perm = torch.randperm(X_train.size(0))
-    limited_images_train, limited_labels_train = X_train[perm], y_train[perm]
-
-    X_test = torch.cat(balanced_images_test, dim=0)
-    y_test = torch.cat(balanced_labels_test, dim=0)
-    perm = torch.randperm(X_test.size(0))
-    limited_images_test, limited_labels_test = X_test[perm], y_test[perm]
-
-    # normalize spike intensity for each image
-    target_sum = (pixel_size**2) * 0.1
-    limited_images_train = torch.stack(
-        [
-            normalize_image(img=img, target_sum=target_sum)
-            for img in limited_images_train
-        ]
+    # Normalize spike intensity for each image
+    target_sum = (
+        pixel_size**2
+    ) * 0.1  # THIS NEEDS TO BE REVISED. IDK WHY I CHOSE 0.1...
+    # TRAIN#
+    norm_images_train = torch.stack(
+        [normalize_image(img=img, target_sum=target_sum) for img in images_train]
     )
-    limited_images_test = torch.stack(
-        [normalize_image(img=img, target_sum=target_sum) for img in limited_images_test]
+    # TEST#
+    norm_images_test = torch.stack(
+        [normalize_image(img=img, target_sum=target_sum) for img in images_test]
     )
 
-    # one-hot encode labels
-    if true_labels:
-
-        one_hot_train_pos = F.one_hot(limited_labels_train, num_classes=N_classes)
-        one_hot_train_neg = 1 - one_hot_train_pos
-        labels_true = torch.concatenate([one_hot_train_pos, one_hot_train_neg], axis=1)
-
-        # create true spiking labels train
-        labels_true_r_train = np.zeros((num_images * num_steps, 2 * N_classes))
-        for i in range(num_images):
-            labels_true_r_train[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
-                labels_true[i],
-                num_steps=num_steps,
-                gain=gain_labels,
-                offset=offset,
-                first_spike_time=first_spike_time,
-                time_var_input=time_var_input,
-            )
-
-        # create true spiking labels train
-        one_hot_train_pos = F.one_hot(limited_labels_test, num_classes=N_classes)
-        one_hot_train_neg = 1 - one_hot_train_pos
-        labels_true = torch.concatenate([one_hot_train_pos, one_hot_train_neg], axis=1)
-
-        labels_true_r_test = np.zeros((test_images * num_steps, N_classes * 2))
-        for i in range(test_images):
-            labels_true_r_test[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
-                labels_true[i],
-                num_steps=num_steps,
-                gain=gain_labels,
-                offset=offset,
-                first_spike_time=first_spike_time,
-                time_var_input=time_var_input,
-            )
-    else:
-        labels_true_r_train = None
-        labels_true_r_test = None
-
-    spike_data_train = torch.zeros(size=limited_images_train.shape)
-    spike_data_train = spike_data_train.repeat(num_steps, 1, 1, 1)
-    for i in range(num_images):
-        spike_data_train[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
-            limited_images_train[i],
+    # Convert floats to poisson sequences
+    # TRAIN#
+    S_data_train = torch.zeros(size=norm_images_train.shape)
+    S_data_train = S_data_train.repeat(num_steps, 1, 1, 1)
+    for i in range(num_images_train):
+        S_data_train[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
+            norm_images_train[i],
+            num_steps=num_steps,
+            gain=gain,
+            offset=offset,
+            first_spike_time=first_spike_time,
+            time_var_input=time_var_input,
+        )
+    # TEST#
+    S_data_test = torch.zeros(size=norm_images_test.shape)
+    S_data_test = S_data_test.repeat(num_steps, 1, 1, 1)
+    for i in range(num_images_test):
+        S_data_test[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
+            norm_images_test[i],
             num_steps=num_steps,
             gain=gain,
             offset=offset,
@@ -162,39 +123,33 @@ def create_data(
             time_var_input=time_var_input,
         )
 
-    spike_data_test = torch.zeros(size=limited_images_test.shape)
-    spike_data_test = spike_data_test.repeat(num_steps, 1, 1, 1)
-    for i in range(test_images):
-        spike_data_test[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
-            limited_images_test[i],
-            num_steps=num_steps,
-            gain=gain,
-            offset=offset,
-            first_spike_time=first_spike_time,
-            time_var_input=time_var_input,
-        )
+    # Extend labels based on num_steps
+    # TRAIN#
+    spike_labels_train = labels_train.numpy().repeat(num_steps)
+    # TEST#
+    spike_labels_test = labels_test.numpy().repeat(num_steps)
 
-    # extend labels based on num_steps
-    spike_labels_train = limited_labels_train.numpy().repeat(num_steps)
-    spike_labels_test = limited_labels_test.numpy().repeat(num_steps)
+    # Remove unnecessary dimensions
+    # TRAIN#
+    S_data_train_corrected = S_data_train.squeeze(2).flatten(start_dim=2)
+    # TEST#
+    S_data_test_corrected = S_data_test.squeeze(2).flatten(start_dim=2)
 
-    # remove unnecessary dimensions
-    spike_data_train_corrected = spike_data_train.squeeze(2).flatten(start_dim=2)
-    spike_data_test_corrected = spike_data_test.squeeze(2).flatten(start_dim=2)
-
-    # merge second and first dimensions
+    # Merge second and first dimensions
+    # TRAIN#
     S_data_train = np.reshape(
-        spike_data_train_corrected,
+        S_data_train_corrected,
         (
-            spike_data_train.shape[0] * spike_data_train.shape[1],
-            spike_data_train_corrected.shape[2],
+            S_data_train.shape[0] * S_data_train.shape[1],
+            S_data_train_corrected.shape[2],
         ),
     )
+    # TEST#
     S_data_test = np.reshape(
-        spike_data_test_corrected,
+        S_data_test_corrected,
         (
-            spike_data_test.shape[0] * spike_data_test.shape[1],
-            spike_data_test_corrected.shape[2],
+            S_data_test.shape[0] * S_data_test.shape[1],
+            S_data_test_corrected.shape[2],
         ),
     )
 
@@ -202,32 +157,17 @@ def create_data(
     S_data_train = S_data_train.numpy()
     S_data_test = S_data_test.numpy()
 
-    # print sum spikes for each class to compare
-    """
-    This will take the sum of all the training, not just the first example
-    """
-
-    # Check that all classes are presented equally in frequency
-    limited_images_train_ = limited_images_train.squeeze(1).flatten(start_dim=2).numpy()
-    limited_labels_train_ = limited_labels_train.numpy()
-    for cl in classes:
-        indices = limited_labels_train_ == cl
-        ind = np.where(indices == True)[0]
-        sum_ = np.sum(limited_images_train_[ind])
-
     if plot_comparison:
         plot_floats_and_spikes(
-            images, S_data_train, spike_labels_train, labels, num_steps
+            images_train, S_data_train, spike_labels_train, labels_train, num_steps
         )
 
     if add_breaks:
         train_data_list = []
         train_labels_list = []
-        if true_labels:
-            train_true_labels_list = []
 
         offset = 0
-        for img in range(num_images):
+        for img in range(num_images_train):
             # 1. Get the original slice for this image
             image_slice = S_data_train[img * num_steps : (img + 1) * num_steps]
             label_slice = spike_labels_train[img * num_steps : (img + 1) * num_steps]
@@ -235,10 +175,6 @@ def create_data(
             # 2. Add them to our list
             train_data_list.append(image_slice)
             train_labels_list.append(label_slice)
-            if true_labels:
-                train_true_labels_list.append(
-                    labels_true_r_train[img * num_steps : (img + 1) * num_steps]
-                )
 
             # 3. Create the break
             length = np.random.choice(break_lengths, size=1)[0]
@@ -248,27 +184,16 @@ def create_data(
             # 4. Append the break
             train_data_list.append(break_activity)
             train_labels_list.append(break_labels)
-            if true_labels:
-                break_true_labels1 = np.zeros((length, N_classes))
-                break_true_labels2 = np.ones((length, N_classes))
-                break_true_labels = np.concatenate(
-                    (break_true_labels1, break_true_labels2), axis=1
-                )
-                train_true_labels_list.append(break_true_labels)
 
         # Finally, concatenate once
         S_data_train = np.concatenate(train_data_list, axis=0)
         spike_labels_train = np.concatenate(train_labels_list, axis=0)
-        if true_labels:
-            labels_true_r_train = np.concatenate(train_true_labels_list, axis=0)
 
         test_data_list = []
         test_labels_list = []
-        if true_labels:
-            test_true_labels_list = []
 
         offset = 0
-        for img in range(test_images):
+        for img in range(num_images_test):
             # 1. Get the original slice for this image
             image_slice = S_data_test[img * num_steps : (img + 1) * num_steps]
             label_slice = spike_labels_test[img * num_steps : (img + 1) * num_steps]
@@ -276,10 +201,6 @@ def create_data(
             # 2. Add them to our list
             test_data_list.append(image_slice)
             test_labels_list.append(label_slice)
-            if true_labels:
-                test_true_labels_list.append(
-                    labels_true_r_test[img * num_steps : (img + 1) * num_steps]
-                )
 
             # 3. Create the break
             length = np.random.choice(break_lengths, size=1)[0]
@@ -289,21 +210,10 @@ def create_data(
             # 4. Append the break
             test_data_list.append(break_activity)
             test_labels_list.append(break_labels)
-            if true_labels:
-                break_true_labels1 = np.zeros((length, N_classes))
-                break_true_labels2 = np.ones((length, N_classes))
-                break_true_labels = np.concatenate(
-                    (break_true_labels1, break_true_labels2), axis=1
-                )
-                test_true_labels_list.append(break_true_labels)
 
         # Finally, concatenate once
         S_data_test = np.concatenate(test_data_list, axis=0)
         spike_labels_test = np.concatenate(test_labels_list, axis=0)
-        if true_labels:
-            labels_true_r_test = np.concatenate(test_true_labels_list, axis=0)
-        else:
-            labels_true_r_test = None
 
     if noisy_data:
         # Convert the float array to an integer array first
@@ -320,6 +230,4 @@ def create_data(
         spike_labels_train,
         S_data_test,
         spike_labels_test,
-        labels_true_r_train,
-        labels_true_r_test,
     )

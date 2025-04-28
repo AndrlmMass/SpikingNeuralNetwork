@@ -457,11 +457,10 @@ class snn_sleepy:
                 offset=offset,
                 download=download,
                 data_dir=self.data_dir,
-                true_labels=true_labels,
                 N_classes=self.N_classes,
                 first_spike_time=first_spike_time,
                 time_var_input=time_var_input,
-                num_images=num_images,
+                num
                 add_breaks=add_breaks,
                 break_lengths=break_lengths,
                 noisy_data=noisy_data,
@@ -741,7 +740,7 @@ class snn_sleepy:
                 download = False
 
         # get epochs
-        epochs = 60000 // self.num_items
+        epochs = 60000 // self.num_images_train
 
         # Bundle common training arguments
         common_args = dict(
