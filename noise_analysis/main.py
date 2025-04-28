@@ -6,7 +6,6 @@ snn_N = snn_sleepy(classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
 # acquire data
 snn_N.prepare_data(
     add_breaks=False,
-    num_images=500,
     force_recreate=False,
     noisy_data=True,
 )

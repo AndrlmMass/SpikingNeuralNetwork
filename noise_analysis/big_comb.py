@@ -819,7 +819,7 @@ class snn_sleepy:
                 gain_labels=self.gain_labels,
                 train_=True,
                 offset=self.offset,
-                download=False,
+                download=download,
                 data_dir=data_dir,
                 true_labels=False,
                 N_classes=self.N_classes,
