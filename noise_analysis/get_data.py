@@ -82,7 +82,6 @@ def create_data(
     labels_test = torch.tensor(
         labels_test[idx_test : idx_test + num_images_test]
     )  # Shape: [num_samples]
-    k = 4
 
     # Normalize spike intensity for each image
     target_sum = (
