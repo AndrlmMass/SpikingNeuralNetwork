@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
@@ -8,6 +9,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
 
 matplotlib.use("TkAgg")
+warnings.filterwarnings("error", category=RuntimeWarning)
 
 
 def bin_spikes_by_label_no_breaks(spikes, labels):
@@ -192,6 +194,7 @@ def calculate_phi(
     """
     sleep_mask = labels_train != -2
     count = 0
+    small_num = 10**-5
     for i in range(0, labels_train.shape[0], num_steps):
         # skip non_sleep spiking activity
         current_mask = sleep_mask[i : i + num_steps]
@@ -249,7 +252,7 @@ def calculate_phi(
     phi = (BCSS / (k-1)) / (WCSS / (n-k))
     """
     phi_train = (BCSS_train / (num_classes - 1)) / (
-        WCSS_train / (scores_train_pca.shape[0] - num_classes)
+        WCSS_train / (scores_train_pca.shape[0] - num_classes + small_num)
     )
 
     """
@@ -318,17 +321,16 @@ def calculate_phi(
             BCSS_test += delta_bcss
 
     # Calculate clustering coefficient
-    """
-    phi = (BCSS / (k-1)) / (WCSS / (n-k))
-    """
     phi_test = (BCSS_test / (num_classes - 1)) / (
-        WCSS_test / (scores_test_pca.shape[0] - num_classes)
+        WCSS_test / (scores_test_pca.shape[0] - num_classes + small_num)
     )
 
-    BCSS_test_scaled = BCSS_test / (num_classes - 1)
-    BCSS_train_scaled = BCSS_train / (num_classes - 1)
-    WCSS_test_scaled = WCSS_test / (scores_test_pca.shape[0] - num_classes)
-    WCSS_train_scaled = WCSS_train / (scores_train_pca.shape[0] - num_classes)
+    BCSS_test_scaled = BCSS_test / (num_classes - 1 + small_num)
+    BCSS_train_scaled = BCSS_train / (num_classes - 1 + small_num)
+    WCSS_test_scaled = WCSS_test / (scores_test_pca.shape[0] - num_classes + small_num)
+    WCSS_train_scaled = WCSS_train / (
+        scores_train_pca.shape[0] - num_classes + small_num
+    )
 
     return (
         phi_train,

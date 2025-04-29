@@ -8,6 +8,8 @@ snn_N.prepare_data(
     add_breaks=False,
     force_recreate=False,
     noisy_data=True,
+    single_train=1000,
+    single_test=166,
 )
 
 # set up network for training
@@ -26,7 +28,7 @@ snn_N.train(
     plot_accuracy_train=False,
     compare_decay_rates=True,
     weight_decay_rate_exc=[
-        0.999995,
+        0.99995,
         0.999993,
         0.99999,
         0.99997,
@@ -40,7 +42,7 @@ snn_N.train(
         0.0,
     ],
     weight_decay_rate_inh=[
-        0.999995,
+        0.99995,
         0.999993,
         0.99999,
         0.99997,
@@ -55,7 +57,6 @@ snn_N.train(
     ],
     samples=10,
     force_train=False,
-    save_test_data=True,
     plot_weights=False,
     plot_spikes_train=False,
     plot_top_response_test=False,

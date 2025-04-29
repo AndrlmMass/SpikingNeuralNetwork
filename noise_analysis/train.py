@@ -257,7 +257,7 @@ def update_membrane_potential(
 
 def update_spikes(
     st,
-    pn,
+    ih,
     mp,
     dt,
     spikes,
@@ -277,7 +277,7 @@ def update_spikes(
 
     # update spikes array
     mp = np.clip(mp, a_min=min_mp, a_max=max_mp)
-    spikes[st:pn][mp > spike_threshold] = 1
+    spikes[st:ih][mp > spike_threshold] = 1
 
     # Add Solve's noisy membrane potential
     if noisy_threshold:
@@ -286,17 +286,17 @@ def update_spikes(
             1 + np.exp(spike_slope * delta_potential + spike_intercept)
         )
         additional_spikes = np.random.binomial(n=1, p=p_fire)
-        spikes[st:pn] = spikes[st:pn] | additional_spikes
+        spikes[st:ih] = spikes[st:ih] | additional_spikes
 
     # add spike adaption
     if spike_adaption:
         spike_threshold += (spike_threshold_default - spike_threshold) / tau_adaption
         delta_adapt_dt = delta_adaption * dt
-        delta_spike_threshold = spike_threshold[spikes[st:pn] == 1] * delta_adapt_dt
-        spike_threshold[spikes[st:pn] == 1] -= delta_spike_threshold
+        delta_spike_threshold = spike_threshold[spikes[st:ih] == 1] * delta_adapt_dt
+        spike_threshold[spikes[st:ih] == 1] -= delta_spike_threshold
         # print(f"\r{np.mean(spike_threshold)}", end="")
 
-    mp[spikes[st:pn] == 1] = reset_potential
+    mp[spikes[st:ih] == 1] = reset_potential
     spike_times = np.where(spikes == 1, 0, spike_times + 1)
 
     return mp, spikes, spike_times, spike_threshold
@@ -337,7 +337,6 @@ def train_network(
     check_sleep_interval,
     w_target_exc,
     w_target_inh,
-    unsupervised,
     dt,
     N,
     A_plus,
@@ -360,9 +359,6 @@ def train_network(
     weight_var_noise,
     timing_update,
     trace_update,
-    w_interval,
-    N_classes,
-    supervised,
     interval,
     N_x,
     T,
@@ -375,26 +371,9 @@ def train_network(
     weight_mask = weights != 0
     non_weight_mask = weights == 0
 
-    if supervised or unsupervised:
-        st = N_x  # stimulation
-        ex = st + N_exc  # excitatory
-        ih = ex + N_inh  # inhibitory
-        pp = ih + N_classes  # predicted positive
-        pn = pp + N_classes  # predicted negative
-        tp = pn + N_classes  # true positive
-        tn = tp + N_classes  # true negative
-        fp = tn + N_classes  # false positive
-        fn = fp + N_classes  # false negative
-    else:
-        st = N_x  # stimulation
-        ex = st + N_exc  # excitatory
-        ih = ex + N_inh  # inhibitory
-        pp = ih  # predicted positive
-        pn = ih  # predicted negative
-        tp = ih  # true positive
-        tn = ih  # true negative
-        fp = ih  # false positive
-        fn = ih  # false negative
+    st = N_x  # stimulation
+    ex = st + N_exc  # excitatory
+    ih = ex + N_inh  # inhibitory
     exc_interval = np.arange(st, ex)
     inh_interval = np.arange(ex, ih)
     idx_exc = np.random.choice(exc_interval, size=num_exc, replace=False)
@@ -402,16 +381,16 @@ def train_network(
 
     # create weights_plotting_array
     plot_positions = np.arange(1, T, interval)
-    weights_4_plotting_exc = np.zeros((plot_positions.shape[0], num_exc, pn - st))
+    weights_4_plotting_exc = np.zeros((plot_positions.shape[0], num_exc, ih - st))
     weights_4_plotting_inh = np.zeros((plot_positions.shape[0], num_inh, ex - st))
-    weights_4_plotting_exc[0] = weights[idx_exc, st:pn]
+    weights_4_plotting_exc[0] = weights[idx_exc, st:ih]
     weights_4_plotting_inh[0] = weights[idx_inh, st:ex]
-    pre_trace_4_plot = np.zeros((plot_positions.shape[0], pn))
-    post_trace_4_plot = np.zeros((plot_positions.shape[0], pn - st))
+    pre_trace_4_plot = np.zeros((plot_positions.shape[0], ih))
+    post_trace_4_plot = np.zeros((plot_positions.shape[0], ih - st))
 
     # create spike threshold array
     spike_threshold = np.full(
-        shape=(T, pn - st), fill_value=spike_threshold_default, dtype=float
+        shape=(T, ih - st), fill_value=spike_threshold_default, dtype=float
     )
 
     # define which weights counts towards total sum of weights
@@ -437,30 +416,22 @@ def train_network(
     # Here, we assume that the columns correspond to post-neurons.
     if train_weights:
         desc = "Training network:"
-        # remove recurrent connections
-        weights[ih:pn, :] = 0
     else:
         desc = "Testing network:"
 
     # Compute for neurons N_x to N_post-1
     nonzero_pre_idx = List()
-    if supervised or unsupervised:
-        for i in range(st, ih):
-            pre_idx = np.nonzero(weights[:ih, i])[0]
-            nonzero_pre_idx.append(pre_idx.astype(np.int64))
-    else:
-        for i in range(st, pn):
-            pre_idx = np.nonzero(weights[:ih, i])[0]
-            nonzero_pre_idx.append(pre_idx.astype(np.int64))
+    for i in range(st, ih):
+        pre_idx = np.nonzero(weights[:ih, i])[0]
+        nonzero_pre_idx.append(pre_idx.astype(np.int64))
 
     idx = 0
-    count = False
     sleep_amount = 0
     for t in tqdm(range(1, T), desc=desc, leave=False):
         # update membrane potential
         mp[t] = update_membrane_potential(
             mp=mp[t - 1],
-            weights=weights[:, st:pn],
+            weights=weights[:, st:ih],
             spikes=spikes[t - 1],
             resting_potential=resting_potential,
             membrane_resistance=membrane_resistance,
@@ -479,7 +450,7 @@ def train_network(
             spike_threshold[t],
         ) = update_spikes(
             st=st,
-            pn=pn,
+            ih=ih,
             mp=mp[t],
             dt=dt,
             spikes=spikes[t],
@@ -562,7 +533,7 @@ def train_network(
 
         # save weights for plotting
         if t == plot_positions[idx]:
-            weights_4_plotting_exc[idx] = weights[idx_exc, st:pn]
+            weights_4_plotting_exc[idx] = weights[idx_exc, st:ih]
             weights_4_plotting_inh[idx] = weights[idx_inh, st:ex]
             pre_trace_4_plot[idx] = pre_trace
             post_trace_4_plot[idx] = post_trace
@@ -574,7 +545,6 @@ def train_network(
         if sleep:
             if sleep_now_exc and t < T - 2:
                 spikes[t + 1, :st] = 0
-                spikes[t + 1, pn:] = 0
                 spike_labels[t] = -2
                 sleep_amount += 1
             if sleep_now_inh and t < T - 2:

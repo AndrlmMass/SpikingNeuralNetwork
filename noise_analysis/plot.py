@@ -1,9 +1,9 @@
 import os
+import traceback
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib
-from matplotlib.ticker import AutoMinorLocator
 
 matplotlib.use("TkAgg")
 

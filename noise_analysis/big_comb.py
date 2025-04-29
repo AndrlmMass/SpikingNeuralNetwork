@@ -28,16 +28,12 @@ class snn_sleepy:
         N_inh=50,
         N_x=225,
         classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-        supervised=False,
-        unsupervised=False,
     ):
         self.N_exc = N_exc
         self.N_inh = N_inh
         self.N_x = N_x
         self.N_classes = len(classes)
         self.classes = classes
-        self.supervised = supervised
-        self.unsupervised = unsupervised
         self.st = N_x  # stimulation
         self.ex = self.st + N_exc  # excitatory
         self.ih = self.ex + N_inh  # inhibitory
@@ -86,12 +82,6 @@ class snn_sleepy:
             np.save(os.path.join(data_dir, "labels_train.npy"), self.labels_train)
             np.save(os.path.join(data_dir, "data_test.npy"), self.data_test)
             np.save(os.path.join(data_dir, "labels_test.npy"), self.labels_test)
-            np.save(
-                os.path.join(data_dir, "labels_true_train.npy"), self.labels_true_train
-            )
-            np.save(
-                os.path.join(data_dir, "labels_true_test.npy"), self.labels_true_test
-            )
             filepath = os.path.join(data_dir, "data_parameters.json")
 
             with open(filepath, "w") as outfile:
@@ -128,21 +118,6 @@ class snn_sleepy:
                         self.labels_test = np.load(
                             os.path.join("data/sdata", folder, "labels_test.npy")
                         )
-                        if self.unsupervised or self.supervised:
-                            self.labels_true_train = np.load(
-                                os.path.join(
-                                    "data/sdata", folder, "labels_true_train.npy"
-                                )
-                            )
-
-                            self.labels_true_test = np.load(
-                                os.path.join(
-                                    "data/sdata", folder, "labels_true_test.npy"
-                                )
-                            )
-                        else:
-                            self.labels_true_test = None
-                            self.labels_true_train = None
 
                         print("\rdata loaded", end="")
                         self.data_loaded = True
@@ -327,8 +302,11 @@ class snn_sleepy:
     # acquire data
     def prepare_data(
         self,
-        num_images_train=60000,
-        num_images_test=10000,
+        tot_images_train=60000,
+        tot_images_test=10000,
+        single_train=1000,
+        single_test=166,
+        epochs=60,
         force_recreate=False,
         plot_comparison=False,
         inspect_spike_plot=False,
@@ -366,23 +344,22 @@ class snn_sleepy:
         # Remove elements from data_parameters
         for element in list:
             del self.data_parameters[element]
-        self.data_parameters["supervised"] = self.supervised
-        self.data_parameters["unsupervised"] = self.unsupervised
 
         # Update model
         self.data_parameters.update()
 
         # set parameters
         self.num_steps = num_steps
-        self.num_items_train = num_images_train
-        self.num_items_test = num_images_test
         self.gain = gain
         self.gain_labels = gain_labels
         self.offset = offset
         self.first_spike_time = first_spike_time
         self.time_var_input = time_var_input
-        self.num_images_train = num_images_train
-        self.num_images_test = num_images_test
+        self.tot_images_train = tot_images_train
+        self.tot_images_test = tot_images_test
+        self.single_train = single_train
+        self.single_test = single_test
+        self.epochs = epochs
         self.add_breaks = add_breaks
         self.break_lengths = break_lengths
         self.noisy_data = noisy_data
@@ -440,11 +417,6 @@ class snn_sleepy:
                 with open(filepath, "w") as outfile:
                     json.dump(data_parameters, outfile)
 
-            if self.unsupervised or self.supervised:
-                true_labels = True
-            else:
-                true_labels = False
-
             (
                 self.data_train,
                 self.labels_train,
@@ -455,23 +427,19 @@ class snn_sleepy:
                 num_steps=num_steps,
                 plot_comparison=plot_comparison,
                 gain=gain,
-                gain_labels=gain_labels,
-                train_=train_,
                 offset=offset,
                 download=download,
                 data_dir=data_dir,
-                true_labels=true_labels,
-                N_classes=self.N_classes,
                 first_spike_time=first_spike_time,
                 time_var_input=time_var_input,
-                num_images_train=num_images_train,
-                num_images_test=num_images_test,
+                num_images_train=self.single_train,
+                num_images_test=self.single_test,
                 add_breaks=add_breaks,
                 break_lengths=break_lengths,
                 noisy_data=noisy_data,
                 noise_level=noise_level,
-                classes=self.classes,
-                test_data_ratio=test_data_ratio,
+                idx_train=0,
+                idx_test=0,
             )
             self.process(save_data=True, data_parameters=self.data_parameters)
 
@@ -509,18 +477,9 @@ class snn_sleepy:
         w_dense_se=0.05,
         w_dense_ei=0.05,
         w_dense_ie=0.1,
-        weight_affinity_output=0.33,
         resting_membrane=-70,
         max_time=100,
         retur=False,
-        epp_weight=1,
-        epn_weight=1,
-        pp_weight=1,
-        pn_weight=-1,
-        tp_weight=1,
-        tn_weight=1,
-        fp_weight=-1,
-        fn_weight=-1,
         se_weights=0.1,
         ee_weights=0.3,
         ei_weights=0.3,
@@ -535,15 +494,11 @@ class snn_sleepy:
         self.ee_weights = ee_weights
         self.ei_weights = ei_weights
         self.ie_weights = ie_weights
-        self.weight_affinity_output = weight_affinity_output
         self.weights = create_weights(
             N_exc=self.N_exc,
             N_inh=self.N_inh,
-            unsupervised=self.unsupervised,
             N=self.N,
             N_x=self.N_x,
-            N_classes=self.N_classes,
-            supervised=self.supervised,
             w_dense_ee=w_dense_ee,
             w_dense_ei=w_dense_ei,
             w_dense_se=w_dense_se,
@@ -552,17 +507,8 @@ class snn_sleepy:
             ee_weights=ee_weights,
             ei_weights=ei_weights,
             ie_weights=ie_weights,
-            weight_affinity_output=weight_affinity_output,
             plot_weights=plot_weights,
             plot_network=plot_network,
-            epp_weight=epp_weight,
-            epn_weight=epn_weight,
-            pp_weight=pp_weight,
-            pn_weight=pn_weight,
-            tp_weight=tp_weight,
-            tn_weight=tn_weight,
-            fp_weight=fp_weight,
-            fn_weight=fn_weight,
         )
         self.resting_potential = resting_membrane
         self.max_time = max_time
@@ -585,12 +531,8 @@ class snn_sleepy:
             total_time_test=self.T_test,
             data_train=self.data_train,
             data_test=self.data_test,
-            supervised=self.supervised,
-            unsupervised=self.unsupervised,
-            N_classes=self.N_classes,
             N_x=self.N_x,
             max_time=self.max_time,
-            labels_true=self.labels_true_train,
         )
         # return results if retur == True
         if retur:
@@ -682,7 +624,6 @@ class snn_sleepy:
         num_exc=50,
         plot_accuracy_train=True,
         plot_accuracy_test=True,
-        save_test_data=True,
         narrow_top=0.05,
         wide_top=0.15,
         smoothening=350,
@@ -718,16 +659,19 @@ class snn_sleepy:
             "stop_index_mp",
             "time_start_mp",
             "time_stop_mp",
-            "save_test_data",
+            "plot_top_response_train",
+            "plot_top_response_test",
         ]
 
         # Remove elements from model_parameters
         for element in remove:
             self.model_parameters.pop(element)
 
-        self.model_parameters["num_items"] = self.num_items
-        self.model_parameters["supervised"] = self.supervised
-        self.model_parameters["unsupervised"] = self.unsupervised
+        self.model_parameters["tot_images_train"] = self.tot_images_train
+        self.model_parameters["tot_images_test"] = self.tot_images_test
+        self.model_parameters["single_train"] = self.single_train
+        self.model_parameters["single_test"] = self.single_test
+        self.model_parameters["epochs"] = self.epochs
         self.model_parameters["w_dense_ee"] = self.w_dense_ee
         self.model_parameters["w_dense_ei"] = self.w_dense_ei
         self.model_parameters["w_dense_se"] = self.w_dense_se
@@ -737,7 +681,6 @@ class snn_sleepy:
         self.model_parameters["ei_weights"] = self.ei_weights
         self.model_parameters["se_weights"] = self.se_weights
         self.model_parameters["classes"] = self.classes
-        self.model_parameters["weight_affinity_output"] = self.weight_affinity_output
 
         if not force_train and self.data_loaded:
             model_dir = self.process(
@@ -771,15 +714,8 @@ class snn_sleepy:
                 download = False
                 data_dir = None
 
-        # define num items per epoch
-        n_by_e_train = self.num_items_train // epochs
-        n_by_e_train = self.num_items_test // epochs
-
         # Bundle common training arguments
         common_args = dict(
-            N_classes=self.N_classes,
-            supervised=self.supervised,
-            unsupervised=self.unsupervised,
             tau_pre_trace_exc=tau_pre_trace_exc,
             tau_pre_trace_inh=tau_pre_trace_inh,
             tau_post_trace_exc=tau_post_trace_exc,
@@ -796,12 +732,10 @@ class snn_sleepy:
             num_exc=num_exc,
             num_inh=num_inh,
             weight_decay=weight_decay,
-            weight_decay_rate_exc=decay_exc,
-            weight_decay_rate_inh=decay_inh,
+            weight_decay_rate_exc=weight_decay_rate_exc[0],
+            weight_decay_rate_inh=weight_decay_rate_inh[0],
             learning_rate_exc=learning_rate_exc,
             learning_rate_inh=learning_rate_inh,
-            w_interval=w_interval,
-            interval=interval,
             w_target_exc=w_target_exc,
             w_target_inh=w_target_inh,
             tau_LTP=tau_LTP,
@@ -809,6 +743,7 @@ class snn_sleepy:
             tau_m=tau_m,
             max_mp=max_mp,
             min_mp=min_mp,
+            interval=interval,
             dt=self.dt,
             N=self.N,
             clip_exc_weights=clip_exc_weights,
@@ -833,14 +768,17 @@ class snn_sleepy:
         )
 
         # pre-define performance tracking array
-        performance_tracker = np.zeros((epochs, 3))
+        performance_tracker = np.zeros((epochs, 2))
 
         # Define starting index
         idx_train = 0
         idx_test = 0
 
+        # define progress bar
+        pbar = tqdm(total=epochs, desc=f"Epoch 0/{epochs}:", unit="it")
+
         # loop over epochs
-        for e in tqdm(range(epochs), "Epoch training"):
+        for e in range(epochs):
             # create & fetch data
             (
                 data_train,
@@ -852,15 +790,13 @@ class snn_sleepy:
                 num_steps=self.num_steps,
                 plot_comparison=False,
                 gain=self.gain,
-                gain_labels=self.gain_labels,
-                train_=True,
                 offset=self.offset,
                 download=download,
                 data_dir=data_dir,
                 first_spike_time=self.first_spike_time,
                 time_var_input=self.time_var_input,
-                num_images_train=self.num_images_train,
-                num_images_test=self.num_images_test,
+                num_images_train=self.single_train,
+                num_images_test=self.single_test,
                 add_breaks=self.add_breaks,
                 break_lengths=self.break_lengths,
                 noisy_data=self.noisy_data,
@@ -868,8 +804,8 @@ class snn_sleepy:
                 idx_test=idx_test,
                 idx_train=idx_train,
             )
-            idx_train += self.num_items_train
-            idx_train += self.num_images_test
+            idx_train += self.single_train
+            idx_train += self.single_test
 
             # Create & fetch necessary arrays
             (
@@ -889,12 +825,8 @@ class snn_sleepy:
                 total_time_test=self.T_test,
                 data_train=data_train,
                 data_test=data_test,
-                supervised=self.supervised,
-                unsupervised=self.unsupervised,
-                N_classes=self.N_classes,
                 N_x=self.N_x,
                 max_time=self.max_time,
-                labels_true=labels_true_train,
             )
 
             # 3a) Train on the training set
@@ -931,7 +863,7 @@ class snn_sleepy:
                 labels_te_out,
                 sleep_te_out,
             ) = train_network(
-                weights=weights_tr.copy(),
+                weights=self.weights.copy(),
                 spike_labels=labels_test.copy(),
                 mp=mp_test.copy(),
                 sleep=False,
@@ -960,6 +892,9 @@ class snn_sleepy:
                 random_state=random_state,
                 num_classes=self.N_classes,
             )
+            """
+            prob here
+            """
 
             # calculate accuracy
             acc_te = top_responders_plotted(
@@ -976,19 +911,22 @@ class snn_sleepy:
 
             # Update performance tracking
             performance_tracker[e] = [
-                phi_tr,
                 phi_te,
                 acc_te,
             ]
 
             # Rinse memory
-            del data_train, labels_train, data_test, labels_test
-            del labels_true_train, labels_true_test
-            del mp_train, mp_test, pre_tr, post_tr
-            del spikes_train_init, spikes_test_init, spike_times
-            gc.collect()
-
-            if e == epochs - 1:
+            if e != epochs - 1:
+                del data_train, labels_train, data_test, labels_test
+                del mp_train, mp_test, pre_tr, post_tr
+                del (
+                    weights_te,
+                    spikes_te_out,
+                    labels_te_out,
+                )
+                del sleep_te_out, spikes_tr_out, labels_tr_out, sleep_tr_out
+                gc.collect()
+            else:
                 if save_model and not self.model_loaded:
                     model_dir = self.process(
                         save_model=True,
@@ -1007,19 +945,6 @@ class snn_sleepy:
                         smoothening=smoothening,
                         train=True,
                         wide_top=wide_top,
-                    )
-
-                if plot_accuracy_train and (self.supervised or self.unsupervised):
-                    self.accuracy_train = plot_accuracy(
-                        spikes=self.spikes_train,
-                        ih=self.ih,
-                        pp=self.pp,
-                        pn=self.pn,
-                        tp=self.tp,
-                        labels=self.labels_train,
-                        num_steps=self.num_steps,
-                        num_classes=self.N_classes,
-                        test=False,
                     )
 
                 if plot_spikes_train:
@@ -1074,13 +999,10 @@ class snn_sleepy:
                         post_traces=self.post_trace_plot,
                     )
 
-            # Train model
-
-            # Test model
-
-            # Compute phi and accuracy scores
-
-            # Remove data
+            pbar.update(1)
+            pbar.set_description(f"Epoch {e+1}/{epochs}")
+            pbar.set_postfix({"acc": acc_te, "phi": phi_te})
+        pbar.close()
 
         if test:
             # test model
