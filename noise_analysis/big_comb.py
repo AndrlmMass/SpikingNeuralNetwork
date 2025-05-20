@@ -128,14 +128,6 @@ class snn_sleepy:
             raise ValueError("load and save model cannot both be True")
 
         if save_model:
-            if save_test_model:
-                np.save(
-                    os.path.join(model_dir_, "spikes_test.npy"),
-                    self.spikes_test,
-                )
-                print("\rtest saved", end="")
-                return
-
             if not os.path.exists("model"):
                 os.makedirs("model")
 
@@ -153,8 +145,6 @@ class snn_sleepy:
             # Save training data and labels
             np.save(os.path.join(model_dir, "weights.npy"), self.weights)
             np.save(os.path.join(model_dir, "spikes_train.npy"), self.spikes_train)
-            np.save(os.path.join(model_dir, "pre_trace.npy"), self.pre_trace)
-            np.save(os.path.join(model_dir, "post_trace.npy"), self.post_trace)
             np.save(os.path.join(model_dir, "mp_train.npy"), self.mp_train)
             np.save(
                 os.path.join(model_dir, "weights2plot_exc.npy"),
@@ -164,14 +154,13 @@ class snn_sleepy:
                 os.path.join(model_dir, "weights2plot_inh.npy"),
                 self.weights2plot_inh,
             )
-            np.save(os.path.join(model_dir, "pre_trace_plot.npy"), self.pre_trace_plot)
-            np.save(
-                os.path.join(model_dir, "post_trace_plot.npy"), self.post_trace_plot
-            )
             np.save(
                 os.path.join(model_dir, "spike_threshold.npy"), self.spike_threshold
             )
-            np.save(os.path.join(model_dir, "weight_mask.npy"), self.weight_mask)
+            np.save(
+                os.path.join(model_dir_, "spikes_test.npy"),
+                self.spikes_test,
+            )
             np.save(
                 os.path.join(model_dir, "max_weight_sum_inh.npy"),
                 self.max_weight_sum_inh,
@@ -306,7 +295,6 @@ class snn_sleepy:
         tot_images_test=10000,
         single_train=1000,
         single_test=166,
-        epochs=60,
         force_recreate=False,
         plot_comparison=False,
         inspect_spike_plot=False,
@@ -359,7 +347,7 @@ class snn_sleepy:
         self.tot_images_test = tot_images_test
         self.single_train = single_train
         self.single_test = single_test
-        self.epochs = epochs
+        self.epochs = tot_images_train // single_train
         self.add_breaks = add_breaks
         self.break_lengths = break_lengths
         self.noisy_data = noisy_data
@@ -456,10 +444,6 @@ class snn_sleepy:
             spike_plot(
                 self.data_train[min_time:max_time], self.labels_train[min_time:max_time]
             )
-
-        # inspect spike labels
-        if inspect_spike_plot:
-            spike_plot(data=self.labels_true_train, labels=None)
 
         # plot heatmap of activity
         if plot_heat_map:
@@ -631,7 +615,6 @@ class snn_sleepy:
         plot_top_response_test=False,
         random_state=48,
         samples=10,
-        epochs=100,
     ):
         self.dt = dt
         self.pca_variance = pca_variance
@@ -686,7 +669,6 @@ class snn_sleepy:
             model_dir = self.process(
                 load_model=True,
                 model_parameters=self.model_parameters,
-                load_test_model=False,
             )
 
         # get data_dir for retrieving MNIST-images
@@ -768,17 +750,23 @@ class snn_sleepy:
         )
 
         # pre-define performance tracking array
-        performance_tracker = np.zeros((epochs, 2))
+        performance_tracker = np.zeros((self.epochs, 2))
 
         # Define starting index
         idx_train = 0
         idx_test = 0
 
         # define progress bar
-        pbar = tqdm(total=epochs, desc=f"Epoch 0/{epochs}:", unit="it")
+        pbar = tqdm(
+            total=self.epochs,
+            desc=f"Epoch 0/{self.epochs}:",
+            unit="it",
+            ncols=80,
+            bar_format="{desc} [{bar}] {n_fmt}/{total_fmt} | {postfix}",
+        )
 
-        # loop over epochs
-        for e in range(epochs):
+        # loop over self.epochs
+        for e in range(self.epochs):
             # create & fetch data
             (
                 data_train,
@@ -833,7 +821,12 @@ class snn_sleepy:
             (
                 self.weights,
                 spikes_tr_out,
-                *unused,
+                mp_tr,
+                w4p_exc_tr,
+                w4p_inh_tr,
+                thresh_tr,
+                mx_w_exc_tr,
+                mx_w_inh_tr,
                 labels_tr_out,
                 sleep_tr_out,
             ) = train_network(
@@ -859,6 +852,7 @@ class snn_sleepy:
             (
                 weights_te,
                 spikes_te_out,
+                mp_te,
                 *unused,
                 labels_te_out,
                 sleep_te_out,
@@ -892,9 +886,6 @@ class snn_sleepy:
                 random_state=random_state,
                 num_classes=self.N_classes,
             )
-            """
-            prob here
-            """
 
             # calculate accuracy
             acc_te = top_responders_plotted(
@@ -916,7 +907,7 @@ class snn_sleepy:
             ]
 
             # Rinse memory
-            if e != epochs - 1:
+            if e != self.epochs - 1:
                 del data_train, labels_train, data_test, labels_test
                 del mp_train, mp_test, pre_tr, post_tr
                 del (
@@ -926,142 +917,134 @@ class snn_sleepy:
                 )
                 del sleep_te_out, spikes_tr_out, labels_tr_out, sleep_tr_out
                 gc.collect()
-            else:
-                if save_model and not self.model_loaded:
-                    model_dir = self.process(
-                        save_model=True,
-                        model_parameters=self.model_parameters,
-                        load_test_model=False,
-                    )
 
-                if plot_top_response_train:
-                    top_responders_plotted(
-                        spikes=self.spikes_train,
-                        labels=self.labels_train,
-                        ih=self.ih,
-                        st=self.st,
-                        num_classes=self.N_classes,
-                        narrow_top=narrow_top,
-                        smoothening=smoothening,
-                        train=True,
-                        wide_top=wide_top,
-                    )
-
-                if plot_spikes_train:
-                    if start_time_spike_plot == None:
-                        start_time_spike_plot = int(self.spikes_train.shape[0] * 0.95)
-                    if stop_time_spike_plot == None:
-                        stop_time_spike_plot = self.spikes_train.shape[0]
-
-                    spike_plot(
-                        self.spikes_train[
-                            start_time_spike_plot:stop_time_spike_plot, self.st :
-                        ],
-                        self.labels_train[start_time_spike_plot:stop_time_spike_plot],
-                    )
-
-                if plot_threshold:
-                    spike_threshold_plot(self.spike_threshold, self.N_exc)
-
-                if plot_mp_train:
-                    if start_index_mp == None:
-                        start_index_mp = self.ex
-                    if stop_index_mp == None:
-                        stop_index_mp = self.ih
-                    if time_start_mp == None:
-                        time_start_mp = int(self.T_train * 0.95)
-                    if time_stop_mp == None:
-                        time_stop_mp = self.T_train
-
-                    mp_plot(
-                        mp=self.mp_train[time_start_mp:time_stop_mp],
-                        N_exc=self.N_exc,
-                    )
-
-                if plot_weights:
-                    weights_plot(
-                        weights_exc=self.weights2plot_exc,
-                        weights_inh=self.weights2plot_inh,
-                        N=self.N,
-                        N_x=self.N_x,
-                        N_exc=self.N_exc,
-                        N_inh=self.N_inh,
-                        max_weight_sum_inh=self.max_weight_sum_inh,
-                        max_weight_sum_exc=self.max_weight_sum_exc,
-                        random_selection=random_selection_weight_plot,
-                    )
-
-                if plot_traces_:
-                    plot_traces(
-                        N_exc=self.N_exc,
-                        N_inh=self.N_inh,
-                        pre_traces=self.pre_trace_plot,
-                        post_traces=self.post_trace_plot,
-                    )
-
+            pbar.set_description(f"Epoch {e+1}/{self.epochs}")
+            pbar.set_postfix(acc=f"{acc_te:.3f}", phi=f"{phi_te:.2f}")
             pbar.update(1)
-            pbar.set_description(f"Epoch {e+1}/{epochs}")
-            pbar.set_postfix({"acc": acc_te, "phi": phi_te})
         pbar.close()
 
-        if test:
-            # test model
+        if save_model and not self.model_loaded:
+            self.spikes_train = spikes_tr_out
+            self.spikes_test = spikes_te_out
+            self.mp_train = mp_tr
+            self.mp_test = mp_te
+            self.weights2plot_exc = w4p_exc_tr
+            self.weights2plot_inh = w4p_inh_tr
+            self.spike_threshold = thresh_tr
+            self.max_weight_sum_inh = mx_w_inh_tr
+            self.max_weight_sum_exc = mx_w_exc_tr
+            self.labels_train = labels_tr_out
+            self.labels_test = labels_te_out
 
-            # check for previous test models saved
-            self.process(load_model=True, load_test_model=True, model_dir_=model_dir)
+            # save training results
+            model_dir = self.process(
+                save_model=True,
+                model_parameters=self.model_parameters,
+            )
 
-            if plot_top_response_test:
-                top_responders_plotted(
-                    spikes=self.spikes_test[50 * self.num_steps :],
-                    labels=self.labels_test[50 * self.num_steps :],
-                    ih=self.ih,
-                    st=self.st,
-                    num_classes=self.N_classes,
-                    narrow_top=narrow_top,
-                    smoothening=smoothening,
-                    train=False,
-                    wide_top=wide_top,
-                )
+        if plot_top_response_train:
+            top_responders_plotted(
+                spikes=self.spikes_train,
+                labels=self.labels_train,
+                ih=self.ih,
+                st=self.st,
+                num_classes=self.N_classes,
+                narrow_top=narrow_top,
+                smoothening=smoothening,
+                train=True,
+                wide_top=wide_top,
+            )
 
-            if plot_accuracy_test and (self.unsupervised or self.supervised):
-                self.spikes_test[:, self.pn : self.tn] = self.labels_true_test
-                self.accuracy_test = plot_accuracy(
-                    spikes=self.spikes_test,
-                    ih=self.ih,
-                    pp=self.pp,
-                    pn=self.pn,
-                    tp=self.tp,
-                    labels=self.labels_test,
-                    num_steps=self.num_steps,
-                    num_classes=self.N_classes,
-                    test=True,
-                )
+        if plot_spikes_train:
+            if start_time_spike_plot == None:
+                start_time_spike_plot = int(self.spikes_train.shape[0] * 0.95)
+            if stop_time_spike_plot == None:
+                stop_time_spike_plot = self.spikes_train.shape[0]
 
-            if plot_spikes_test:
-                if start_time_spike_plot == None:
-                    start_time_spike_plot = int(self.T_test * 0.95)
-                if stop_time_spike_plot == None:
-                    stop_time_spike_plot = self.T_test
+            spike_plot(
+                self.spikes_train[
+                    start_time_spike_plot:stop_time_spike_plot, self.st :
+                ],
+                self.labels_train[start_time_spike_plot:stop_time_spike_plot],
+            )
 
-                spike_plot(
-                    self.spikes_test[start_time_spike_plot:stop_time_spike_plot],
-                    self.labels_test[start_time_spike_plot:stop_time_spike_plot],
-                )
+        if plot_threshold:
+            spike_threshold_plot(self.spike_threshold, self.N_exc)
 
-            if plot_mp_test:
-                if start_index_mp == None:
-                    start_index_mp = self.N_x
-                if stop_index_mp == None:
-                    stop_index_mp = self.N_exc + self.N_inh
-                if time_start_mp == None:
-                    time_start_mp = 0
-                if time_stop_mp == None:
-                    time_stop_mp = self.T_test
+        if plot_mp_train:
+            if start_index_mp == None:
+                start_index_mp = self.ex
+            if stop_index_mp == None:
+                stop_index_mp = self.ih
+            if time_start_mp == None:
+                time_start_mp = int(self.T_train * 0.95)
+            if time_stop_mp == None:
+                time_stop_mp = self.T_train
 
-                mp_plot(
-                    mp=self.mp_test[time_start_mp:time_stop_mp],
-                    N_exc=self.N_exc,
-                )
+            mp_plot(
+                mp=self.mp_train[time_start_mp:time_stop_mp],
+                N_exc=self.N_exc,
+            )
+
+        if plot_weights:
+            weights_plot(
+                weights_exc=self.weights2plot_exc,
+                weights_inh=self.weights2plot_inh,
+                N=self.N,
+                N_x=self.N_x,
+                N_exc=self.N_exc,
+                N_inh=self.N_inh,
+                max_weight_sum_inh=self.max_weight_sum_inh,
+                max_weight_sum_exc=self.max_weight_sum_exc,
+                random_selection=random_selection_weight_plot,
+            )
+
+        if plot_traces_:
+            plot_traces(
+                N_exc=self.N_exc,
+                N_inh=self.N_inh,
+                pre_traces=self.pre_trace_plot,
+                post_traces=self.post_trace_plot,
+            )
+
+        if plot_top_response_test:
+            top_responders_plotted(
+                spikes=self.spikes_test[50 * self.num_steps :],
+                labels=self.labels_test[50 * self.num_steps :],
+                ih=self.ih,
+                st=self.st,
+                num_classes=self.N_classes,
+                narrow_top=narrow_top,
+                smoothening=smoothening,
+                train=False,
+                wide_top=wide_top,
+            )
+
+        if plot_spikes_test:
+            if start_time_spike_plot == None:
+                start_time_spike_plot = int(self.T_test * 0.95)
+            if stop_time_spike_plot == None:
+                stop_time_spike_plot = self.T_test
+
+            spike_plot(
+                self.spikes_test[start_time_spike_plot:stop_time_spike_plot],
+                self.labels_test[start_time_spike_plot:stop_time_spike_plot],
+            )
+
+        if plot_mp_test:
+            if start_index_mp == None:
+                start_index_mp = self.N_x
+            if stop_index_mp == None:
+                stop_index_mp = self.N_exc + self.N_inh
+            if time_start_mp == None:
+                time_start_mp = 0
+            if time_stop_mp == None:
+                time_stop_mp = self.T_test
+
+            mp_plot(
+                mp=self.mp_test[time_start_mp:time_stop_mp],
+                N_exc=self.N_exc,
+            )
 
         if compare_decay_rates:
             # try loading previous run
