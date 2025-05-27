@@ -49,8 +49,6 @@ class snn_sleepy:
         save_model: bool = False,
         save_phi_model: bool = False,
         load_phi_model: bool = False,
-        save_test_model: bool = False,
-        load_test_model: bool = False,
         data_parameters: dict = None,
         model_parameters: dict = None,
     ):
@@ -206,12 +204,6 @@ class snn_sleepy:
                         self.spikes_train = np.load(
                             os.path.join("model", folder, "spikes_train.npy")
                         )
-                        self.pre_trace = np.load(
-                            os.path.join("model", folder, "pre_trace.npy")
-                        )
-                        self.post_trace = np.load(
-                            os.path.join("model", folder, "post_trace.npy")
-                        )
                         self.mp_train = np.load(
                             os.path.join("model", folder, "mp_train.npy")
                         )
@@ -221,17 +213,8 @@ class snn_sleepy:
                         self.weights2plot_inh = np.load(
                             os.path.join("model", folder, "weights2plot_inh.npy")
                         )
-                        self.pre_trace_plot = np.load(
-                            os.path.join("model", folder, "pre_trace_plot.npy")
-                        )
-                        self.post_trace_plot = np.load(
-                            os.path.join("model", folder, "post_trace_plot.npy")
-                        )
                         self.spike_threshold = np.load(
                             os.path.join("model", folder, "spike_threshold.npy")
-                        )
-                        self.weight_mask = np.load(
-                            os.path.join("model", folder, "weight_mask.npy")
                         )
                         self.max_weight_sum_inh = np.load(
                             os.path.join("model", folder, "max_weight_sum_inh.npy")
@@ -672,293 +655,294 @@ class snn_sleepy:
                 model_parameters=self.model_parameters,
             )
 
-        # get data_dir for retrieving MNIST-images
-        data_parameters = {"pixel_size": int(np.sqrt(self.N_x)), "train_": True}
+        if not self.model_loaded:
+            # get data_dir for retrieving MNIST-images
+            data_parameters = {"pixel_size": int(np.sqrt(self.N_x)), "train_": True}
 
-        # Define folder to load data
-        folders = os.listdir("data/mdata")
+            # Define folder to load data
+            folders = os.listdir("data/mdata")
 
-        # Search for existing data
-        if len(folders) > 0:
-            for folder in folders:
-                json_file_path = os.path.join(
-                    "data", "mdata", folder, "data_parameters.json"
-                )
+            # Search for existing data
+            if len(folders) > 0:
+                for folder in folders:
+                    json_file_path = os.path.join(
+                        "data", "mdata", folder, "data_parameters.json"
+                    )
 
-                with open(json_file_path, "r") as j:
-                    ex_params = json.loads(j.read())
+                    with open(json_file_path, "r") as j:
+                        ex_params = json.loads(j.read())
 
-                # Check if parameters are the same as the current ones
-                if ex_params == data_parameters:
-                    data_dir = os.path.join("data/mdata", folder)
-                    download = (True,)
-            if data_dir is None:
-                print("Could not find the mdata directory.")
-                download = False
-                data_dir = None
+                    # Check if parameters are the same as the current ones
+                    if ex_params == data_parameters:
+                        data_dir = os.path.join("data/mdata", folder)
+                        download = (True,)
+                if data_dir is None:
+                    print("Could not find the mdata directory.")
+                    download = False
+                    data_dir = None
 
-        # Bundle common training arguments
-        common_args = dict(
-            tau_pre_trace_exc=tau_pre_trace_exc,
-            tau_pre_trace_inh=tau_pre_trace_inh,
-            tau_post_trace_exc=tau_post_trace_exc,
-            tau_post_trace_inh=tau_post_trace_inh,
-            resting_potential=self.resting_potential,
-            membrane_resistance=membrane_resistance,
-            min_weight_exc=min_weight_exc,
-            max_weight_exc=max_weight_exc,
-            min_weight_inh=min_weight_inh,
-            max_weight_inh=max_weight_inh,
-            N_exc=self.N_exc,
-            N_inh=self.N_inh,
-            beta=beta,
-            num_exc=num_exc,
-            num_inh=num_inh,
-            weight_decay=weight_decay,
-            weight_decay_rate_exc=weight_decay_rate_exc[0],
-            weight_decay_rate_inh=weight_decay_rate_inh[0],
-            learning_rate_exc=learning_rate_exc,
-            learning_rate_inh=learning_rate_inh,
-            w_target_exc=w_target_exc,
-            w_target_inh=w_target_inh,
-            tau_LTP=tau_LTP,
-            tau_LTD=tau_LTD,
-            tau_m=tau_m,
-            max_mp=max_mp,
-            min_mp=min_mp,
-            interval=interval,
-            dt=self.dt,
-            N=self.N,
-            clip_exc_weights=clip_exc_weights,
-            clip_inh_weights=clip_inh_weights,
-            A_plus=A_plus,
-            A_minus=A_minus,
-            trace_update=trace_update,
-            spike_adaption=spike_adaption,
-            delta_adaption=delta_adaption,
-            tau_adaption=tau_adaption,
-            spike_threshold_default=spike_threshold_default,
-            spike_intercept=spike_intercept,
-            spike_slope=spike_slope,
-            noisy_threshold=noisy_threshold,
-            reset_potential=reset_potential,
-            noisy_potential=noisy_potential,
-            noisy_weights=noisy_weights,
-            weight_mean_noise=weight_mean_noise,
-            weight_var_noise=weight_var_noise,
-            vectorized_trace=vectorized_trace,
-            N_x=self.N_x,
-        )
-
-        # pre-define performance tracking array
-        self.performance_tracker = np.zeros((self.epochs, 2))
-
-        # Define starting index
-        idx_train = 0
-        idx_test = 0
-
-        # early stopping interval
-        interval_ES = int(self.epochs * 0.1)  # 10% interval rate
-
-        # define progress bar
-        pbar = tqdm(
-            total=self.epochs,
-            desc=f"Epoch 0/{self.epochs}:",
-            unit="it",
-            ncols=80,
-            bar_format="{desc} [{bar}] ETA: {remaining} |{postfix}",
-        )
-
-        # loop over self.epochs
-        for e in range(self.epochs):
-            # create & fetch data
-            (
-                data_train,
-                labels_train,
-                data_test,
-                labels_test,
-            ) = create_data(
-                pixel_size=int(np.sqrt(self.N_x)),
-                num_steps=self.num_steps,
-                plot_comparison=False,
-                gain=self.gain,
-                offset=self.offset,
-                download=download,
-                data_dir=data_dir,
-                first_spike_time=self.first_spike_time,
-                time_var_input=self.time_var_input,
-                num_images_train=self.single_train,
-                num_images_test=self.single_test,
-                add_breaks=self.add_breaks,
-                break_lengths=self.break_lengths,
-                noisy_data=self.noisy_data,
-                noise_level=self.noise_level,
-                idx_test=idx_test,
-                idx_train=idx_train,
-            )
-            idx_train += self.single_train
-            idx_train += self.single_test
-
-            # Create & fetch necessary arrays
-            (
-                mp_train,
-                mp_test,
-                pre_tr,
-                post_tr,
-                spikes_train,
-                spikes_test,
-                spike_times,
-            ) = create_arrays(
-                N=self.N,
+            # Bundle common training arguments
+            common_args = dict(
+                tau_pre_trace_exc=tau_pre_trace_exc,
+                tau_pre_trace_inh=tau_pre_trace_inh,
+                tau_post_trace_exc=tau_post_trace_exc,
+                tau_post_trace_inh=tau_post_trace_inh,
+                resting_potential=self.resting_potential,
+                membrane_resistance=membrane_resistance,
+                min_weight_exc=min_weight_exc,
+                max_weight_exc=max_weight_exc,
+                min_weight_inh=min_weight_inh,
+                max_weight_inh=max_weight_inh,
                 N_exc=self.N_exc,
                 N_inh=self.N_inh,
-                resting_membrane=self.resting_potential,
-                total_time_train=self.T_train,
-                total_time_test=self.T_test,
-                data_train=data_train,
-                data_test=data_test,
+                beta=beta,
+                num_exc=num_exc,
+                num_inh=num_inh,
+                weight_decay=weight_decay,
+                weight_decay_rate_exc=weight_decay_rate_exc[0],
+                weight_decay_rate_inh=weight_decay_rate_inh[0],
+                learning_rate_exc=learning_rate_exc,
+                learning_rate_inh=learning_rate_inh,
+                w_target_exc=w_target_exc,
+                w_target_inh=w_target_inh,
+                tau_LTP=tau_LTP,
+                tau_LTD=tau_LTD,
+                tau_m=tau_m,
+                max_mp=max_mp,
+                min_mp=min_mp,
+                interval=interval,
+                dt=self.dt,
+                N=self.N,
+                clip_exc_weights=clip_exc_weights,
+                clip_inh_weights=clip_inh_weights,
+                A_plus=A_plus,
+                A_minus=A_minus,
+                trace_update=trace_update,
+                spike_adaption=spike_adaption,
+                delta_adaption=delta_adaption,
+                tau_adaption=tau_adaption,
+                spike_threshold_default=spike_threshold_default,
+                spike_intercept=spike_intercept,
+                spike_slope=spike_slope,
+                noisy_threshold=noisy_threshold,
+                reset_potential=reset_potential,
+                noisy_potential=noisy_potential,
+                noisy_weights=noisy_weights,
+                weight_mean_noise=weight_mean_noise,
+                weight_var_noise=weight_var_noise,
+                vectorized_trace=vectorized_trace,
                 N_x=self.N_x,
-                max_time=self.max_time,
             )
 
-            if e == self.epochs - 1:
-                final = True
-            else:
-                final = False
+            # pre-define performance tracking array
+            self.performance_tracker = np.zeros((self.epochs, 2))
 
-            # 3a) Train on the training set
-            (
-                self.weights,
-                spikes_tr_out,
-                mp_tr,
-                w4p_exc_tr,
-                w4p_inh_tr,
-                thresh_tr,
-                mx_w_exc_tr,
-                mx_w_inh_tr,
-                labels_tr_out,
-                sleep_tr_out,
-            ) = train_network(
-                weights=self.weights.copy(),
-                spike_labels=labels_train.copy(),
-                mp=mp_train.copy(),
-                sleep=sleep,
-                train_weights=train_weights,
-                T=self.T_train,
-                mean_noise=mean_noise,
-                var_noise=var_noise,
-                spikes=spikes_train.copy(),
-                pre_trace=pre_tr.copy(),
-                post_trace=post_tr.copy(),
-                check_sleep_interval=check_sleep_interval,
-                alpha=alpha,
-                timing_update=timing_update,
-                spike_times=spike_times.copy(),
-                final=final,
-                **common_args,
+            # Define starting index
+            idx_train = 0
+            idx_test = 0
+
+            # early stopping interval
+            interval_ES = int(self.epochs * 0.1)  # 10% interval rate
+
+            # define progress bar
+            pbar = tqdm(
+                total=self.epochs,
+                desc=f"Epoch 0/{self.epochs}:",
+                unit="it",
+                ncols=80,
+                bar_format="{desc} [{bar}] ETA: {remaining} |{postfix}",
             )
 
-            # 3b) Test on the test set
-            (
-                weights_te,
-                spikes_te_out,
-                mp_te,
-                *unused,
-                labels_te_out,
-                sleep_te_out,
-            ) = train_network(
-                weights=self.weights.copy(),
-                spike_labels=labels_test.copy(),
-                mp=mp_test.copy(),
-                sleep=False,
-                train_weights=False,
-                T=self.T_test,
-                mean_noise=mean_noise,
-                var_noise=var_noise,
-                spikes=spikes_test.copy(),
-                pre_trace=pre_tr.copy(),
-                post_trace=post_tr.copy(),
-                check_sleep_interval=check_sleep_interval,
-                alpha=alpha,
-                timing_update=timing_update,
-                spike_times=spike_times.copy(),
-                final=final,
-                **common_args,
-            )
+            # loop over self.epochs
+            for e in range(self.epochs):
+                # create & fetch data
+                (
+                    data_train,
+                    labels_train,
+                    data_test,
+                    labels_test,
+                ) = create_data(
+                    pixel_size=int(np.sqrt(self.N_x)),
+                    num_steps=self.num_steps,
+                    plot_comparison=False,
+                    gain=self.gain,
+                    offset=self.offset,
+                    download=download,
+                    data_dir=data_dir,
+                    first_spike_time=self.first_spike_time,
+                    time_var_input=self.time_var_input,
+                    num_images_train=self.single_train,
+                    num_images_test=self.single_test,
+                    add_breaks=self.add_breaks,
+                    break_lengths=self.break_lengths,
+                    noisy_data=self.noisy_data,
+                    noise_level=self.noise_level,
+                    idx_test=idx_test,
+                    idx_train=idx_train,
+                )
+                idx_train += self.single_train
+                idx_train += self.single_test
 
-            # 4) Compute phi metrics using the trained outputs
-            phi_tr, phi_te, *unused = calculate_phi(
-                spikes_train=spikes_tr_out[:, self.st :],
-                spikes_test=spikes_te_out[:, self.st :],
-                labels_train=labels_tr_out,
-                labels_test=labels_te_out,
-                num_steps=self.num_steps,
-                pca_variance=self.pca_variance,
-                random_state=random_state,
-                num_classes=self.N_classes,
-            )
+                # Create & fetch necessary arrays
+                (
+                    mp_train,
+                    mp_test,
+                    pre_tr,
+                    post_tr,
+                    spikes_train,
+                    spikes_test,
+                    spike_times,
+                ) = create_arrays(
+                    N=self.N,
+                    N_exc=self.N_exc,
+                    N_inh=self.N_inh,
+                    resting_membrane=self.resting_potential,
+                    total_time_train=self.T_train,
+                    total_time_test=self.T_test,
+                    data_train=data_train,
+                    data_test=data_test,
+                    N_x=self.N_x,
+                    max_time=self.max_time,
+                )
 
-            # calculate accuracy
-            acc_te = top_responders_plotted(
-                spikes=spikes_te_out,
-                labels=labels_te_out,
-                ih=self.ih,
-                st=self.st,
-                num_classes=self.N_classes,
-                narrow_top=narrow_top,
-                smoothening=smoothening,
-                train=False,
-                compute_not_plot=True,
-            )
+                if e == self.epochs - 1:
+                    final = True
+                else:
+                    final = False
 
-            # Update performance tracking
-            self.performance_tracker[e] = [
-                phi_te,
-                acc_te,
-            ]
+                # 3a) Train on the training set
+                (
+                    self.weights,
+                    spikes_tr_out,
+                    mp_tr,
+                    w4p_exc_tr,
+                    w4p_inh_tr,
+                    thresh_tr,
+                    mx_w_exc_tr,
+                    mx_w_inh_tr,
+                    labels_tr_out,
+                    sleep_tr_out,
+                ) = train_network(
+                    weights=self.weights.copy(),
+                    spike_labels=labels_train.copy(),
+                    mp=mp_train.copy(),
+                    sleep=sleep,
+                    train_weights=train_weights,
+                    T=self.T_train,
+                    mean_noise=mean_noise,
+                    var_noise=var_noise,
+                    spikes=spikes_train.copy(),
+                    pre_trace=pre_tr.copy(),
+                    post_trace=post_tr.copy(),
+                    check_sleep_interval=check_sleep_interval,
+                    alpha=alpha,
+                    timing_update=timing_update,
+                    spike_times=spike_times.copy(),
+                    final=final,
+                    **common_args,
+                )
 
-            # early stopping
-            if early_stopping and e > interval_ES:
-                start = max(0, e - interval_ES)
-                mu = np.mean(self.performance_tracker[start:e, 1])
-                if acc_te < mu:
-                    break
-
-            # Rinse memory
-            if e != self.epochs - 1:
-                del data_train, labels_train, data_test, labels_test
-                del mp_train, mp_test, pre_tr, post_tr
-                del (
+                # 3b) Test on the test set
+                (
                     weights_te,
                     spikes_te_out,
+                    mp_te,
+                    *unused,
                     labels_te_out,
+                    sleep_te_out,
+                ) = train_network(
+                    weights=self.weights.copy(),
+                    spike_labels=labels_test.copy(),
+                    mp=mp_test.copy(),
+                    sleep=False,
+                    train_weights=False,
+                    T=self.T_test,
+                    mean_noise=mean_noise,
+                    var_noise=var_noise,
+                    spikes=spikes_test.copy(),
+                    pre_trace=pre_tr.copy(),
+                    post_trace=post_tr.copy(),
+                    check_sleep_interval=check_sleep_interval,
+                    alpha=alpha,
+                    timing_update=timing_update,
+                    spike_times=spike_times.copy(),
+                    final=final,
+                    **common_args,
                 )
-                del sleep_te_out, spikes_tr_out, labels_tr_out, sleep_tr_out
-                gc.collect()
 
-            pbar.set_description(f"Epoch {e+1}/{self.epochs}")
-            pbar.set_postfix(acc=f"{acc_te:.3f}", phi=f"{phi_te:.2f}")
-            pbar.update(1)
-        pbar.close()
+                # 4) Compute phi metrics using the trained outputs
+                phi_tr, phi_te, *unused = calculate_phi(
+                    spikes_train=spikes_tr_out[:, self.st :],
+                    spikes_test=spikes_te_out[:, self.st :],
+                    labels_train=labels_tr_out,
+                    labels_test=labels_te_out,
+                    num_steps=self.num_steps,
+                    pca_variance=self.pca_variance,
+                    random_state=random_state,
+                    num_classes=self.N_classes,
+                )
 
-        if save_model and not self.model_loaded:
-            self.spikes_train = spikes_tr_out
-            self.spikes_test = spikes_te_out
-            self.mp_train = mp_tr
-            self.mp_test = mp_te
-            self.weights2plot_exc = w4p_exc_tr
-            self.weights2plot_inh = w4p_inh_tr
-            self.spike_threshold = thresh_tr
-            self.max_weight_sum_inh = mx_w_inh_tr
-            self.max_weight_sum_exc = mx_w_exc_tr
-            self.labels_train = labels_tr_out
-            self.labels_test = labels_te_out
+                # calculate accuracy
+                acc_te = top_responders_plotted(
+                    spikes=spikes_te_out,
+                    labels=labels_te_out,
+                    ih=self.ih,
+                    st=self.st,
+                    num_classes=self.N_classes,
+                    narrow_top=narrow_top,
+                    smoothening=smoothening,
+                    train=False,
+                    compute_not_plot=True,
+                )
 
-            # save training results
-            model_dir = self.process(
-                save_model=True,
-                model_parameters=self.model_parameters,
-            )
+                # Update performance tracking
+                self.performance_tracker[e] = [
+                    phi_te,
+                    acc_te,
+                ]
+
+                # early stopping
+                if early_stopping and e > interval_ES:
+                    start = max(0, e - interval_ES)
+                    mu = np.mean(self.performance_tracker[start:e, 1])
+                    if acc_te < mu:
+                        break
+
+                # Rinse memory
+                if e != self.epochs - 1:
+                    del data_train, labels_train, data_test, labels_test
+                    del mp_train, mp_test, pre_tr, post_tr
+                    del (
+                        weights_te,
+                        spikes_te_out,
+                        labels_te_out,
+                    )
+                    del sleep_te_out, spikes_tr_out, labels_tr_out, sleep_tr_out
+                    gc.collect()
+
+                pbar.set_description(f"Epoch {e+1}/{self.epochs}")
+                pbar.set_postfix(acc=f"{acc_te:.3f}", phi=f"{phi_te:.2f}")
+                pbar.update(1)
+            pbar.close()
+
+            if save_model and not self.model_loaded:
+                self.spikes_train = spikes_tr_out
+                self.spikes_test = spikes_te_out
+                self.mp_train = mp_tr
+                self.mp_test = mp_te
+                self.weights2plot_exc = w4p_exc_tr
+                self.weights2plot_inh = w4p_inh_tr
+                self.spike_threshold = thresh_tr
+                self.max_weight_sum_inh = mx_w_inh_tr
+                self.max_weight_sum_exc = mx_w_exc_tr
+                self.labels_train = labels_tr_out
+                self.labels_test = labels_te_out
+
+                # save training results
+                model_dir = self.process(
+                    save_model=True,
+                    model_parameters=self.model_parameters,
+                )
 
         if plot_epoch_performance:
             plot_epoch_training(
