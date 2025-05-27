@@ -231,11 +231,12 @@ def calculate_phi(
     wcss_arr = np.zeros(num_classes)
     for c in range(num_classes):
         indices = np.where(labels_train_unique == c)[0]
-        centroids[:, c] = np.mean(scores_train_pca[indices], axis=0)
-        values = scores_train_pca[indices]
-        for dim in range(n_components):
-            delta_wcss = np.sum((centroids[dim, c] - values[:, dim]) ** 2)
-            wcss_arr[c] += delta_wcss
+        if indices.size != 0:
+            centroids[:, c] = np.mean(scores_train_pca[indices], axis=0)
+            values = scores_train_pca[indices]
+            for dim in range(n_components):
+                delta_wcss = np.sum((centroids[dim, c] - values[:, dim]) ** 2)
+                wcss_arr[c] += delta_wcss
     WCSS_train = np.sum(wcss_arr)
 
     # Estimate BCSS
@@ -305,10 +306,11 @@ def calculate_phi(
     wcss_arr = np.zeros(num_classes)
     for c in range(num_classes):
         indices = np.where(labels_test_unique == c)[0]
-        values = scores_test_pca[indices]
-        for dim in range(n_components):
-            delta_wcss = np.sum((values[:, dim] - centroids[dim, c]) ** 2)
-            wcss_arr[c] += delta_wcss
+        if indices.size != 0:
+            values = scores_test_pca[indices]
+            for dim in range(n_components):
+                delta_wcss = np.sum((values[:, dim] - centroids[dim, c]) ** 2)
+                wcss_arr[c] += delta_wcss
     WCSS_test = np.sum(wcss_arr)
 
     # Estimate bcss

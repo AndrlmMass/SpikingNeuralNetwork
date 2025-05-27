@@ -367,6 +367,7 @@ def train_network(
     var_noise,
     num_exc,
     num_inh,
+    final,
 ):
     weight_mask = weights != 0
     non_weight_mask = weights == 0
@@ -379,18 +380,21 @@ def train_network(
     idx_exc = np.random.choice(exc_interval, size=num_exc, replace=False)
     idx_inh = np.random.choice(inh_interval, size=num_inh, replace=False)
 
-    # create weights_plotting_array
-    plot_positions = np.arange(1, T, interval)
-    weights_4_plotting_exc = np.zeros((plot_positions.shape[0], num_exc, ih - st))
-    weights_4_plotting_inh = np.zeros((plot_positions.shape[0], num_inh, ex - st))
-    weights_4_plotting_exc[0] = weights[idx_exc, st:ih]
-    weights_4_plotting_inh[0] = weights[idx_inh, st:ex]
-    pre_trace_4_plot = np.zeros((plot_positions.shape[0], ih))
-    post_trace_4_plot = np.zeros((plot_positions.shape[0], ih - st))
+    if final:
+        # create weights_plotting_array
+        plot_positions = np.arange(1, T, interval)
+        weights_4_plotting_exc = np.zeros((plot_positions.shape[0], num_exc, ih - st))
+        weights_4_plotting_inh = np.zeros((plot_positions.shape[0], num_inh, ex - st))
+        weights_4_plotting_exc[0] = weights[idx_exc, st:ih]
+        weights_4_plotting_inh[0] = weights[idx_inh, st:ex]
+    else:
+        weights_4_plotting_exc = None
+        weights_4_plotting_inh = None
+        plot_positions = None
 
     # create spike threshold array
     spike_threshold = np.full(
-        shape=(T, ih - st), fill_value=spike_threshold_default, dtype=float
+        shape=(ih - st), fill_value=spike_threshold_default, dtype=float
     )
 
     # define which weights counts towards total sum of weights
@@ -447,7 +451,7 @@ def train_network(
             mp[t],
             spikes[t],
             spike_times,
-            spike_threshold[t],
+            spike_threshold,
         ) = update_spikes(
             st=st,
             ih=ih,
@@ -463,7 +467,7 @@ def train_network(
             delta_adaption=delta_adaption,
             max_mp=max_mp,
             min_mp=min_mp,
-            spike_threshold=spike_threshold[t - 1],
+            spike_threshold=spike_threshold,
             spike_threshold_default=spike_threshold_default,
             reset_potential=reset_potential,
         )
@@ -532,14 +536,13 @@ def train_network(
             )
 
         # save weights for plotting
-        if t == plot_positions[idx]:
-            weights_4_plotting_exc[idx] = weights[idx_exc, st:ih]
-            weights_4_plotting_inh[idx] = weights[idx_inh, st:ex]
-            pre_trace_4_plot[idx] = pre_trace
-            post_trace_4_plot[idx] = post_trace
-            idx += 1
-            if plot_positions.size <= idx:
-                idx -= 1
+        if final:
+            if t == plot_positions[idx]:
+                weights_4_plotting_exc[idx] = weights[idx_exc, st:ih]
+                weights_4_plotting_inh[idx] = weights[idx_inh, st:ex]
+                idx += 1
+                if plot_positions.size <= idx:
+                    idx -= 1
 
         # remove training data during sleep
         if sleep:

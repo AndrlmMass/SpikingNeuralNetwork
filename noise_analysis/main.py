@@ -5,10 +5,10 @@ snn_N = snn_sleepy()
 
 # acquire data
 snn_N.prepare_data(
-    tot_images_train=2000,
-    single_train=500,
-    single_test=125,
-    tot_images_test=500,
+    tot_images_train=1500,
+    single_train=100,
+    single_test=100,
+    tot_images_test=1500,
     add_breaks=False,
     force_recreate=False,
     noisy_data=True,

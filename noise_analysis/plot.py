@@ -45,6 +45,32 @@ def get_elite_nodes(spikes, labels, num_classes, narrow_top, st, ih):
     return final_indices, spikes, labels
 
 
+def plot_epoch_training(acc, cluster):
+    fig, ax0 = plt.subplots()
+
+    # Left y-axis
+    (line0,) = ax0.plot(cluster, color="tab:blue", label="Cluster")
+    ax0.set_ylabel("Cluster", color="tab:blue")
+    ax0.tick_params(axis="y", labelcolor="tab:blue")
+
+    # Right y-axis
+    ax1 = ax0.twinx()
+    (line1,) = ax1.plot(acc, color="tab:red", label="Accuracy")
+    ax1.set_ylabel("Accuracy", color="tab:red")
+    ax1.tick_params(axis="y", labelcolor="tab:red")
+
+    # Common title and xlabel
+    fig.suptitle("Epoch Training")
+    fig.supxlabel("Epoch")
+
+    # Common legend
+    lines = [line0, line1]
+    labels = [line.get_label() for line in lines]
+    ax0.legend(lines, labels, loc="upper center")
+
+    plt.show()
+
+
 def top_responders_plotted(
     spikes,
     labels,

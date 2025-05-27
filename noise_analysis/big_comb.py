@@ -13,9 +13,9 @@ from plot import (
     weights_plot,
     spike_threshold_plot,
     plot_traces,
-    plot_accuracy,
     top_responders_plotted,
     plot_phi_acc,
+    plot_epoch_training,
 )
 from analysis import t_SNE, PCA_analysis, calculate_phi
 from create_network import create_weights, create_arrays
@@ -158,7 +158,7 @@ class snn_sleepy:
                 os.path.join(model_dir, "spike_threshold.npy"), self.spike_threshold
             )
             np.save(
-                os.path.join(model_dir_, "spikes_test.npy"),
+                os.path.join(model_dir, "spikes_test.npy"),
                 self.spikes_test,
             )
             np.save(
@@ -169,8 +169,12 @@ class snn_sleepy:
                 os.path.join(model_dir, "max_weight_sum_exc.npy"),
                 self.max_weight_sum_exc,
             )
-            np.save(os.path.join(model_dir, "labels_train"), self.labels_train)
-            np.save(os.path.join(model_dir, "labels_test"), self.labels_test)
+            np.save(os.path.join(model_dir, "labels_train.npy"), self.labels_train)
+            np.save(os.path.join(model_dir, "labels_test.npy"), self.labels_test)
+            np.save(
+                os.path.join(model_dir, "performance_tracker.npy"),
+                self.performance_tracker,
+            )
 
             filepath = os.path.join(model_dir, "model_parameters.json")
 
@@ -181,17 +185,6 @@ class snn_sleepy:
             return model_dir
 
         if load_model:
-            if load_test_model:
-                path = os.path.join(model_dir_, "spikes_test.npy")
-                if os.path.exists(path):
-                    self.spikes_test = np.load(
-                        os.path.join(model_dir_, "spikes_test.npy")
-                    )
-                    self.test_data_loaded = True
-                    print("\rTest spikes found.", end="")
-                else:
-                    print("\rTest spikes not found. Testing again.", end="")
-
             # Define folder to load data
             folders = os.listdir("model")
 
@@ -251,6 +244,12 @@ class snn_sleepy:
                         )
                         self.labels_test = np.load(
                             os.path.join("model", folder, "labels_test.npy")
+                        )
+                        self.spikes_test = np.load(
+                            os.path.join("model", folder, "spikes_test.npy")
+                        )
+                        self.performance_tracker = np.load(
+                            os.path.join("model", folder, "performance_tracker.npy")
                         )
 
                         print("\rmodel loaded", end="")
@@ -581,6 +580,7 @@ class snn_sleepy:
         test=True,
         tau_LTD=10,
         tau_LTP=10,
+        early_stopping=False,
         dt=1,
         tau_m=30,
         membrane_resistance=100,
@@ -606,6 +606,7 @@ class snn_sleepy:
         random_selection_weight_plot=True,
         num_inh=10,
         num_exc=50,
+        plot_epoch_performance=True,
         plot_accuracy_train=True,
         plot_accuracy_test=True,
         narrow_top=0.05,
@@ -750,11 +751,14 @@ class snn_sleepy:
         )
 
         # pre-define performance tracking array
-        performance_tracker = np.zeros((self.epochs, 2))
+        self.performance_tracker = np.zeros((self.epochs, 2))
 
         # Define starting index
         idx_train = 0
         idx_test = 0
+
+        # early stopping interval
+        interval_ES = int(self.epochs * 0.1)  # 10% interval rate
 
         # define progress bar
         pbar = tqdm(
@@ -762,7 +766,7 @@ class snn_sleepy:
             desc=f"Epoch 0/{self.epochs}:",
             unit="it",
             ncols=80,
-            bar_format="{desc} [{bar}] {n_fmt}/{total_fmt} | {postfix}",
+            bar_format="{desc} [{bar}] ETA: {remaining} |{postfix}",
         )
 
         # loop over self.epochs
@@ -817,6 +821,11 @@ class snn_sleepy:
                 max_time=self.max_time,
             )
 
+            if e == self.epochs - 1:
+                final = True
+            else:
+                final = False
+
             # 3a) Train on the training set
             (
                 self.weights,
@@ -845,6 +854,7 @@ class snn_sleepy:
                 alpha=alpha,
                 timing_update=timing_update,
                 spike_times=spike_times.copy(),
+                final=final,
                 **common_args,
             )
 
@@ -872,6 +882,7 @@ class snn_sleepy:
                 alpha=alpha,
                 timing_update=timing_update,
                 spike_times=spike_times.copy(),
+                final=final,
                 **common_args,
             )
 
@@ -901,10 +912,17 @@ class snn_sleepy:
             )
 
             # Update performance tracking
-            performance_tracker[e] = [
+            self.performance_tracker[e] = [
                 phi_te,
                 acc_te,
             ]
+
+            # early stopping
+            if early_stopping and e > interval_ES:
+                start = max(0, e - interval_ES)
+                mu = np.mean(self.performance_tracker[start:e, 1])
+                if acc_te < mu:
+                    break
 
             # Rinse memory
             if e != self.epochs - 1:
@@ -940,6 +958,11 @@ class snn_sleepy:
             model_dir = self.process(
                 save_model=True,
                 model_parameters=self.model_parameters,
+            )
+
+        if plot_epoch_performance:
+            plot_epoch_training(
+                self.performance_tracker[:, 1], self.performance_tracker[:, 0]
             )
 
         if plot_top_response_train:
@@ -1224,6 +1247,7 @@ class snn_sleepy:
                                 alpha=alpha,
                                 timing_update=timing_update,
                                 spike_times=spike_times.copy(),
+                                final=False,
                                 **common_args,
                             )
 
@@ -1250,6 +1274,7 @@ class snn_sleepy:
                                 alpha=alpha,
                                 timing_update=timing_update,
                                 spike_times=spike_times.copy(),
+                                final=False,
                                 **common_args,
                             )
 
