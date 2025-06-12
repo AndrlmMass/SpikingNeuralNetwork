@@ -105,6 +105,18 @@ def update_weights(
     Returns:
     - Updated weights.
     """
+    weights = clip_weights(
+        weights=weights,
+        nz_cols_exc=nz_cols_exc,
+        nz_cols_inh=nz_cols_inh,
+        nz_rows_exc=nz_rows_exc,
+        nz_rows_inh=nz_rows_inh,
+        min_weight_exc=min_weight_exc,
+        max_weight_exc=max_weight_exc,
+        min_weight_inh=min_weight_inh,
+        max_weight_inh=max_weight_inh,
+    )
+
     if sleep:
         now = t % check_sleep_interval
         if now == 0 or sleep_now_inh or sleep_now_exc:
@@ -214,18 +226,6 @@ def update_weights(
         #     end="",
         # )
 
-    weights = clip_weights(
-        weights=weights,
-        nz_cols_exc=nz_cols_exc,
-        nz_cols_inh=nz_cols_inh,
-        nz_rows_exc=nz_rows_exc,
-        nz_rows_inh=nz_rows_inh,
-        min_weight_exc=min_weight_exc,
-        max_weight_exc=max_weight_exc,
-        min_weight_inh=min_weight_inh,
-        max_weight_inh=max_weight_inh,
-    )
-
     return weights, pre_trace, post_trace, sleep_now_inh, sleep_now_exc
 
 
@@ -238,6 +238,8 @@ def update_membrane_potential(
     membrane_resistance,
     tau_m,
     dt,
+    I_syn,
+    tau_syn,
     mean_noise,
     var_noise,
 ):
@@ -249,8 +251,9 @@ def update_membrane_potential(
         gaussian_noise = 0
 
     mp_new = mp.copy()
-    I_in = np.dot(weights.T, spikes)
-    mp_delta = (-(mp - resting_potential) + membrane_resistance * I_in) / tau_m * dt
+    # before the membrane update
+    I_syn += (-I_syn + np.dot(weights.T, spikes)) * dt / tau_syn
+    mp_delta = (-(mp - resting_potential) + membrane_resistance * I_syn) / tau_m * dt
     mp_new += mp_delta + gaussian_noise
     return mp_new
 
@@ -260,6 +263,7 @@ def update_spikes(
     ih,
     mp,
     dt,
+    a,
     spikes,
     spike_times,
     max_mp,
@@ -290,16 +294,17 @@ def update_spikes(
 
     # add spike adaption
     if spike_adaption:
-        spike_threshold += (spike_threshold_default - spike_threshold) / tau_adaption
-        delta_adapt_dt = delta_adaption * dt
-        delta_spike_threshold = spike_threshold[spikes[st:ih] == 1] * delta_adapt_dt
-        spike_threshold[spikes[st:ih] == 1] -= delta_spike_threshold
-        # print(f"\r{np.mean(spike_threshold)}", end="")
+        # --- each timestep ---
+        a += (-a / tau_adaption) * dt
+        a[spikes[st:ih] == 1] += delta_adaption
+
+        spike_threshold = spike_threshold_default + a
+        spike_threshold = np.clip(spike_threshold, -90, 0)
 
     mp[spikes[st:ih] == 1] = reset_potential
     spike_times = np.where(spikes == 1, 0, spike_times + 1)
 
-    return mp, spikes, spike_times, spike_threshold
+    return mp, spikes, spike_times, spike_threshold, a
 
 
 def train_network(
@@ -337,6 +342,10 @@ def train_network(
     check_sleep_interval,
     w_target_exc,
     w_target_inh,
+    baseline_sum_exc,
+    baseline_sum_inh,
+    max_sum_exc,
+    max_sum_inh,
     dt,
     N,
     A_plus,
@@ -362,12 +371,15 @@ def train_network(
     interval,
     N_x,
     T,
+    tau_syn,
     beta,
     mean_noise,
     var_noise,
     num_exc,
     num_inh,
-    final,
+    I_syn,
+    a,
+    spike_threshold,
 ):
     weight_mask = weights != 0
     non_weight_mask = weights == 0
@@ -380,31 +392,12 @@ def train_network(
     idx_exc = np.random.choice(exc_interval, size=num_exc, replace=False)
     idx_inh = np.random.choice(inh_interval, size=num_inh, replace=False)
 
-    if final:
-        # create weights_plotting_array
-        plot_positions = np.arange(1, T, interval)
-        weights_4_plotting_exc = np.zeros((plot_positions.shape[0], num_exc, ih - st))
-        weights_4_plotting_inh = np.zeros((plot_positions.shape[0], num_inh, ex - st))
-        weights_4_plotting_exc[0] = weights[idx_exc, st:ih]
-        weights_4_plotting_inh[0] = weights[idx_inh, st:ex]
-    else:
-        weights_4_plotting_exc = None
-        weights_4_plotting_inh = None
-        plot_positions = None
+    plot_positions = np.arange(1, T, interval)
+    weights_4_plotting_exc = np.zeros((plot_positions.shape[0], num_exc, ih - st))
+    weights_4_plotting_inh = np.zeros((plot_positions.shape[0], num_inh, ex - st))
+    weights_4_plotting_exc[0] = weights[idx_exc, st:ih]
+    weights_4_plotting_inh[0] = weights[idx_inh, st:ex]
 
-    # create spike threshold array
-    spike_threshold = np.full(
-        shape=(ih - st), fill_value=spike_threshold_default, dtype=float
-    )
-
-    # define which weights counts towards total sum of weights
-    sum_weights_exc = np.sum(np.abs(weights[:ex, st:ih]))
-    sum_weights_inh = np.sum(np.abs(weights[ex:ih, st:ex]))
-
-    baseline_sum_exc = sum_weights_exc * beta
-    baseline_sum_inh = sum_weights_inh * beta
-    max_sum_exc = sum_weights_exc * alpha
-    max_sum_inh = sum_weights_inh * alpha
     delta_w = np.zeros(shape=weights.shape)
 
     nz_rows_inh, nz_cols_inh = np.nonzero(weights[ex:ih, st:ex])
@@ -444,6 +437,8 @@ def train_network(
             noisy_potential=noisy_potential,
             mean_noise=mean_noise,
             var_noise=var_noise,
+            I_syn=I_syn,
+            tau_syn=tau_syn,
         )
 
         # update spikes array
@@ -452,11 +447,13 @@ def train_network(
             spikes[t],
             spike_times,
             spike_threshold,
+            a,
         ) = update_spikes(
             st=st,
             ih=ih,
             mp=mp[t],
             dt=dt,
+            a=a,
             spikes=spikes[t],
             spike_times=spike_times,
             spike_intercept=spike_intercept,
@@ -471,6 +468,7 @@ def train_network(
             spike_threshold_default=spike_threshold_default,
             reset_potential=reset_potential,
         )
+        # print(np.mean(spike_threshold))
 
         # update weights
         if train_weights:
@@ -535,8 +533,6 @@ def train_network(
                 )
             )
 
-        # save weights for plotting
-        if final:
             if t == plot_positions[idx]:
                 weights_4_plotting_exc[idx] = weights[idx_exc, st:ih]
                 weights_4_plotting_inh[idx] = weights[idx_inh, st:ex]
@@ -566,4 +562,7 @@ def train_network(
         max_sum_exc,
         spike_labels,
         sleep_percent,
+        I_syn,
+        spike_times,
+        a,
     )

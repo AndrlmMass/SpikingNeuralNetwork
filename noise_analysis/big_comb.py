@@ -2,6 +2,7 @@ import numpy as np
 import os
 import gc
 from tqdm import tqdm
+import torch
 import json
 import random
 from train import train_network
@@ -487,7 +488,6 @@ class snn_sleepy:
             self.post_trace,
             self.spikes_train,
             self.spikes_test,
-            self.spike_times,
         ) = create_arrays(
             N=self.N,
             N_exc=self.N_exc,
@@ -527,8 +527,8 @@ class snn_sleepy:
         train_weights=False,
         learning_rate_exc=0.0008,
         learning_rate_inh=0.005,
-        w_target_exc=0.1,
-        w_target_inh=-0.1,
+        w_target_exc=0.01,
+        w_target_inh=-0.01,
         var_noise=1,
         min_weight_inh=-25,
         max_weight_inh=0,
@@ -549,7 +549,7 @@ class snn_sleepy:
         noisy_threshold=False,
         noisy_weights=False,
         spike_adaption=True,
-        delta_adaption=0.5,
+        delta_adaption=3,
         tau_adaption=100,
         trace_update=False,
         timing_update=True,
@@ -558,7 +558,7 @@ class snn_sleepy:
         clip_inh_weights=False,
         alpha=1.1,
         beta=1.0,
-        A_plus=0.25,
+        A_plus=0.5,
         A_minus=0.5,
         test=True,
         tau_LTD=10,
@@ -566,7 +566,7 @@ class snn_sleepy:
         early_stopping=False,
         dt=1,
         tau_m=30,
-        membrane_resistance=100,
+        membrane_resistance=30,
         reset_potential=-80,
         spike_slope=-0.1,
         spike_intercept=-4,
@@ -586,14 +586,12 @@ class snn_sleepy:
         tau_post_trace_inh=1,
         weight_mean_noise=0.05,
         weight_var_noise=0.005,
-        random_selection_weight_plot=True,
         num_inh=10,
         num_exc=50,
         plot_epoch_performance=True,
-        plot_accuracy_train=True,
-        plot_accuracy_test=True,
         narrow_top=0.05,
         wide_top=0.15,
+        tau_syn=7.5,
         smoothening=350,
         plot_top_response_train=False,
         plot_top_response_test=False,
@@ -617,9 +615,6 @@ class snn_sleepy:
             "plot_weights",
             "plot_threshold",
             "plot_traces_",
-            "random_selection_weight_plot",
-            "plot_accuracy_train",
-            "plot_accuracy_test",
             "start_time_spike_plot",
             "stop_time_spike_plot",
             "start_index_mp",
@@ -680,9 +675,20 @@ class snn_sleepy:
                     print("Could not find the mdata directory.")
                     download = False
                     data_dir = None
+            # define which weights counts towards total sum of weights
+            sum_weights_exc = np.sum(np.abs(self.weights[: self.ex, self.st : self.ih]))
+            sum_weights_inh = np.sum(
+                np.abs(self.weights[self.ex : self.ih, self.st : self.ex])
+            )
+
+            baseline_sum_exc = sum_weights_exc * beta
+            baseline_sum_inh = sum_weights_inh * beta
+            max_sum_exc = sum_weights_exc * alpha
+            max_sum_inh = sum_weights_inh * alpha
 
             # Bundle common training arguments
             common_args = dict(
+                tau_syn=tau_syn,
                 tau_pre_trace_exc=tau_pre_trace_exc,
                 tau_pre_trace_inh=tau_pre_trace_inh,
                 tau_post_trace_exc=tau_post_trace_exc,
@@ -695,6 +701,10 @@ class snn_sleepy:
                 max_weight_inh=max_weight_inh,
                 N_exc=self.N_exc,
                 N_inh=self.N_inh,
+                max_sum_exc=max_sum_exc,
+                max_sum_inh=max_sum_inh,
+                baseline_sum_exc=baseline_sum_exc,
+                baseline_sum_inh=baseline_sum_inh,
                 beta=beta,
                 num_exc=num_exc,
                 num_inh=num_inh,
@@ -752,6 +762,16 @@ class snn_sleepy:
                 ncols=80,
                 bar_format="{desc} [{bar}] ETA: {remaining} |{postfix}",
             )
+            # create missing arrays
+            I_syn = np.zeros(self.N - self.st)
+            spike_times = np.zeros(self.N)
+            a = np.zeros(self.N - self.st)
+            # create spike threshold array
+            spike_threshold = np.full(
+                shape=(self.ih - self.st),
+                fill_value=spike_threshold_default,
+                dtype=float,
+            )
 
             # loop over self.epochs
             for e in range(self.epochs):
@@ -781,7 +801,6 @@ class snn_sleepy:
                     idx_train=idx_train,
                 )
                 idx_train += self.single_train
-                idx_train += self.single_test
 
                 # Create & fetch necessary arrays
                 (
@@ -791,7 +810,6 @@ class snn_sleepy:
                     post_tr,
                     spikes_train,
                     spikes_test,
-                    spike_times,
                 ) = create_arrays(
                     N=self.N,
                     N_exc=self.N_exc,
@@ -805,11 +823,6 @@ class snn_sleepy:
                     max_time=self.max_time,
                 )
 
-                if e == self.epochs - 1:
-                    final = True
-                else:
-                    final = False
-
                 # 3a) Train on the training set
                 (
                     self.weights,
@@ -822,6 +835,9 @@ class snn_sleepy:
                     mx_w_inh_tr,
                     labels_tr_out,
                     sleep_tr_out,
+                    I_syn,
+                    spike_times,
+                    a,
                 ) = train_network(
                     weights=self.weights.copy(),
                     spike_labels=labels_train.copy(),
@@ -838,7 +854,9 @@ class snn_sleepy:
                     alpha=alpha,
                     timing_update=timing_update,
                     spike_times=spike_times.copy(),
-                    final=final,
+                    spike_threshold=spike_threshold.copy(),
+                    a=a.copy(),
+                    I_syn=I_syn.copy(),
                     **common_args,
                 )
 
@@ -850,6 +868,9 @@ class snn_sleepy:
                     *unused,
                     labels_te_out,
                     sleep_te_out,
+                    I_syn_te,
+                    spike_times_te,
+                    a_te,
                 ) = train_network(
                     weights=self.weights.copy(),
                     spike_labels=labels_test.copy(),
@@ -866,7 +887,9 @@ class snn_sleepy:
                     alpha=alpha,
                     timing_update=timing_update,
                     spike_times=spike_times.copy(),
-                    final=final,
+                    a=a.copy(),
+                    I_syn=I_syn.copy(),
+                    spike_threshold=spike_threshold.copy(),
                     **common_args,
                 )
 
@@ -884,7 +907,7 @@ class snn_sleepy:
 
                 # calculate accuracy
                 acc_te = top_responders_plotted(
-                    spikes=spikes_te_out,
+                    spikes=spikes_te_out[:, self.st :],
                     labels=labels_te_out,
                     ih=self.ih,
                     st=self.st,
@@ -920,29 +943,37 @@ class snn_sleepy:
                     del sleep_te_out, spikes_tr_out, labels_tr_out, sleep_tr_out
                     gc.collect()
 
+                if plot_weights:
+                    self.weights2plot_exc = w4p_exc_tr
+                    self.weights2plot_inh = w4p_inh_tr
+                    weights_plot(
+                        weights_exc=self.weights2plot_exc,
+                        weights_inh=self.weights2plot_inh,
+                    )
+
                 pbar.set_description(f"Epoch {e+1}/{self.epochs}")
                 pbar.set_postfix(acc=f"{acc_te:.3f}", phi=f"{phi_te:.2f}")
                 pbar.update(1)
             pbar.close()
 
-            if save_model and not self.model_loaded:
-                self.spikes_train = spikes_tr_out
-                self.spikes_test = spikes_te_out
-                self.mp_train = mp_tr
-                self.mp_test = mp_te
-                self.weights2plot_exc = w4p_exc_tr
-                self.weights2plot_inh = w4p_inh_tr
-                self.spike_threshold = thresh_tr
-                self.max_weight_sum_inh = mx_w_inh_tr
-                self.max_weight_sum_exc = mx_w_exc_tr
-                self.labels_train = labels_tr_out
-                self.labels_test = labels_te_out
+        if save_model and not self.model_loaded:
+            self.spikes_train = spikes_tr_out
+            self.spikes_test = spikes_te_out
+            self.mp_train = mp_tr
+            self.mp_test = mp_te
+            self.weights2plot_exc = w4p_exc_tr
+            self.weights2plot_inh = w4p_inh_tr
+            self.spike_threshold = thresh_tr
+            self.max_weight_sum_inh = mx_w_inh_tr
+            self.max_weight_sum_exc = mx_w_exc_tr
+            self.labels_train = labels_tr_out
+            self.labels_test = labels_te_out
 
-                # save training results
-                model_dir = self.process(
-                    save_model=True,
-                    model_parameters=self.model_parameters,
-                )
+            # save training results
+            model_dir = self.process(
+                save_model=True,
+                model_parameters=self.model_parameters,
+            )
 
         if plot_epoch_performance:
             plot_epoch_training(
@@ -991,19 +1022,6 @@ class snn_sleepy:
             mp_plot(
                 mp=self.mp_train[time_start_mp:time_stop_mp],
                 N_exc=self.N_exc,
-            )
-
-        if plot_weights:
-            weights_plot(
-                weights_exc=self.weights2plot_exc,
-                weights_inh=self.weights2plot_inh,
-                N=self.N,
-                N_x=self.N_x,
-                N_exc=self.N_exc,
-                N_inh=self.N_inh,
-                max_weight_sum_inh=self.max_weight_sum_inh,
-                max_weight_sum_exc=self.max_weight_sum_exc,
-                random_selection=random_selection_weight_plot,
             )
 
         if plot_traces_:

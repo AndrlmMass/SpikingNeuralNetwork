@@ -234,9 +234,10 @@ def calculate_phi(
         if indices.size != 0:
             centroids[:, c] = np.mean(scores_train_pca[indices], axis=0)
             values = scores_train_pca[indices]
-            for dim in range(n_components):
-                delta_wcss = np.sum((centroids[dim, c] - values[:, dim]) ** 2)
-                wcss_arr[c] += delta_wcss
+            if indices.size != 0:
+                for dim in range(n_components):
+                    delta_wcss = np.sum((centroids[dim, c] - values[:, dim]) ** 2)
+                    wcss_arr[c] += delta_wcss
     WCSS_train = np.sum(wcss_arr)
 
     # Estimate BCSS

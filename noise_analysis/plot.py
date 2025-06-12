@@ -81,7 +81,6 @@ def top_responders_plotted(
     train,
     compute_not_plot,
 ):
-    fig, ax = plt.subplots(2, 1)
 
     # get indicess
     indices, spikes, labels = get_elite_nodes(
@@ -131,6 +130,7 @@ def top_responders_plotted(
 
         # return the final accuracy measurement
         return precision[-1]
+    fig, ax = plt.subplots(2, 1)
 
     # reduce samples
     cmap = plt.get_cmap("Set3", num_classes)
@@ -557,13 +557,6 @@ def mp_plot(mp, N_exc):
 def weights_plot(
     weights_exc,
     weights_inh,
-    N,
-    N_x,
-    N_exc,
-    N_inh,
-    max_weight_sum_inh,
-    max_weight_sum_exc,
-    random_selection,
 ):
 
     fig, axs = plt.subplots(2, 1, figsize=(10, 8))
@@ -592,13 +585,11 @@ def weights_plot(
         axs[0].plot(
             mu_weights_inh[:, i], color=cmap_inh(i / mu_weights_inh.shape[1]), alpha=0.7
         )
-    sum_weights_exc = np.abs(np.sum(weights_exc, axis=2))
-    sum_weights_inh = np.abs(np.sum(weights_inh, axis=2))
+    sum_weights_exc = np.nansum(mu_weights_exc, axis=1)
+    sum_weights_inh = np.nansum(mu_weights_inh, axis=1)
     # plot sum of weights
-    axs[1].plot(sum_weights_exc, color="red")
-    axs[1].plot(sum_weights_inh, color="blue")
-    axs[1].axhline(y=max_weight_sum_exc, color="red", linestyle="--", linewidth=2)
-    axs[1].axhline(y=max_weight_sum_inh, color="blue", linestyle="--", linewidth=2)
+    axs[1].plot(sum_weights_exc, color="red", label="excitatory")
+    axs[1].plot(sum_weights_inh, color="blue", label="inhibitory")
 
     # Add legend and show the plot
     # Add titles and labels appropriately
@@ -611,8 +602,6 @@ def weights_plot(
 
 def plot_traces(
     random_selection=False,
-    num_exc=None,
-    num_inh=None,
     N_exc=200,
     N_inh=50,
     pre_traces=None,

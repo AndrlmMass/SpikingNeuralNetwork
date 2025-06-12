@@ -172,5 +172,4 @@ def create_arrays(
         post_trace,
         spikes_train,
         spikes_test,
-        spike_times,
     )
