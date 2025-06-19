@@ -42,8 +42,8 @@ def sleep_func(
         if sleep_synchronized:
             sum_weights = 0
             for i in range(nz_rows.size):
-                sum_weights += weights[nz_rows[i], nz_cols[i]]
-            # print("1", sum_weights, max_sum)
+                sum_weights += np.abs(weights[nz_rows[i], nz_cols[i]])
+            print("1", sum_weights, max_sum)
             if sum_weights > max_sum:
                 sleep_now_exc = True
                 sleep_now_inh = True
@@ -51,13 +51,15 @@ def sleep_func(
         else:
             sum_weights_exc = 0
             for i in range(nz_rows_exc.size):
-                sum_weights_exc += weights[nz_rows_exc[i], nz_cols_exc[i]]
+                sum_weights_exc += np.abs(weights[nz_rows_exc[i], nz_cols_exc[i]])
+            print("exc1", sum_weights_exc, baseline_sum_exc)
             if sum_weights_exc > max_sum_exc:
                 sleep_now_exc = True
 
             sum_weights_inh = 0
             for i in range(nz_rows_inh.size):
                 sum_weights_inh += np.abs(weights[nz_rows_inh[i], nz_cols_inh[i]])
+            print("inh1", sum_weights_inh, baseline_sum_inh)
             if sum_weights_inh > max_sum_inh:
                 sleep_now_inh = True
 
@@ -75,6 +77,7 @@ def sleep_func(
             sum_weights_exc2 = 0
             for i in range(nz_rows_exc.size):
                 sum_weights_exc2 += np.abs(weights[nz_rows_exc[i], nz_cols_exc[i]])
+            print("exc2", sum_weights_exc2, baseline_sum_exc)
             if sum_weights_exc2 <= baseline_sum_exc:
                 sleep_now_exc = False
 
@@ -92,15 +95,16 @@ def sleep_func(
             sum_weights_inh2 = 0
             for i in range(nz_rows_inh.size):
                 sum_weights_inh2 += np.abs(weights[nz_rows_inh[i], nz_cols_inh[i]])
+            print("inh2", sum_weights_inh2, baseline_sum_inh)
             if sum_weights_inh2 <= baseline_sum_inh:
                 sleep_now_inh = False
 
-    if sleep_now_inh and sleep_now_exc and sleep_synchronized:
+    if (sleep_now_inh or sleep_now_exc) and sleep_synchronized:
         # Recompute the excitatory sum (only for the decayed submatrix)
         sum_weights2 = 0
         for i in range(nz_rows.size):
             sum_weights2 += np.abs(weights[nz_rows[i], nz_cols[i]])
-        # print("2", sum_weights2, baseline_sum)
+        print("2", sum_weights2, baseline_sum)
         if sum_weights2 <= baseline_sum:
             sleep_now_inh = False
             sleep_now_exc = False

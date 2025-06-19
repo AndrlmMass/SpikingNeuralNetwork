@@ -36,7 +36,8 @@ snn_N.train(
     samples=10,
     force_train=False,
     plot_weights=True,
-    plot_spikes_train=False,
+    sleep_synchronized=False,
+    plot_spikes_train=True,
     plot_top_response_test=False,
     plot_top_response_train=False,
 )

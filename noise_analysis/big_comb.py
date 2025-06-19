@@ -2,7 +2,6 @@ import numpy as np
 import os
 import gc
 from tqdm import tqdm
-import torch
 import json
 import random
 from train import train_network
