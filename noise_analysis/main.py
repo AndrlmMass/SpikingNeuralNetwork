@@ -26,8 +26,6 @@ snn_N.prepare_training(
 snn_N.train(
     train_weights=True,
     noisy_potential=True,
-    plot_accuracy_test=False,
-    plot_accuracy_train=False,
     compare_decay_rates=False,
     weight_decay_rate_exc=[
         0.99997,
@@ -37,7 +35,7 @@ snn_N.train(
     ],
     samples=10,
     force_train=False,
-    plot_weights=False,
+    plot_weights=True,
     plot_spikes_train=False,
     plot_top_response_test=False,
     plot_top_response_train=False,

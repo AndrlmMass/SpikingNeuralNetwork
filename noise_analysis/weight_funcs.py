@@ -6,6 +6,7 @@ from numba import njit, prange
 @njit
 def sleep_func(
     weights,  # shape = (N_pre, N_post)
+    max_sum,
     max_sum_exc,
     max_sum_inh,
     sleep_now_inh,
@@ -16,6 +17,10 @@ def sleep_func(
     weight_decay_rate_inh,
     baseline_sum_exc,
     baseline_sum_inh,
+    sleep_synchronized,
+    nz_rows,
+    nz_cols,
+    baseline_sum,
     nz_rows_exc,
     nz_rows_inh,
     nz_cols_exc,
@@ -34,32 +39,30 @@ def sleep_func(
     # and columns [N_exc+N_x, N_post) are inhibitory.
 
     if not sleep_now_inh or not sleep_now_exc:
-        sum_weights_exc = 0
-        for i in range(nz_rows_exc.size):
-            sum_weights_exc += weights[nz_rows_exc[i], nz_cols_exc[i]]
-        sum_weights_inh = 0
-        for i in range(nz_rows_inh.size):
-            sum_weights_inh += np.abs(weights[nz_rows_inh[i], nz_cols_inh[i]])
+        if sleep_synchronized:
+            sum_weights = 0
+            for i in range(nz_rows.size):
+                sum_weights += weights[nz_rows[i], nz_cols[i]]
+            # print("1", sum_weights, max_sum)
+            if sum_weights > max_sum:
+                sleep_now_exc = True
+                sleep_now_inh = True
 
-        # print(max_sum_exc, sum_weights_exc, max_sum_inh, sum_weights_inh)
-        if sum_weights_exc > max_sum_exc:
-            # print("sleepy exc!: ", sum_weights_exc)
-            sleep_now_exc = True
         else:
-            sleep_now_exc = False
-        if sum_weights_inh > max_sum_inh:
-            sleep_now_inh = True
-            # print("sleepy inh!", sum_weights_inh)
-        else:
-            sleep_now_inh = False
+            sum_weights_exc = 0
+            for i in range(nz_rows_exc.size):
+                sum_weights_exc += weights[nz_rows_exc[i], nz_cols_exc[i]]
+            if sum_weights_exc > max_sum_exc:
+                sleep_now_exc = True
 
-        # If no sleep is needed, return immediately.
-        if not sleep_now_inh and not sleep_now_exc:
-            return weights, sleep_now_inh, sleep_now_exc
+            sum_weights_inh = 0
+            for i in range(nz_rows_inh.size):
+                sum_weights_inh += np.abs(weights[nz_rows_inh[i], nz_cols_inh[i]])
+            if sum_weights_inh > max_sum_inh:
+                sleep_now_inh = True
 
     # --- Decay excitatory weights --
     if sleep_now_exc:
-        # print("decaying exc")
         # Apply decay to columns [N_x, N_post] (excitatory weights)
         for i in range(nz_rows_exc.size):
             weights[nz_rows_exc[i], nz_cols_exc[i]] = w_target_exc * (
@@ -67,12 +70,13 @@ def sleep_func(
                 ** weight_decay_rate_exc
             )
 
-        # Recompute the excitatory sum (only for the decayed submatrix)
-        sum_weights_exc2 = 0
-        for i in range(nz_rows_exc.size):
-            sum_weights_exc2 += np.abs(weights[nz_rows_exc[i], nz_cols_exc[i]])
-        if sum_weights_exc2 <= baseline_sum_exc:
-            sleep_now_exc = False
+        if not sleep_synchronized:
+            # Recompute the excitatory sum (only for the decayed submatrix)
+            sum_weights_exc2 = 0
+            for i in range(nz_rows_exc.size):
+                sum_weights_exc2 += np.abs(weights[nz_rows_exc[i], nz_cols_exc[i]])
+            if sum_weights_exc2 <= baseline_sum_exc:
+                sleep_now_exc = False
 
     # --- Decay inhibitory weights ---
     if sleep_now_inh:
@@ -83,13 +87,26 @@ def sleep_func(
                 (weights[nz_rows_inh[i], nz_cols_inh[i]] / w_target_inh)
                 ** weight_decay_rate_inh
             )
+        if not sleep_synchronized:
+            # Recompute the excitatory sum (only for the decayed submatrix)
+            sum_weights_inh2 = 0
+            for i in range(nz_rows_inh.size):
+                sum_weights_inh2 += np.abs(weights[nz_rows_inh[i], nz_cols_inh[i]])
+            if sum_weights_inh2 <= baseline_sum_inh:
+                sleep_now_inh = False
 
+    if sleep_now_inh and sleep_now_exc and sleep_synchronized:
         # Recompute the excitatory sum (only for the decayed submatrix)
-        sum_weights_inh2 = 0
-        for i in range(nz_rows_inh.size):
-            sum_weights_inh2 += np.abs(weights[nz_rows_inh[i], nz_cols_inh[i]])
-        if sum_weights_inh2 <= baseline_sum_inh:
+        sum_weights2 = 0
+        for i in range(nz_rows.size):
+            sum_weights2 += np.abs(weights[nz_rows[i], nz_cols[i]])
+        # print("2", sum_weights2, baseline_sum)
+        if sum_weights2 <= baseline_sum:
             sleep_now_inh = False
+            sleep_now_exc = False
+
+    if np.isnan(weights).any():
+        raise SystemError("Matrix contains NaN values.")
 
     return weights, sleep_now_inh, sleep_now_exc
 

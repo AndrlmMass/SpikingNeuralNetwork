@@ -66,6 +66,11 @@ def update_weights(
     baseline_sum_exc,
     baseline_sum_inh,
     check_sleep_interval,
+    sleep_synchronized,
+    baseline_sum,
+    nz_rows,
+    nz_cols,
+    max_sum,
     spikes,
     N_inh,
     N,
@@ -75,8 +80,6 @@ def update_weights(
     sleep_now_exc,
     delta_w,
     N_x,
-    nz_cols,
-    nz_rows,
     nz_cols_exc,
     nz_cols_inh,
     nz_rows_exc,
@@ -132,6 +135,11 @@ def update_weights(
                 weight_decay_rate_inh=weight_decay_rate_inh,
                 baseline_sum_exc=baseline_sum_exc,
                 baseline_sum_inh=baseline_sum_inh,
+                sleep_synchronized=sleep_synchronized,
+                baseline_sum=baseline_sum,
+                nz_rows=nz_rows,
+                nz_cols=nz_cols,
+                max_sum=max_sum,
                 nz_rows_exc=nz_rows_exc,
                 nz_rows_inh=nz_rows_inh,
                 nz_cols_exc=nz_cols_exc,
@@ -325,6 +333,9 @@ def train_network(
     weight_decay,
     weight_decay_rate_exc,
     weight_decay_rate_inh,
+    sleep_synchronized,
+    baseline_sum,
+    max_sum,
     N_inh,
     N_exc,
     learning_rate_exc,
@@ -400,8 +411,8 @@ def train_network(
 
     delta_w = np.zeros(shape=weights.shape)
 
-    nz_rows_inh, nz_cols_inh = np.nonzero(weights[ex:ih, st:ex])
-    nz_rows_exc, nz_cols_exc = np.nonzero(weights[:ex, st:ih])
+    nz_rows_inh, nz_cols_inh = np.nonzero(weights[ex:ih, :ex])
+    nz_rows_exc, nz_cols_exc = np.nonzero(weights[:ex, :ih])
     nz_rows_inh += ex
     nz_cols_inh += st
     nz_cols_exc += st
@@ -516,8 +527,11 @@ def train_network(
                     sleep_now_exc=sleep_now_exc,
                     t=t,
                     N=N,
+                    sleep_synchronized=sleep_synchronized,
+                    baseline_sum=baseline_sum,
                     nz_rows=nz_rows,
                     nz_cols=nz_cols,
+                    max_sum=max_sum,
                     nz_cols_exc=nz_cols_exc,
                     nz_cols_inh=nz_cols_inh,
                     nz_rows_exc=nz_rows_exc,

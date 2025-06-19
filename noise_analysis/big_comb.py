@@ -580,6 +580,7 @@ class snn_sleepy:
         time_stop_mp=None,
         mean_noise=0,
         max_mp=40,
+        sleep_synchronized=True,
         tau_pre_trace_exc=1,
         tau_pre_trace_inh=1,
         tau_post_trace_exc=1,
@@ -680,11 +681,14 @@ class snn_sleepy:
             sum_weights_inh = np.sum(
                 np.abs(self.weights[self.ex : self.ih, self.st : self.ex])
             )
+            sum_weights = np.sum(np.abs(self.weights))
 
             baseline_sum_exc = sum_weights_exc * beta
             baseline_sum_inh = sum_weights_inh * beta
+            baseline_sum = sum_weights * beta
             max_sum_exc = sum_weights_exc * alpha
             max_sum_inh = sum_weights_inh * alpha
+            max_sum = sum_weights * alpha
 
             # Bundle common training arguments
             common_args = dict(
@@ -701,11 +705,14 @@ class snn_sleepy:
                 max_weight_inh=max_weight_inh,
                 N_exc=self.N_exc,
                 N_inh=self.N_inh,
+                max_sum=max_sum,
                 max_sum_exc=max_sum_exc,
                 max_sum_inh=max_sum_inh,
+                baseline_sum=baseline_sum,
                 baseline_sum_exc=baseline_sum_exc,
                 baseline_sum_inh=baseline_sum_inh,
                 beta=beta,
+                sleep_synchronized=sleep_synchronized,
                 num_exc=num_exc,
                 num_inh=num_inh,
                 weight_decay=weight_decay,
