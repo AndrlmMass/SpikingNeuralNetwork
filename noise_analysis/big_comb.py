@@ -279,7 +279,6 @@ class snn_sleepy:
         single_test=166,
         force_recreate=False,
         plot_comparison=False,
-        inspect_spike_plot=False,
         plot_spikes=False,
         noisy_data=False,
         noise_level=0.005,
@@ -297,6 +296,8 @@ class snn_sleepy:
         time_var_input=False,
         min_time=None,
         gain_labels=0.5,
+        use_validation_data=False,
+        validation_split=0.2,
     ):
         # Save current parameters
         self.data_parameters = {**locals()}
@@ -387,34 +388,68 @@ class snn_sleepy:
                 with open(filepath, "w") as outfile:
                     json.dump(data_parameters, outfile)
 
-            (
-                self.data_train,
-                self.labels_train,
-                self.data_test,
-                self.labels_test,
-            ) = create_data(
-                pixel_size=int(np.sqrt(self.N_x)),
-                num_steps=num_steps,
-                plot_comparison=plot_comparison,
-                gain=gain,
-                offset=offset,
-                download=download,
-                data_dir=data_dir,
-                first_spike_time=first_spike_time,
-                time_var_input=time_var_input,
-                num_images_train=self.single_train,
-                num_images_test=self.single_test,
-                add_breaks=add_breaks,
-                break_lengths=break_lengths,
-                noisy_data=noisy_data,
-                noise_level=noise_level,
-                idx_train=0,
-                idx_test=0,
-            )
+            if use_validation_data:
+                (
+                    self.data_train,
+                    self.labels_train,
+                    self.data_val,
+                    self.labels_val,
+                    self.data_test,
+                    self.labels_test,
+                ) = create_data(
+                    pixel_size=int(np.sqrt(self.N_x)),
+                    num_steps=num_steps,
+                    plot_comparison=plot_comparison,
+                    gain=gain,
+                    offset=offset,
+                    download=download,
+                    data_dir=data_dir,
+                    first_spike_time=first_spike_time,
+                    time_var_input=time_var_input,
+                    num_images_train=self.single_train,
+                    num_images_test=self.single_test,
+                    add_breaks=add_breaks,
+                    break_lengths=break_lengths,
+                    noisy_data=noisy_data,
+                    noise_level=noise_level,
+                    idx_train=0,
+                    idx_test=0,
+                    use_validation_data=True,
+                    validation_split=validation_split,
+                )
+            else:
+                (
+                    self.data_train,
+                    self.labels_train,
+                    self.data_test,
+                    self.labels_test,
+                ) = create_data(
+                    pixel_size=int(np.sqrt(self.N_x)),
+                    num_steps=num_steps,
+                    plot_comparison=plot_comparison,
+                    gain=gain,
+                    offset=offset,
+                    download=download,
+                    data_dir=data_dir,
+                    first_spike_time=first_spike_time,
+                    time_var_input=time_var_input,
+                    num_images_train=self.single_train,
+                    num_images_test=self.single_test,
+                    add_breaks=add_breaks,
+                    break_lengths=break_lengths,
+                    noisy_data=noisy_data,
+                    noise_level=noise_level,
+                    idx_train=0,
+                    idx_test=0,
+                    use_validation_data=False,
+                )
             self.process(save_data=True, data_parameters=self.data_parameters)
 
         # get data shape
-        self.T_train = self.data_train.shape[0]
+        if use_validation_data:
+            self.T_train = self.data_val.shape[0]
+        else:
+            self.T_train = self.data_train.shape[0]
         self.T_test = self.data_test.shape[0]
 
         # plot spikes
@@ -433,7 +468,15 @@ class snn_sleepy:
 
         # return data and labels if needed
         if retur:
-            return self.data_train, self.labels_train
+            if use_validation_data:
+                return (
+                    self.data_train,
+                    self.labels_train,
+                    self.data_val,
+                    self.labels_val,
+                )
+            else:
+                return self.data_train, self.labels_train
 
     def prepare_training(
         self,
@@ -597,9 +640,13 @@ class snn_sleepy:
         plot_top_response_test=False,
         random_state=48,
         samples=10,
+        use_validation_data=False,
+        validation_split=0.2,
     ):
         self.dt = dt
         self.pca_variance = pca_variance
+        self.use_validation_data = use_validation_data
+        self.validation_split = validation_split
 
         # Save current parameters
         self.model_parameters = {**locals()}
@@ -782,30 +829,63 @@ class snn_sleepy:
             # loop over self.epochs
             for e in range(self.epochs):
                 # create & fetch data
-                (
-                    data_train,
-                    labels_train,
-                    data_test,
-                    labels_test,
-                ) = create_data(
-                    pixel_size=int(np.sqrt(self.N_x)),
-                    num_steps=self.num_steps,
-                    plot_comparison=False,
-                    gain=self.gain,
-                    offset=self.offset,
-                    download=download,
-                    data_dir=data_dir,
-                    first_spike_time=self.first_spike_time,
-                    time_var_input=self.time_var_input,
-                    num_images_train=self.single_train,
-                    num_images_test=self.single_test,
-                    add_breaks=self.add_breaks,
-                    break_lengths=self.break_lengths,
-                    noisy_data=self.noisy_data,
-                    noise_level=self.noise_level,
-                    idx_test=idx_test,
-                    idx_train=idx_train,
-                )
+                if self.use_validation_data:
+                    (
+                        data_train,
+                        labels_train,
+                        data_val,
+                        labels_val,
+                        data_test,
+                        labels_test,
+                    ) = create_data(
+                        pixel_size=int(np.sqrt(self.N_x)),
+                        num_steps=self.num_steps,
+                        plot_comparison=False,
+                        gain=self.gain,
+                        offset=self.offset,
+                        download=download,
+                        data_dir=data_dir,
+                        first_spike_time=self.first_spike_time,
+                        time_var_input=self.time_var_input,
+                        num_images_train=self.single_train,
+                        num_images_test=self.single_test,
+                        add_breaks=self.add_breaks,
+                        break_lengths=self.break_lengths,
+                        noisy_data=self.noisy_data,
+                        noise_level=self.noise_level,
+                        idx_test=idx_test,
+                        idx_train=idx_train,
+                        use_validation_data=True,
+                        validation_split=self.validation_split,
+                    )
+                    data_train = data_val
+                    labels_train = labels_val
+                else:
+                    (
+                        data_train,
+                        labels_train,
+                        data_test,
+                        labels_test,
+                    ) = create_data(
+                        pixel_size=int(np.sqrt(self.N_x)),
+                        num_steps=self.num_steps,
+                        plot_comparison=False,
+                        gain=self.gain,
+                        offset=self.offset,
+                        download=download,
+                        data_dir=data_dir,
+                        first_spike_time=self.first_spike_time,
+                        time_var_input=self.time_var_input,
+                        num_images_train=self.single_train,
+                        num_images_test=self.single_test,
+                        add_breaks=self.add_breaks,
+                        break_lengths=self.break_lengths,
+                        noisy_data=self.noisy_data,
+                        noise_level=self.noise_level,
+                        idx_test=idx_test,
+                        idx_train=idx_train,
+                        use_validation_data=False,
+                    )
                 idx_train += self.single_train
 
                 # Create & fetch necessary arrays

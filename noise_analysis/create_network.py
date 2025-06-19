@@ -158,7 +158,7 @@ def create_arrays(
     post_trace = np.zeros((ih - st))
 
     spikes_train = np.zeros((total_time_train, N), dtype=np.int8)
-    spikes_train[:, :st] = data_train
+    spikes_train = data_train
 
     spikes_test = np.zeros((total_time_test, N), dtype=np.int8)
     spikes_test[:, :st] = data_test

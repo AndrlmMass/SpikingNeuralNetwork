@@ -3,6 +3,8 @@ from big_comb import snn_sleepy
 # init class
 snn_N = snn_sleepy()
 
+### REMOVE PREPARE
+
 # acquire data
 snn_N.prepare_data(
     tot_images_train=5000,
@@ -40,6 +42,8 @@ snn_N.train(
     plot_spikes_train=True,
     plot_top_response_test=False,
     plot_top_response_train=False,
+    use_validation_data=True,
+    validation_split=0.2,
 )
 
 # analyze results
