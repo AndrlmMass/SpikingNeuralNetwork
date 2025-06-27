@@ -264,8 +264,6 @@ def create_data(
 
     if use_validation_data:
         return (
-            S_data_train,
-            spike_labels_train,
             S_data_val,
             spike_labels_val,
             S_data_test,

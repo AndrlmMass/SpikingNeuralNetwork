@@ -34,6 +34,20 @@ def sleep_func(
       4) Recomputes the sum to stop sleeping if below baseline.
     """
 
+    # Check for zero weights at the beginning
+    # Note: Some weights are intentionally zero for network topology, so we only check
+    # weights that were originally non-zero (those in nz_rows/nz_cols)
+    zero_count = 0
+    for i in range(nz_rows.size):
+        if weights[nz_rows[i], nz_cols[i]] == 0:
+            print(f"Zero weight found at position ({nz_rows[i]}, {nz_cols[i]})")
+            zero_count += 1
+
+    if zero_count > 0:
+        raise ValueError(
+            f"Warning: Found {zero_count} zero weights out of {nz_rows.size} total weights"
+        )
+
     # Instead of nested loops, use slicing for excitatory/inhibitory sums.
     # According to your code, columns [0, N_exc+N_x) are excitatory,
     # and columns [N_exc+N_x, N_post) are inhibitory.
@@ -86,10 +100,18 @@ def sleep_func(
         # print("decaying inh")
         # Apply decay to columns [N_x, N_post] (excitatory weights)
         for i in range(nz_rows_inh.size):
-            weights[nz_rows_inh[i], nz_cols_inh[i]] = w_target_inh * (
-                (weights[nz_rows_inh[i], nz_cols_inh[i]] / w_target_inh)
-                ** weight_decay_rate_inh
+            current_weight = weights[nz_rows_inh[i], nz_cols_inh[i]]
+            # Work with absolute values to avoid complex numbers
+            abs_weight = np.abs(current_weight)
+            abs_target = np.abs(w_target_inh)
+
+            # Apply decay to absolute values
+            new_abs_weight = (
+                abs_target * (abs_weight / abs_target) ** weight_decay_rate_inh
             )
+
+            # Apply the original sign
+            weights[nz_rows_inh[i], nz_cols_inh[i]] = -new_abs_weight
         if not sleep_synchronized:
             # Recompute the excitatory sum (only for the decayed submatrix)
             sum_weights_inh2 = 0
@@ -109,8 +131,11 @@ def sleep_func(
             sleep_now_inh = False
             sleep_now_exc = False
 
-    if np.isnan(weights).any():
-        raise SystemError("Matrix contains NaN values.")
+    for i in range(weights.shape[0]):
+        for j in range(weights.shape[1]):
+            if np.isnan(weights[i, j]):
+                print(f"Matrix contains NaN values at position ({i}, {j})")
+                raise SyntaxWarning()
 
     return weights, sleep_now_inh, sleep_now_exc
 

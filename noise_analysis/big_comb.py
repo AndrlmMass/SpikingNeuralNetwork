@@ -296,7 +296,7 @@ class snn_sleepy:
         time_var_input=False,
         min_time=None,
         gain_labels=0.5,
-        use_validation_data=False,
+        use_validation_data=True,
         validation_split=0.2,
     ):
         # Save current parameters
@@ -392,8 +392,6 @@ class snn_sleepy:
                 (
                     self.data_train,
                     self.labels_train,
-                    self.data_val,
-                    self.labels_val,
                     self.data_test,
                     self.labels_test,
                 ) = create_data(
@@ -445,11 +443,7 @@ class snn_sleepy:
                 )
             self.process(save_data=True, data_parameters=self.data_parameters)
 
-        # get data shape
-        if use_validation_data:
-            self.T_train = self.data_val.shape[0]
-        else:
-            self.T_train = self.data_train.shape[0]
+        self.T_train = self.data_train.shape[0]
         self.T_test = self.data_test.shape[0]
 
         # plot spikes
@@ -472,8 +466,6 @@ class snn_sleepy:
                 return (
                     self.data_train,
                     self.labels_train,
-                    self.data_val,
-                    self.labels_val,
                 )
             else:
                 return self.data_train, self.labels_train
@@ -526,8 +518,6 @@ class snn_sleepy:
         (
             self.mp_train,
             self.mp_test,
-            self.pre_trace,
-            self.post_trace,
             self.spikes_train,
             self.spikes_test,
         ) = create_arrays(
@@ -540,7 +530,6 @@ class snn_sleepy:
             data_train=self.data_train,
             data_test=self.data_test,
             N_x=self.N_x,
-            max_time=self.max_time,
         )
         # return results if retur == True
         if retur:
@@ -573,9 +562,9 @@ class snn_sleepy:
         w_target_inh=-0.01,
         var_noise=1,
         min_weight_inh=-25,
-        max_weight_inh=0,
+        max_weight_inh=-0.01,
         max_weight_exc=25,
-        min_weight_exc=0,
+        min_weight_exc=0.01,
         spike_threshold_default=-55,
         check_sleep_interval=10000,
         interval=1000,
@@ -739,10 +728,6 @@ class snn_sleepy:
             # Bundle common training arguments
             common_args = dict(
                 tau_syn=tau_syn,
-                tau_pre_trace_exc=tau_pre_trace_exc,
-                tau_pre_trace_inh=tau_pre_trace_inh,
-                tau_post_trace_exc=tau_post_trace_exc,
-                tau_post_trace_inh=tau_post_trace_inh,
                 resting_potential=self.resting_potential,
                 membrane_resistance=membrane_resistance,
                 min_weight_exc=min_weight_exc,
@@ -776,8 +761,6 @@ class snn_sleepy:
                 interval=interval,
                 dt=self.dt,
                 N=self.N,
-                clip_exc_weights=clip_exc_weights,
-                clip_inh_weights=clip_inh_weights,
                 A_plus=A_plus,
                 A_minus=A_minus,
                 trace_update=trace_update,
@@ -819,6 +802,7 @@ class snn_sleepy:
             I_syn = np.zeros(self.N - self.st)
             spike_times = np.zeros(self.N)
             a = np.zeros(self.N - self.st)
+
             # create spike threshold array
             spike_threshold = np.full(
                 shape=(self.ih - self.st),
@@ -829,71 +813,38 @@ class snn_sleepy:
             # loop over self.epochs
             for e in range(self.epochs):
                 # create & fetch data
-                if self.use_validation_data:
-                    (
-                        data_train,
-                        labels_train,
-                        data_val,
-                        labels_val,
-                        data_test,
-                        labels_test,
-                    ) = create_data(
-                        pixel_size=int(np.sqrt(self.N_x)),
-                        num_steps=self.num_steps,
-                        plot_comparison=False,
-                        gain=self.gain,
-                        offset=self.offset,
-                        download=download,
-                        data_dir=data_dir,
-                        first_spike_time=self.first_spike_time,
-                        time_var_input=self.time_var_input,
-                        num_images_train=self.single_train,
-                        num_images_test=self.single_test,
-                        add_breaks=self.add_breaks,
-                        break_lengths=self.break_lengths,
-                        noisy_data=self.noisy_data,
-                        noise_level=self.noise_level,
-                        idx_test=idx_test,
-                        idx_train=idx_train,
-                        use_validation_data=True,
-                        validation_split=self.validation_split,
-                    )
-                    data_train = data_val
-                    labels_train = labels_val
-                else:
-                    (
-                        data_train,
-                        labels_train,
-                        data_test,
-                        labels_test,
-                    ) = create_data(
-                        pixel_size=int(np.sqrt(self.N_x)),
-                        num_steps=self.num_steps,
-                        plot_comparison=False,
-                        gain=self.gain,
-                        offset=self.offset,
-                        download=download,
-                        data_dir=data_dir,
-                        first_spike_time=self.first_spike_time,
-                        time_var_input=self.time_var_input,
-                        num_images_train=self.single_train,
-                        num_images_test=self.single_test,
-                        add_breaks=self.add_breaks,
-                        break_lengths=self.break_lengths,
-                        noisy_data=self.noisy_data,
-                        noise_level=self.noise_level,
-                        idx_test=idx_test,
-                        idx_train=idx_train,
-                        use_validation_data=False,
-                    )
+                (
+                    data_train,
+                    labels_train,
+                    data_test,
+                    labels_test,
+                ) = create_data(
+                    pixel_size=int(np.sqrt(self.N_x)),
+                    num_steps=self.num_steps,
+                    plot_comparison=False,
+                    gain=self.gain,
+                    offset=self.offset,
+                    download=download,
+                    data_dir=data_dir,
+                    first_spike_time=self.first_spike_time,
+                    time_var_input=self.time_var_input,
+                    num_images_train=self.single_train,
+                    num_images_test=self.single_test,
+                    add_breaks=self.add_breaks,
+                    break_lengths=self.break_lengths,
+                    noisy_data=self.noisy_data,
+                    noise_level=self.noise_level,
+                    idx_test=idx_test,
+                    idx_train=idx_train,
+                    use_validation_data=self.use_validation_data,
+                    validation_split=self.validation_split,
+                )
                 idx_train += self.single_train
 
                 # Create & fetch necessary arrays
                 (
                     mp_train,
                     mp_test,
-                    pre_tr,
-                    post_tr,
                     spikes_train,
                     spikes_test,
                 ) = create_arrays(
@@ -906,7 +857,6 @@ class snn_sleepy:
                     data_train=data_train,
                     data_test=data_test,
                     N_x=self.N_x,
-                    max_time=self.max_time,
                 )
 
                 # 3a) Train on the training set
@@ -934,10 +884,7 @@ class snn_sleepy:
                     mean_noise=mean_noise,
                     var_noise=var_noise,
                     spikes=spikes_train.copy(),
-                    pre_trace=pre_tr.copy(),
-                    post_trace=post_tr.copy(),
                     check_sleep_interval=check_sleep_interval,
-                    alpha=alpha,
                     timing_update=timing_update,
                     spike_times=spike_times.copy(),
                     spike_threshold=spike_threshold.copy(),
@@ -967,10 +914,7 @@ class snn_sleepy:
                     mean_noise=mean_noise,
                     var_noise=var_noise,
                     spikes=spikes_test.copy(),
-                    pre_trace=pre_tr.copy(),
-                    post_trace=post_tr.copy(),
                     check_sleep_interval=check_sleep_interval,
-                    alpha=alpha,
                     timing_update=timing_update,
                     spike_times=spike_times.copy(),
                     a=a.copy(),
@@ -1202,8 +1146,6 @@ class snn_sleepy:
                             labels_train,
                             data_test,
                             labels_test,
-                            labels_true_train,
-                            labels_true_test,
                         ) = create_data(
                             pixel_size=int(np.sqrt(self.N_x)),
                             num_steps=self.num_steps,
@@ -1231,11 +1173,8 @@ class snn_sleepy:
                         (
                             mp_train,
                             mp_test,
-                            pre_tr,
-                            post_tr,
                             spikes_train_init,
                             spikes_test_init,
-                            spike_times,
                         ) = create_arrays(
                             N=self.N,
                             N_exc=self.N_exc,
@@ -1245,11 +1184,8 @@ class snn_sleepy:
                             total_time_test=self.T_test,
                             data_train=data_train,
                             data_test=data_test,
-                            supervised=self.supervised,
-                            unsupervised=self.unsupervised,
                             N_classes=self.N_classes,
                             N_x=self.N_x,
-                            max_time=self.max_time,
                             labels_true=labels_true_train,
                         )
 
@@ -1332,7 +1268,6 @@ class snn_sleepy:
                                 pre_trace=pre_tr.copy(),
                                 post_trace=post_tr.copy(),
                                 check_sleep_interval=check_sleep_interval,
-                                alpha=alpha,
                                 timing_update=timing_update,
                                 spike_times=spike_times.copy(),
                                 final=False,
@@ -1356,10 +1291,7 @@ class snn_sleepy:
                                 mean_noise=mean_noise,
                                 var_noise=var_noise,
                                 spikes=spikes_test_init.copy(),
-                                pre_trace=pre_tr.copy(),
-                                post_trace=post_tr.copy(),
                                 check_sleep_interval=check_sleep_interval,
-                                alpha=alpha,
                                 timing_update=timing_update,
                                 spike_times=spike_times.copy(),
                                 final=False,
@@ -1411,9 +1343,8 @@ class snn_sleepy:
 
                         # 6) Clean up per-sample data to free memory
                         del data_train, labels_train, data_test, labels_test
-                        del labels_true_train, labels_true_test
-                        del mp_train, mp_test, pre_tr, post_tr
-                        del spikes_train_init, spikes_test_init, spike_times
+                        del mp_train, mp_test
+                        del spikes_train_init, spikes_test_init
                         gc.collect()
 
                 # save phi scores, sleep lengths and amounts

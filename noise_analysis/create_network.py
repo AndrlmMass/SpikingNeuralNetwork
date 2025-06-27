@@ -137,7 +137,6 @@ def create_arrays(
     resting_membrane,
     total_time_train,
     total_time_test,
-    max_time,
     data_train,
     data_test,
     N_x,
@@ -154,22 +153,15 @@ def create_arrays(
     membrane_potential_test = np.zeros((total_time_test, ih - st))
     membrane_potential_test[0] = resting_membrane
 
-    pre_trace = np.zeros((ih))
-    post_trace = np.zeros((ih - st))
-
     spikes_train = np.zeros((total_time_train, N), dtype=np.int8)
-    spikes_train = data_train
+    spikes_train[:, :st] = data_train
 
     spikes_test = np.zeros((total_time_test, N), dtype=np.int8)
     spikes_test[:, :st] = data_test
 
-    spike_times = np.random.randint(low=max_time, high=max_time**2, size=N)
-
     return (
         membrane_potential_train,
         membrane_potential_test,
-        pre_trace,
-        post_trace,
         spikes_train,
         spikes_test,
     )

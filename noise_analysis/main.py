@@ -24,6 +24,7 @@ snn_N.prepare_training(
     plot_weights=False,
 )
 
+
 # train network
 snn_N.train(
     train_weights=True,
@@ -38,7 +39,7 @@ snn_N.train(
     samples=10,
     force_train=False,
     plot_weights=True,
-    sleep_synchronized=False,
+    sleep_synchronized=True,
     plot_spikes_train=True,
     plot_top_response_test=False,
     plot_top_response_train=False,
