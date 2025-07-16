@@ -29,6 +29,11 @@ class snn_sleepy:
         N_x=225,
         classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
     ):
+        # Change to the noise_analysis directory if not already there
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        if os.getcwd() != script_dir:
+            os.chdir(script_dir)
+
         self.N_exc = N_exc
         self.N_inh = N_inh
         self.N_x = N_x
@@ -90,6 +95,9 @@ class snn_sleepy:
 
         if load_data:
             # Define folder to load data
+            if not os.path.exists("data/sdata"):
+                os.makedirs("data/sdata")
+
             folders = os.listdir("data/sdata")
 
             # Search for existing data gens
