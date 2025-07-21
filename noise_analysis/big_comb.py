@@ -68,16 +68,20 @@ class snn_sleepy:
 
         ########## load or save data ##########
         if save_data:
+            # Ensure data/sdata directory exists
+            if not os.path.exists("data/sdata"):
+                os.makedirs("data/sdata", exist_ok=True)
+
             # generate random number to create unique folder
             rand_nums = np.random.randint(low=0, high=9, size=5)
 
             # Check if folder already exists
-            while any(item in os.listdir("data") for item in rand_nums):
-                rand_nums = random.randint(low=0, high=9, size=5)[0]
+            while str(rand_nums) in os.listdir("data/sdata"):
+                rand_nums = np.random.randint(low=0, high=9, size=5)
 
             # Create folder to store data
             data_dir = os.path.join("data/sdata", str(rand_nums))
-            os.makedirs(data_dir)
+            os.makedirs(data_dir, exist_ok=True)
 
             # Save training data and labels
             np.save(os.path.join(data_dir, "data_train.npy"), self.data_train)
@@ -96,7 +100,7 @@ class snn_sleepy:
         if load_data:
             # Define folder to load data
             if not os.path.exists("data/sdata"):
-                os.makedirs("data/sdata")
+                os.makedirs("data/sdata", exist_ok=True)
 
             folders = os.listdir("data/sdata")
 
@@ -135,18 +139,18 @@ class snn_sleepy:
 
         if save_model:
             if not os.path.exists("model"):
-                os.makedirs("model")
+                os.makedirs("model", exist_ok=True)
 
             # generate random number to create unique folder
             rand_nums = np.random.randint(low=0, high=9, size=5)
 
             # Check if folder already exists
-            while any(item in os.listdir("data") for item in rand_nums):
-                rand_nums = random.randint(low=0, high=9, size=5)[0]
+            while str(rand_nums) in os.listdir("model"):
+                rand_nums = np.random.randint(low=0, high=9, size=5)
 
             # Create folder to store data
             model_dir = os.path.join("model", str(rand_nums))
-            os.makedirs(model_dir)
+            os.makedirs(model_dir, exist_ok=True)
 
             # Save training data and labels
             np.save(os.path.join(model_dir, "weights.npy"), self.weights)
@@ -255,7 +259,7 @@ class snn_sleepy:
         if save_phi_model:
             # create sub-folder in already created folder (model dir) for each sleep score
             data_dir = os.path.join(model_dir_, str(sleep_scores))
-            os.makedirs(data_dir)
+            os.makedirs(data_dir, exist_ok=True)
 
             # save phi_all_scores
             np.save(
@@ -353,6 +357,10 @@ class snn_sleepy:
             # Define data parameters
             data_parameters = {"pixel_size": int(np.sqrt(self.N_x)), "train_": train_}
 
+            # Ensure data/mdata directory exists
+            if not os.path.exists("data/mdata"):
+                os.makedirs("data/mdata")
+
             # Define folder to load data
             folders = os.listdir("data/mdata")
 
@@ -379,16 +387,20 @@ class snn_sleepy:
             # get dataset with progress bar
             print("\rDownloading MNIST dataset...", end="")
             if download == True:
+                # Ensure data/mdata directory exists
+                if not os.path.exists("data/mdata"):
+                    os.makedirs("data/mdata", exist_ok=True)
+
                 # generate random number to create unique folder
                 rand_nums = np.random.randint(low=0, high=9, size=5)
 
                 # Check if folder already exists
-                while any(item in os.listdir("data") for item in rand_nums):
+                while str(rand_nums) in os.listdir("data/mdata"):
                     rand_nums = np.random.randint(low=0, high=9, size=5)
 
                 # Create folder to store data
                 data_dir = os.path.join("data/mdata", str(rand_nums))
-                os.makedirs(data_dir)
+                os.makedirs(data_dir, exist_ok=True)
 
                 # Save data parameters
                 filepath = os.path.join(data_dir, "data_parameters.json")
@@ -485,7 +497,7 @@ class snn_sleepy:
         w_dense_ee=0.01,
         w_dense_se=0.05,
         w_dense_ei=0.05,
-        w_dense_ie=0.1,
+        w_dense_ie=0.05,
         resting_membrane=-70,
         max_time=100,
         retur=False,
@@ -599,7 +611,6 @@ class snn_sleepy:
         beta=1.0,
         A_plus=0.5,
         A_minus=0.5,
-        test=True,
         tau_LTD=10,
         tau_LTP=10,
         early_stopping=False,
@@ -631,7 +642,7 @@ class snn_sleepy:
         plot_epoch_performance=True,
         narrow_top=0.05,
         wide_top=0.15,
-        tau_syn=7.5,
+        tau_syn=30,
         smoothening=350,
         plot_top_response_train=False,
         plot_top_response_test=False,
@@ -651,7 +662,6 @@ class snn_sleepy:
             "self",
             "force_train",
             "save_model",
-            "test",
             "plot_mp_train",
             "plot_mp_test",
             "plot_spikes_train",
@@ -697,6 +707,10 @@ class snn_sleepy:
         if not self.model_loaded:
             # get data_dir for retrieving MNIST-images
             data_parameters = {"pixel_size": int(np.sqrt(self.N_x)), "train_": True}
+
+            # Ensure data/mdata directory exists
+            if not os.path.exists("data/mdata"):
+                os.makedirs("data/mdata", exist_ok=True)
 
             # Define folder to load data
             folders = os.listdir("data/mdata")
@@ -875,8 +889,8 @@ class snn_sleepy:
                     w4p_exc_tr,
                     w4p_inh_tr,
                     thresh_tr,
-                    mx_w_exc_tr,
                     mx_w_inh_tr,
+                    mx_w_exc_tr,
                     labels_tr_out,
                     sleep_tr_out,
                     I_syn,
@@ -951,9 +965,10 @@ class snn_sleepy:
                     st=self.st,
                     num_classes=self.N_classes,
                     narrow_top=narrow_top,
-                    smoothening=smoothening,
+                    smoothening=self.num_steps,
                     train=False,
-                    compute_not_plot=True,
+                    compute_not_plot=False,
+                    n_last_points=10000,
                 )
 
                 # Update performance tracking
@@ -966,13 +981,25 @@ class snn_sleepy:
                 if early_stopping and e > interval_ES:
                     start = max(0, e - interval_ES)
                     mu = np.mean(self.performance_tracker[start:e, 1])
-                    if acc_te < mu:
-                        break
+
+                if plot_spikes_train:
+                    if start_time_spike_plot == None:
+                        start_time_spike_plot = int(spikes_tr_out.shape[0] * 0.95)
+                    if stop_time_spike_plot == None:
+                        stop_time_spike_plot = spikes_tr_out.shape[0]
+
+                    spike_plot(
+                        spikes_tr_out[start_time_spike_plot:stop_time_spike_plot],
+                        labels_tr_out[start_time_spike_plot:stop_time_spike_plot],
+                    )
 
                 # Rinse memory
                 if e != self.epochs - 1:
                     del data_train, labels_train, data_test, labels_test
-                    del mp_train, mp_test, pre_tr, post_tr
+                    del (
+                        mp_train,
+                        mp_test,
+                    )
                     del (
                         weights_te,
                         spikes_te_out,
@@ -990,7 +1017,10 @@ class snn_sleepy:
                     )
 
                 pbar.set_description(f"Epoch {e+1}/{self.epochs}")
-                pbar.set_postfix(acc=f"{acc_te:.3f}", phi=f"{phi_te:.2f}")
+                # Handle None values safely
+                acc_str = f"{acc_te:.3f}" if acc_te is not None else "N/A"
+                phi_str = f"{phi_te:.2f}" if phi_te is not None else "N/A"
+                pbar.set_postfix(acc=acc_str, phi=phi_str)
                 pbar.update(1)
             pbar.close()
 
@@ -1125,6 +1155,10 @@ class snn_sleepy:
                 self.phi_all_scores = np.zeros((len(decay_pairs), samples, 9))
                 # Define data parameters
                 data_parameters = {"pixel_size": int(np.sqrt(self.N_x)), "train_": True}
+
+                # Ensure data/mdata directory exists
+                if not os.path.exists("data/mdata"):
+                    os.makedirs("data/mdata", exist_ok=True)
 
                 # Define folder to load data
                 folders = os.listdir("data/mdata")
@@ -1328,7 +1362,7 @@ class snn_sleepy:
                                 st=self.st,
                                 num_classes=self.N_classes,
                                 narrow_top=narrow_top,
-                                smoothening=smoothening,
+                                smoothening=self.num_steps,
                                 train=False,
                                 compute_not_plot=True,
                             )

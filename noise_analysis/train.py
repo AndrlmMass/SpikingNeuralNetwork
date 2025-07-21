@@ -2,7 +2,7 @@ from numba.typed import List
 from numba import njit
 from tqdm import tqdm
 import numpy as np
-from weight_funcs import sleep_func, spike_timing, vectorized_trace_func, trace_STDP
+from weight_funcs import sleep_func, spike_timing, vectorized_trace_func
 
 
 @njit
@@ -97,6 +97,18 @@ def update_weights(
     Returns:
     - Updated weights.
     """
+    # Clip weights before sleep to prevent zero/negative weights
+    weights = clip_weights(
+        weights=weights,
+        nz_cols_exc=nz_cols_exc,
+        nz_cols_inh=nz_cols_inh,
+        nz_rows_exc=nz_rows_exc,
+        nz_rows_inh=nz_rows_inh,
+        min_weight_exc=min_weight_exc,
+        max_weight_exc=max_weight_exc,
+        min_weight_inh=min_weight_inh,
+        max_weight_inh=max_weight_inh,
+    )
 
     if sleep:
         now = t % check_sleep_interval
@@ -127,19 +139,6 @@ def update_weights(
                 nz_rows_inh=nz_rows_inh,
                 nz_cols_exc=nz_cols_exc,
                 nz_cols_inh=nz_cols_inh,
-            )
-
-            # Clip weights after sleep to prevent zero/negative weights
-            weights = clip_weights(
-                weights=weights,
-                nz_cols_exc=nz_cols_exc,
-                nz_cols_inh=nz_cols_inh,
-                nz_rows_exc=nz_rows_exc,
-                nz_rows_inh=nz_rows_inh,
-                min_weight_exc=min_weight_exc,
-                max_weight_exc=max_weight_exc,
-                min_weight_inh=min_weight_inh,
-                max_weight_inh=max_weight_inh,
             )
 
     if timing_update:
@@ -187,9 +186,9 @@ def update_weights(
 
 
 def update_membrane_potential(
-    spikes,
-    weights,
     mp,
+    weights,
+    spikes,
     noisy_potential,
     resting_potential,
     membrane_resistance,
@@ -208,11 +207,13 @@ def update_membrane_potential(
         gaussian_noise = 0
 
     mp_new = mp.copy()
-    # before the membrane update
-    I_syn += (-I_syn + np.dot(weights.T, spikes)) * dt / tau_syn
-    mp_delta = (-(mp - resting_potential) + membrane_resistance * I_syn) / tau_m * dt
+    # Update synaptic current (avoid in-place modification)
+    I_syn_new = I_syn + (-I_syn + np.dot(weights.T, spikes)) * dt / tau_syn
+    mp_delta = (
+        (-(mp - resting_potential) + membrane_resistance * I_syn_new) / tau_m * dt
+    )
     mp_new += mp_delta + gaussian_noise
-    return mp_new
+    return mp_new, I_syn_new
 
 
 def update_spikes(
@@ -374,7 +375,7 @@ def train_network(
     sleep_amount = 0
     for t in tqdm(range(1, T), desc=desc, leave=False):
         # update membrane potential
-        mp[t] = update_membrane_potential(
+        mp[t], I_syn = update_membrane_potential(
             mp=mp[t - 1],
             weights=weights[:, st:ih],
             spikes=spikes[t - 1],

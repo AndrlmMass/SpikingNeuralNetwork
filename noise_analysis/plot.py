@@ -1,4 +1,5 @@
 import os
+import random
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -8,6 +9,7 @@ matplotlib.use("TkAgg")
 
 
 def get_elite_nodes(spikes, labels, num_classes, narrow_top, st, ih):
+
     # remove unnecessary data periods
     mask_break = (labels != -1) & (labels != -2)
     spikes = spikes[mask_break, :]
@@ -35,11 +37,29 @@ def get_elite_nodes(spikes, labels, num_classes, narrow_top, st, ih):
     ratio = responses / total_responses_reshaped
     responses *= ratio
 
-    # sort performance
-    responses_indices = np.argsort(responses, 0)[::-1, :]
+    # Now, assign nodes to their preferred class (highest response)
     top_k = int(spikes.shape[1] * narrow_top)
+    preferred = {cl: [] for cl in range(num_classes)}
 
-    final_indices = responses_indices[:top_k]
+    for node in range(responses.shape[0]):
+        valid_classes = np.where(~np.isnan(responses[node]))[0]
+        if len(valid_classes) == 0:
+            continue
+        max_idx = np.argmax(responses[node, valid_classes])
+        pref_cl = valid_classes[max_idx]
+        score = responses[node, pref_cl]
+        preferred[pref_cl].append((score, node))
+
+    # For each class, sort by score descending and take top_k
+    final_indices = np.full((top_k, num_classes), -1, dtype=int)
+    for cl in range(num_classes):
+        if cl in preferred and preferred[cl]:
+            sorted_list = sorted(preferred[cl], reverse=True)  # sorts by score first
+            sorted_nodes = [node for score, node in sorted_list]
+            take = min(top_k, len(sorted_nodes))
+            final_indices[:take, cl] = sorted_nodes[:take]
+
+    print(final_indices)
 
     return final_indices, spikes, labels
 
@@ -80,6 +100,7 @@ def top_responders_plotted(
     smoothening,
     train,
     compute_not_plot,
+    n_last_points=None,
 ):
 
     # get indicess
@@ -172,20 +193,32 @@ def top_responders_plotted(
     for c in range(num_classes):
         activity = np.sum(spikes[:, indices[:, c]], axis=1)
         acts[:, c] = activity
-        ax[0].plot(activity, color=colors[c], label=f"Class {c}")
+
+    # Determine the range of points to plot for activity
+    if n_last_points is not None and n_last_points < len(acts):
+        start_idx = len(acts) - n_last_points
+        plot_acts = acts[start_idx:]
+        plot_labels = labels[start_idx:]
+    else:
+        plot_acts = acts
+        plot_labels = labels
+
+    # Plot activity for each class
+    for c in range(num_classes):
+        ax[0].plot(plot_acts[:, c], color=colors[c], label=f"Class {c}")
 
     # Add the horizontal line below the spikes
     y_offset = 0
-    box_height = np.max(acts)
+    box_height = np.max(plot_acts)
 
     # We iterate through the time steps to identify contiguous segments
     segment_start = 0
-    current_label = labels[0]
+    current_label = plot_labels[0]
     labeled_classes = set()
 
     # Loop through the labels to draw segments
-    for i in range(1, len(labels)):
-        if labels[i] != current_label:
+    for i in range(1, len(plot_labels)):
+        if plot_labels[i] != current_label:
             # Draw a rectangle patch for the segment that just ended
             rect = patches.Rectangle(
                 (segment_start, y_offset),
@@ -200,7 +233,7 @@ def top_responders_plotted(
             labeled_classes.add(current_label)
 
             # Update for the new segment
-            current_label = labels[i]
+            current_label = plot_labels[i]
             segment_start = i
 
     # Handle the final segment
@@ -209,7 +242,7 @@ def top_responders_plotted(
     )
     rect = patches.Rectangle(
         (segment_start, y_offset),
-        len(labels) - segment_start,
+        len(plot_labels) - segment_start,
         box_height,
         linewidth=2,
         edgecolor=colors_adjusted[current_label],
@@ -249,6 +282,31 @@ def spike_plot(data, labels):
             f"Labels length ({len(labels)}) must match the number of time steps ({data.shape[0]})."
         )
 
+    # Debug: Print data information
+    print(f"Data shape: {data.shape}")
+    print(f"Data type: {data.dtype}")
+    print(f"Data min/max: {data.min()}/{data.max()}")
+    print(f"Number of non-zero elements: {np.count_nonzero(data)}")
+    print(f"Unique values in data: {np.unique(data)}")
+
+    # Check if there are any spikes at all
+    if np.count_nonzero(data) == 0:
+        print("WARNING: No spikes found in the data!")
+        print("This could be because:")
+        print(
+            "1. The time window is too small (only last 5% of data is shown by default)"
+        )
+        print("2. The neurons selected don't have spikes")
+        print("3. The spike data format is different than expected")
+        print("4. The network hasn't learned to spike yet")
+        print("\nSuggestions:")
+        print(
+            "- Try using a larger time window by setting start_time_spike_plot to an earlier time"
+        )
+        print("- Check if the network is actually producing spikes during training")
+        print("- Verify that the spike data contains non-zero values")
+        return
+
     # Assign colors to unique labels (excluding -1 if desired)
     valid_label_mask = labels != -1
     unique_labels = np.unique(labels[valid_label_mask])
@@ -256,7 +314,26 @@ def spike_plot(data, labels):
     label_colors = {label: color for label, color in zip(unique_labels, colors)}
 
     # Collect spike positions for each neuron
-    positions = [np.where(data[:, n] == 1)[0] for n in range(data.shape[1])]
+    # Try different spike representations
+    if np.any(data > 0):
+        # If there are positive values, use those as spikes
+        spike_threshold = 0
+        print(f"Using positive values as spikes (threshold > {spike_threshold})")
+    else:
+        # Default to looking for exactly 1
+        spike_threshold = 1
+        print(f"Using exact value {spike_threshold} as spikes")
+
+    positions = [
+        np.where(data[:, n] > spike_threshold)[0] for n in range(data.shape[1])
+    ]
+
+    # Debug: Print spike information
+    total_spikes = sum(len(pos) for pos in positions)
+    print(f"Total spikes found: {total_spikes}")
+    print(
+        f"Spikes per neuron: {[len(pos) for pos in positions[:10]]}..."
+    )  # First 10 neurons
 
     # Create the figure and axes
     fig, ax = plt.subplots(figsize=(12, 6))
