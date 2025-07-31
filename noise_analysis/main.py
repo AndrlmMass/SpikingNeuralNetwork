@@ -3,14 +3,12 @@ from big_comb import snn_sleepy
 # init class
 snn_N = snn_sleepy()
 
-### REMOVE PREPARE
-
 # acquire data
 snn_N.prepare_data(
     tot_images_train=60000,
     single_train=500,
     single_test=200,
-    tot_images_test=10000,
+    tot_images_test=1000,
     add_breaks=False,
     force_recreate=False,
     noisy_data=True,

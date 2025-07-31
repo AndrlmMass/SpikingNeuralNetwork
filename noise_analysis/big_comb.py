@@ -384,6 +384,9 @@ class snn_sleepy:
             else:
                 download = True
 
+            # Clean up data directory search variables
+            del folders, folder, json_file_path, ex_params
+
             # get dataset with progress bar
             print("\rDownloading MNIST dataset...", end="")
             if download == True:
@@ -802,6 +805,11 @@ class snn_sleepy:
                 N_x=self.N_x,
             )
 
+            # Clean up weight calculation variables after they're used in common_args
+            del sum_weights_exc, sum_weights_inh, sum_weights
+            del baseline_sum_exc, baseline_sum_inh, baseline_sum
+            del max_sum_exc, max_sum_inh, max_sum
+
             # pre-define performance tracking array
             self.performance_tracker = np.zeros((self.epochs, 2))
 
@@ -863,6 +871,9 @@ class snn_sleepy:
                     use_validation_data=self.use_validation_data,
                     validation_split=self.validation_split,
                 )
+
+                # Clean up unused variables
+                del unused
                 idx_train += self.single_train
 
                 # Update T_train and T_test to match the actual data shapes
@@ -956,6 +967,9 @@ class snn_sleepy:
                         use_validation_data=self.use_validation_data,
                         validation_split=self.validation_split,
                     )
+
+                    # Clean up unused variables
+                    del unused
 
                     # Update T_test for this batch
                     T_test_batch = data_test.shape[0]
@@ -1077,11 +1091,17 @@ class snn_sleepy:
                         spikes_te_out,
                         labels_te_out,
                         sleep_te_out,
+                        I_syn_te,
+                        spike_times_te,
+                        a_te,
                     )
                     # Clean up training results
                     del mp_train, spikes_tr_out, labels_tr_out, sleep_tr_out
                     # Clean up accumulated arrays
                     del all_spikes_test, all_labels_test, all_mp_test
+                    # Clean up temporary variables
+                    del phi_tr, phi_te, acc_te, test_acc, test_phi
+                    del T_test_batch, st, ex, ih
                     gc.collect()
 
                 # if plot_weights:
@@ -1099,6 +1119,12 @@ class snn_sleepy:
                 pbar.set_postfix(acc=acc_str, phi=phi_str)
                 pbar.update(1)
             pbar.close()
+
+            # Clean up main training loop variables
+            del I_syn, spike_times, a, spike_threshold
+            del common_args, total_num_tests, idx_train, idx_test
+            del interval_ES, download, data_dir
+            gc.collect()
 
         if save_model and not self.model_loaded:
             self.spikes_train = spikes_tr_out
@@ -1257,6 +1283,9 @@ class snn_sleepy:
                 with tqdm(
                     total=len(decay_pairs) * samples, desc="Computing φ scores"
                 ) as pbar:
+                    # Clean up variables that are no longer needed
+                    del data_parameters, folders, folder, json_file_path, ex_params
+                    gc.collect()
                     for t in range(samples):
                         # 1) Generate fresh data for this sample
                         (
@@ -1389,6 +1418,9 @@ class snn_sleepy:
                                 **common_args,
                             )
 
+                            # Clean up unused variables
+                            del unused
+
                             # 3b) Test on the test set
                             (
                                 weights_te,
@@ -1412,6 +1444,9 @@ class snn_sleepy:
                                 final=False,
                                 **common_args,
                             )
+
+                            # Clean up unused variables
+                            del unused
 
                             # 4) Compute phi metrics using the trained outputs
                             phi_tr, phi_te, wcss_tr, wcss_te, bcss_tr, bcss_te = (
@@ -1460,6 +1495,12 @@ class snn_sleepy:
                         del data_train, labels_train, data_test, labels_test
                         del mp_train, mp_test
                         del spikes_train_init, spikes_test_init
+                        # Clean up training and test results from decay rate loop
+                        del weights_tr, spikes_tr_out, labels_tr_out, sleep_tr_out
+                        del weights_te, spikes_te_out, labels_te_out, sleep_te_out
+                        del phi_tr, phi_te, wcss_tr, wcss_te, bcss_tr, bcss_te, acc_te
+                        # Clean up common_args for this decay rate iteration
+                        del common_args
                         gc.collect()
 
                 # save phi scores, sleep lengths and amounts
@@ -1468,6 +1509,10 @@ class snn_sleepy:
                     model_dir_=model_dir,
                     sleep_scores=weight_decay_rate_exc,
                 )
+
+                # Clean up compare_decay_rates variables
+                del decay_pairs, pbar
+                gc.collect()
 
             # plot phi and sleep amounts with linear regression
             plot_phi_acc(
