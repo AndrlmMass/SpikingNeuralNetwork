@@ -5,3 +5,4 @@ plot_files/
 sdata/
 pycache/
 *.pkl
+*.pyc
