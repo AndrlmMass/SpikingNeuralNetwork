@@ -7,14 +7,15 @@ snn_N = snn_sleepy()
 
 # acquire data
 snn_N.prepare_data(
-    tot_images_train=10000,
-    single_train=1000,
+    tot_images_train=60000,
+    single_train=500,
     single_test=200,
-    tot_images_test=1000,
+    tot_images_test=10000,
     add_breaks=False,
     force_recreate=False,
     noisy_data=True,
     gain=1.0,
+    noise_level=0.001,
 )
 
 # set up network for training
@@ -26,7 +27,7 @@ snn_N.prepare_training(
     w_dense_ie=0.5,
     se_weights=0.5,
     ee_weights=0.05,
-    ei_weights=0.3,
+    ei_weights=0.4,
     ie_weights=-0.8,
 )
 
@@ -46,18 +47,20 @@ snn_N.train(
     force_train=False,
     plot_spikes_train=True,
     plot_weights=True,
+    plot_epoch_performance=True,
     sleep_synchronized=True,
     plot_top_response_test=False,
     plot_top_response_train=False,
-    use_validation_data=True,
+    use_validation_data=False,
     validation_split=0.2,
     tau_syn=30,
-    narrow_top=0.1,
-    A_minus=0.5,
+    narrow_top=0.2,
+    A_minus=0.7,
     A_plus=0.5,
-    tau_LTD=8,
+    tau_LTD=7.5,
     tau_LTP=10,
     learning_rate_exc=0.001,
+    learning_rate_inh=0.005,
 )
 
 # analyze results

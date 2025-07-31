@@ -834,12 +834,14 @@ class snn_sleepy:
 
             # loop over self.epochs
             for e in range(self.epochs):
+                # Reset test index for each epoch
+                idx_test = 0
+
                 # create & fetch data
                 (
                     data_train,
                     labels_train,
-                    data_test,
-                    labels_test,
+                    *unused,
                 ) = create_data(
                     pixel_size=int(np.sqrt(self.N_x)),
                     num_steps=self.num_steps,
@@ -863,21 +865,24 @@ class snn_sleepy:
                 )
                 idx_train += self.single_train
 
+                # Update T_train and T_test to match the actual data shapes
+                self.T_train = data_train.shape[0]
+
                 # Create & fetch necessary arrays
                 (
                     mp_train,
-                    mp_test,
+                    _,
                     spikes_train,
-                    spikes_test,
+                    _,
                 ) = create_arrays(
                     N=self.N,
                     N_exc=self.N_exc,
                     N_inh=self.N_inh,
                     resting_membrane=self.resting_potential,
                     total_time_train=self.T_train,
-                    total_time_test=self.T_test,
+                    total_time_test=0,
                     data_train=data_train,
-                    data_test=data_test,
+                    data_test=None,
                     N_x=self.N_x,
                 )
 
@@ -914,62 +919,128 @@ class snn_sleepy:
                     I_syn=I_syn.copy(),
                     **common_args,
                 )
+                total_num_tests = self.tot_images_test // self.single_test
+                test_acc = 0
+                test_phi = 0
 
-                # 3b) Test on the test set
-                (
-                    weights_te,
-                    spikes_te_out,
-                    mp_te,
-                    *unused,
-                    labels_te_out,
-                    sleep_te_out,
-                    I_syn_te,
-                    spike_times_te,
-                    a_te,
-                ) = train_network(
-                    weights=self.weights.copy(),
-                    spike_labels=labels_test.copy(),
-                    mp=mp_test.copy(),
-                    sleep=False,
-                    train_weights=False,
-                    T=self.T_test,
-                    mean_noise=mean_noise,
-                    var_noise=var_noise,
-                    spikes=spikes_test.copy(),
-                    check_sleep_interval=check_sleep_interval,
-                    timing_update=timing_update,
-                    spike_times=spike_times.copy(),
-                    a=a.copy(),
-                    I_syn=I_syn.copy(),
-                    spike_threshold=spike_threshold.copy(),
-                    **common_args,
-                )
+                # Initialize arrays to store accumulated test results
+                all_spikes_test = []
+                all_labels_test = []
+                all_mp_test = []
 
-                # 4) Compute phi metrics using the trained outputs
-                phi_tr, phi_te, *unused = calculate_phi(
-                    spikes_train=spikes_tr_out[:, self.st :],
-                    spikes_test=spikes_te_out[:, self.st :],
-                    labels_train=labels_tr_out,
-                    labels_test=labels_te_out,
-                    num_steps=self.num_steps,
-                    pca_variance=self.pca_variance,
-                    random_state=random_state,
-                    num_classes=self.N_classes,
-                )
+                for test in range(total_num_tests):
+                    idx_test += self.single_test
+                    # retrieve data
+                    (
+                        *unused,
+                        data_test,
+                        labels_test,
+                    ) = create_data(
+                        pixel_size=int(np.sqrt(self.N_x)),
+                        num_steps=self.num_steps,
+                        plot_comparison=False,
+                        gain=self.gain,
+                        offset=self.offset,
+                        download=download,
+                        data_dir=data_dir,
+                        first_spike_time=self.first_spike_time,
+                        time_var_input=self.time_var_input,
+                        num_images_train=self.single_train,
+                        num_images_test=self.single_test,
+                        add_breaks=self.add_breaks,
+                        break_lengths=self.break_lengths,
+                        noisy_data=self.noisy_data,
+                        noise_level=self.noise_level,
+                        idx_test=idx_test,
+                        idx_train=idx_train,
+                        use_validation_data=self.use_validation_data,
+                        validation_split=self.validation_split,
+                    )
 
-                # calculate accuracy
-                acc_te = top_responders_plotted(
-                    spikes=spikes_te_out[:, self.st :],
-                    labels=labels_te_out,
-                    ih=self.ih,
-                    st=self.st,
-                    num_classes=self.N_classes,
-                    narrow_top=narrow_top,
-                    smoothening=self.num_steps,
-                    train=False,
-                    compute_not_plot=False,
-                    n_last_points=10000,
-                )
+                    # Update T_test for this batch
+                    T_test_batch = data_test.shape[0]
+
+                    # Create test arrays directly
+                    st = self.N_x  # stimulation
+                    ex = st + self.N_exc  # excitatory
+                    ih = ex + self.N_inh  # inhibitory
+
+                    mp_test = np.zeros((T_test_batch, ih - st))
+                    mp_test[0] = self.resting_potential
+
+                    spikes_test = np.zeros((T_test_batch, self.N), dtype=np.int8)
+                    spikes_test[:, :st] = data_test
+
+                    # 3b) Test on the test set
+                    (
+                        weights_te,
+                        spikes_te_out,
+                        mp_te,
+                        *unused,
+                        labels_te_out,
+                        sleep_te_out,
+                        I_syn_te,
+                        spike_times_te,
+                        a_te,
+                    ) = train_network(
+                        weights=self.weights.copy(),
+                        spike_labels=labels_test.copy(),
+                        mp=mp_test.copy(),
+                        sleep=False,
+                        train_weights=False,
+                        T=T_test_batch,
+                        mean_noise=mean_noise,
+                        var_noise=var_noise,
+                        spikes=spikes_test.copy(),
+                        check_sleep_interval=check_sleep_interval,
+                        timing_update=timing_update,
+                        spike_times=spike_times.copy(),
+                        a=a.copy(),
+                        I_syn=I_syn.copy(),
+                        spike_threshold=spike_threshold.copy(),
+                        **common_args,
+                    )
+
+                    # Store results for accumulation
+                    all_spikes_test.append(spikes_te_out)
+                    all_labels_test.append(labels_te_out)
+                    all_mp_test.append(mp_te)
+
+                    # 4) Compute phi metrics using the trained outputs
+                    phi_tr, phi_te, *unused = calculate_phi(
+                        spikes_train=spikes_tr_out[:, self.st :],
+                        spikes_test=spikes_te_out[:, self.st :],
+                        labels_train=labels_tr_out,
+                        labels_test=labels_te_out,
+                        num_steps=self.num_steps,
+                        pca_variance=self.pca_variance,
+                        random_state=random_state,
+                        num_classes=self.N_classes,
+                    )
+
+                    # calculate accuracy
+                    acc_te = top_responders_plotted(
+                        spikes=spikes_te_out[:, self.st : self.ih],
+                        labels=labels_te_out,
+                        num_classes=self.N_classes,
+                        narrow_top=narrow_top,
+                        smoothening=self.num_steps,
+                        train=False,
+                        compute_not_plot=True,
+                        n_last_points=10000,
+                    )
+                    # accumulate over all tests
+                    test_acc += acc_te
+                    test_phi += phi_te
+
+                # average over all tests
+                acc_te = test_acc / total_num_tests
+                phi_te = test_phi / total_num_tests
+
+                # Concatenate all test results
+                spikes_te_out = np.concatenate(all_spikes_test, axis=0)
+                labels_te_out = np.concatenate(all_labels_test, axis=0)
+                mp_te = np.concatenate(all_mp_test, axis=0)
 
                 # Update performance tracking
                 self.performance_tracker[e] = [
@@ -982,42 +1053,47 @@ class snn_sleepy:
                     start = max(0, e - interval_ES)
                     mu = np.mean(self.performance_tracker[start:e, 1])
 
-                if plot_spikes_train:
-                    if start_time_spike_plot == None:
-                        start_time_spike_plot = int(spikes_tr_out.shape[0] * 0.95)
-                    if stop_time_spike_plot == None:
-                        stop_time_spike_plot = spikes_tr_out.shape[0]
+                # if plot_spikes_train:
+                #     if start_time_spike_plot == None:
+                #         start_time_spike_plot = int(spikes_tr_out.shape[0] * 0.95)
+                #     if stop_time_spike_plot == None:
+                #         stop_time_spike_plot = spikes_tr_out.shape[0]
 
-                    spike_plot(
-                        spikes_tr_out[start_time_spike_plot:stop_time_spike_plot],
-                        labels_tr_out[start_time_spike_plot:stop_time_spike_plot],
-                    )
+                #     spike_plot(
+                #         spikes_tr_out[start_time_spike_plot:stop_time_spike_plot],
+                #         labels_tr_out[start_time_spike_plot:stop_time_spike_plot],
+                #     )
 
                 # Rinse memory
                 if e != self.epochs - 1:
-                    del data_train, labels_train, data_test, labels_test
+                    # Clean up training data
+                    del data_train, labels_train
+                    # Clean up test data (these exist in the test loop)
                     del (
-                        mp_train,
+                        data_test,
+                        labels_test,
                         mp_test,
-                    )
-                    del (
                         weights_te,
                         spikes_te_out,
                         labels_te_out,
+                        sleep_te_out,
                     )
-                    del sleep_te_out, spikes_tr_out, labels_tr_out, sleep_tr_out
+                    # Clean up training results
+                    del mp_train, spikes_tr_out, labels_tr_out, sleep_tr_out
+                    # Clean up accumulated arrays
+                    del all_spikes_test, all_labels_test, all_mp_test
                     gc.collect()
 
-                if plot_weights:
-                    self.weights2plot_exc = w4p_exc_tr
-                    self.weights2plot_inh = w4p_inh_tr
-                    weights_plot(
-                        weights_exc=self.weights2plot_exc,
-                        weights_inh=self.weights2plot_inh,
-                    )
+                # if plot_weights:
+                #     self.weights2plot_exc = w4p_exc_tr
+                #     self.weights2plot_inh = w4p_inh_tr
+                #     weights_plot(
+                #         weights_exc=self.weights2plot_exc,
+                #         weights_inh=self.weights2plot_inh,
+                #     )
 
                 pbar.set_description(f"Epoch {e+1}/{self.epochs}")
-                # Handle None values safely
+                # Handle None valuTruees safely
                 acc_str = f"{acc_te:.3f}" if acc_te is not None else "N/A"
                 phi_str = f"{phi_te:.2f}" if phi_te is not None else "N/A"
                 pbar.set_postfix(acc=acc_str, phi=phi_str)
@@ -1228,7 +1304,6 @@ class snn_sleepy:
                             data_test=data_test,
                             N_classes=self.N_classes,
                             N_x=self.N_x,
-                            labels_true=labels_true_train,
                         )
 
                         # 3) Loop over each pair of decay rates
@@ -1307,8 +1382,6 @@ class snn_sleepy:
                                 mean_noise=mean_noise,
                                 var_noise=var_noise,
                                 spikes=spikes_train_init.copy(),
-                                pre_trace=pre_tr.copy(),
-                                post_trace=post_tr.copy(),
                                 check_sleep_interval=check_sleep_interval,
                                 timing_update=timing_update,
                                 spike_times=spike_times.copy(),

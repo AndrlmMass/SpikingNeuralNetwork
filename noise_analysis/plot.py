@@ -8,15 +8,12 @@ import matplotlib
 matplotlib.use("TkAgg")
 
 
-def get_elite_nodes(spikes, labels, num_classes, narrow_top, st, ih):
+def get_elite_nodes(spikes, labels, num_classes, narrow_top):
 
     # remove unnecessary data periods
     mask_break = (labels != -1) & (labels != -2)
     spikes = spikes[mask_break, :]
     labels = labels[mask_break]
-
-    # remove poisson-input & inhibition
-    spikes = spikes[:, st:ih]
 
     # collect responses
     responses = np.zeros(
@@ -38,28 +35,11 @@ def get_elite_nodes(spikes, labels, num_classes, narrow_top, st, ih):
     responses *= ratio
 
     # Now, assign nodes to their preferred class (highest response)
+    responses_indices = np.argsort(responses, 0)[::-1, :]
     top_k = int(spikes.shape[1] * narrow_top)
-    preferred = {cl: [] for cl in range(num_classes)}
 
-    for node in range(responses.shape[0]):
-        valid_classes = np.where(~np.isnan(responses[node]))[0]
-        if len(valid_classes) == 0:
-            continue
-        max_idx = np.argmax(responses[node, valid_classes])
-        pref_cl = valid_classes[max_idx]
-        score = responses[node, pref_cl]
-        preferred[pref_cl].append((score, node))
-
-    # For each class, sort by score descending and take top_k
-    final_indices = np.full((top_k, num_classes), -1, dtype=int)
-    for cl in range(num_classes):
-        if cl in preferred and preferred[cl]:
-            sorted_list = sorted(preferred[cl], reverse=True)  # sorts by score first
-            sorted_nodes = [node for score, node in sorted_list]
-            take = min(top_k, len(sorted_nodes))
-            final_indices[:take, cl] = sorted_nodes[:take]
-
-    print(final_indices)
+    # Assign top responders
+    final_indices = responses_indices[:top_k]
 
     return final_indices, spikes, labels
 
@@ -93,8 +73,6 @@ def plot_epoch_training(acc, cluster):
 def top_responders_plotted(
     spikes,
     labels,
-    ih,
-    st,
     num_classes,
     narrow_top,
     smoothening,
@@ -107,8 +85,6 @@ def top_responders_plotted(
     indices, spikes, labels = get_elite_nodes(
         spikes=spikes,
         labels=labels,
-        ih=ih,
-        st=st,
         num_classes=num_classes,
         narrow_top=narrow_top,
     )
@@ -273,6 +249,7 @@ def top_responders_plotted(
     ax[0].set_title(title)
     ax[0].legend(loc="upper right")
     plt.show()
+    return precision[-1]
 
 
 def spike_plot(data, labels):
