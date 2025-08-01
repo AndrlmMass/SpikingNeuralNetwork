@@ -1065,18 +1065,17 @@ class snn_sleepy:
                 # early stopping
                 if early_stopping and e > interval_ES:
                     start = max(0, e - interval_ES)
-                    mu = np.mean(self.performance_tracker[start:e, 1])
 
-                # if plot_spikes_train:
-                #     if start_time_spike_plot == None:
-                #         start_time_spike_plot = int(spikes_tr_out.shape[0] * 0.95)
-                #     if stop_time_spike_plot == None:
-                #         stop_time_spike_plot = spikes_tr_out.shape[0]
+                if plot_spikes_train:
+                    if start_time_spike_plot == None:
+                        start_time_spike_plot = int(spikes_tr_out.shape[0] * 0.95)
+                    if stop_time_spike_plot == None:
+                        stop_time_spike_plot = spikes_tr_out.shape[0]
 
-                #     spike_plot(
-                #         spikes_tr_out[start_time_spike_plot:stop_time_spike_plot],
-                #         labels_tr_out[start_time_spike_plot:stop_time_spike_plot],
-                #     )
+                    spike_plot(
+                        spikes_tr_out[start_time_spike_plot:stop_time_spike_plot],
+                        labels_tr_out[start_time_spike_plot:stop_time_spike_plot],
+                    )
 
                 # Rinse memory
                 if e != self.epochs - 1:
@@ -1100,17 +1099,17 @@ class snn_sleepy:
                     # Clean up accumulated arrays
                     del all_spikes_test, all_labels_test, all_mp_test
                     # Clean up temporary variables
-                    del phi_tr, phi_te, acc_te, test_acc, test_phi
+                    del test_acc, test_phi
                     del T_test_batch, st, ex, ih
                     gc.collect()
 
-                # if plot_weights:
-                #     self.weights2plot_exc = w4p_exc_tr
-                #     self.weights2plot_inh = w4p_inh_tr
-                #     weights_plot(
-                #         weights_exc=self.weights2plot_exc,
-                #         weights_inh=self.weights2plot_inh,
-                #     )
+                if plot_weights:
+                    self.weights2plot_exc = w4p_exc_tr
+                    self.weights2plot_inh = w4p_inh_tr
+                    weights_plot(
+                        weights_exc=self.weights2plot_exc,
+                        weights_inh=self.weights2plot_inh,
+                    )
 
                 pbar.set_description(f"Epoch {e+1}/{self.epochs}")
                 # Handle None valuTruees safely
@@ -1121,7 +1120,7 @@ class snn_sleepy:
             pbar.close()
 
             # Clean up main training loop variables
-            del I_syn, spike_times, a, spike_threshold
+            del I_syn, spike_times, a, spike_threshold, acc_te, phi_te, phi_tr
             del common_args, total_num_tests, idx_train, idx_test
             del interval_ES, download, data_dir
             gc.collect()
