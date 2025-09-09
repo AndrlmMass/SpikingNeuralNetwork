@@ -5,19 +5,30 @@ snn_N = snn_sleepy()
 
 # acquire data
 snn_N.prepare_data(
-    tot_images_train=6000,
-    single_train=500,
-    single_test=200,
-    tot_images_test=1000,
+    all_audio_train=6000,
+    batch_audio_train=500,
+    all_audio_test=1000,
+    batch_audio_test=200,
+    all_audio_val=1000,
+    batch_audio_val=100,
+    all_images_train=6000,
+    batch_image_train=500,
+    all_images_test=1000,
+    batch_image_test=200,
+    all_images_val=1000,
+    batch_image_val=100,
     add_breaks=False,
-    force_recreate=False,
+    force_recreate=True,
     noisy_data=True,
     gain=1.0,
     noise_level=0.01,
+    audioMNIST=True,
+    imageMNIST=False,
+    create_data=False,
 )
 
 # set up network for training
-snn_N.prepare_training(
+snn_N.prepare_network(
     plot_weights=False,
     w_dense_ee=0.05,
     w_dense_se=0.1,
@@ -27,14 +38,16 @@ snn_N.prepare_training(
     ee_weights=0.05,
     ei_weights=0.4,
     ie_weights=-0.8,
+    create_network=False,
 )
 
 
 # train network
-snn_N.train(
+snn_N.train_network(
     train_weights=True,
     noisy_potential=True,
     compare_decay_rates=False,
+    check_sleep_interval=10000,
     weight_decay_rate_exc=[
         0.99997,
     ],
@@ -50,7 +63,9 @@ snn_N.train(
     plot_top_response_test=False,
     plot_top_response_train=False,
     use_validation_data=False,
-    validation_split=0.2,
+    use_audio_data=True,
+    use_image_data=False,
+    var_noise=5,
     tau_syn=30,
     narrow_top=0.05,
     A_minus=0.7,
@@ -62,4 +77,4 @@ snn_N.train(
 )
 
 # analyze results
-snn_N.analysis(t_sne_test=True)
+snn_N.analyze_results(t_sne_test=True)

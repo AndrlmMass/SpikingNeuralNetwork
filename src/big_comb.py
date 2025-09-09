@@ -29,11 +29,6 @@ class snn_sleepy:
         N_x=225,
         classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
     ):
-        # Change to the noise_analysis directory if not already there
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        if os.getcwd() != script_dir:
-            os.chdir(script_dir)
-
         self.N_exc = N_exc
         self.N_inh = N_inh
         self.N_x = N_x
@@ -285,7 +280,7 @@ class snn_sleepy:
     # acquire data
     def prepare_data(
         self,
-        tot_images_train=60000,
+        tot_images_train=10000,
         tot_images_test=10000,
         single_train=1000,
         single_test=166,
@@ -309,7 +304,25 @@ class snn_sleepy:
         min_time=None,
         gain_labels=0.5,
         use_validation_data=True,
-        validation_split=0.2,
+        val_split=0.2,
+        train_split=0.6,
+        test_split=0.2,
+        audioMNIST=False,
+        imageMNIST=False,
+        create_data=False,
+        # New batch and total parameters
+        all_audio_train=30000,
+        batch_audio_train=500,
+        all_audio_test=1000,
+        batch_audio_test=200,
+        all_audio_val=1000,
+        batch_audio_val=100,
+        all_images_train=6000,
+        batch_image_train=500,
+        all_images_test=1000,
+        batch_image_test=200,
+        all_images_val=1000,
+        batch_image_val=100,
     ):
         # Save current parameters
         self.data_parameters = {**locals()}
@@ -348,152 +361,577 @@ class snn_sleepy:
         self.noisy_data = noisy_data
         self.noise_level = noise_level
         self.test_data_ratio = test_data_ratio
+        self.val_split = val_split
+        self.train_split = train_split
+        self.test_split = test_split
+        self.T_train = self.single_train * num_steps
+        self.T_test = self.single_test * num_steps
+        self.data_loaded = False
+        self.model_loaded = False
+        self.test_data_loaded = False
+        self.loaded_phi_model = False
 
-        # create data
-        if not force_recreate:
-            self.process(load_data=True, data_parameters=self.data_parameters)
+        # Initialize streaming data variables
+        self.audio_streamer = None
+        self.image_streamer = None
+        self.current_train_idx = 0
+        self.current_test_idx = 0
 
-        if force_recreate or not self.data_loaded:
-            # Define data parameters
-            data_parameters = {"pixel_size": int(np.sqrt(self.N_x)), "train_": train_}
+        # Initialize data attributes
+        self.data_train = None
+        self.labels_train = None
+        self.data_test = None
+        self.labels_test = None
+
+        # Set batch sizes and validate total limits
+        if audioMNIST and imageMNIST:
+            # Multimodal mode - use smaller of the two batch sizes for memory efficiency
+            self.single_train = min(batch_audio_train, batch_image_train)
+            self.single_test = min(batch_audio_test, batch_image_test)
+
+            # Use smaller total for both to ensure synchronization
+            self.tot_images_train = min(all_audio_train, all_images_train)
+            self.tot_images_test = min(all_audio_test, all_images_test)
+            self.epochs = self.tot_images_train // self.single_train
+
+            # Double input neurons for multimodal
+            self.N_x = int(2 * self.N_x)
+
+            # Update network architecture based on new N_x
+            self.st = self.N_x  # stimulation
+            self.ex = self.st + self.N_exc  # excitatory
+            self.ih = self.ex + self.N_inh  # inhibitory
+            self.N = self.N_exc + self.N_inh + self.N_x  # total neurons
+
+            print(f"Multimodal mode: {self.N_x} input neurons (image + audio)")
+            print(
+                f"Network: {self.N} total neurons (stim: {self.st}, exc: {self.ex}, inh: {self.ih})"
+            )
+            print(f"Batch size: {self.single_train} train, {self.single_test} test")
+            print(
+                f"Total samples: {self.tot_images_train} train, {self.tot_images_test} test"
+            )
+
+        elif audioMNIST:
+            # Audio only mode
+            total_audio = all_audio_train + all_audio_test + all_audio_val
+            if total_audio > 30000:
+                raise ValueError(
+                    f"Total audio samples ({total_audio}) cannot exceed 30000"
+                )
+
+            self.single_train = batch_audio_train
+            self.single_test = batch_audio_test
+            self.tot_images_train = all_audio_train
+            self.tot_images_test = all_audio_test
+            self.epochs = all_audio_train // batch_audio_train
+
+            # Update network architecture (audio uses original N_x)
+            self.st = self.N_x  # stimulation
+            self.ex = self.st + self.N_exc  # excitatory
+            self.ih = self.ex + self.N_inh  # inhibitory
+            self.N = self.N_exc + self.N_inh + self.N_x  # total neurons
+
+        elif imageMNIST:
+            # Image only mode
+            total_images = all_images_train + all_images_test + all_images_val
+            if total_images > 30000:
+                raise ValueError(
+                    f"Total image samples ({total_images}) cannot exceed 30000"
+                )
+
+            self.single_train = batch_image_train
+            self.single_test = batch_image_test
+            self.tot_images_train = all_images_train
+            self.tot_images_test = all_images_test
+            self.epochs = all_images_train // batch_image_train
+
+            # Update network architecture (image uses original N_x)
+            self.st = self.N_x  # stimulation
+            self.ex = self.st + self.N_exc  # excitatory
+            self.ih = self.ex + self.N_inh  # inhibitory
+            self.N = self.N_exc + self.N_inh + self.N_x  # total neurons
+
+        # Initialize streamers if needed
+        if audioMNIST and not create_data:
+            from get_data import AudioDataStreamer
+
+            # Check for existing audio data parameters
+            data_dir = "data/mdata"
+            audio_data_dir = None
+            download_audio = True
 
             # Ensure data/mdata directory exists
-            if not os.path.exists("data/mdata"):
-                os.makedirs("data/mdata")
+            if not os.path.exists(data_dir):
+                os.makedirs(data_dir, exist_ok=True)
 
-            # Define folder to load data
-            folders = os.listdir("data/mdata")
-
-            # Search for existing data
+            # Search for existing audio data
+            folders = os.listdir(data_dir)
             if len(folders) > 0:
                 for folder in folders:
                     json_file_path = os.path.join(
-                        "data", "mdata", folder, "data_parameters.json"
+                        data_dir, folder, "audio_data_parameters.json"
                     )
+                    if os.path.exists(json_file_path):
+                        with open(json_file_path, "r") as j:
+                            ex_params = json.loads(j.read())
 
-                    with open(json_file_path, "r") as j:
-                        ex_params = json.loads(j.read())
+                        # Check if parameters match
+                        expected_params = {
+                            "batch_size": batch_audio_train,
+                            "target_sr": 22050,
+                            "duration": 1.0,
+                            "N_x": self.N_x,
+                            "mode": (
+                                "multimodal"
+                                if (
+                                    hasattr(self, "image_streamer")
+                                    and self.image_streamer is not None
+                                )
+                                else "audio_only"
+                            ),
+                        }
 
-                    # Check if parameters are the same as the current ones
-                    if ex_params == data_parameters:
-                        data_dir = os.path.join("data/mdata", folder)
-                        download = False
-                        break
-                else:
-                    download = True
-            else:
-                download = True
+                        if ex_params == expected_params:
+                            audio_data_dir = os.path.join(data_dir, folder)
+                            download_audio = False
+                            break
 
-            # Clean up data directory search variables
-            del folders, folder, json_file_path, ex_params
-
-            # get dataset with progress bar
-            print("\rDownloading MNIST dataset...", end="")
-            if download == True:
-                # Ensure data/mdata directory exists
-                if not os.path.exists("data/mdata"):
-                    os.makedirs("data/mdata", exist_ok=True)
-
-                # generate random number to create unique folder
+            if download_audio:
+                # Create new folder for audio data
                 rand_nums = np.random.randint(low=0, high=9, size=5)
-
-                # Check if folder already exists
-                while str(rand_nums) in os.listdir("data/mdata"):
+                while str(rand_nums) in os.listdir(data_dir):
                     rand_nums = np.random.randint(low=0, high=9, size=5)
 
-                # Create folder to store data
-                data_dir = os.path.join("data/mdata", str(rand_nums))
-                os.makedirs(data_dir, exist_ok=True)
+                audio_data_dir = os.path.join(data_dir, str(rand_nums))
+                os.makedirs(audio_data_dir, exist_ok=True)
 
-                # Save data parameters
-                filepath = os.path.join(data_dir, "data_parameters.json")
+                # Save audio data parameters
+                audio_params = {
+                    "batch_size": batch_audio_train,
+                    "target_sr": 22050,
+                    "duration": 1.0,
+                    "N_x": self.N_x,  # Add number of input neurons
+                    "mode": (
+                        "multimodal"
+                        if (
+                            hasattr(self, "image_streamer")
+                            and self.image_streamer is not None
+                        )
+                        else "audio_only"
+                    ),
+                }
 
-                with open(filepath, "w") as outfile:
-                    json.dump(data_parameters, outfile)
+                with open(
+                    os.path.join(audio_data_dir, "audio_data_parameters.json"), "w"
+                ) as f:
+                    json.dump(audio_params, f)
 
-            if use_validation_data:
-                (
-                    self.data_train,
-                    self.labels_train,
-                    self.data_test,
-                    self.labels_test,
-                ) = create_data(
-                    pixel_size=int(np.sqrt(self.N_x)),
-                    num_steps=num_steps,
-                    plot_comparison=plot_comparison,
-                    gain=gain,
-                    offset=offset,
-                    download=download,
-                    data_dir=data_dir,
-                    first_spike_time=first_spike_time,
-                    time_var_input=time_var_input,
-                    num_images_train=self.single_train,
-                    num_images_test=self.single_test,
-                    add_breaks=add_breaks,
-                    break_lengths=break_lengths,
-                    noisy_data=noisy_data,
-                    noise_level=noise_level,
-                    idx_train=0,
-                    idx_test=0,
-                    use_validation_data=True,
-                    validation_split=validation_split,
-                )
-            else:
-                (
-                    self.data_train,
-                    self.labels_train,
-                    self.data_test,
-                    self.labels_test,
-                ) = create_data(
-                    pixel_size=int(np.sqrt(self.N_x)),
-                    num_steps=num_steps,
-                    plot_comparison=plot_comparison,
-                    gain=gain,
-                    offset=offset,
-                    download=download,
-                    data_dir=data_dir,
-                    first_spike_time=first_spike_time,
-                    time_var_input=time_var_input,
-                    num_images_train=self.single_train,
-                    num_images_test=self.single_test,
-                    add_breaks=add_breaks,
-                    break_lengths=break_lengths,
-                    noisy_data=noisy_data,
-                    noise_level=noise_level,
-                    idx_train=0,
-                    idx_test=0,
-                    use_validation_data=False,
-                )
-            self.process(save_data=True, data_parameters=self.data_parameters)
-
-        self.T_train = self.data_train.shape[0]
-        self.T_test = self.data_test.shape[0]
-
-        # plot spikes
-        if plot_spikes:
-            if min_time == None:
-                min_time = 0
-            if max_time == None:
-                max_time = self.T_train
-            spike_plot(
-                self.data_train[min_time:max_time], self.labels_train[min_time:max_time]
+            # Use the original audio data path
+            data_path = "/home/andreas/Documents/GitHub/AudioMNIST/data"
+            self.audio_streamer = AudioDataStreamer(
+                data_path, batch_size=batch_audio_train
+            )
+            print(
+                f"Audio streamer initialized with {self.audio_streamer.get_total_samples()} total samples"
             )
 
-        # plot heatmap of activity
-        if plot_heat_map:
-            heat_map(self.data_train, pixel_size=10)
+        if imageMNIST and not create_data:
+            from get_data import ImageDataStreamer
 
-        # return data and labels if needed
-        if retur:
-            if use_validation_data:
-                return (
-                    self.data_train,
-                    self.labels_train,
+            # Check for existing image data parameters
+            data_dir = "data/mdata"
+            image_data_dir = None
+            download_images = True
+
+            # Ensure data/mdata directory exists
+            if not os.path.exists(data_dir):
+                os.makedirs(data_dir, exist_ok=True)
+
+            # Search for existing image data
+            folders = os.listdir(data_dir)
+            if len(folders) > 0:
+                for folder in folders:
+                    json_file_path = os.path.join(
+                        data_dir, folder, "image_data_parameters.json"
+                    )
+                    if os.path.exists(json_file_path):
+                        with open(json_file_path, "r") as j:
+                            ex_params = json.loads(j.read())
+
+                        # Check if parameters match
+                        expected_params = {
+                            "pixel_size": int(np.sqrt(self.N_x // 2)),
+                            "num_steps": num_steps,
+                            "gain": gain,
+                            "offset": offset,
+                            "first_spike_time": first_spike_time,
+                            "time_var_input": time_var_input,
+                            "N_x": self.N_x,
+                            "mode": (
+                                "multimodal"
+                                if (
+                                    hasattr(self, "audio_streamer")
+                                    and self.audio_streamer is not None
+                                )
+                                else "image_only"
+                            ),
+                        }
+
+                        if ex_params == expected_params:
+                            image_data_dir = os.path.join(data_dir, folder)
+                            download_images = False
+                            break
+
+            if download_images:
+                # Create new folder for image data
+                rand_nums = np.random.randint(low=0, high=9, size=5)
+                while str(rand_nums) in os.listdir(data_dir):
+                    rand_nums = np.random.randint(low=0, high=9, size=5)
+
+                image_data_dir = os.path.join(data_dir, str(rand_nums))
+                os.makedirs(image_data_dir, exist_ok=True)
+
+                # Save image data parameters
+                image_params = {
+                    "pixel_size": int(np.sqrt(self.N_x // 2)),
+                    "num_steps": num_steps,
+                    "gain": gain,
+                    "offset": offset,
+                    "first_spike_time": first_spike_time,
+                    "time_var_input": time_var_input,
+                    "N_x": self.N_x,  # Add number of input neurons
+                    "mode": (
+                        "multimodal"
+                        if (
+                            hasattr(self, "audio_streamer")
+                            and self.audio_streamer is not None
+                        )
+                        else "image_only"
+                    ),
+                }
+
+                with open(
+                    os.path.join(image_data_dir, "image_data_parameters.json"), "w"
+                ) as f:
+                    json.dump(image_params, f)
+
+            self.image_streamer = ImageDataStreamer(
+                "data",  # Use the data directory for MNIST download
+                batch_size=batch_image_train,
+                pixel_size=int(np.sqrt(self.N_x // 2)),
+                num_steps=num_steps,
+                gain=gain,
+                offset=offset,
+                first_spike_time=first_spike_time,
+                time_var_input=time_var_input,
+            )
+            print(
+                f"Image streamer initialized with {self.image_streamer.get_total_samples()} total samples"
+            )
+
+        if create_data:
+            # create data
+            if not force_recreate:
+                self.process(load_data=True, data_parameters=self.data_parameters)
+
+            if force_recreate or not self.data_loaded:
+                # Define data parameters
+                data_parameters = {
+                    "pixel_size": int(np.sqrt(self.N_x)),
+                    "train_": train_,
+                }
+
+                # Ensure data/mdata directory exists
+                if not os.path.exists("data/mdata"):
+                    os.makedirs("data/mdata")
+
+                # Define folder to load data
+                folders = os.listdir("data/mdata")
+
+                # Search for existing data
+                if len(folders) > 0:
+                    for folder in folders:
+                        json_file_path = os.path.join(
+                            "data", "mdata", folder, "data_parameters.json"
+                        )
+
+                        with open(json_file_path, "r") as j:
+                            ex_params = json.loads(j.read())
+
+                        # Check if parameters are the same as the current ones
+                        if ex_params == data_parameters:
+                            data_dir = os.path.join("data/mdata", folder)
+                            download = False
+                            break
+                    else:
+                        download = True
+                else:
+                    download = True
+
+                # Clean up data directory search variables
+                del folders
+
+                # get dataset with progress bar
+                print("\rDownloading MNIST dataset...", end="")
+                if download == True:
+                    # Ensure data/mdata directory exists
+                    if not os.path.exists("data/mdata"):
+                        os.makedirs("data/mdata", exist_ok=True)
+
+                    # generate random number to create unique folder
+                    rand_nums = np.random.randint(low=0, high=9, size=5)
+
+                    # Check if folder already exists
+                    while str(rand_nums) in os.listdir("data/mdata"):
+                        rand_nums = np.random.randint(low=0, high=9, size=5)
+
+                    # Create folder to store data
+                    data_dir = os.path.join("data/mdata", str(rand_nums))
+                    os.makedirs(data_dir, exist_ok=True)
+
+                    # Save data parameters
+                    filepath = os.path.join(data_dir, "data_parameters.json")
+
+                    with open(filepath, "w") as outfile:
+                        json.dump(data_parameters, outfile)
+
+                if use_validation_data:
+                    (
+                        self.data_train,
+                        self.labels_train,
+                        self.data_test,
+                        self.labels_test,
+                    ) = create_data(
+                        pixel_size=int(np.sqrt(self.N_x)),
+                        num_steps=num_steps,
+                        plot_comparison=plot_comparison,
+                        gain=gain,
+                        offset=offset,
+                        download=download,
+                        data_dir=data_dir,
+                        first_spike_time=first_spike_time,
+                        time_var_input=time_var_input,
+                        num_images_train=self.single_train,
+                        num_images_test=self.single_test,
+                        add_breaks=add_breaks,
+                        break_lengths=break_lengths,
+                        noisy_data=noisy_data,
+                        noise_level=noise_level,
+                        use_validation_data=True,
+                        val_split=self.val_split,
+                        train_split=self.train_split,
+                        test_split=self.test_split,
+                        audioMNIST=audioMNIST,
+                        imageMNIST=imageMNIST,
+                    )
+
+                    # Handle streaming audio data
+                    if audioMNIST and hasattr(self.data_train, "get_total_samples"):
+                        self.audio_streamer = self.data_train
+                        # Initialize data_train and labels_train for compatibility
+                        self.data_train = None
+                        self.labels_train = None
+                        print("Audio data set to streaming mode")
+                else:
+                    (
+                        self.data_train,
+                        self.labels_train,
+                        self.data_test,
+                        self.labels_test,
+                    ) = create_data(
+                        pixel_size=int(np.sqrt(self.N_x)),
+                        num_steps=num_steps,
+                        plot_comparison=plot_comparison,
+                        gain=gain,
+                        offset=offset,
+                        download=download,
+                        data_dir=data_dir,
+                        first_spike_time=first_spike_time,
+                        time_var_input=time_var_input,
+                        num_images_train=self.single_train,
+                        num_images_test=self.single_test,
+                        add_breaks=add_breaks,
+                        break_lengths=break_lengths,
+                        noisy_data=noisy_data,
+                        noise_level=noise_level,
+                        idx_train=0,
+                        idx_test=0,
+                        use_validation_data=False,
+                    )
+                self.process(save_data=True, data_parameters=self.data_parameters)
+
+            # plot spikes
+            if plot_spikes:
+                if min_time == None:
+                    min_time = 0
+                if max_time == None:
+                    max_time = self.T_train
+                spike_plot(
+                    self.data_train[min_time:max_time],
+                    self.labels_train[min_time:max_time],
                 )
-            else:
-                return self.data_train, self.labels_train
 
-    def prepare_training(
+            # plot heatmap of activity
+            if plot_heat_map:
+                heat_map(self.data_train, pixel_size=10)
+
+            # return data and labels if needed
+            if retur:
+                if use_validation_data:
+                    return (
+                        self.data_train,
+                        self.labels_train,
+                    )
+                else:
+                    return self.data_train, self.labels_train
+
+    def load_audio_batch(self, batch_size, is_training=True):
+        """
+        Load a batch of audio data and convert to spikes on-demand.
+
+        Args:
+            batch_size: Number of samples to load
+            is_training: If True, load training data; if False, load test data
+
+        Returns:
+            (spike_data, labels) or (None, None) if no more data
+        """
+        if self.audio_streamer is None:
+            return None, None
+
+        # Check if we've exceeded the total limit
+        if is_training and self.current_train_idx >= self.tot_images_train:
+            return None, None
+        if not is_training and self.current_test_idx >= self.tot_images_test:
+            return None, None
+
+        # Import the load_audio_batch function
+        from get_data import load_audio_batch
+
+        # Determine current index
+        if is_training:
+            start_idx = self.current_train_idx
+        else:
+            start_idx = self.current_test_idx
+
+        # Load audio batch - determine correct number of neurons based on mode
+        training_mode = self.get_training_mode()
+        if training_mode == "multimodal":
+            # Multimodal mode - use half of N_x for audio
+            num_audio_neurons = int(np.sqrt(self.N_x // 2)) ** 2
+        else:
+            # Audio-only mode - use full N_x for audio
+            num_audio_neurons = int(np.sqrt(self.N_x)) ** 2
+
+        # print(f"Audio neurons: {num_audio_neurons}")  # Commented for performance
+        spike_data, labels = load_audio_batch(
+            self.audio_streamer,
+            start_idx,
+            batch_size,
+            self.num_steps,
+            num_audio_neurons,
+            scaling_method="normalize",
+        )
+
+        if spike_data is not None:
+            # Update index
+            if is_training:
+                self.current_train_idx += batch_size
+            else:
+                self.current_test_idx += batch_size
+
+        return spike_data, labels
+
+    def load_multimodal_batch(self, batch_size, is_training=True):
+        """
+        Load a batch of multimodal data (image + audio) and concatenate.
+
+        Args:
+            batch_size: Number of samples to load
+            is_training: If True, load training data; if False, load test data
+
+        Returns:
+            (concatenated_spike_data, labels) or (None, None) if no more data
+        """
+        from get_data import load_image_batch
+
+        # Load audio batch
+        audio_spikes, audio_labels = self.load_audio_batch(batch_size, is_training)
+        if audio_spikes is None:
+            return None, None
+
+        # Load image batch - determine correct number of neurons based on mode
+        training_mode = self.get_training_mode()
+        if training_mode == "multimodal":
+            # Multimodal mode - use half of N_x for image
+            num_image_neurons = int(np.sqrt(self.N_x // 2)) ** 2
+        else:
+            # Image-only mode - use full N_x for image
+            num_image_neurons = int(np.sqrt(self.N_x)) ** 2
+
+        # print(f"Image neurons: {num_image_neurons}")  # Commented for performance
+        image_spikes, image_labels = load_image_batch(
+            self.image_streamer,
+            self.current_train_idx if is_training else self.current_test_idx,
+            batch_size,
+            self.num_steps,
+            num_image_neurons,
+        )
+        if image_spikes is None:
+            return None, None
+
+        # Concatenate horizontally: [image_features, audio_features]
+        multimodal_spikes = np.concatenate([image_spikes, audio_spikes], axis=1)
+
+        return multimodal_spikes, audio_labels
+
+    def _save_streaming_parameters(self):
+        """Save streaming data parameters for future reference."""
+        if not hasattr(self, "data_parameters"):
+            return
+
+        # Create a combined parameters file for streaming data
+        streaming_params = {
+            "streaming_mode": True,
+            "audio_streamer": self.audio_streamer is not None,
+            "image_streamer": self.image_streamer is not None,
+            "N_x": self.N_x,
+            "N_exc": self.N_exc,
+            "N_inh": self.N_inh,
+            "single_train": self.single_train,
+            "single_test": self.single_test,
+            "tot_images_train": self.tot_images_train,
+            "tot_images_test": self.tot_images_test,
+            "epochs": self.epochs,
+        }
+
+        # Save to a streaming parameters file
+        streaming_file = "data/mdata/streaming_parameters.json"
+        os.makedirs("data/mdata", exist_ok=True)
+
+        with open(streaming_file, "w") as f:
+            json.dump(streaming_params, f, indent=2)
+
+        print(f"Streaming parameters saved to {streaming_file}")
+
+    def get_training_mode(self):
+        """Determine the current training mode based on active streamers."""
+        if (
+            hasattr(self, "audio_streamer")
+            and self.audio_streamer is not None
+            and hasattr(self, "image_streamer")
+            and self.image_streamer is not None
+        ):
+            return "multimodal"
+        elif hasattr(self, "audio_streamer") and self.audio_streamer is not None:
+            return "audio_only"
+        elif hasattr(self, "image_streamer") and self.image_streamer is not None:
+            return "image_only"
+        else:
+            return "unknown"
+
+    def prepare_network(
         self,
         plot_weights=False,
         plot_network=False,
@@ -508,6 +946,7 @@ class snn_sleepy:
         ee_weights=0.3,
         ei_weights=0.3,
         ie_weights=-0.2,
+        create_network=False,
     ):
         # create weights
         self.w_dense_ee = w_dense_ee
@@ -518,6 +957,9 @@ class snn_sleepy:
         self.ee_weights = ee_weights
         self.ei_weights = ei_weights
         self.ie_weights = ie_weights
+        self.resting_potential = resting_membrane
+        self.max_time = max_time
+
         self.weights = create_weights(
             N_exc=self.N_exc,
             N_inh=self.N_inh,
@@ -534,42 +976,41 @@ class snn_sleepy:
             plot_weights=plot_weights,
             plot_network=plot_network,
         )
-        self.resting_potential = resting_membrane
-        self.max_time = max_time
 
-        # create other arrays
-        (
-            self.mp_train,
-            self.mp_test,
-            self.spikes_train,
-            self.spikes_test,
-        ) = create_arrays(
-            N=self.N,
-            N_exc=self.N_exc,
-            N_inh=self.N_inh,
-            resting_membrane=self.resting_potential,
-            total_time_train=self.T_train,
-            total_time_test=self.T_test,
-            data_train=self.data_train,
-            data_test=self.data_test,
-            N_x=self.N_x,
-        )
-        # return results if retur == True
-        if retur:
-            return (
-                self.weights,
-                self.spikes_train,
-                self.spikes_test,
+        if create_network:
+            # create other arrays
+            (
                 self.mp_train,
                 self.mp_test,
-                self.pre_trace,
-                self.post_trace,
-                self.spike_times,
-                self.resting_potential,
-                self.max_time,
+                self.spikes_train,
+                self.spikes_test,
+            ) = create_arrays(
+                N=self.N,
+                N_exc=self.N_exc,
+                N_inh=self.N_inh,
+                resting_membrane=self.resting_potential,
+                total_time_train=self.T_train,
+                total_time_test=self.T_test,
+                data_train=None,  # Streaming mode - data loaded on-demand
+                data_test=None,  # Streaming mode - data loaded on-demand
+                N_x=self.N_x,
             )
+            # return results if retur == True
+            if retur:
+                return (
+                    self.weights,
+                    self.spikes_train,
+                    self.spikes_test,
+                    self.mp_train,
+                    self.mp_test,
+                    self.pre_trace,
+                    self.post_trace,
+                    self.spike_times,
+                    self.resting_potential,
+                    self.max_time,
+                )
 
-    def train(
+    def train_network(
         self,
         plot_spikes_train=False,
         plot_spikes_test=False,
@@ -589,8 +1030,8 @@ class snn_sleepy:
         max_weight_exc=25,
         min_weight_exc=0.01,
         spike_threshold_default=-55,
-        check_sleep_interval=10000,
-        interval=1000,
+        check_sleep_interval=50000,  # Reduced frequency for better performance
+        interval=5000,  # Reduced frequency for better performance
         min_mp=-100,
         sleep=True,
         force_train=False,
@@ -652,12 +1093,10 @@ class snn_sleepy:
         random_state=48,
         samples=10,
         use_validation_data=False,
-        validation_split=0.2,
     ):
         self.dt = dt
         self.pca_variance = pca_variance
         self.use_validation_data = use_validation_data
-        self.validation_split = validation_split
 
         # Save current parameters
         self.model_parameters = {**locals()}
@@ -708,34 +1147,57 @@ class snn_sleepy:
             )
 
         if not self.model_loaded:
-            # get data_dir for retrieving MNIST-images
-            data_parameters = {"pixel_size": int(np.sqrt(self.N_x)), "train_": True}
+            # Handle data parameter checking for streaming data
+            data_dir = None
+            download = False
 
-            # Ensure data/mdata directory exists
-            if not os.path.exists("data/mdata"):
-                os.makedirs("data/mdata", exist_ok=True)
+            # Check if we're using streaming data
+            if self.audio_streamer is not None or self.image_streamer is not None:
+                # For streaming data, we don't need to check data_parameters.json
+                # as the streamers handle their own data loading
+                print("Using streaming data - no data parameter checking needed")
 
-            # Define folder to load data
-            folders = os.listdir("data/mdata")
+                # Log which streamers are active
+                if self.audio_streamer is not None and self.image_streamer is not None:
+                    print("Multimodal streaming: Audio + Image")
+                elif self.audio_streamer is not None:
+                    print("Audio streaming only")
+                elif self.image_streamer is not None:
+                    print("Image streaming only")
 
-            # Search for existing data
-            if len(folders) > 0:
-                for folder in folders:
-                    json_file_path = os.path.join(
-                        "data", "mdata", folder, "data_parameters.json"
-                    )
+                # Save training parameters for streaming data
+                self._save_streaming_parameters()
+            else:
+                # For pre-loaded data, check data_parameters.json
+                data_parameters = {"pixel_size": int(np.sqrt(self.N_x)), "train_": True}
 
-                    with open(json_file_path, "r") as j:
-                        ex_params = json.loads(j.read())
+                # Ensure data/mdata directory exists
+                if not os.path.exists("data/mdata"):
+                    os.makedirs("data/mdata", exist_ok=True)
 
-                    # Check if parameters are the same as the current ones
-                    if ex_params == data_parameters:
-                        data_dir = os.path.join("data/mdata", folder)
-                        download = (True,)
-                if data_dir is None:
-                    print("Could not find the mdata directory.")
-                    download = False
-                    data_dir = None
+                # Define folder to load data
+                folders = os.listdir("data/mdata")
+
+                # Search for existing data
+                if len(folders) > 0:
+                    for folder in folders:
+                        json_file_path = os.path.join(
+                            "data", "mdata", folder, "data_parameters.json"
+                        )
+
+                        if os.path.exists(json_file_path):
+                            with open(json_file_path, "r") as j:
+                                ex_params = json.loads(j.read())
+
+                            # Check if parameters are the same as the current ones
+                            if ex_params == data_parameters:
+                                data_dir = os.path.join("data/mdata", folder)
+                                download = True
+                                break
+                    if data_dir is None:
+                        print("Could not find the mdata directory.")
+                        download = False
+                        data_dir = None
             # define which weights counts towards total sum of weights
             sum_weights_exc = np.sum(np.abs(self.weights[: self.ex, self.st : self.ih]))
             sum_weights_inh = np.sum(
@@ -813,10 +1275,6 @@ class snn_sleepy:
             # pre-define performance tracking array
             self.performance_tracker = np.zeros((self.epochs, 2))
 
-            # Define starting index
-            idx_train = 0
-            idx_test = 0
-
             # early stopping interval
             interval_ES = int(self.epochs * 0.1)  # 10% interval rate
 
@@ -840,62 +1298,82 @@ class snn_sleepy:
                 dtype=float,
             )
 
+            # Define indices for each dataset
+            idx_test = 0
+            idx_train = 0
+            idx_val = 0
+
             # loop over self.epochs
             for e in range(self.epochs):
-                # Reset test index for each epoch
-                idx_test = 0
 
-                # create & fetch data
-                (
-                    data_train,
-                    labels_train,
-                    *unused,
-                ) = create_data(
-                    pixel_size=int(np.sqrt(self.N_x)),
-                    num_steps=self.num_steps,
-                    plot_comparison=False,
-                    gain=self.gain,
-                    offset=self.offset,
-                    download=download,
-                    data_dir=data_dir,
-                    first_spike_time=self.first_spike_time,
-                    time_var_input=self.time_var_input,
-                    num_images_train=self.single_train,
-                    num_images_test=self.single_test,
-                    add_breaks=self.add_breaks,
-                    break_lengths=self.break_lengths,
-                    noisy_data=self.noisy_data,
-                    noise_level=self.noise_level,
-                    idx_test=idx_test,
-                    idx_train=idx_train,
-                    use_validation_data=self.use_validation_data,
-                    validation_split=self.validation_split,
-                )
+                # Reset test index at the beginning of each epoch
+                self.current_test_idx = 0
 
-                # Clean up unused variables
-                del unused
-                idx_train += self.single_train
+                # Load data for this epoch
+                if (
+                    self.audio_streamer is not None
+                    and hasattr(self, "image_streamer")
+                    and self.image_streamer is not None
+                ):
+                    # Multimodal mode - load both audio and image data
+                    data_train, labels_train = self.load_multimodal_batch(
+                        self.single_train, is_training=True
+                    )
+                    if data_train is None:
+                        print(f"No more multimodal data available at epoch {e}")
+                        break
+                elif self.audio_streamer is not None:
+                    # Audio only mode
+                    data_train, labels_train = self.load_audio_batch(
+                        self.single_train, is_training=True
+                    )
+                    if data_train is None:
+                        print(f"No more audio data available at epoch {e}")
+                        break
+                else:
+                    # Use pre-loaded data (for image data)
+                    if self.data_train is not None:
+                        data_train = self.data_train
+                        labels_train = self.labels_train
+                    else:
+                        print("No data available")
+                        break
 
                 # Update T_train and T_test to match the actual data shapes
                 self.T_train = data_train.shape[0]
 
-                # Create & fetch necessary arrays
-                (
-                    mp_train,
-                    _,
-                    spikes_train,
-                    _,
-                ) = create_arrays(
-                    N=self.N,
-                    N_exc=self.N_exc,
-                    N_inh=self.N_inh,
-                    resting_membrane=self.resting_potential,
-                    total_time_train=self.T_train,
-                    total_time_test=0,
-                    data_train=data_train,
-                    data_test=None,
-                    N_x=self.N_x,
-                )
+                # Debug: Check data dimensions and training mode
+                training_mode = self.get_training_mode()
+                print(f"Training mode: {training_mode}")
+                print(f"Loaded data shape: {data_train.shape}")
+                print(f"Expected N_x: {self.N_x}")
+                print(f"Expected st (stimulation neurons): {self.N_x}")
+
+                # Create & fetch necessary arrays (only if not pre-allocated)
+                if not hasattr(self, "_arrays_pre_allocated"):
+                    (
+                        mp_train,
+                        _,
+                        spikes_train,
+                        _,
+                    ) = create_arrays(
+                        N=self.N,
+                        N_exc=self.N_exc,
+                        N_inh=self.N_inh,
+                        resting_membrane=self.resting_potential,
+                        total_time_train=self.T_train,
+                        total_time_test=0,
+                        data_train=data_train,
+                        data_test=None,
+                        N_x=self.N_x,
+                    )
+                    self._arrays_pre_allocated = True
+                else:
+                    # Reuse pre-allocated arrays
+                    mp_train = np.zeros((self.T_train, self.N - self.N_x))
+                    spikes_train = np.zeros((self.T_train, self.N), dtype=np.int8)
+                    # Copy data to spikes array
+                    spikes_train[:, : self.N_x] = data_train
 
                 # 3a) Train on the training set
                 (
@@ -913,21 +1391,21 @@ class snn_sleepy:
                     spike_times,
                     a,
                 ) = train_network(
-                    weights=self.weights.copy(),
-                    spike_labels=labels_train.copy(),
-                    mp=mp_train.copy(),
+                    weights=self.weights,  # Remove .copy() for performance
+                    spike_labels=labels_train,  # Remove .copy() for performance
+                    mp=mp_train,  # Remove .copy() for performance
                     sleep=sleep,
                     train_weights=train_weights,
                     T=self.T_train,
                     mean_noise=mean_noise,
                     var_noise=var_noise,
-                    spikes=spikes_train.copy(),
+                    spikes=spikes_train,  # Remove .copy() for performance
                     check_sleep_interval=check_sleep_interval,
                     timing_update=timing_update,
-                    spike_times=spike_times.copy(),
-                    spike_threshold=spike_threshold.copy(),
-                    a=a.copy(),
-                    I_syn=I_syn.copy(),
+                    spike_times=spike_times,  # Remove .copy() for performance
+                    spike_threshold=spike_threshold,  # Remove .copy() for performance
+                    a=a,  # Remove .copy() for performance
+                    I_syn=I_syn,  # Remove .copy() for performance
                     **common_args,
                 )
                 total_num_tests = self.tot_images_test // self.single_test
@@ -939,37 +1417,69 @@ class snn_sleepy:
                 all_labels_test = []
                 all_mp_test = []
 
-                for test in range(total_num_tests):
-                    idx_test += self.single_test
-                    # retrieve data
-                    (
-                        *unused,
-                        data_test,
-                        labels_test,
-                    ) = create_data(
-                        pixel_size=int(np.sqrt(self.N_x)),
-                        num_steps=self.num_steps,
-                        plot_comparison=False,
-                        gain=self.gain,
-                        offset=self.offset,
-                        download=download,
-                        data_dir=data_dir,
-                        first_spike_time=self.first_spike_time,
-                        time_var_input=self.time_var_input,
-                        num_images_train=self.single_train,
-                        num_images_test=self.single_test,
-                        add_breaks=self.add_breaks,
-                        break_lengths=self.break_lengths,
-                        noisy_data=self.noisy_data,
-                        noise_level=self.noise_level,
-                        idx_test=idx_test,
-                        idx_train=idx_train,
-                        use_validation_data=self.use_validation_data,
-                        validation_split=self.validation_split,
-                    )
+                # Pre-allocate arrays for better memory management
+                max_test_samples = self.tot_images_test * self.num_steps
+                all_spikes_test = np.zeros((max_test_samples, self.N), dtype=np.int8)
+                all_labels_test = np.zeros(max_test_samples, dtype=np.int32)
+                all_mp_test = np.zeros(
+                    (max_test_samples, self.N - self.N_x), dtype=np.float32
+                )
+                test_sample_count = 0
 
-                    # Clean up unused variables
-                    del unused
+                for test_batch_idx in range(total_num_tests):
+                    # Load test data
+                    if (
+                        self.audio_streamer is not None
+                        and self.image_streamer is not None
+                    ):
+                        # Multimodal streaming mode
+                        data_test, labels_test = self.load_multimodal_batch(
+                            self.single_test, is_training=False
+                        )
+                        if data_test is None:
+                            print(f"No more test multimodal data available")
+                            break
+                    elif self.audio_streamer is not None:
+                        # Audio only streaming mode
+                        from get_data import load_audio_batch
+
+                        test_start_idx = test_batch_idx * self.single_test
+                        data_test, labels_test = load_audio_batch(
+                            self.audio_streamer,
+                            test_start_idx,
+                            self.single_test,
+                            self.num_steps,
+                            int(np.sqrt(self.N_x))
+                            ** 2,  # Audio-only mode uses full N_x
+                            scaling_method="normalize",
+                        )
+                        if data_test is None:
+                            print(f"No more test audio data available")
+                            break
+                    elif self.image_streamer is not None:
+                        # Image only streaming mode
+                        from get_data import load_image_batch
+
+                        test_start_idx = test_batch_idx * self.single_test
+                        data_test, labels_test = load_image_batch(
+                            self.image_streamer,
+                            test_start_idx,
+                            self.single_test,
+                            self.num_steps,
+                            int(np.sqrt(self.N_x))
+                            ** 2,  # Image-only mode uses full N_x
+                        )
+                        if data_test is None:
+                            print(f"No more test image data available")
+                            break
+                    else:
+                        # Use pre-loaded data (for image data)
+                        if self.data_test is not None:
+                            data_test = self.data_test
+                            labels_test = self.labels_test
+                        else:
+                            print("No test data available")
+                            break
 
                     # Update T_test for this batch
                     T_test_batch = data_test.shape[0]
@@ -1015,10 +1525,18 @@ class snn_sleepy:
                         **common_args,
                     )
 
-                    # Store results for accumulation
-                    all_spikes_test.append(spikes_te_out)
-                    all_labels_test.append(labels_te_out)
-                    all_mp_test.append(mp_te)
+                    # Store results for accumulation (use pre-allocated arrays)
+                    batch_size = spikes_te_out.shape[0]
+                    all_spikes_test[
+                        test_sample_count : test_sample_count + batch_size
+                    ] = spikes_te_out
+                    all_labels_test[
+                        test_sample_count : test_sample_count + batch_size
+                    ] = labels_te_out
+                    all_mp_test[test_sample_count : test_sample_count + batch_size] = (
+                        mp_te
+                    )
+                    test_sample_count += batch_size
 
                     # 4) Compute phi metrics using the trained outputs
                     phi_tr, phi_te, *unused = calculate_phi(
@@ -1047,14 +1565,16 @@ class snn_sleepy:
                     test_acc += acc_te
                     test_phi += phi_te
 
+                    idx_test += self.single_test
+
                 # average over all tests
                 acc_te = test_acc / total_num_tests
                 phi_te = test_phi / total_num_tests
 
-                # Concatenate all test results
-                spikes_te_out = np.concatenate(all_spikes_test, axis=0)
-                labels_te_out = np.concatenate(all_labels_test, axis=0)
-                mp_te = np.concatenate(all_mp_test, axis=0)
+                # Use pre-allocated arrays (no concatenation needed)
+                spikes_te_out = all_spikes_test[:test_sample_count]
+                labels_te_out = all_labels_test[:test_sample_count]
+                mp_te = all_mp_test[:test_sample_count]
 
                 # Update performance tracking
                 self.performance_tracker[e] = [
@@ -1518,7 +2038,7 @@ class snn_sleepy:
                 all_scores=self.phi_all_scores,
             )
 
-    def analysis(
+    def analyze_results(
         self,
         perplexity=8,
         max_iter=1000,
