@@ -1,5 +1,5 @@
 from torchvision import datasets, transforms
-from plot import plot_floats_and_spikes
+from plot import plot_floats_and_spikes, plot_audio_spectrograms_and_spikes
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import librosa
@@ -438,6 +438,8 @@ def load_audio_batch(
     num_steps,
     num_input_neurons,
     scaling_method="normalize",
+    plot_spectrograms=False,
+    sample_rate=22050,
 ):
     """
     Load a batch of audio data and convert to spikes on-demand.
@@ -466,6 +468,20 @@ def load_audio_batch(
 
     # Extend labels to match spike data (repeat each label for num_steps)
     spike_labels = labels.repeat(num_steps)
+
+    # Optional visualization of spectrograms + spikes for this batch
+    if plot_spectrograms:
+        try:
+            plot_audio_spectrograms_and_spikes(
+                audio_data=audio_batch,
+                spikes=spike_data,
+                spike_labels=spike_labels,
+                audio_labels=labels,
+                num_steps=num_steps,
+                sample_rate=sample_rate,
+            )
+        except Exception as e:
+            print(f"Warning: failed to plot spectrograms for this batch: {e}")
 
     return spike_data, spike_labels
 

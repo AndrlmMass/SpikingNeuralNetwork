@@ -4,6 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib
+import librosa
+import librosa.display
 
 matplotlib.use("TkAgg")
 
@@ -14,6 +16,11 @@ def get_elite_nodes(spikes, labels, num_classes, narrow_top):
     mask_break = (labels != -1) & (labels != -2)
     spikes = spikes[mask_break, :]
     labels = labels[mask_break]
+
+    print(f"Debug get_elite_nodes - spikes shape after filtering: {spikes.shape}")
+    print(f"Debug get_elite_nodes - labels shape after filtering: {labels.shape}")
+    print(f"Debug get_elite_nodes - unique labels after filtering: {np.unique(labels)}")
+    print(f"Debug get_elite_nodes - narrow_top: {narrow_top}")
 
     # collect responses
     responses = np.zeros(
@@ -37,6 +44,10 @@ def get_elite_nodes(spikes, labels, num_classes, narrow_top):
     # Now, assign nodes to their preferred class (highest response)
     responses_indices = np.argsort(responses, 0)[::-1, :]
     top_k = int(spikes.shape[1] * narrow_top)
+
+    print(f"Debug get_elite_nodes - total neurons: {spikes.shape[1]}")
+    print(f"Debug get_elite_nodes - top_k (neurons per class): {top_k}")
+    print(f"Debug get_elite_nodes - total elite neurons: {top_k * num_classes}")
 
     # Assign top responders
     final_indices = responses_indices[:top_k]
@@ -124,6 +135,13 @@ def top_responders_plotted(
         for i in range(precision.shape[0]):
             hit += predictions[i] == labels[i]
             precision[i] = hit / (i + 1)
+
+        # Debug: Print some statistics
+        print(f"Debug accuracy - Total samples: {len(predictions)}")
+        print(f"Debug accuracy - Correct predictions: {hit}")
+        print(f"Debug accuracy - Final accuracy: {precision[-1]}")
+        print(f"Debug accuracy - Prediction distribution: {np.bincount(predictions)}")
+        print(f"Debug accuracy - Label distribution: {np.bincount(labels)}")
 
         # return the final accuracy measurement
         return precision[-1]
@@ -565,6 +583,271 @@ def plot_floats_and_spikes(images, spikes, spike_labels, img_labels, num_steps):
     plt.tight_layout()
 
     plt.savefig("plots/comparison_spike_img.png")
+    plt.show()
+
+
+def plot_audio_spectrograms_and_spikes(
+    audio_data, spikes, spike_labels, audio_labels, num_steps, sample_rate=22050
+):
+    """
+    Given:
+      - audio_data: an array of audio samples (e.g., shape [num_samples, audio_length])
+      - spikes: a 2D array of spike activity (shape: [time, neurons])
+      - spike_labels: an array (length equal to the time dimension of spikes)
+                      containing the label of the audio that produced that spike train.
+      - audio_labels: an array of labels for the audio samples
+      - num_steps: number of time steps for spike generation
+      - sample_rate: sample rate of the audio data
+    This function plots, for each unique audio label, the corresponding spectrogram
+    (in the bottom row) and a raster plot of the spike data (in the top row).
+    """
+    # Always target classes 0-3; keep empty columns if some are missing
+    labels_to_plot = [0, 1, 2, 3]
+    n_cols = 4
+
+    # Create subplots: one column per digit, two rows (top for spikes, bottom for spectrogram)
+    fig, axs = plt.subplots(2, n_cols, figsize=(n_cols * 4, 8))
+
+    for i, label in enumerate(labels_to_plot):
+        # Plot axes for this column
+        ax_spec = axs[1, i]
+        ax_spike = axs[0, i]
+        # Find the first audio sample with this label (if none, show placeholder)
+        idxs = np.where(np.array(audio_labels) == label)[0]
+        if idxs.size == 0:
+            ax_spec.text(
+                0.5, 0.5, f"No audio for digit {label}", ha="center", va="center"
+            )
+            ax_spec.set_ylabel("Frequency (Hz)")
+            ax_spec.set_xlabel("Time (s)")
+            ax_spike.text(
+                0.5, 0.5, f"No spikes for digit {label}", ha="center", va="center"
+            )
+            ax_spike.set_xlabel("Time steps")
+            ax_spike.set_ylabel("Neuron")
+            continue
+
+        audio_idx = idxs[0]
+
+        # Compute spectrogram
+        audio_sample = audio_data[audio_idx]
+        stft = librosa.stft(audio_sample)
+        magnitude = np.abs(stft)
+        log_magnitude = librosa.amplitude_to_db(magnitude, ref=np.max)
+
+        # Display spectrogram
+        librosa.display.specshow(
+            log_magnitude,
+            sr=sample_rate,
+            x_axis="time",
+            y_axis="hz",
+            ax=ax_spec,
+            cmap="viridis",
+        )
+        # Reduce x-axis label density (wider spacing)
+        try:
+            from matplotlib import ticker as _ticker
+
+            ax_spec.xaxis.set_major_locator(_ticker.MaxNLocator(nbins=4))
+        except Exception:
+            pass
+        ax_spec.set_title(f"Digit {label}")
+
+        # Find all time indices in the spiking data that belong to this label.
+        spike_idx_all = np.where(np.array(spike_labels) == label)[0][:num_steps]
+        if len(spike_idx_all) == 0:
+            print(f"No spiking data found for label {label}.")
+            continue
+
+        # Get a contiguous segment from the available indices.
+        segment = get_contiguous_segment(spike_idx_all)
+        if segment is None or len(segment) == 0:
+            print(f"No contiguous segment found for label {label}.")
+            continue
+
+        # Extract the spike data for this segment.
+        spike_segment = spikes[segment, :]  # shape: [time_segment, neurons]
+
+        # For each neuron, determine the time steps (relative to the segment) where it spiked.
+        positions = [
+            np.where(spike_segment[:, n] == 1)[0] for n in range(spike_segment.shape[1])
+        ]
+
+        # Plot the spike raster on the top row.
+        ax_spike.eventplot(positions, colors="black")
+        ax_spike.set_title(f"Digit {label}")
+        # Optionally, adjust y-limits for clarity:
+        ax_spike.set_ylim(-1, spike_segment.shape[1])
+
+    plt.tight_layout()
+
+    # Create plots directory if it doesn't exist
+    os.makedirs("plots", exist_ok=True)
+    plt.savefig("plots/comparison_spike_audio.png")
+    plt.show()
+
+
+def plot_audio_preview_from_streamer(
+    audio_streamer,
+    num_steps,
+    N_x,
+    training_mode="audio_only",
+    max_batches=50,
+    batch_size=500,
+    sample_rate=22050,
+):
+    """
+    Collect up to one sample for each class in [0,1,2,3] from the streamer,
+    generate spikes, and render the spectrogram + spikes grid.
+    """
+    from get_data import convert_audio_to_spikes
+
+    targets = [0, 1, 2, 3]
+    have = {k: False for k in targets}
+    audio_samples = []
+    audio_labels = []
+    spike_chunks = []
+    spike_labels = []
+
+    if training_mode == "multimodal":
+        num_audio_neurons = int(np.sqrt(N_x // 2)) ** 2
+    else:
+        num_audio_neurons = int(np.sqrt(N_x)) ** 2
+
+    start = 0
+    for _ in range(max_batches):
+        batch, labels = audio_streamer.get_batch(start, batch_size)
+        if batch is None:
+            break
+        for t in targets:
+            if not have[t]:
+                idxs = np.where(labels == t)[0]
+                if idxs.size > 0:
+                    i0 = idxs[0]
+                    audio_samples.append(batch[i0])
+                    audio_labels.append(t)
+                    spikes = convert_audio_to_spikes(
+                        batch[i0].reshape(1, -1),
+                        num_steps,
+                        num_audio_neurons,
+                        scaling_method="normalize",
+                    )
+                    spike_chunks.append(spikes)
+                    spike_labels.extend([t] * num_steps)
+                    have[t] = True
+        if all(have.values()):
+            break
+        start += batch_size
+
+    if len(audio_samples) == 0:
+        print("No audio samples found for preview.")
+        return
+
+    spike_data = np.concatenate(spike_chunks, axis=0)
+    plot_audio_spectrograms_and_spikes(
+        audio_data=np.array(audio_samples),
+        spikes=spike_data,
+        spike_labels=np.array(spike_labels),
+        audio_labels=np.array(audio_labels),
+        num_steps=num_steps,
+        sample_rate=sample_rate,
+    )
+
+
+def plot_audio_spectrograms_and_spikes_simple(
+    audio_samples, spike_data, spike_labels, audio_labels, num_steps, sample_rate=22050
+):
+    """
+    Simplified version that works with pre-loaded data.
+    Given:
+      - audio_samples: list of audio samples (each is a 1D array)
+      - spike_data: 2D array of spike activity (shape: [time, neurons])
+      - spike_labels: array of labels for spike data
+      - audio_labels: array of labels for audio samples
+      - num_steps: number of time steps for spike generation
+      - sample_rate: sample rate of the audio data
+    """
+    # Determine labels to plot (restrict to classes 0-3)
+    unique_labels = np.unique(audio_labels)
+    labels_to_plot = [lbl for lbl in [0, 1, 2, 3] if lbl in unique_labels]
+    if len(labels_to_plot) == 0:
+        labels_to_plot = list(unique_labels[:4])
+    n_cols = max(1, len(labels_to_plot))
+
+    # Create subplots: one column per digit, two rows (top for spikes, bottom for spectrogram)
+    fig, axs = plt.subplots(2, n_cols, figsize=(n_cols * 4, 8))
+
+    # If there's only one column, make sure axs is 2D.
+    if n_cols == 1:
+        axs = np.expand_dims(axs, axis=1)
+
+    for i, label in enumerate(labels_to_plot):
+        # Find the first audio sample with this label
+        audio_idx = np.where(np.array(audio_labels) == label)[0][0]
+
+        # Plot the spectrogram in the bottom row
+        ax_spec = axs[1, i]
+
+        # Compute spectrogram
+        audio_sample = audio_samples[audio_idx]
+        stft = librosa.stft(audio_sample)
+        magnitude = np.abs(stft)
+        log_magnitude = librosa.amplitude_to_db(magnitude, ref=np.max)
+
+        # Display spectrogram
+        librosa.display.specshow(
+            log_magnitude,
+            sr=sample_rate,
+            x_axis="time",
+            y_axis="hz",
+            ax=ax_spec,
+            cmap="viridis",
+        )
+        # Reduce x-axis label density (wider spacing)
+        try:
+            from matplotlib import ticker as _ticker
+
+            ax_spec.xaxis.set_major_locator(_ticker.MaxNLocator(nbins=4))
+        except Exception:
+            pass
+        ax_spec.set_title(f"Audio Spectrogram - Digit {label}")
+        ax_spec.set_ylabel("Frequency (Hz)")
+        ax_spec.set_xlabel("Time (s)")
+
+        # Find all time indices in the spiking data that belong to this label.
+        spike_idx_all = np.where(np.array(spike_labels) == label)[0][:num_steps]
+        if len(spike_idx_all) == 0:
+            print(f"No spiking data found for label {label}.")
+            continue
+
+        # Get a contiguous segment from the available indices.
+        segment = get_contiguous_segment(spike_idx_all)
+        if segment is None or len(segment) == 0:
+            print(f"No contiguous segment found for label {label}.")
+            continue
+
+        # Extract the spike data for this segment.
+        spike_segment = spike_data[segment, :]  # shape: [time_segment, neurons]
+
+        # For each neuron, determine the time steps (relative to the segment) where it spiked.
+        positions = [
+            np.where(spike_segment[:, n] == 1)[0] for n in range(spike_segment.shape[1])
+        ]
+
+        # Plot the spike raster on the top row.
+        ax_spike = axs[0, i]
+        ax_spike.eventplot(positions, colors="black")
+        ax_spike.set_title(f"Spikes for Audio {label}")
+        ax_spike.set_xlabel("Time steps")
+        ax_spike.set_ylabel("Neuron")
+        # Optionally, adjust y-limits for clarity:
+        ax_spike.set_ylim(-1, spike_segment.shape[1])
+
+    plt.tight_layout()
+
+    # Create plots directory if it doesn't exist
+    os.makedirs("plots", exist_ok=True)
+    plt.savefig("plots/comparison_spike_audio.png")
     plt.show()
 
 

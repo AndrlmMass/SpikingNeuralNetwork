@@ -16,6 +16,8 @@ from plot import (
     top_responders_plotted,
     plot_phi_acc,
     plot_epoch_training,
+    plot_audio_spectrograms_and_spikes,
+    plot_audio_spectrograms_and_spikes_simple,
 )
 from analysis import t_SNE, PCA_analysis, calculate_phi
 from create_network import create_weights, create_arrays
@@ -38,6 +40,8 @@ class snn_sleepy:
         self.ex = self.st + N_exc  # excitatory
         self.ih = self.ex + N_inh  # inhibitory
         self.N = N_exc + N_inh + N_x
+        # One-time plotting guard
+        self._did_plot_spectrograms = False
 
     def process(
         self,
@@ -310,6 +314,7 @@ class snn_sleepy:
         audioMNIST=False,
         imageMNIST=False,
         create_data=False,
+        plot_spectrograms=False,
         # New batch and total parameters
         all_audio_train=30000,
         batch_audio_train=500,
@@ -351,6 +356,7 @@ class snn_sleepy:
         self.offset = offset
         self.first_spike_time = first_spike_time
         self.time_var_input = time_var_input
+        self.plot_spectrograms = plot_spectrograms
         self.tot_images_train = tot_images_train
         self.tot_images_test = tot_images_test
         self.single_train = single_train
@@ -535,6 +541,27 @@ class snn_sleepy:
             print(
                 f"Audio streamer initialized with {self.audio_streamer.get_total_samples()} total samples"
             )
+            # One-time spectrograms + spikes plot before training if requested
+            if (
+                getattr(self, "plot_spectrograms", False)
+                and not self._did_plot_spectrograms
+            ):
+                # One-time preview plotting via plot.py helper
+                from plot import plot_audio_preview_from_streamer
+
+                training_mode = getattr(
+                    self, "get_training_mode", lambda: "audio_only"
+                )()
+                plot_audio_preview_from_streamer(
+                    audio_streamer=self.audio_streamer,
+                    num_steps=self.num_steps if hasattr(self, "num_steps") else 100,
+                    N_x=self.N_x,
+                    training_mode=training_mode,
+                    max_batches=50,
+                    batch_size=max(100, getattr(self, "single_train", 500)),
+                    sample_rate=22050,
+                )
+                self._did_plot_spectrograms = True
 
         if imageMNIST and not create_data:
             from get_data import ImageDataStreamer
@@ -786,7 +813,7 @@ class snn_sleepy:
                 else:
                     return self.data_train, self.labels_train
 
-    def load_audio_batch(self, batch_size, is_training=True):
+    def load_audio_batch(self, batch_size, is_training=True, plot_spectrograms=False):
         """
         Load a batch of audio data and convert to spikes on-demand.
 
@@ -832,6 +859,8 @@ class snn_sleepy:
             self.num_steps,
             num_audio_neurons,
             scaling_method="normalize",
+            plot_spectrograms=plot_spectrograms,
+            sample_rate=22050,
         )
 
         if spike_data is not None:
@@ -843,7 +872,9 @@ class snn_sleepy:
 
         return spike_data, labels
 
-    def load_multimodal_batch(self, batch_size, is_training=True):
+    def load_multimodal_batch(
+        self, batch_size, is_training=True, plot_spectrograms=False
+    ):
         """
         Load a batch of multimodal data (image + audio) and concatenate.
 
@@ -857,7 +888,9 @@ class snn_sleepy:
         from get_data import load_image_batch
 
         # Load audio batch
-        audio_spikes, audio_labels = self.load_audio_batch(batch_size, is_training)
+        audio_spikes, audio_labels = self.load_audio_batch(
+            batch_size, is_training, plot_spectrograms
+        )
         if audio_spikes is None:
             return None, None
 
@@ -914,6 +947,8 @@ class snn_sleepy:
             json.dump(streaming_params, f, indent=2)
 
         print(f"Streaming parameters saved to {streaming_file}")
+
+    # Removed inline audio visualization; use plot.plot_audio_preview_from_streamer instead
 
     def get_training_mode(self):
         """Determine the current training mode based on active streamers."""
@@ -1084,12 +1119,15 @@ class snn_sleepy:
         num_inh=10,
         num_exc=50,
         plot_epoch_performance=True,
-        narrow_top=0.05,
+        narrow_top=0.2,  # Increased from 0.05 to 0.2 (20% of neurons)
         wide_top=0.15,
         tau_syn=30,
         smoothening=350,
         plot_top_response_train=False,
         plot_top_response_test=False,
+        plot_tsne_during_training=True,  # New parameter for t-SNE plotting
+        tsne_plot_interval=1,  # Plot t-SNE every N epochs (1 = every epoch)
+        plot_spectrograms=False,
         random_state=48,
         samples=10,
         use_validation_data=False,
@@ -1317,7 +1355,9 @@ class snn_sleepy:
                 ):
                     # Multimodal mode - load both audio and image data
                     data_train, labels_train = self.load_multimodal_batch(
-                        self.single_train, is_training=True
+                        self.single_train,
+                        is_training=True,
+                        plot_spectrograms=plot_spectrograms,
                     )
                     if data_train is None:
                         print(f"No more multimodal data available at epoch {e}")
@@ -1325,7 +1365,9 @@ class snn_sleepy:
                 elif self.audio_streamer is not None:
                     # Audio only mode
                     data_train, labels_train = self.load_audio_batch(
-                        self.single_train, is_training=True
+                        self.single_train,
+                        is_training=True,
+                        plot_spectrograms=plot_spectrograms,
                     )
                     if data_train is None:
                         print(f"No more audio data available at epoch {e}")
@@ -1434,7 +1476,9 @@ class snn_sleepy:
                     ):
                         # Multimodal streaming mode
                         data_test, labels_test = self.load_multimodal_batch(
-                            self.single_test, is_training=False
+                            self.single_test,
+                            is_training=False,
+                            plot_spectrograms=plot_spectrograms,
                         )
                         if data_test is None:
                             print(f"No more test multimodal data available")
@@ -1452,6 +1496,8 @@ class snn_sleepy:
                             int(np.sqrt(self.N_x))
                             ** 2,  # Audio-only mode uses full N_x
                             scaling_method="normalize",
+                            plot_spectrograms=plot_spectrograms,
+                            sample_rate=22050,
                         )
                         if data_test is None:
                             print(f"No more test audio data available")
@@ -1551,6 +1597,15 @@ class snn_sleepy:
                     )
 
                     # calculate accuracy
+                    print(f"Debug - Test data shape: {spikes_te_out.shape}")
+                    print(f"Debug - Labels shape: {labels_te_out.shape}")
+                    print(
+                        f"Debug - Labels range: {np.min(labels_te_out)} to {np.max(labels_te_out)}"
+                    )
+                    print(f"Debug - Unique labels: {np.unique(labels_te_out)}")
+                    print(f"Debug - narrow_top: {narrow_top}")
+                    print(f"Debug - num_classes: {self.N_classes}")
+
                     acc_te = top_responders_plotted(
                         spikes=spikes_te_out[:, self.st : self.ih],
                         labels=labels_te_out,
@@ -1561,6 +1616,7 @@ class snn_sleepy:
                         compute_not_plot=True,
                         n_last_points=10000,
                     )
+                    print(f"Debug - Raw accuracy: {acc_te}")
                     # accumulate over all tests
                     test_acc += acc_te
                     test_phi += phi_te
@@ -1581,6 +1637,52 @@ class snn_sleepy:
                     phi_te,
                     acc_te,
                 ]
+
+                # Plot t-SNE clustering after each training batch (if enabled and interval matches)
+                if plot_tsne_during_training and (e + 1) % tsne_plot_interval == 0:
+                    print(f"\n=== Epoch {e+1}/{self.epochs} - t-SNE Clustering ===")
+                    print(f"Accuracy: {acc_te:.3f}, Phi: {phi_te:.3f}")
+
+                    # Plot t-SNE for training data (sample for performance)
+                    if spikes_tr_out is not None and labels_tr_out is not None:
+                        print("Plotting t-SNE for training data...")
+                        # Sample data for faster t-SNE computation
+                        sample_size = min(1000, len(spikes_tr_out))
+                        sample_indices = np.random.choice(
+                            len(spikes_tr_out), sample_size, replace=False
+                        )
+                        t_SNE(
+                            spikes=spikes_tr_out[sample_indices, self.st : self.ih],
+                            labels_spike=labels_tr_out[sample_indices],
+                            n_components=2,
+                            perplexity=min(30, sample_size // 4),  # Adaptive perplexity
+                            max_iter=500,  # Reduced iterations for speed
+                            random_state=random_state,
+                            train=True,
+                        )
+
+                    # Plot t-SNE for test data (sample for performance)
+                    if spikes_te_out is not None and labels_te_out is not None:
+                        print("Plotting t-SNE for test data...")
+                        # Sample data for faster t-SNE computation
+                        sample_size = min(1000, len(spikes_te_out))
+                        sample_indices = np.random.choice(
+                            len(spikes_te_out), sample_size, replace=False
+                        )
+                        t_SNE(
+                            spikes=spikes_te_out[sample_indices, self.st : self.ih],
+                            labels_spike=labels_te_out[sample_indices],
+                            n_components=2,
+                            perplexity=min(30, sample_size // 4),  # Adaptive perplexity
+                            max_iter=500,  # Reduced iterations for speed
+                            random_state=random_state,
+                            train=False,
+                        )
+                else:
+                    # Just print the performance metrics without plotting
+                    print(
+                        f"Epoch {e+1}/{self.epochs} - Accuracy: {acc_te:.3f}, Phi: {phi_te:.3f}"
+                    )
 
                 # early stopping
                 if early_stopping and e > interval_ES:
