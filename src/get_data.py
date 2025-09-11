@@ -836,3 +836,85 @@ def create_data(
             S_data_test,
             spike_labels_test,
         )
+
+
+class AudioDataStreamer:
+    """
+    Streamer class for audio data that provides batch processing capabilities
+    """
+    def __init__(self, data_path, batch_size=32):
+        """
+        Initialize the audio data streamer
+
+        Args:
+            data_path: Path to audio data directory
+            batch_size: Batch size for processing
+        """
+        self.data_path = data_path
+        self.batch_size = batch_size
+        self.total_samples = 0
+
+        # Count total samples in the dataset
+        if os.path.exists(data_path):
+            audio_files = []
+            for root, dirs, files in os.walk(data_path):
+                for file in files:
+                    if file.endswith('.wav'):
+                        audio_files.append(os.path.join(root, file))
+
+            self.total_samples = len(audio_files)
+            self.audio_files = audio_files
+        else:
+            print(f"Warning: Audio data path {data_path} does not exist")
+            self.audio_files = []
+
+    def get_total_samples(self):
+        """
+        Get the total number of audio samples in the dataset
+
+        Returns:
+            int: Total number of samples
+        """
+        return self.total_samples
+
+
+class ImageDataStreamer:
+    """
+    Streamer class for image data that provides batch processing capabilities
+    """
+    def __init__(self, data_path, batch_size=32, pixel_size=28, num_steps=10,
+                 gain=1.0, offset=0.0, first_spike_time=0, time_var_input=0):
+        """
+        Initialize the image data streamer
+
+        Args:
+            data_path: Path to image data directory
+            batch_size: Batch size for processing
+            pixel_size: Size of image pixels
+            num_steps: Number of temporal steps
+            gain: Gain parameter for spike generation
+            offset: Offset parameter for spike generation
+            first_spike_time: First spike time
+            time_var_input: Time variance for input
+        """
+        self.data_path = data_path
+        self.batch_size = batch_size
+        self.pixel_size = pixel_size
+        self.num_steps = num_steps
+        self.gain = gain
+        self.offset = offset
+        self.first_spike_time = first_spike_time
+        self.time_var_input = time_var_input
+
+        # For MNIST, we know there are 60000 training and 10000 test samples
+        # But we'll set a reasonable default
+        self.total_samples = 60000
+
+    def get_total_samples(self):
+        """
+        Get the total number of image samples in the dataset
+
+        Returns:
+            int: Total number of samples
+        """
+        return self.total_samples
