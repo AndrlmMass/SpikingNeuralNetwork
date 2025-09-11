@@ -226,186 +226,73 @@ def create_balanced_splits(data, labels, max_total_samples=30000, train_ratio=0.
     
     return (train_data, train_labels), (val_data, val_labels), (test_data, test_labels)
 
-def convert_audio_to_spikes(audio_data, num_steps, pixel_size, use_cochlea_model=True, sample_rate=None):
+def convert_audio_to_spikes(audio_data, num_steps, pixel_size):
     """
-    Convert audio waveforms to spike trains
-    If use_cochlea_model=True: Uses cochlea-inspired frequency decomposition with Poisson processes
-    If use_cochlea_model=False: Uses original Bernoulli process approach
-    Ensures same temporal duration as image data
+    Convert audio waveforms to spike trains using a cochlea-inspired approach.
+    Each neuron encodes a specific frequency band and spikes according to a Poisson process
+    with mean rate proportional to the energy in that band at each time step.
+    """
+    import numpy as np
+    import torch
 
-    Args:
-        audio_data: List of audio waveforms
-        num_steps: Number of temporal steps for spike generation
-        pixel_size: Spatial dimension size (pixel_size x pixel_size)
-        use_cochlea_model: Whether to use cochlea-inspired approach
-        sample_rate: Audio sample rate (if None, auto-detects from data length)
-    """
     batch_size = len(audio_data)
     spike_data = []
+
+    # Define frequency bands (one per neuron/pixel)
+    n_freqs = pixel_size * pixel_size
+    sr = 22050  # Assume AudioMNIST default sample rate
+
+    # Center frequencies spaced on a mel scale for biological plausibility
+    mel_min, mel_max = 0, 2595 * np.log10(1 + (sr // 2) / 700)
+    mel_points = np.linspace(mel_min, mel_max, n_freqs + 2)[1:-1]
+    hz_points = 700 * (10**(mel_points / 2595) - 1)
 
     for i, audio_sample in enumerate(audio_data):
         if i % 1000 == 0:
             print(f"Converting audio sample {i+1}/{batch_size} to spikes...")
 
-        if use_cochlea_model:
-            # Cochlea-inspired approach: Frequency decomposition with Poisson processes
-            sample_spikes = convert_audio_cochlea_style(audio_sample, num_steps, pixel_size, sample_rate)
+        # Pad or trim audio to fixed length
+        audio = np.array(audio_sample)
+        if len(audio) < sr:
+            audio = np.pad(audio, (0, sr - len(audio)))
         else:
-            # Original approach: Amplitude-based Bernoulli process
-            sample_spikes = convert_audio_amplitude_style(audio_sample, num_steps, pixel_size)
+            audio = audio[:sr]
 
-        spike_data.append(sample_spikes)
+        # Compute STFT
+        hop_length = sr // num_steps
+        stft = np.abs(np.fft.rfft(audio, n=sr))
+        freqs = np.fft.rfftfreq(sr, 1/sr)
 
-    # Convert to tensor: (batch_size, num_steps, pixel_size, pixel_size)
+        # For each time step, get the spectrum in a window
+        spikes_t = []
+        for t in range(num_steps):
+            start = t * hop_length
+            end = start + hop_length
+            segment = audio[start:end] if end <= len(audio) else audio[start:]
+            if len(segment) < 8:  # skip if too short
+                segment = np.pad(segment, (0, 8 - len(segment)))
+            spectrum = np.abs(np.fft.rfft(segment, n=hop_length))
+            # For each frequency band, compute mean energy
+            band_energies = []
+            for f in hz_points:
+                idx = np.argmin(np.abs(freqs - f))
+                band_energies.append(spectrum[idx] if idx < len(spectrum) else 0)
+            band_energies = np.array(band_energies)
+            # Normalize energies to [0, 1]
+            if band_energies.max() > 0:
+                band_energies = band_energies / band_energies.max()
+            # Poisson mean rate: scale to reasonable spike rate (e.g., max 1 per timestep)
+            lam = band_energies
+            # Generate Poisson spikes for each neuron (frequency band)
+            spikes_flat = np.random.poisson(lam)
+            # Reshape to (pixel_size, pixel_size)
+            spikes_img = spikes_flat.reshape(pixel_size, pixel_size).astype(np.float32)
+            spikes_t.append(spikes_img)
+        sample_spike_array = np.stack(spikes_t, axis=0)
+        spike_data.append(sample_spike_array)
+
     spike_tensor = torch.tensor(np.array(spike_data), dtype=torch.float32)
-
     return spike_tensor
-
-
-def convert_audio_cochlea_style(audio_sample, num_steps, pixel_size, sample_rate=None):
-    """
-    Convert audio to spikes using cochlea-inspired frequency decomposition
-    Each spatial position encodes a different frequency band
-    Uses Poisson processes with frequency-specific rates
-
-    Args:
-        audio_sample: Audio waveform array
-        num_steps: Number of temporal steps for spike generation
-        pixel_size: Spatial dimension size (pixel_size x pixel_size)
-        sample_rate: Audio sample rate (if None, tries to estimate from data)
-    """
-    # If sample_rate not provided, try to estimate from audio length
-    # AudioMNIST uses 22050 Hz, but we'll make it flexible
-    if sample_rate is None:
-        # Estimate based on typical audio lengths and sample rates
-        # For 1 second audio at 22050 Hz: ~22050 samples
-        # For 1 second audio at 16000 Hz: ~16000 samples
-        audio_length = len(audio_sample)
-        if audio_length > 20000:  # Likely 22050 Hz
-            sample_rate = 22050
-        elif audio_length > 15000:  # Likely 16000 Hz
-            sample_rate = 16000
-        else:  # Shorter audio, assume higher sample rate
-            sample_rate = 44100
-
-    print(f"Using sample rate: {sample_rate} Hz for frequency analysis")
-
-    # Create mel spectrogram for frequency decomposition (like cochlea)
-    # Use more mel bins to ensure good frequency coverage
-    n_mels = min(pixel_size * pixel_size, 80)  # More frequency bands for better coverage
-
-    # Ensure n_fft is appropriate for the sample rate
-    n_fft = min(2048, len(audio_sample) // 4)  # Larger FFT for better frequency resolution
-
-    # Compute mel spectrogram with full frequency range
-    mel_spec = librosa.feature.melspectrogram(
-        y=audio_sample,
-        sr=sample_rate,
-        n_mels=n_mels,
-        n_fft=n_fft,
-        hop_length=max(1, len(audio_sample) // num_steps),
-        fmin=20,  # Start from 20 Hz (human hearing threshold)
-        fmax=min(sample_rate//2, 20000)  # Up to 20kHz or Nyquist, whichever is smaller
-    )
-
-    # Convert to decibels (log scale, like auditory system)
-    mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
-
-    # Normalize to [0, 1] range
-    mel_spec_norm = (mel_spec_db - mel_spec_db.min()) / (mel_spec_db.max() - mel_spec_db.min() + 1e-8)
-
-    # For each frequency band (mel bin), compute average activity over time
-    # This becomes the Poisson rate for that frequency
-    freq_rates = np.mean(mel_spec_norm, axis=1)  # Average across time for each frequency
-
-    # Scale rates to reasonable Poisson firing rates (Hz)
-    # Typical neuron firing rates: 0-100 Hz
-    max_rate = 50.0  # Maximum firing rate in Hz
-    poisson_rates = freq_rates * max_rate
-
-    # Generate Poisson spikes for each frequency band over time
-    sample_spikes = []
-    dt = len(audio_sample) / sample_rate / num_steps  # Time per step in seconds
-
-    for t in range(num_steps):
-        # Create spatial spike pattern where each position corresponds to a frequency
-        spatial_spikes = np.zeros((pixel_size, pixel_size), dtype=np.float32)
-
-        # Map frequency bands to spatial positions
-        for freq_idx in range(min(n_mels, pixel_size * pixel_size)):
-            rate = poisson_rates[freq_idx]
-
-            # Generate Poisson spike count for this time step
-            spike_count = np.random.poisson(rate * dt)
-
-            # Distribute spikes across the spatial dimension for this frequency
-            if spike_count > 0:
-                # Create a spatial pattern for this frequency band
-                # Use a more sophisticated mapping to cover all spatial positions
-                y_pos = freq_idx // pixel_size
-                x_pos = freq_idx % pixel_size
-
-                if y_pos < pixel_size and x_pos < pixel_size:
-                    # Place spike at this spatial location
-                    spatial_spikes[y_pos, x_pos] = 1.0
-
-                    # If we have multiple spikes, spread them to neighboring positions
-                    if spike_count > 1:
-                        for extra_spike in range(spike_count - 1):
-                            # Add some spatial jitter
-                            jitter_y = np.random.randint(-1, 2)
-                            jitter_x = np.random.randint(-1, 2)
-                            new_y = np.clip(y_pos + jitter_y, 0, pixel_size - 1)
-                            new_x = np.clip(x_pos + jitter_x, 0, pixel_size - 1)
-                            spatial_spikes[new_y, new_x] = 1.0
-
-        sample_spikes.append(spatial_spikes)
-
-    return np.stack(sample_spikes, axis=0)
-
-
-def convert_audio_amplitude_style(audio_sample, num_steps, pixel_size):
-    """
-    Original amplitude-based approach for comparison
-    """
-    # Get audio properties
-    audio_length = len(audio_sample)
-
-    # Resample audio to match temporal steps
-    if audio_length > num_steps:
-        # Downsample by taking every nth sample
-        step_size = audio_length // num_steps
-        resampled_audio = audio_sample[::step_size][:num_steps]
-    else:
-        # Upsample by repeating samples
-        repeat_factor = num_steps // audio_length + 1
-        resampled_audio = np.tile(audio_sample, repeat_factor)[:num_steps]
-
-    # Convert audio amplitude to spike probability [0, 1]
-    # Normalize to [0, 1] range
-    audio_min = np.min(resampled_audio)
-    audio_max = np.max(resampled_audio)
-    if audio_max > audio_min:
-        normalized_audio = (resampled_audio - audio_min) / (audio_max - audio_min)
-    else:
-        normalized_audio = np.zeros_like(resampled_audio)
-
-    # Apply sigmoid to create smoother probability distribution
-    spike_probabilities = 1 / (1 + np.exp(-5 * (normalized_audio - 0.5)))
-
-    # Generate spike trains for each temporal step
-    sample_spikes = []
-    for t in range(num_steps):
-        # Create spatial spike pattern based on audio amplitude
-        prob = spike_probabilities[t]
-
-        # Generate Bernoulli spikes across spatial dimensions
-        # Higher amplitude = higher probability of spikes
-        spatial_spikes = np.random.binomial(1, prob, size=(pixel_size, pixel_size)).astype(np.float32)
-
-        sample_spikes.append(spatial_spikes)
-
-    return np.stack(sample_spikes, axis=0)
 
 def combine_audio_image_data(audio_data, audio_labels, image_data, image_labels):
     """
@@ -591,10 +478,10 @@ def create_data(
         print(f"Converting audio data to spike trains with {temporal_steps} temporal steps...")
 
         # Convert audio to spike trains
-        audio_spikes_train = convert_audio_to_spikes(audio_train_data, temporal_steps, pixel_size, sample_rate=22050)
-        audio_spikes_test = convert_audio_to_spikes(audio_test_data, temporal_steps, pixel_size, sample_rate=22050)
+        audio_spikes_train = convert_audio_to_spikes(audio_train_data, temporal_steps, pixel_size)
+        audio_spikes_test = convert_audio_to_spikes(audio_test_data, temporal_steps, pixel_size)
         if use_validation_data and audio_val_data is not None:
-            audio_spikes_val = convert_audio_to_spikes(audio_val_data, temporal_steps, pixel_size, sample_rate=22050)
+            audio_spikes_val = convert_audio_to_spikes(audio_val_data, temporal_steps, pixel_size)
 
         print(f"Audio spike conversion complete:")
         print(f"Train audio spikes shape: {audio_spikes_train.shape}")
@@ -777,8 +664,8 @@ def create_data(
         print("\nCombining audio and image data into unified dataset...")
 
         # Get the spike trains for both modalities
-        audio_spikes_train = convert_audio_to_spikes(audio_train_data, num_steps, pixel_size, sample_rate=22050)
-        audio_spikes_test = convert_audio_to_spikes(audio_test_data, num_steps, pixel_size, sample_rate=22050)
+        audio_spikes_train = convert_audio_to_spikes(audio_train_data, num_steps, pixel_size)
+        audio_spikes_test = convert_audio_to_spikes(audio_test_data, num_steps, pixel_size)
 
         # Combine by concatenating along channel/feature dimension
         # Original shape: (batch, time_steps, pixel_size, pixel_size)
@@ -796,7 +683,7 @@ def create_data(
         S_data_test = S_data_test_combined.view(-1, pixel_size * 2)
 
         if use_validation_data:
-            audio_spikes_val = convert_audio_to_spikes(audio_val_data, num_steps, pixel_size, sample_rate=22050)
+            audio_spikes_val = convert_audio_to_spikes(audio_val_data, num_steps, pixel_size)
             S_data_val_combined = torch.cat([S_data_val.view(-1, num_steps, pixel_size, pixel_size),
                                            audio_spikes_val], dim=-1)
             S_data_val = S_data_val_combined.view(-1, pixel_size * 2)
@@ -836,85 +723,3 @@ def create_data(
             S_data_test,
             spike_labels_test,
         )
-
-
-class AudioDataStreamer:
-    """
-    Streamer class for audio data that provides batch processing capabilities
-    """
-    def __init__(self, data_path, batch_size=32):
-        """
-        Initialize the audio data streamer
-
-        Args:
-            data_path: Path to audio data directory
-            batch_size: Batch size for processing
-        """
-        self.data_path = data_path
-        self.batch_size = batch_size
-        self.total_samples = 0
-
-        # Count total samples in the dataset
-        if os.path.exists(data_path):
-            audio_files = []
-            for root, dirs, files in os.walk(data_path):
-                for file in files:
-                    if file.endswith('.wav'):
-                        audio_files.append(os.path.join(root, file))
-
-            self.total_samples = len(audio_files)
-            self.audio_files = audio_files
-        else:
-            print(f"Warning: Audio data path {data_path} does not exist")
-            self.audio_files = []
-
-    def get_total_samples(self):
-        """
-        Get the total number of audio samples in the dataset
-
-        Returns:
-            int: Total number of samples
-        """
-        return self.total_samples
-
-
-class ImageDataStreamer:
-    """
-    Streamer class for image data that provides batch processing capabilities
-    """
-    def __init__(self, data_path, batch_size=32, pixel_size=28, num_steps=10,
-                 gain=1.0, offset=0.0, first_spike_time=0, time_var_input=0):
-        """
-        Initialize the image data streamer
-
-        Args:
-            data_path: Path to image data directory
-            batch_size: Batch size for processing
-            pixel_size: Size of image pixels
-            num_steps: Number of temporal steps
-            gain: Gain parameter for spike generation
-            offset: Offset parameter for spike generation
-            first_spike_time: First spike time
-            time_var_input: Time variance for input
-        """
-        self.data_path = data_path
-        self.batch_size = batch_size
-        self.pixel_size = pixel_size
-        self.num_steps = num_steps
-        self.gain = gain
-        self.offset = offset
-        self.first_spike_time = first_spike_time
-        self.time_var_input = time_var_input
-
-        # For MNIST, we know there are 60000 training and 10000 test samples
-        # But we'll set a reasonable default
-        self.total_samples = 60000
-
-    def get_total_samples(self):
-        """
-        Get the total number of image samples in the dataset
-
-        Returns:
-            int: Total number of samples
-        """
-        return self.total_samples
