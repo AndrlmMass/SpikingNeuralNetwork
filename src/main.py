@@ -5,11 +5,11 @@ snn_N = snn_sleepy()
 
 # acquire data
 snn_N.prepare_data(
-    all_audio_train=6000,
-    batch_audio_train=500,
-    all_audio_test=1000,
-    batch_audio_test=200,
-    all_audio_val=1000,
+    all_audio_train=20000,
+    batch_audio_train=5000,
+    all_audio_test=4000,
+    batch_audio_test=800,
+    all_audio_val=2000,
     batch_audio_val=100,
     all_images_train=6000,
     batch_image_train=500,
@@ -25,7 +25,7 @@ snn_N.prepare_data(
     audioMNIST=True,
     imageMNIST=False,
     create_data=False,
-    plot_spectrograms=True,
+    plot_spectrograms=False,
 )
 
 # set up network for training
@@ -38,7 +38,7 @@ snn_N.prepare_network(
     se_weights=0.2,
     ee_weights=0.05,
     ei_weights=0.4,
-    ie_weights=-0.8,
+    ie_weights=-0.5,
     create_network=False,
 )
 
@@ -56,16 +56,16 @@ snn_N.train_network(
         0.99997,
     ],
     samples=10,
-    force_train=False,
-    plot_spikes_train=True,
+    force_train=True,
+    plot_spikes_train=False,
     plot_weights=True,
     plot_epoch_performance=True,
-    sleep_synchronized=False,
+    sleep_synchronized=True,
     plot_top_response_test=False,
     plot_top_response_train=False,
-    plot_tsne_during_training=True,
+    plot_tsne_during_training=False,
     tsne_plot_interval=1,
-    plot_spectrograms=False,
+    plot_spectrograms=True,
     use_validation_data=False,
     var_noise=2,
     tau_syn=30,
@@ -74,7 +74,7 @@ snn_N.train_network(
     A_plus=0.5,
     tau_LTD=7.5,
     tau_LTP=10,
-    learning_rate_exc=0.0008,
+    learning_rate_exc=0.005,
     learning_rate_inh=0.005,
 )
 

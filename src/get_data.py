@@ -1,11 +1,12 @@
 from torchvision import datasets, transforms
-from plot import plot_floats_and_spikes, plot_audio_spectrograms_and_spikes
-import torch.nn.functional as F
-import matplotlib.pyplot as plt
+from src.plot import plot_floats_and_spikes, plot_audio_spectrograms_and_spikes
 import librosa
+import gammatone.gtgram
 from snntorch import spikegen
 import numpy as np
 import torch
+from tqdm import tqdm
+import warnings
 import os
 
 os.environ["TQDM_DISABLE"] = "True"
@@ -16,39 +17,166 @@ def normalize_image(img, target_sum=1.0):
     return img * (target_sum / current_sum) if current_sum > 0 else img
 
 
-import os
-import numpy as np
-import librosa
-import warnings
-
 warnings.filterwarnings("ignore")
 
 
-def normalize_audio_lufs(audio, sample_rate, target_lufs=-23.0):
+def _mel_filterbank_envelopes(
+    x, sr, n_ch=40, win_ms=25, hop_ms=10, fmin=50.0, fmax=None
+):
     """
-    Normalize audio to target LUFS (Loudness Units relative to Full Scale)
-    This is the standard used by Spotify and other streaming platforms
+    Fallback cochlear-ish features using mel filterbank magnitudes + smoothing.
+    Returns envelopes (F x T) and frame_dt (seconds).
     """
-    # Calculate current RMS
-    rms = np.sqrt(np.mean(audio**2))
+    if fmax is None:
+        fmax = sr / 2.0
+    n_fft = int(round(sr * win_ms / 1000.0))
+    hop_length = int(round(sr * hop_ms / 1000.0))
+    S = librosa.feature.melspectrogram(
+        y=x,
+        sr=sr,
+        n_mels=n_ch,
+        fmin=fmin,
+        fmax=fmax,
+        n_fft=n_fft,
+        hop_length=hop_length,
+        power=1.0,  # magnitude, not power^2
+    )  # (F, T)
+    # Simple envelope smoothing across time per channel
+    # Convert each channel’s frame series to a “continuous-ish” envelope by smoothing along time
+    # Here: a lightweight moving-average via IIR in frame-domain
+    F, T = S.shape
+    E = np.empty_like(S)
+    alpha = np.exp(-1.0 / 3.0)  # ~3-frame time constant
+    for f in range(F):
+        acc = 0.0
+        for t in range(T):
+            acc = (1.0 - alpha) * S[f, t] + alpha * acc
+            E[f, t] = acc
+    frame_dt = hop_length / float(sr)
+    return E, frame_dt
 
-    # Convert RMS to LUFS approximation (simplified)
-    # In practice, you'd use a proper LUFS meter, but this gives good results
-    current_lufs = 20 * np.log10(rms) if rms > 0 else -60
 
-    # Calculate gain needed
-    gain_db = target_lufs - current_lufs
-    gain_linear = 10 ** (gain_db / 20)
+def _gammatone_envelopes(x, sr, n_ch=40, win_ms=25, hop_ms=10, fmin=50.0):
+    """
+    If 'gammatone' is installed, use its gtgram for a more auditory cochleagram.
+    Returns envelopes (F x T) and frame_dt (seconds).
+    """
+    try:
+        import gammatone.gtgram as gtg
+    except Exception:
+        return None, None
+    win_time = win_ms / 1000.0
+    hop_time = hop_ms / 1000.0
+    G = gtg.gtgram(
+        x, sr, window_time=win_time, hop_time=hop_time, channels=n_ch, f_min=fmin
+    )
+    # G is positive; light temporal smoothing
+    F, T = G.shape
+    E = np.empty_like(G)
+    alpha = np.exp(-1.0 / 3.0)
+    for f in range(F):
+        acc = 0.0
+        for t in range(T):
+            acc = (1.0 - alpha) * G[f, t] + alpha * acc
+            E[f, t] = acc
+    frame_dt = hop_time
+    return E, frame_dt
 
-    # Apply gain
-    normalized_audio = audio * gain_linear
 
-    # Prevent clipping
-    max_val = np.max(np.abs(normalized_audio))
-    if max_val > 1.0:
-        normalized_audio = normalized_audio / max_val * 0.95
+def cochlear_to_spikes_1s(
+    wav_batch,  # list of 1D float32 arrays, variable length
+    sr=22050,
+    n_channels=40,
+    win_ms=25,
+    hop_ms=10,
+    target_max_rate_hz=100.0,  # upper bound for an active channel
+    env_cutoff_hz=120.0,  # used in raw-envelope path; mel/gt already smoothed
+    out_T_ms=1000,  # exactly 1000 steps
+    eps=1e-8,
+    return_rates=False,
+    show_progress=False,
+    progress_desc="Encoding",
+    debug=False,
+):
+    """
+    Full pipeline:
+      raw -> (gammatone|mel) envelopes -> CMVN -> sigmoid map -> resample to 1000 steps (1 ms) -> area-match -> Poisson.
+    Guarantees: every file uses *all* of its content (global time-warp), output length = 1000.
+    """
+    B = len(wav_batch)
+    T_out = int(out_T_ms)  # 1000
+    dt_out = 1e-3  # 1 ms
 
-    return normalized_audio
+    all_spikes, all_rates = [], []
+
+    # Optionally show per-file progress
+    if show_progress:
+        # Ensure tqdm is enabled for this call
+        try:
+            os.environ["TQDM_DISABLE"] = "False"
+        except Exception:
+            pass
+        iterator = tqdm(
+            wav_batch,
+            total=B,
+            desc=progress_desc,
+            leave=False,
+        )
+    else:
+        iterator = wav_batch
+
+    for x in iterator:
+        # --- Cochlear front-end (prefer gammatone)
+        E, frame_dt = _gammatone_envelopes(
+            x, sr, n_ch=n_channels, win_ms=win_ms, hop_ms=hop_ms
+        )
+        if E is None:  # fallback: mel
+            E, frame_dt = _mel_filterbank_envelopes(
+                x, sr, n_ch=n_channels, win_ms=win_ms, hop_ms=hop_ms
+            )
+
+        # --- Log compression + per-channel CMVN
+        # add small bias to avoid log(0)
+        X = np.log1p(np.maximum(E, 0.0))
+        X = (X - X.mean(axis=1, keepdims=True)) / (X.std(axis=1, keepdims=True) + eps)
+
+        # --- Map to [0, target_max_rate] with a smooth nonlinearity
+        rates_hz_frames = (
+            1.0 / (1.0 + np.exp(-X))
+        ) * target_max_rate_hz  # (F, T_frames)
+
+        # --- Time-normalize: resample from original length to 1000 steps (use *all* audio)
+        F, T_frames = rates_hz_frames.shape
+        t_old = np.arange(T_frames) * frame_dt
+        if T_frames == 1:
+            # Degenerate 1-frame case: tile
+            rates_resamp = np.tile(rates_hz_frames[:, 0:1], (1, T_out))
+        else:
+            t_new = np.linspace(0.0, t_old[-1], T_out)  # covers full utterance
+            rates_resamp = np.empty((F, T_out), dtype=np.float32)
+            for f in range(F):
+                rates_resamp[f] = np.interp(t_new, t_old, rates_hz_frames[f])
+
+        # --- Area match: preserve expected spike count across the time-warp
+        # Ensure sum(rate*dt) invariant before/after resample (per channel)
+        area_old = (rates_hz_frames * frame_dt).sum(axis=1, keepdims=True)  # (F,1)
+        area_new = (rates_resamp * dt_out).sum(axis=1, keepdims=True) + eps  # (F,1)
+        scale = np.where(area_new > 0, area_old / area_new, 1.0)
+        rates_resamp *= scale
+
+        # --- Poisson sampling at 1 ms with exact Bernoulli thinning
+        # p = 1 - exp(-rate * dt)
+        p = 1.0 - np.exp(-np.clip(rates_resamp, 0.0, None) * dt_out)  # (F, 1000)
+        spikes = (np.random.rand(F, T_out) < p).astype(np.int8).T  # (1000, F)
+        all_spikes.append(spikes)
+        if return_rates:
+            all_rates.append(rates_resamp.T)  # (1000, F)
+
+    spikes_bt = np.stack(all_spikes, axis=0)  # (B, 1000, F)
+    if return_rates:
+        rates_bt = np.stack(all_rates, axis=0)  # (B, 1000, F)
+        return spikes_bt, rates_bt
+    return spikes_bt
 
 
 class ImageDataStreamer:
@@ -176,259 +304,93 @@ class ImageDataStreamer:
 
 class AudioDataStreamer:
     """
-    Streams audio data in batches to avoid loading all files at once.
-    Only loads and processes small batches as needed.
+    Streams audio in batches without truncating/padding.
+    You get variable-length waveforms; the encoder will handle time-normalization.
     """
 
-    def __init__(self, data_path, target_sr=22050, duration=1.0, batch_size=100):
+    def __init__(self, data_path, target_sr=22050, batch_size=100):
         self.data_path = data_path
         self.target_sr = target_sr
-        self.duration = duration
         self.batch_size = batch_size
 
-        # Get list of all audio files
-        self.audio_files = []
-        self.audio_labels = []
-
+        self.audio_files, self.audio_labels = [], []
         if not os.path.exists(data_path):
-            print(f"Error: Path {data_path} does not exist!")
-            return
+            raise FileNotFoundError(f"Path {data_path} does not exist!")
 
-        # Walk through all files and collect file paths
         for root, _, files in os.walk(data_path):
             for file in files:
-                if file.endswith(".wav"):
-                    file_path = os.path.join(root, file)
-                    label = int(file[0]) if file[0].isdigit() else None
-                    if label is not None and 0 <= label <= 9:
-                        self.audio_files.append(file_path)
-                        self.audio_labels.append(label)
+                if not file.lower().endswith(".wav"):
+                    continue
+                fp = os.path.join(root, file)
+                # Expect filenames like "3_...wav"; adapt if yours differ
+                label = int(file[0]) if file[0].isdigit() else None
+                if label is not None and 0 <= label <= 9:
+                    self.audio_files.append(fp)
+                    self.audio_labels.append(label)
 
+        self.indices = np.arange(len(self.audio_files))
+        np.random.shuffle(self.indices)
         print(f"Found {len(self.audio_files)} audio files")
         print(f"Label distribution: {np.bincount(self.audio_labels)}")
 
-        # Shuffle indices for random access
-        self.indices = np.arange(len(self.audio_files))
-        np.random.shuffle(self.indices)
-
     def get_batch(self, start_idx, num_samples):
-        """
-        Load a batch of audio samples starting from start_idx.
-        Returns (audio_batch, labels_batch) or (None, None) if no more data.
-        """
         if start_idx >= len(self.audio_files):
             return None, None
-
         end_idx = min(start_idx + num_samples, len(self.audio_files))
-        batch_files = [
-            self.audio_files[self.indices[i]] for i in range(start_idx, end_idx)
-        ]
-        batch_labels = [
-            self.audio_labels[self.indices[i]] for i in range(start_idx, end_idx)
-        ]
+        idxs = self.indices[start_idx:end_idx]
 
-        # Load and process audio files
-        audio_batch = []
-        valid_labels = []
-
-        for file_path, label in zip(batch_files, batch_labels):
+        audio_batch, labels_batch = [], []
+        for i in idxs:
+            fp = self.audio_files[i]
             try:
-                # Load audio file
-                audio, sr = librosa.load(
-                    file_path, sr=self.target_sr, duration=self.duration
-                )
-
-                # Normalize using LUFS standard
-                normalized_audio = normalize_audio_lufs(audio, sr)
-                audio_batch.append(normalized_audio)
-                valid_labels.append(label)
-
+                # Load full file at target_sr (no duration cap)
+                x, sr = librosa.load(fp, sr=self.target_sr, mono=True)
+                audio_batch.append(x.astype(np.float32))
+                labels_batch.append(self.audio_labels[i])
             except Exception as e:
-                print(f"Error loading {file_path}: {e}")
-                continue
-
+                print(f"Error loading {fp}: {e}")
         if not audio_batch:
             return None, None
-
-        # Pad/truncate to same length
-        max_length = max(len(audio) for audio in audio_batch)
-        padded_audio = []
-
-        for audio in audio_batch:
-            if len(audio) < max_length:
-                padded_audio.append(
-                    np.pad(audio, (0, max_length - len(audio)), "constant")
-                )
-            else:
-                padded_audio.append(audio[:max_length])
-
-        return np.array(padded_audio), np.array(valid_labels)
+        return audio_batch, np.array(labels_batch, dtype=np.int64)
 
     def get_total_samples(self):
-        """Return total number of available samples."""
         return len(self.audio_files)
 
 
-def load_audiomnist_data(data_path, target_sr=22050, duration=1.0):
+def load_audiomnist_data(data_path, target_sr=22050):
     """
-    Load AudioMNIST data with proper normalization and labeling
+    Loads all AudioMNIST into memory (if you really want that).
+    Fixed: returns properly stacked padded data if you *choose* to pad.
     """
-    all_data = []
-    all_labels = []
-
+    all_data, all_labels = [], []
     if not os.path.exists(data_path):
-        print(f"Error: Path {data_path} does not exist!")
-        return None, None
+        raise FileNotFoundError(f"Path {data_path} does not exist!")
 
-    from tqdm import tqdm
-
-    # Walk through all files with progress bar for directories
-    for root, _, files in tqdm(list(os.walk(data_path)), desc="Downloading AudioMNIST"):
-        # Progress bar for files in each directory
+    for root, _, files in tqdm(list(os.walk(data_path)), desc="Loading AudioMNIST"):
         for file in files:
-            if file.endswith(".wav"):
-                file_path = os.path.join(root, file)
-
-                try:
-                    # Load audio file
-                    audio, sr = librosa.load(file_path, sr=target_sr, duration=duration)
-
-                    # Normalize using LUFS standard
-                    normalized_audio = normalize_audio_lufs(audio, sr)
-
-                    # Extract label from filename (first character should be 0-9)
-                    label = int(file[0]) if file[0].isdigit() else None
-
-                    if label is not None and 0 <= label <= 9:
-                        all_data.append(normalized_audio)
-                        all_labels.append(label)
-
-                except Exception as e:
-                    print(f"Error loading {file_path}: {e}")
-                    continue
+            if not file.endswith(".wav"):
+                continue
+            fp = os.path.join(root, file)
+            try:
+                x, sr = librosa.load(fp, sr=target_sr, mono=True)
+                label = int(file[0]) if file[0].isdigit() else None
+                if label is not None and 0 <= label <= 9:
+                    all_data.append(x.astype(np.float32))
+                    all_labels.append(label)
+            except Exception as e:
+                print(f"Error loading {fp}: {e}")
 
     if not all_data:
-        print("No valid audio files found!")
         return None, None
 
-    # Convert to numpy arrays
-    # Pad/truncate all audio to same length
-    max_length = max(len(audio) for audio in all_data)
-    padded_data = []
-
-    for audio in all_data:
-        if len(audio) < max_length:
-            # Pad with zeros
-            padded_audio = np.pad(audio, (0, max_length - len(audio)), "constant")
-        else:
-            # Truncate
-            padded_audio = audio[:max_length]
-        padded_data.append(padded_audio)
-
-    data_array = np.array(padded_data)
-    labels_array = np.array(all_labels)
-
-    print(f"Audio shape: {data_array.shape}")
-    print(f"Labels shape: {labels_array.shape}")
+    # Optional: pad to the max length (not used downstream if you use the encoder below)
+    max_len = max(len(x) for x in all_data)
+    padded = [np.pad(x, (0, max_len - len(x))) for x in all_data]
+    data_array = np.stack(padded, axis=0)
+    labels_array = np.array(all_labels, dtype=np.int64)
+    print(f"Audio shape: {data_array.shape}  Labels shape: {labels_array.shape}")
     print(f"Label distribution: {np.bincount(labels_array)}")
-
     return data_array, labels_array
-
-
-def convert_audio_to_spikes(
-    audio, num_steps, num_input_neurons, scaling_method="normalize"
-):
-    """
-    Convert audio data to binary spikes for SNN input.
-    Each input neuron represents a frequency band, and firing rate corresponds
-    to the energy in that frequency band over time.
-
-    Args:
-        audio: numpy array of shape (num_samples, audio_length)
-        num_steps: number of time steps for spike generation
-        num_input_neurons: number of input neurons (frequency bands)
-        scaling_method: "normalize" for image-like normalization, "sigmoid" for sigmoid scaling
-
-    Returns:
-        spikes_arr: numpy array of shape (num_samples * num_steps, num_input_neurons)
-    """
-    num_samples = audio.shape[0]
-    audio_length = audio.shape[1]
-
-    # Calculate frequency band intervals
-    intervals = audio_length // num_input_neurons
-
-    # Debug: Print dimensions (commented for performance)
-    # print(f"Audio data: {num_samples} samples, {audio_length} length")
-    # print(f"Input neurons: {num_input_neurons}, intervals: {intervals}")
-
-    # Initialize output array
-    spikes_arr = np.zeros((num_samples * num_steps, num_input_neurons), dtype=int)
-
-    # Calculate normalization parameters similar to image processing
-    # Target sum for audio should be similar to image target_sum = (pixel_size**2) * 0.1
-    target_sum = num_input_neurons * 0.1  # Similar scaling to images
-
-    for sample_idx in range(num_samples):
-        audio_sample = audio[sample_idx]
-
-        # Collect all frequency band energies for this sample for normalization
-        band_energies = []
-        for neuron_idx in range(num_input_neurons):
-            # Get frequency band for this neuron
-            start_idx = neuron_idx * intervals
-            end_idx = start_idx + intervals
-
-            # Extract frequency band
-            freq_band = audio_sample[start_idx:end_idx]
-            band_energy = np.mean(freq_band**2)  # Use squared values for energy
-            band_energies.append(band_energy)
-
-        # Apply scaling based on the chosen method
-        if scaling_method == "normalize":
-            # Normalize the energies similar to image normalization
-            current_sum = sum(band_energies)
-            if current_sum > 0:
-                normalization_factor = target_sum / current_sum
-                scaled_energies = [
-                    energy * normalization_factor for energy in band_energies
-                ]
-            else:
-                scaled_energies = band_energies
-        elif scaling_method == "sigmoid":
-            # Scale frequency band energies to range [0, 1]
-            max_energy = max(band_energies) if band_energies else 1.0
-            min_energy = min(band_energies) if band_energies else 0.0
-            if max_energy > min_energy:
-                scaled_energies = [
-                    (energy - min_energy) / (max_energy - min_energy)
-                    for energy in band_energies
-                ]
-            else:
-                scaled_energies = band_energies
-        else:
-            # Default to no scaling
-            scaled_energies = band_energies
-
-        # Generate spikes for each frequency band
-        for neuron_idx in range(num_input_neurons):
-            # Use scaled energy as the rate parameter
-            energy_tensor = torch.tensor(
-                [scaled_energies[neuron_idx]], dtype=torch.float32
-            )
-
-            # Generate spikes using rate coding
-            spikes = spikegen.rate(energy_tensor, num_steps=num_steps)
-
-            # Convert back to numpy and flatten
-            spikes_np = spikes.numpy().flatten()
-
-            # Store in output array
-            start_row = sample_idx * num_steps
-            end_row = start_row + num_steps
-            spikes_arr[start_row:end_row, neuron_idx] = spikes_np
-
-    return spikes_arr
 
 
 def load_audio_batch(
@@ -437,9 +399,8 @@ def load_audio_batch(
     batch_size,
     num_steps,
     num_input_neurons,
-    scaling_method="normalize",
     plot_spectrograms=False,
-    sample_rate=22050,
+    return_rates=False,
 ):
     """
     Load a batch of audio data and convert to spikes on-demand.
@@ -450,7 +411,6 @@ def load_audio_batch(
         batch_size: Number of samples to load
         num_steps: Number of time steps for spike generation
         num_input_neurons: Number of input neurons (frequency bands)
-        scaling_method: Scaling method for audio-to-spikes conversion
 
     Returns:
         (spike_data, labels) or (None, None) if no more data
@@ -462,9 +422,20 @@ def load_audio_batch(
         return None, None
 
     # Convert to spikes
-    spike_data = convert_audio_to_spikes(
-        audio_batch, num_steps, num_input_neurons, scaling_method=scaling_method
-    )
+    spike_data_3d = cochlear_to_spikes_1s(
+        audio_batch,
+        sr=getattr(audio_streamer, "target_sr", 22050),
+        n_channels=int(num_input_neurons),
+        win_ms=25,
+        hop_ms=10,
+        target_max_rate_hz=100.0,
+        env_cutoff_hz=120.0,
+        out_T_ms=num_steps,
+        eps=1e-8,
+    )  # (B, num_steps, num_input_neurons)
+
+    # Flatten batch and time to match training pipeline expectations: (B*T, F)
+    spike_data = spike_data_3d.reshape(-1, spike_data_3d.shape[-1])
 
     # Extend labels to match spike data (repeat each label for num_steps)
     spike_labels = labels.repeat(num_steps)
@@ -478,7 +449,7 @@ def load_audio_batch(
                 spike_labels=spike_labels,
                 audio_labels=labels,
                 num_steps=num_steps,
-                sample_rate=sample_rate,
+                sample_rate=getattr(audio_streamer, "target_sr", 22050),
             )
         except Exception as e:
             print(f"Warning: failed to plot spectrograms for this batch: {e}")
@@ -609,17 +580,6 @@ def create_balanced_splits(
     train_per_class = train_samples // len(unique_labels)
     val_per_class = val_samples // len(unique_labels)
     test_per_class = test_samples // len(unique_labels)
-
-    print(f"Total available samples: {available_samples}")
-    print(f"Max samples limit: {max_total_samples}")
-    print(f"Actual samples used: {actual_max_samples}")
-    print(f"Samples per class: {samples_per_class}")
-    print(f"Train samples: {train_samples} ({train_ratio*100:.1f}%)")
-    print(f"Val samples: {val_samples} ({val_ratio*100:.1f}%)")
-    print(f"Test samples: {test_samples} ({test_ratio*100:.1f}%)")
-    print(f"Train samples per class: {train_per_class}")
-    print(f"Val samples per class: {val_per_class}")
-    print(f"Test samples per class: {test_per_class}")
 
     # First, limit total data to actual_max_samples if we have more
     if len(data) > actual_max_samples:
@@ -911,41 +871,41 @@ def create_data(
         if use_validation_data:
             labels_val = torch.zeros(1, dtype=torch.long)
 
-    # Convert floats to poisson sequences
-    S_data_train = torch.zeros(size=norm_images_train.shape)
-    S_data_train = S_data_train.repeat(num_steps, 1, 1, 1)
-    for i in range(norm_images_train.shape[0]):
-        S_data_train[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
-            norm_images_train[i],
-            num_steps=num_steps,
-            gain=gain,
-            offset=offset,
-            first_spike_time=first_spike_time,
-            time_var_input=time_var_input,
-        )
-    S_data_test = torch.zeros(size=norm_images_test.shape)
-    S_data_test = S_data_test.repeat(num_steps, 1, 1, 1)
-    for i in range(norm_images_test.shape[0]):
-        S_data_test[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
-            norm_images_test[i],
-            num_steps=num_steps,
-            gain=gain,
-            offset=offset,
-            first_spike_time=first_spike_time,
-            time_var_input=time_var_input,
-        )
-    if use_validation_data:
-        S_data_val = torch.zeros(size=norm_images_val.shape)
-        S_data_val = S_data_val.repeat(num_steps, 1, 1, 1)
-        for i in range(norm_images_val.shape[0]):
-            S_data_val[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
-                norm_images_val[i],
+        # Convert floats to poisson sequences
+        S_data_train = torch.zeros(size=norm_images_train.shape)
+        S_data_train = S_data_train.repeat(num_steps, 1, 1, 1)
+        for i in range(norm_images_train.shape[0]):
+            S_data_train[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
+                norm_images_train[i],
                 num_steps=num_steps,
                 gain=gain,
                 offset=offset,
                 first_spike_time=first_spike_time,
                 time_var_input=time_var_input,
             )
+        S_data_test = torch.zeros(size=norm_images_test.shape)
+        S_data_test = S_data_test.repeat(num_steps, 1, 1, 1)
+        for i in range(norm_images_test.shape[0]):
+            S_data_test[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
+                norm_images_test[i],
+                num_steps=num_steps,
+                gain=gain,
+                offset=offset,
+                first_spike_time=first_spike_time,
+                time_var_input=time_var_input,
+            )
+        if use_validation_data:
+            S_data_val = torch.zeros(size=norm_images_val.shape)
+            S_data_val = S_data_val.repeat(num_steps, 1, 1, 1)
+            for i in range(norm_images_val.shape[0]):
+                S_data_val[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
+                    norm_images_val[i],
+                    num_steps=num_steps,
+                    gain=gain,
+                    offset=offset,
+                    first_spike_time=first_spike_time,
+                    time_var_input=time_var_input,
+                )
 
     # Extend labels based on num_steps
     spike_labels_train = labels_train.numpy().repeat(num_steps)
@@ -1075,8 +1035,8 @@ def create_data(
         print(
             f"Image data: {len(images_train)} train, {len(images_val) if images_val is not None else 0} val, {len(images_test)} test"
         )
-        print(f"Data shape: {S_data_train.shape}")
-        print(f"Labels shape: {spike_labels_train.shape}")
+    print(f"Data shape: {S_data_train.shape}")
+    print(f"Labels shape: {spike_labels_train.shape}")
 
     print("=" * 30)
 

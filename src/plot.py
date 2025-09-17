@@ -689,7 +689,7 @@ def plot_audio_spectrograms_and_spikes(
 
 def plot_audio_preview_from_streamer(
     audio_streamer,
-    num_steps,
+    num_steps,  # e.g., 1000
     N_x,
     training_mode="audio_only",
     max_batches=50,
@@ -700,7 +700,10 @@ def plot_audio_preview_from_streamer(
     Collect up to one sample for each class in [0,1,2,3] from the streamer,
     generate spikes, and render the spectrogram + spikes grid.
     """
-    from get_data import convert_audio_to_spikes
+    import numpy as np
+    from get_data import (
+        cochlear_to_spikes_1s,
+    )  # expects: (wav_batch_list, sr=..., n_channels=..., out_T_ms=...)
 
     targets = [0, 1, 2, 3]
     have = {k: False for k in targets}
@@ -709,6 +712,7 @@ def plot_audio_preview_from_streamer(
     spike_chunks = []
     spike_labels = []
 
+    # How many cochlear channels to allocate (must match your plotting grid expectations)
     if training_mode == "multimodal":
         num_audio_neurons = int(np.sqrt(N_x // 2)) ** 2
     else:
@@ -719,22 +723,35 @@ def plot_audio_preview_from_streamer(
         batch, labels = audio_streamer.get_batch(start, batch_size)
         if batch is None:
             break
+
+        # batch is a list of 1D waveforms; labels is a numpy array
         for t in targets:
-            if not have[t]:
-                idxs = np.where(labels == t)[0]
-                if idxs.size > 0:
-                    i0 = idxs[0]
-                    audio_samples.append(batch[i0])
-                    audio_labels.append(t)
-                    spikes = convert_audio_to_spikes(
-                        batch[i0].reshape(1, -1),
-                        num_steps,
-                        num_audio_neurons,
-                        scaling_method="normalize",
-                    )
-                    spike_chunks.append(spikes)
-                    spike_labels.extend([t] * num_steps)
-                    have[t] = True
+            if have[t]:
+                continue
+            idxs = np.where(labels == t)[0]
+            if idxs.size == 0:
+                continue
+
+            i0 = idxs[0]
+            wav = batch[i0]  # 1D np.array
+            audio_samples.append(wav)
+            audio_labels.append(t)
+
+            # IMPORTANT: pass a *list* of waveforms; set sr, n_channels, and out_T_ms
+            spikes_bt = cochlear_to_spikes_1s(
+                [wav],
+                sr=sample_rate,
+                n_channels=num_audio_neurons,
+                out_T_ms=num_steps,
+                return_rates=False,
+            )  # shape: (B=1, num_steps, num_audio_neurons)
+
+            spike_chunks.append(spikes_bt)  # list of (1, T, F)
+            spike_labels.extend(
+                [t] * num_steps
+            )  # one label per timestep for this sample
+            have[t] = True
+
         if all(have.values()):
             break
         start += batch_size
@@ -743,9 +760,13 @@ def plot_audio_preview_from_streamer(
         print("No audio samples found for preview.")
         return
 
-    spike_data = np.concatenate(spike_chunks, axis=0)
+    # Concatenate on batch axis -> (num_found, T, F), then flatten time axis -> (num_found*T, F)
+    spike_data_3d = np.concatenate(spike_chunks, axis=0)
+    spike_data = spike_data_3d.reshape(-1, spike_data_3d.shape[-1])
+
+    # Hand off to your plotting util
     plot_audio_spectrograms_and_spikes(
-        audio_data=np.array(audio_samples),
+        audio_data=np.array(audio_samples, dtype=object),  # variable-length waves
         spikes=spike_data,
         spike_labels=np.array(spike_labels),
         audio_labels=np.array(audio_labels),

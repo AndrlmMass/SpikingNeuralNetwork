@@ -858,9 +858,7 @@ class snn_sleepy:
             batch_size,
             self.num_steps,
             num_audio_neurons,
-            scaling_method="normalize",
             plot_spectrograms=plot_spectrograms,
-            sample_rate=22050,
         )
 
         if spike_data is not None:
@@ -1433,21 +1431,21 @@ class snn_sleepy:
                     spike_times,
                     a,
                 ) = train_network(
-                    weights=self.weights,  # Remove .copy() for performance
-                    spike_labels=labels_train,  # Remove .copy() for performance
-                    mp=mp_train,  # Remove .copy() for performance
+                    weights=self.weights,
+                    spike_labels=labels_train,
+                    mp=mp_train,
                     sleep=sleep,
                     train_weights=train_weights,
                     T=self.T_train,
                     mean_noise=mean_noise,
                     var_noise=var_noise,
-                    spikes=spikes_train,  # Remove .copy() for performance
+                    spikes=spikes_train,
                     check_sleep_interval=check_sleep_interval,
                     timing_update=timing_update,
-                    spike_times=spike_times,  # Remove .copy() for performance
-                    spike_threshold=spike_threshold,  # Remove .copy() for performance
-                    a=a,  # Remove .copy() for performance
-                    I_syn=I_syn,  # Remove .copy() for performance
+                    spike_times=spike_times,
+                    spike_threshold=spike_threshold,
+                    a=a,
+                    I_syn=I_syn,
                     **common_args,
                 )
                 total_num_tests = self.tot_images_test // self.single_test
@@ -1495,9 +1493,7 @@ class snn_sleepy:
                             self.num_steps,
                             int(np.sqrt(self.N_x))
                             ** 2,  # Audio-only mode uses full N_x
-                            scaling_method="normalize",
                             plot_spectrograms=plot_spectrograms,
-                            sample_rate=22050,
                         )
                         if data_test is None:
                             print(f"No more test audio data available")
