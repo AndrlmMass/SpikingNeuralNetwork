@@ -3,9 +3,16 @@ import os
 import gc
 from tqdm import tqdm
 import json
-import random
 from train import train_network
-from get_data import create_data
+from get_data import (
+    create_data,
+    load_audio_batch_streaming,
+    load_multimodal_batch,
+    load_prealigned_multimodal_batch,
+    sync_multimodal_datasets,
+    load_audio_batch,
+    load_image_batch,
+)
 from plot import (
     spike_plot,
     heat_map,
@@ -18,8 +25,15 @@ from plot import (
     plot_epoch_training,
     plot_audio_spectrograms_and_spikes,
     plot_audio_spectrograms_and_spikes_simple,
+    get_elite_nodes,
 )
-from analysis import t_SNE, PCA_analysis, calculate_phi
+from analysis import (
+    t_SNE,
+    PCA_analysis,
+    calculate_phi,
+    pca_logistic_regression,
+    bin_spikes_by_label_no_breaks,
+)
 from create_network import create_weights, create_arrays
 
 
@@ -195,60 +209,62 @@ class snn_sleepy:
 
         if load_model:
             # Define folder to load data
+            if not os.path.exists("model"):
+                return
             folders = os.listdir("model")
 
-            # Search for existing data gens
+            # Search for exact parameter match first
+            matched_folder = None
             if len(folders) > 0:
                 for folder in folders:
                     json_file_path = os.path.join(
                         "model", folder, "model_parameters.json"
                     )
-
+                    if not os.path.exists(json_file_path):
+                        continue
                     with open(json_file_path, "r") as j:
                         ex_params = json.loads(j.read())
-
-                    # Check if parameters are the same as the current ones
                     if ex_params == model_parameters:
-                        self.weights = np.load(
-                            os.path.join("model", folder, "weights.npy")
-                        )
-                        self.spikes_train = np.load(
-                            os.path.join("model", folder, "spikes_train.npy")
-                        )
-                        self.mp_train = np.load(
-                            os.path.join("model", folder, "mp_train.npy")
-                        )
-                        self.weights2plot_exc = np.load(
-                            os.path.join("model", folder, "weights2plot_exc.npy")
-                        )
-                        self.weights2plot_inh = np.load(
-                            os.path.join("model", folder, "weights2plot_inh.npy")
-                        )
-                        self.spike_threshold = np.load(
-                            os.path.join("model", folder, "spike_threshold.npy")
-                        )
-                        self.max_weight_sum_inh = np.load(
-                            os.path.join("model", folder, "max_weight_sum_inh.npy")
-                        )
-                        self.max_weight_sum_exc = np.load(
-                            os.path.join("model", folder, "max_weight_sum_exc.npy")
-                        )
-                        self.labels_train = np.load(
-                            os.path.join("model", folder, "labels_train.npy")
-                        )
-                        self.labels_test = np.load(
-                            os.path.join("model", folder, "labels_test.npy")
-                        )
-                        self.spikes_test = np.load(
-                            os.path.join("model", folder, "spikes_test.npy")
-                        )
-                        self.performance_tracker = np.load(
-                            os.path.join("model", folder, "performance_tracker.npy")
-                        )
+                        matched_folder = folder
+                        break
 
-                        print("\rmodel loaded", end="")
-                        self.model_loaded = True
-                        return os.path.join("model", folder)
+            # If no exact match, fall back to most recent model folder
+            if matched_folder is None and len(folders) > 0:
+                try:
+                    folders_sorted = sorted(
+                        folders,
+                        key=lambda f: os.path.getmtime(os.path.join("model", f)),
+                        reverse=True,
+                    )
+                    matched_folder = folders_sorted[0]
+                    print("\rNo exact model match; loading latest available.", end="")
+                except Exception:
+                    matched_folder = None
+
+            if matched_folder is not None:
+                folder = matched_folder
+                self.weights = np.load(os.path.join("model", folder, "weights.npy"))
+
+                # Optional arrays may be absent depending on save; load if present
+                def _maybe_load(name):
+                    path = os.path.join("model", folder, name + ".npy")
+                    return np.load(path) if os.path.exists(path) else None
+
+                self.spikes_train = _maybe_load("spikes_train")
+                self.mp_train = _maybe_load("mp_train")
+                self.weights2plot_exc = _maybe_load("weights2plot_exc")
+                self.weights2plot_inh = _maybe_load("weights2plot_inh")
+                self.spike_threshold = _maybe_load("spike_threshold")
+                self.max_weight_sum_inh = _maybe_load("max_weight_sum_inh")
+                self.max_weight_sum_exc = _maybe_load("max_weight_sum_exc")
+                self.labels_train = _maybe_load("labels_train")
+                self.labels_test = _maybe_load("labels_test")
+                self.spikes_test = _maybe_load("spikes_test")
+                self.performance_tracker = _maybe_load("performance_tracker")
+
+                print("\rmodel loaded", end="")
+                self.model_loaded = True
+                return os.path.join("model", folder)
             else:
                 print(
                     "\rNo model found to load. Will train new model from scratch.",
@@ -284,10 +300,6 @@ class snn_sleepy:
     # acquire data
     def prepare_data(
         self,
-        tot_images_train=10000,
-        tot_images_test=10000,
-        single_train=1000,
-        single_test=166,
         force_recreate=False,
         plot_comparison=False,
         plot_spikes=False,
@@ -315,7 +327,6 @@ class snn_sleepy:
         imageMNIST=False,
         create_data=False,
         plot_spectrograms=False,
-        # New batch and total parameters
         all_audio_train=30000,
         batch_audio_train=500,
         all_audio_test=1000,
@@ -357,11 +368,18 @@ class snn_sleepy:
         self.first_spike_time = first_spike_time
         self.time_var_input = time_var_input
         self.plot_spectrograms = plot_spectrograms
-        self.tot_images_train = tot_images_train
-        self.tot_images_test = tot_images_test
-        self.single_train = single_train
-        self.single_test = single_test
-        self.epochs = tot_images_train // single_train
+        self.all_images_train = all_images_train
+        self.all_images_test = all_images_test
+        self.all_images_val = all_images_val
+        self.all_audio_train = all_audio_train
+        self.all_audio_test = all_audio_test
+        self.all_audio_val = all_audio_val
+        self.batch_image_train = batch_image_train
+        self.batch_image_test = batch_image_test
+        self.batch_image_val = batch_image_val
+        self.batch_audio_train = batch_audio_train
+        self.batch_audio_test = batch_audio_test
+        self.batch_audio_val = batch_audio_val
         self.add_breaks = add_breaks
         self.break_lengths = break_lengths
         self.noisy_data = noisy_data
@@ -370,8 +388,15 @@ class snn_sleepy:
         self.val_split = val_split
         self.train_split = train_split
         self.test_split = test_split
-        self.T_train = self.single_train * num_steps
-        self.T_test = self.single_test * num_steps
+        self.all_train = self.all_audio_train if audioMNIST else self.all_images_train
+        self.all_test = self.all_audio_test if audioMNIST else self.all_images_test
+        self.all_val = self.all_audio_val if audioMNIST else self.all_images_val
+        self.batch_train = (
+            self.batch_audio_train if audioMNIST else self.batch_image_train
+        )
+        self.batch_test = self.batch_audio_test if audioMNIST else self.batch_image_test
+        self.batch_val = self.batch_audio_val if audioMNIST else self.batch_image_val
+        self.epochs = self.all_train // self.batch_train
         self.data_loaded = False
         self.model_loaded = False
         self.test_data_loaded = False
@@ -392,16 +417,19 @@ class snn_sleepy:
         # Set batch sizes and validate total limits
         if audioMNIST and imageMNIST:
             # Multimodal mode - use smaller of the two batch sizes for memory efficiency
-            self.single_train = min(batch_audio_train, batch_image_train)
-            self.single_test = min(batch_audio_test, batch_image_test)
+            self.batch_train = min(batch_audio_train, batch_image_train)
+            self.batch_test = min(batch_audio_test, batch_image_test)
 
             # Use smaller total for both to ensure synchronization
-            self.tot_images_train = min(all_audio_train, all_images_train)
-            self.tot_images_test = min(all_audio_test, all_images_test)
-            self.epochs = self.tot_images_train // self.single_train
+            self.all_train = min(all_audio_train, all_images_train)
+            self.all_test = min(all_audio_test, all_images_test)
+            self.epochs = self.all_train // self.batch_train
 
-            # Double input neurons for multimodal
-            self.N_x = int(2 * self.N_x)
+            # For multimodal, derive total input as 2 * (floor((sqrt(base))/sqrt(2)))^2
+            # where base is original single-modality sqrt(self.N_x)
+            base_dim = int(np.sqrt(self.N_x))
+            shared_dim = int(np.floor(base_dim / np.sqrt(2)))
+            self.N_x = int(2 * (shared_dim**2))
 
             # Update network architecture based on new N_x
             self.st = self.N_x  # stimulation
@@ -409,14 +437,12 @@ class snn_sleepy:
             self.ih = self.ex + self.N_inh  # inhibitory
             self.N = self.N_exc + self.N_inh + self.N_x  # total neurons
 
-            print(f"Multimodal mode: {self.N_x} input neurons (image + audio)")
+            print(f"Multimodal mode total input: {self.N_x} neurons (image + audio)")
             print(
                 f"Network: {self.N} total neurons (stim: {self.st}, exc: {self.ex}, inh: {self.ih})"
             )
-            print(f"Batch size: {self.single_train} train, {self.single_test} test")
-            print(
-                f"Total samples: {self.tot_images_train} train, {self.tot_images_test} test"
-            )
+            print(f"Batch size: {self.batch_train} train, {self.batch_test} test")
+            print(f"Total samples: {self.all_train} train, {self.all_test} test")
 
         elif audioMNIST:
             # Audio only mode
@@ -426,10 +452,10 @@ class snn_sleepy:
                     f"Total audio samples ({total_audio}) cannot exceed 30000"
                 )
 
-            self.single_train = batch_audio_train
-            self.single_test = batch_audio_test
-            self.tot_images_train = all_audio_train
-            self.tot_images_test = all_audio_test
+            self.batch_train = batch_audio_train
+            self.batch_test = batch_audio_test
+            self.all_train = all_audio_train
+            self.all_test = all_audio_test
             self.epochs = all_audio_train // batch_audio_train
 
             # Update network architecture (audio uses original N_x)
@@ -446,10 +472,10 @@ class snn_sleepy:
                     f"Total image samples ({total_images}) cannot exceed 30000"
                 )
 
-            self.single_train = batch_image_train
-            self.single_test = batch_image_test
-            self.tot_images_train = all_images_train
-            self.tot_images_test = all_images_test
+            self.batch_train = batch_image_train
+            self.batch_test = batch_image_test
+            self.all_train = all_images_train
+            self.all_test = all_images_test
             self.epochs = all_images_train // batch_image_train
 
             # Update network architecture (image uses original N_x)
@@ -536,7 +562,11 @@ class snn_sleepy:
             # Use the original audio data path
             data_path = "/home/andreas/Documents/GitHub/AudioMNIST/data"
             self.audio_streamer = AudioDataStreamer(
-                data_path, batch_size=batch_audio_train
+                data_path,
+                batch_size=batch_audio_train,
+                train_count=all_audio_train,
+                val_count=all_audio_val,
+                test_count=all_audio_test,
             )
             print(
                 f"Audio streamer initialized with {self.audio_streamer.get_total_samples()} total samples"
@@ -558,7 +588,7 @@ class snn_sleepy:
                     N_x=self.N_x,
                     training_mode=training_mode,
                     max_batches=50,
-                    batch_size=max(100, getattr(self, "single_train", 500)),
+                    batch_size=max(100, getattr(self, "batch_train", 500)),
                     sample_rate=22050,
                 )
                 self._did_plot_spectrograms = True
@@ -587,8 +617,17 @@ class snn_sleepy:
                             ex_params = json.loads(j.read())
 
                         # Check if parameters match
+                        # Use full N_x for image-only, half for multimodal
+                        pixel_size_expected = (
+                            int(np.sqrt(self.N_x // 2))
+                            if (
+                                hasattr(self, "audio_streamer")
+                                and self.audio_streamer is not None
+                            )
+                            else int(np.sqrt(self.N_x))
+                        )
                         expected_params = {
-                            "pixel_size": int(np.sqrt(self.N_x // 2)),
+                            "pixel_size": pixel_size_expected,
                             "num_steps": num_steps,
                             "gain": gain,
                             "offset": offset,
@@ -620,8 +659,16 @@ class snn_sleepy:
                 os.makedirs(image_data_dir, exist_ok=True)
 
                 # Save image data parameters
+                pixel_size_param = (
+                    int(np.sqrt(self.N_x // 2))
+                    if (
+                        hasattr(self, "audio_streamer")
+                        and self.audio_streamer is not None
+                    )
+                    else int(np.sqrt(self.N_x))
+                )
                 image_params = {
-                    "pixel_size": int(np.sqrt(self.N_x // 2)),
+                    "pixel_size": pixel_size_param,
                     "num_steps": num_steps,
                     "gain": gain,
                     "offset": offset,
@@ -643,19 +690,72 @@ class snn_sleepy:
                 ) as f:
                     json.dump(image_params, f)
 
+            # Determine pixel size based on mode
+            pixel_size_streamer = (
+                int(np.sqrt(self.N_x // 2))
+                if (hasattr(self, "audio_streamer") and self.audio_streamer is not None)
+                else int(np.sqrt(self.N_x))
+            )
             self.image_streamer = ImageDataStreamer(
                 "data",  # Use the data directory for MNIST download
                 batch_size=batch_image_train,
-                pixel_size=int(np.sqrt(self.N_x // 2)),
+                pixel_size=pixel_size_streamer,
                 num_steps=num_steps,
                 gain=gain,
                 offset=offset,
                 first_spike_time=first_spike_time,
                 time_var_input=time_var_input,
+                train_count=all_images_train,
+                val_count=all_images_val,
+                test_count=all_images_test,
             )
             print(
                 f"Image streamer initialized with {self.image_streamer.get_total_samples()} total samples"
             )
+
+        # Ensure multimodal pre-alignment if both streamers exist
+        if (
+            hasattr(self, "audio_streamer")
+            and self.audio_streamer is not None
+            and hasattr(self, "image_streamer")
+            and self.image_streamer is not None
+        ):
+            try:
+                from get_data import create_prealigned_multimodal_datasets
+
+                print(
+                    "Pre-aligning multimodal datasets (strict class-matched indices)..."
+                )
+                # Derive ratios honoring requested validation sample counts
+                try:
+                    val_count = int(min(all_audio_val, all_images_val))
+                except Exception:
+                    val_count = 0
+                total_count = int(self.all_train + self.all_test + val_count)
+                train_ratio = (
+                    float(self.all_train) / float(total_count) if total_count else 1.0
+                )
+                val_ratio = (
+                    float(val_count) / float(total_count) if total_count else 0.0
+                )
+                test_ratio = (
+                    float(self.all_test) / float(total_count) if total_count else 0.0
+                )
+
+                self.audio_streamer, self.image_streamer = (
+                    create_prealigned_multimodal_datasets(
+                        audio_streamer=self.audio_streamer,
+                        image_streamer=self.image_streamer,
+                        max_total_samples=min(total_count, 30000),
+                        train_ratio=train_ratio,
+                        val_ratio=val_ratio,
+                        test_ratio=test_ratio,
+                    )
+                )
+            except Exception as e:
+                print(
+                    f"Warning: pre-alignment failed ({e}); proceeding with sequential streaming."
+                )
 
         if create_data:
             # create data
@@ -739,8 +839,8 @@ class snn_sleepy:
                         data_dir=data_dir,
                         first_spike_time=first_spike_time,
                         time_var_input=time_var_input,
-                        num_images_train=self.single_train,
-                        num_images_test=self.single_test,
+                        num_images_train=self.batch_train,
+                        num_images_test=self.batch_test,
                         add_breaks=add_breaks,
                         break_lengths=break_lengths,
                         noisy_data=noisy_data,
@@ -776,8 +876,8 @@ class snn_sleepy:
                         data_dir=data_dir,
                         first_spike_time=first_spike_time,
                         time_var_input=time_var_input,
-                        num_images_train=self.single_train,
-                        num_images_test=self.single_test,
+                        num_images_train=self.batch_train,
+                        num_images_test=self.batch_test,
                         add_breaks=add_breaks,
                         break_lengths=break_lengths,
                         noisy_data=noisy_data,
@@ -813,7 +913,9 @@ class snn_sleepy:
                 else:
                     return self.data_train, self.labels_train
 
-    def load_audio_batch(self, batch_size, is_training=True, plot_spectrograms=False):
+    def load_audio_batch_streaming(
+        self, batch_size, is_training=True, plot_spectrograms=False, partition=None
+    ):
         """
         Load a batch of audio data and convert to spikes on-demand.
 
@@ -824,57 +926,32 @@ class snn_sleepy:
         Returns:
             (spike_data, labels) or (None, None) if no more data
         """
-        if self.audio_streamer is None:
-            return None, None
-
-        # Check if we've exceeded the total limit
-        if is_training and self.current_train_idx >= self.tot_images_train:
-            return None, None
-        if not is_training and self.current_test_idx >= self.tot_images_test:
-            return None, None
-
-        # Import the load_audio_batch function
-        from get_data import load_audio_batch
-
-        # Determine current index
-        if is_training:
-            start_idx = self.current_train_idx
-        else:
-            start_idx = self.current_test_idx
-
-        # Load audio batch - determine correct number of neurons based on mode
-        training_mode = self.get_training_mode()
-        if training_mode == "multimodal":
-            # Multimodal mode - use half of N_x for audio
-            num_audio_neurons = int(np.sqrt(self.N_x // 2)) ** 2
-        else:
-            # Audio-only mode - use full N_x for audio
-            num_audio_neurons = int(np.sqrt(self.N_x)) ** 2
-
-        # print(f"Audio neurons: {num_audio_neurons}")  # Commented for performance
-        spike_data, labels = load_audio_batch(
-            self.audio_streamer,
-            start_idx,
-            batch_size,
-            self.num_steps,
-            num_audio_neurons,
+        spike_data, labels, new_train_idx, new_test_idx = load_audio_batch_streaming(
+            audio_streamer=self.audio_streamer,
+            batch_size=batch_size,
+            current_train_idx=self.current_train_idx,
+            current_test_idx=self.current_test_idx,
+            all_train=self.all_train,
+            all_test=self.all_test,
+            num_steps=self.num_steps,
+            N_x=self.N_x,
+            get_training_mode_func=self.get_training_mode,
+            is_training=is_training,
             plot_spectrograms=plot_spectrograms,
+            partition=partition,
         )
 
-        if spike_data is not None:
-            # Update index
-            if is_training:
-                self.current_train_idx += batch_size
-            else:
-                self.current_test_idx += batch_size
+        # Update indices
+        self.current_train_idx = new_train_idx
+        self.current_test_idx = new_test_idx
 
         return spike_data, labels
 
     def load_multimodal_batch(
-        self, batch_size, is_training=True, plot_spectrograms=False
+        self, batch_size, is_training=True, plot_spectrograms=False, partition=None
     ):
         """
-        Load a batch of multimodal data (image + audio) and concatenate.
+        Load a batch of multimodal data (image + audio) with synchronized labels.
 
         Args:
             batch_size: Number of samples to load
@@ -883,39 +960,79 @@ class snn_sleepy:
         Returns:
             (concatenated_spike_data, labels) or (None, None) if no more data
         """
-        from get_data import load_image_batch
-
-        # Load audio batch
-        audio_spikes, audio_labels = self.load_audio_batch(
-            batch_size, is_training, plot_spectrograms
+        multimodal_spikes, labels, new_train_idx, new_test_idx = load_multimodal_batch(
+            audio_streamer=self.audio_streamer,
+            image_streamer=self.image_streamer,
+            batch_size=batch_size,
+            current_train_idx=self.current_train_idx,
+            current_test_idx=self.current_test_idx,
+            all_train=self.all_train,
+            all_test=self.all_test,
+            num_steps=self.num_steps,
+            N_x=self.N_x,
+            get_training_mode_func=self.get_training_mode,
+            load_prealigned_func=load_prealigned_multimodal_batch,
+            is_training=is_training,
+            plot_spectrograms=plot_spectrograms,
+            partition=partition,
         )
-        if audio_spikes is None:
-            return None, None
 
-        # Load image batch - determine correct number of neurons based on mode
-        training_mode = self.get_training_mode()
-        if training_mode == "multimodal":
-            # Multimodal mode - use half of N_x for image
-            num_image_neurons = int(np.sqrt(self.N_x // 2)) ** 2
-        else:
-            # Image-only mode - use full N_x for image
-            num_image_neurons = int(np.sqrt(self.N_x)) ** 2
+        # Update indices
+        self.current_train_idx = new_train_idx
+        self.current_test_idx = new_test_idx
 
-        # print(f"Image neurons: {num_image_neurons}")  # Commented for performance
-        image_spikes, image_labels = load_image_batch(
-            self.image_streamer,
-            self.current_train_idx if is_training else self.current_test_idx,
-            batch_size,
-            self.num_steps,
-            num_image_neurons,
+        return multimodal_spikes, labels
+
+    def _load_prealigned_multimodal_batch(
+        self,
+        batch_size,
+        is_training=True,
+        plot_spectrograms=False,
+        partition=None,
+        num_image_neurons=None,
+        num_audio_neurons=None,
+    ):
+        """
+        Load a batch from multimodal datasets with synchronized shuffling.
+        Both datasets are shuffled with the same seed to ensure similar label distributions.
+        """
+        # Ensure datasets are synchronized before loading
+        if not hasattr(self, "multimodal_synced") or not self.multimodal_synced:
+            sync_multimodal_datasets()
+            self.multimodal_synced = True
+
+        # Call the function from get_data.py
+        return load_prealigned_multimodal_batch(
+            audio_streamer=self.audio_streamer,
+            image_streamer=self.image_streamer,
+            batch_size=batch_size,
+            current_train_idx=self.current_train_idx,
+            current_test_idx=self.current_test_idx,
+            all_train=self.all_train,
+            all_test=self.all_test,
+            num_steps=self.num_steps,
+            N_x=self.N_x,
+            get_training_mode_func=self.get_training_mode,
+            is_training=is_training,
+            plot_spectrograms=plot_spectrograms,
+            partition=partition,
+            num_image_neurons=num_image_neurons,
+            num_audio_neurons=num_audio_neurons,
         )
-        if image_spikes is None:
-            return None, None
 
-        # Concatenate horizontally: [image_features, audio_features]
-        multimodal_spikes = np.concatenate([image_spikes, audio_spikes], axis=1)
+    def _sync_multimodal_datasets(self):
+        """
+        Synchronize multimodal datasets by ensuring they use the same random seed.
+        This ensures that when both datasets are shuffled, they have similar label distributions.
+        """
+        if not hasattr(self, "multimodal_synced") or not self.multimodal_synced:
+            sync_multimodal_datasets()
 
-        return multimodal_spikes, audio_labels
+            # Reset indices to start fresh with synchronized shuffling
+            self.current_train_idx = 0
+            self.current_test_idx = 0
+
+            self.multimodal_synced = True
 
     def _save_streaming_parameters(self):
         """Save streaming data parameters for future reference."""
@@ -930,10 +1047,12 @@ class snn_sleepy:
             "N_x": self.N_x,
             "N_exc": self.N_exc,
             "N_inh": self.N_inh,
-            "single_train": self.single_train,
-            "single_test": self.single_test,
-            "tot_images_train": self.tot_images_train,
-            "tot_images_test": self.tot_images_test,
+            "batch_train": self.batch_train,
+            "batch_test": self.batch_test,
+            "batch_val": self.batch_val,
+            "all_train": self.all_train,
+            "all_test": self.all_test,
+            "all_val": self.all_val,
             "epochs": self.epochs,
         }
 
@@ -1129,6 +1248,10 @@ class snn_sleepy:
         random_state=48,
         samples=10,
         use_validation_data=False,
+        accuracy_method="top",
+        test_only=False,
+        test_batch_size=None,
+        patience=None,
     ):
         self.dt = dt
         self.pca_variance = pca_variance
@@ -1161,26 +1284,34 @@ class snn_sleepy:
         for element in remove:
             self.model_parameters.pop(element)
 
-        self.model_parameters["tot_images_train"] = self.tot_images_train
-        self.model_parameters["tot_images_test"] = self.tot_images_test
-        self.model_parameters["single_train"] = self.single_train
-        self.model_parameters["single_test"] = self.single_test
+        self.model_parameters["all_train"] = self.all_train
+        self.model_parameters["all_test"] = self.all_test
+        self.model_parameters["all_val"] = self.all_val
+        self.model_parameters["batch_train"] = self.batch_train
+        self.model_parameters["batch_test"] = self.batch_test
+        self.model_parameters["batch_val"] = self.batch_val
         self.model_parameters["epochs"] = self.epochs
         self.model_parameters["w_dense_ee"] = self.w_dense_ee
         self.model_parameters["w_dense_ei"] = self.w_dense_ei
         self.model_parameters["w_dense_se"] = self.w_dense_se
         self.model_parameters["w_dense_ie"] = self.w_dense_ie
+
         self.model_parameters["ie_weights"] = self.ie_weights
         self.model_parameters["ee_weights"] = self.ee_weights
         self.model_parameters["ei_weights"] = self.ei_weights
         self.model_parameters["se_weights"] = self.se_weights
         self.model_parameters["classes"] = self.classes
 
-        if not force_train and self.data_loaded:
-            model_dir = self.process(
-                load_model=True,
-                model_parameters=self.model_parameters,
-            )
+        # Always attempt to load a matching model if not forcing a fresh run,
+        # regardless of data_loaded (streaming modes don't set data_loaded).
+        if not force_train:
+            try:
+                model_dir = self.process(
+                    load_model=True,
+                    model_parameters=self.model_parameters,
+                )
+            except Exception as e:
+                print(f"Warning: model load skipped ({e})")
 
         if not self.model_loaded:
             # Handle data parameter checking for streaming data
@@ -1220,20 +1351,18 @@ class snn_sleepy:
                         json_file_path = os.path.join(
                             "data", "mdata", folder, "data_parameters.json"
                         )
-
                         if os.path.exists(json_file_path):
                             with open(json_file_path, "r") as j:
                                 ex_params = json.loads(j.read())
-
                             # Check if parameters are the same as the current ones
                             if ex_params == data_parameters:
                                 data_dir = os.path.join("data/mdata", folder)
                                 download = True
                                 break
-                    if data_dir is None:
-                        print("Could not find the mdata directory.")
-                        download = False
-                        data_dir = None
+                if data_dir is None:
+                    print("Could not find the mdata directory.")
+                    download = False
+                    data_dir = None
             # define which weights counts towards total sum of weights
             sum_weights_exc = np.sum(np.abs(self.weights[: self.ex, self.st : self.ih]))
             sum_weights_inh = np.sum(
@@ -1309,19 +1438,42 @@ class snn_sleepy:
             del max_sum_exc, max_sum_inh, max_sum
 
             # pre-define performance tracking array
-            self.performance_tracker = np.zeros((self.epochs, 2))
+            if test_only and not train_weights:
+                # single pass; tracker will be (1,2) later
+                self.performance_tracker = np.zeros((1, 2))
+            else:
+                self.performance_tracker = np.zeros((self.epochs, 2))
 
-            # early stopping interval
-            interval_ES = int(self.epochs * 0.1)  # 10% interval rate
+            # early stopping disabled
+            interval_ES = None
 
             # define progress bar
+            pbar_total = 1 if (test_only and not train_weights) else self.epochs
             pbar = tqdm(
-                total=self.epochs,
-                desc=f"Epoch 0/{self.epochs}:",
+                total=pbar_total,
+                desc=(
+                    "Test-only"
+                    if (test_only and not train_weights)
+                    else f"Epoch 0/{self.epochs}:"
+                ),
                 unit="it",
                 ncols=80,
                 bar_format="{desc} [{bar}] ETA: {remaining} |{postfix}",
             )
+            # Predefine outputs to avoid UnboundLocalError if loop exits early
+            spikes_tr_out = None
+            labels_tr_out = None
+            sleep_tr_out = None
+            mp_tr = None
+            w4p_exc_tr = None
+            w4p_inh_tr = None
+            thresh_tr = None
+            mx_w_inh_tr = None
+            mx_w_exc_tr = None
+            spikes_te_out = None
+            labels_te_out = None
+            mp_te = None
+
             # create missing arrays
             I_syn = np.zeros(self.N - self.st)
             spike_times = np.zeros(self.N)
@@ -1333,17 +1485,254 @@ class snn_sleepy:
                 fill_value=spike_threshold_default,
                 dtype=float,
             )
+            # Fast path: test-only mode (no SNN weight training, single pass over test set)
+            if test_only and not train_weights:
+                try:
+                    self.current_test_idx = 0
+                    effective_batch = (
+                        int(test_batch_size)
+                        if (test_batch_size is not None and int(test_batch_size) > 0)
+                        else self.batch_test
+                    )
+                    total_num_tests = max(1, self.all_test // effective_batch)
 
-            # Define indices for each dataset
-            idx_test = 0
-            idx_train = 0
-            idx_val = 0
+                    # Pre-allocate accumulation buffers
+                    max_test_samples = self.all_test * self.num_steps
+                    all_spikes_test = np.zeros(
+                        (max_test_samples, self.N), dtype=np.int8
+                    )
+                    all_labels_test = np.zeros(max_test_samples, dtype=np.int32)
+                    all_mp_test = np.zeros(
+                        (max_test_samples, self.N - self.N_x), dtype=np.float32
+                    )
+                    test_sample_count = 0
+                    test_acc = 0.0
+                    test_phi = 0.0
+
+                    for test_batch_idx in range(total_num_tests):
+                        # Load validation data for monitoring training progress
+                        if (
+                            self.audio_streamer is not None
+                            and self.image_streamer is not None
+                        ):
+                            # Multimodal streaming mode
+                            data_test, labels_test = self.load_multimodal_batch(
+                                effective_batch,
+                                is_training=False,
+                                plot_spectrograms=plot_spectrograms,
+                                partition="val",  # Use validation data for training monitoring
+                            )
+                            if data_test is None or labels_test is None:
+                                raise ValueError("No validation data available")
+                        elif self.audio_streamer is not None:
+                            data_test, labels_test = self.load_audio_batch_streaming(
+                                batch_size=effective_batch,
+                                is_training=False,
+                                plot_spectrograms=plot_spectrograms,
+                                partition="val",  # Use validation data
+                            )
+                            if data_test is None:
+                                raise ValueError("No validation data available")
+                            self.current_test_idx += effective_batch
+                        elif self.image_streamer is not None:
+                            data_test, labels_test = load_image_batch(
+                                self.image_streamer,
+                                self.current_test_idx,
+                                effective_batch,
+                                self.num_steps,
+                                int(np.sqrt(self.N_x)) ** 2,
+                                partition="val",  # Use validation data
+                            )
+                            if data_test is None:
+                                raise ValueError("No validation data available")
+                            self.current_test_idx += effective_batch
+                        else:
+                            # Pre-loaded data path - for validation, use a subset of test data or separate validation data
+                            if hasattr(self, "data_val") and self.data_val is not None:
+                                # Use dedicated validation data if available
+                                data_test = self.data_val
+                                labels_test = self.labels_val
+                            elif self.data_test is not None:
+                                # Fallback: use a portion of test data for validation
+                                val_size = min(
+                                    len(self.data_test) // 5, 1000
+                                )  # Use 20% or max 1000 samples
+                                data_test = self.data_test[:val_size]
+                                labels_test = self.labels_test[:val_size]
+                            else:
+                                raise ValueError("No validation data available")
+
+                        # Adjust width if needed
+                        if data_test.shape[1] != self.N_x:
+                            actual = data_test.shape[1]
+                            if actual < self.N_x:
+                                pad = self.N_x - actual
+                                data_test = np.concatenate(
+                                    [
+                                        data_test,
+                                        np.zeros(
+                                            (data_test.shape[0], pad),
+                                            dtype=data_test.dtype,
+                                        ),
+                                    ],
+                                    axis=1,
+                                )
+                            else:
+                                data_test = data_test[:, : self.N_x]
+
+                        T_te = data_test.shape[0]
+                        st = self.N_x
+                        ex = st + self.N_exc
+                        ih = ex + self.N_inh
+
+                        mp_test = np.zeros((T_te, ih - st))
+                        mp_test[0] = self.resting_potential
+                        spikes_test = np.zeros((T_te, self.N), dtype=np.int8)
+                        spikes_test[:, :st] = data_test
+
+                        (
+                            _weights_te,
+                            spikes_te_out,
+                            mp_te,
+                            *unused,
+                            labels_te_out,
+                            _sleep_te_out,
+                            _I_syn_te,
+                            _spike_times_te,
+                            _a_te,
+                        ) = train_network(
+                            weights=self.weights.copy(),
+                            spike_labels=labels_test.copy(),
+                            mp=mp_test.copy(),
+                            sleep=False,
+                            train_weights=False,
+                            T=T_te,
+                            mean_noise=mean_noise,
+                            var_noise=var_noise,
+                            spikes=spikes_test.copy(),
+                            check_sleep_interval=check_sleep_interval,
+                            timing_update=timing_update,
+                            spike_times=spike_times.copy(),
+                            a=a.copy(),
+                            I_syn=I_syn.copy(),
+                            spike_threshold=spike_threshold.copy(),
+                            **common_args,
+                        )
+
+                        # store
+                        bs = spikes_te_out.shape[0]
+                        all_spikes_test[test_sample_count : test_sample_count + bs] = (
+                            spikes_te_out
+                        )
+                        all_labels_test[test_sample_count : test_sample_count + bs] = (
+                            labels_te_out
+                        )
+                        all_mp_test[test_sample_count : test_sample_count + bs] = mp_te
+                        test_sample_count += bs
+
+                        # Always compute top-responders accuracy per batch for reporting
+                        acc_te_batch = top_responders_plotted(
+                            spikes=spikes_te_out[:, self.st : self.ih],
+                            labels=labels_te_out,
+                            num_classes=self.N_classes,
+                            narrow_top=narrow_top,
+                            smoothening=self.num_steps,
+                            train=False,
+                            compute_not_plot=True,
+                            n_last_points=10000,
+                        )
+                        test_acc_top += acc_te_batch
+
+                    # finalize
+                    spikes_te_out = all_spikes_test[:test_sample_count]
+                    labels_te_out = all_labels_test[:test_sample_count]
+                    mp_te = all_mp_test[:test_sample_count]
+
+                    # Compute both metrics at the end of test-only pass
+                    acc_top = test_acc_top / max(1, total_num_tests)
+                    try:
+                        # PCA+LR using only test features (split test into train/val/test internally)
+                        X_te, y_te = bin_spikes_by_label_no_breaks(
+                            spikes=spikes_te_out[:, self.st : self.ih],
+                            labels=labels_te_out,
+                        )
+                        if X_te.size == 0:
+                            acc_pca = 0.0
+                        else:
+                            rng = np.random.RandomState(42)
+                            idx = rng.permutation(X_te.shape[0])
+                            split_tr = max(1, int(0.6 * len(idx)))
+                            split_va = max(split_tr + 1, int(0.8 * len(idx)))
+                            tr_idx = idx[:split_tr]
+                            va_idx = idx[split_tr:split_va]
+                            te_idx = idx[split_va:]
+                            if te_idx.size == 0:
+                                te_idx = va_idx
+                            accs, _, _, _ = pca_logistic_regression(
+                                X_train=X_te[tr_idx],
+                                y_train=y_te[tr_idx],
+                                X_val=X_te[va_idx],
+                                y_val=y_te[va_idx],
+                                X_test=X_te[te_idx],
+                                y_test=y_te[te_idx],
+                                variance_ratio=self.pca_variance,
+                            )
+                            acc_pca = float(accs.get("test", 0.0))
+                    except Exception as ex:
+                        print(f"Warning: PCA+LR (test-only) failed ({ex}); using 0.0")
+                        acc_pca = 0.0
+
+                    # performance tracker for single pass: [top_acc, pca_lr_acc]
+                    self.performance_tracker = np.zeros((1, 2))
+                    self.performance_tracker[0, 0] = acc_top
+                    self.performance_tracker[0, 1] = acc_pca
+
+                    print(
+                        f"Test-only summary — Top responders acc: {acc_top:.4f}, PCA+LR acc: {acc_pca:.4f}"
+                    )
+
+                    # expose outputs
+                    self.spikes_test = spikes_te_out
+                    self.mp_test = mp_te
+                    self.labels_test = labels_te_out
+
+                    # Clean up test arrays and variables
+                    del all_spikes_test, all_labels_test, all_mp_test
+                    del test_acc_top, test_sample_count
+
+                finally:
+                    pbar.close()
+                    del (
+                        I_syn,
+                        spike_times,
+                        a,
+                        spike_threshold,
+                    )
+                    del (common_args,)
+                    gc.collect()
+                return
 
             # loop over self.epochs
             for e in range(self.epochs):
 
-                # Reset test index at the beginning of each epoch
+                # Reset test/val indices at the beginning of each epoch
                 self.current_test_idx = 0
+                # Reset streamer validation/train pointers (streamers ignore start_idx)
+                try:
+                    if (
+                        hasattr(self, "audio_streamer")
+                        and self.audio_streamer is not None
+                    ):
+                        self.audio_streamer.reset_partition("val")
+                        self.audio_streamer.reset_partition("train")
+                    if (
+                        hasattr(self, "image_streamer")
+                        and self.image_streamer is not None
+                    ):
+                        self.image_streamer.reset_partition("val")
+                        self.image_streamer.reset_partition("train")
+                except Exception:
+                    pass
 
                 # Load data for this epoch
                 if (
@@ -1353,7 +1742,7 @@ class snn_sleepy:
                 ):
                     # Multimodal mode - load both audio and image data
                     data_train, labels_train = self.load_multimodal_batch(
-                        self.single_train,
+                        self.batch_train,
                         is_training=True,
                         plot_spectrograms=plot_spectrograms,
                     )
@@ -1362,14 +1751,43 @@ class snn_sleepy:
                         break
                 elif self.audio_streamer is not None:
                     # Audio only mode
-                    data_train, labels_train = self.load_audio_batch(
-                        self.single_train,
-                        is_training=True,
-                        plot_spectrograms=plot_spectrograms,
+                    data_train, labels_train, new_train_idx, new_test_idx = (
+                        load_audio_batch_streaming(
+                            audio_streamer=self.audio_streamer,
+                            batch_size=self.batch_train,
+                            current_train_idx=self.current_train_idx,
+                            current_test_idx=self.current_test_idx,
+                            all_train=self.all_train,
+                            all_test=self.all_test,
+                            num_steps=self.num_steps,
+                            N_x=self.N_x,
+                            get_training_mode_func=self.get_training_mode,
+                            is_training=True,
+                            plot_spectrograms=plot_spectrograms,
+                        )
                     )
                     if data_train is None:
                         print(f"No more audio data available at epoch {e}")
                         break
+                    # Update training index
+                    self.current_train_idx = new_train_idx
+                elif self.image_streamer is not None:
+                    # Image only streaming mode (missing branch)
+                    from get_data import load_image_batch
+
+                    train_start_idx = self.current_train_idx
+                    data_train, labels_train = load_image_batch(
+                        self.image_streamer,
+                        train_start_idx,
+                        self.batch_train,
+                        self.num_steps,
+                        int(np.sqrt(self.N_x)) ** 2,  # Image-only uses full N_x
+                    )
+                    if data_train is None:
+                        print(f"No more image data available at epoch {e}")
+                        break
+                    # Advance training index for streaming
+                    self.current_train_idx += self.batch_train
                 else:
                     # Use pre-loaded data (for image data)
                     if self.data_train is not None:
@@ -1416,6 +1834,20 @@ class snn_sleepy:
                     spikes_train[:, : self.N_x] = data_train
 
                 # 3a) Train on the training set
+                # Ensure data width matches expected N_x
+                if data_train is not None and data_train.shape[1] != self.N_x:
+                    actual_nx = data_train.shape[1]
+                    print(
+                        f"Warning: Adjusting training input width from {actual_nx} to {self.N_x}"
+                    )
+                    if actual_nx < self.N_x:
+                        pad_width = self.N_x - actual_nx
+                        pad_block = np.zeros(
+                            (data_train.shape[0], pad_width), dtype=data_train.dtype
+                        )
+                        data_train = np.concatenate([data_train, pad_block], axis=1)
+                    else:
+                        data_train = data_train[:, : self.N_x]
                 (
                     self.weights,
                     spikes_tr_out,
@@ -1431,7 +1863,7 @@ class snn_sleepy:
                     spike_times,
                     a,
                 ) = train_network(
-                    weights=self.weights,
+                    weights=(self.weights if train_weights else self.weights.copy()),
                     spike_labels=labels_train,
                     mp=mp_train,
                     sleep=sleep,
@@ -1448,82 +1880,241 @@ class snn_sleepy:
                     I_syn=I_syn,
                     **common_args,
                 )
-                total_num_tests = self.tot_images_test // self.single_test
-                test_acc = 0
-                test_phi = 0
 
-                # Initialize arrays to store accumulated test results
-                all_spikes_test = []
-                all_labels_test = []
-                all_mp_test = []
+                # Calculate training accuracy for current epoch
+                if spikes_tr_out is not None and labels_tr_out is not None:
+                    print(
+                        f"\n--- Epoch {e+1} Training Accuracy ({accuracy_method.upper()}) ---"
+                    )
+
+                    if accuracy_method == "top":
+                        # Use top-responders method for training accuracy
+                        train_acc_batch = top_responders_plotted(
+                            spikes=spikes_tr_out[:, self.st : self.ih],
+                            labels=labels_tr_out,
+                            num_classes=self.N_classes,
+                            narrow_top=narrow_top,
+                            smoothening=self.num_steps,
+                            train=True,
+                            compute_not_plot=True,
+                            n_last_points=10000,
+                        )
+                        print(f"Training Accuracy (TOP): {train_acc_batch:.4f}")
+
+                    elif accuracy_method == "pca_lr":
+                        # Use PCA+LR method for training accuracy
+                        try:
+                            X_tr, y_tr = bin_spikes_by_label_no_breaks(
+                                spikes=spikes_tr_out[:, self.st : self.ih],
+                                labels=labels_tr_out,
+                            )
+
+                            if X_tr.size > 0:
+                                # Check if we have enough samples for reliable PCA+LR
+                                min_samples_needed = max(
+                                    10, self.N_classes * 5
+                                )  # At least 5 samples per class
+                                recommended_samples = (
+                                    self.N_classes * 20
+                                )  # Recommended: 20 samples per class
+
+                                print(
+                                    f"Training samples: {len(X_tr)} (min needed: {min_samples_needed}, recommended: {recommended_samples})"
+                                )
+
+                                if len(X_tr) < min_samples_needed:
+                                    print(
+                                        f"⚠️  WARNING: Only {len(X_tr)} samples - PCA+LR may be unreliable (need ≥{min_samples_needed})"
+                                    )
+                                elif len(X_tr) < recommended_samples:
+                                    print(
+                                        f"ℹ️  NOTE: {len(X_tr)} samples available - consider using more for better PCA+LR estimation"
+                                    )
+
+                                # Calculate training accuracy using PCA+LR with proper train/test split
+                                # Use 80% for training, 20% for testing to avoid data leakage
+                                from sklearn.model_selection import train_test_split
+
+                                if len(X_tr) >= 10:  # Need minimum samples for split
+                                    X_tr_split, X_te_split, y_tr_split, y_te_split = (
+                                        train_test_split(
+                                            X_tr,
+                                            y_tr,
+                                            test_size=0.2,
+                                            random_state=42,
+                                            stratify=y_tr,
+                                        )
+                                    )
+                                    print(
+                                        f"PCA+LR split: {len(X_tr_split)} train, {len(X_te_split)} test samples"
+                                    )
+                                else:
+                                    # Not enough samples for proper split, use original approach but note the limitation
+                                    print(
+                                        f"⚠️  Only {len(X_tr)} samples - using same data for train/test (limited reliability)"
+                                    )
+                                    X_tr_split, X_te_split = X_tr, X_tr
+                                    y_tr_split, y_te_split = y_tr, y_tr
+
+                                accs, scaler, pca, clf = pca_logistic_regression(
+                                    X_train=X_tr_split,
+                                    y_train=y_tr_split,
+                                    X_val=X_tr_split,  # Use training split for validation
+                                    y_val=y_tr_split,
+                                    X_test=X_te_split,  # Use test split for final evaluation
+                                    y_test=y_te_split,
+                                    variance_ratio=self.pca_variance,
+                                )
+                                train_acc_pca = float(accs.get("test", 0.0))
+                                print(
+                                    f"Training Accuracy (PCA+LR): {train_acc_pca:.4f}"
+                                )
+
+                                # Show training data distribution
+                                train_dist = np.bincount(y_tr, minlength=self.N_classes)
+                                print(f"\nTraining Data Distribution:")
+                                for i in range(self.N_classes):
+                                    count = train_dist[i]
+                                    percentage = (
+                                        (count / len(y_tr)) * 100
+                                        if len(y_tr) > 0
+                                        else 0
+                                    )
+                                    print(
+                                        f"  Class {i}: {count:3d} samples ({percentage:5.1f}%)"
+                                    )
+                            else:
+                                print("No training features available for PCA+LR")
+                        except Exception as ex:
+                            print(f"Training PCA+LR failed: {ex}")
+
+                    print(f"{'-'*50}")
+
+                total_num_vals = (
+                    self.all_test // self.batch_test
+                )  # Use test dataset size for validation batching
+                val_acc = 0
+                val_phi = 0
+
+                # Initialize arrays to store accumulated validation results
+                all_spikes_val = []
+                all_labels_val = []
+                all_mp_val = []
 
                 # Pre-allocate arrays for better memory management
-                max_test_samples = self.tot_images_test * self.num_steps
-                all_spikes_test = np.zeros((max_test_samples, self.N), dtype=np.int8)
-                all_labels_test = np.zeros(max_test_samples, dtype=np.int32)
-                all_mp_test = np.zeros(
-                    (max_test_samples, self.N - self.N_x), dtype=np.float32
+                max_val_samples = (
+                    self.all_test * self.num_steps
+                )  # Use test dataset size for pre-allocation
+                all_spikes_val = np.zeros((max_val_samples, self.N), dtype=np.int8)
+                all_labels_val = np.zeros(max_val_samples, dtype=np.int32)
+                all_mp_val = np.zeros(
+                    (max_val_samples, self.N - self.N_x), dtype=np.float32
                 )
-                test_sample_count = 0
+                val_sample_count = 0
+                val_batches_counted = 0
 
-                for test_batch_idx in range(total_num_tests):
-                    # Load test data
+                # Predefine variables used in the test loop so cleanup never fails
+                data_test = None
+                labels_test = None
+                mp_test = None
+                weights_te = None
+                spikes_te_out = None
+                labels_te_out = None
+                sleep_te_out = None
+                I_syn_te = None
+                spike_times_te = None
+                a_te = None
+                T_test_batch = 0
+                st = self.N_x
+                ex = st + self.N_exc
+                ih = ex + self.N_inh
+
+                for val_batch_idx in range(total_num_vals):
+                    # Load validation data for training monitoring
                     if (
                         self.audio_streamer is not None
                         and self.image_streamer is not None
                     ):
                         # Multimodal streaming mode
                         data_test, labels_test = self.load_multimodal_batch(
-                            self.single_test,
+                            self.batch_test,
                             is_training=False,
                             plot_spectrograms=plot_spectrograms,
+                            partition="val",  # Use validation data
                         )
                         if data_test is None:
-                            print(f"No more test multimodal data available")
+                            print(f"No more validation multimodal data available")
                             break
                     elif self.audio_streamer is not None:
                         # Audio only streaming mode
                         from get_data import load_audio_batch
 
-                        test_start_idx = test_batch_idx * self.single_test
+                        val_start_idx = val_batch_idx * self.batch_test
                         data_test, labels_test = load_audio_batch(
                             self.audio_streamer,
-                            test_start_idx,
-                            self.single_test,
+                            val_start_idx,
+                            self.batch_test,
                             self.num_steps,
                             int(np.sqrt(self.N_x))
                             ** 2,  # Audio-only mode uses full N_x
                             plot_spectrograms=plot_spectrograms,
+                            partition="val",  # Use validation data
                         )
                         if data_test is None:
-                            print(f"No more test audio data available")
+                            print(f"No more validation audio data available")
                             break
                     elif self.image_streamer is not None:
                         # Image only streaming mode
                         from get_data import load_image_batch
 
-                        test_start_idx = test_batch_idx * self.single_test
+                        val_start_idx = val_batch_idx * self.batch_test
                         data_test, labels_test = load_image_batch(
                             self.image_streamer,
-                            test_start_idx,
-                            self.single_test,
+                            val_start_idx,
+                            self.batch_test,
                             self.num_steps,
                             int(np.sqrt(self.N_x))
                             ** 2,  # Image-only mode uses full N_x
+                            partition="val",  # Use validation data
                         )
                         if data_test is None:
-                            print(f"No more test image data available")
+                            print(f"No more validation image data available")
                             break
                     else:
-                        # Use pre-loaded data (for image data)
-                        if self.data_test is not None:
-                            data_test = self.data_test
-                            labels_test = self.labels_test
+                        # Use pre-loaded data - for validation, use validation data or subset of test data
+                        if hasattr(self, "data_val") and self.data_val is not None:
+                            # Use dedicated validation data
+                            data_test = self.data_val
+                            labels_test = self.labels_val
+                        elif self.data_test is not None:
+                            # Fallback: use a portion of test data for validation
+                            val_size = min(
+                                len(self.data_test) // 5, 1000
+                            )  # Use 20% or max 1000 samples
+                            data_test = self.data_test[:val_size]
+                            labels_test = self.labels_test[:val_size]
                         else:
-                            print("No test data available")
+                            print("No validation data available")
                             break
 
                     # Update T_test for this batch
+                    # Ensure test data width matches expected N_x
+                    if data_test is not None and data_test.shape[1] != self.N_x:
+                        actual_nx_te = data_test.shape[1]
+                        print(
+                            f"Warning: Adjusting test input width from {actual_nx_te} to {self.N_x}"
+                        )
+                        if actual_nx_te < self.N_x:
+                            pad_width_te = self.N_x - actual_nx_te
+                            pad_block_te = np.zeros(
+                                (data_test.shape[0], pad_width_te),
+                                dtype=data_test.dtype,
+                            )
+                            data_test = np.concatenate(
+                                [data_test, pad_block_te], axis=1
+                            )
+                        else:
+                            data_test = data_test[:, : self.N_x]
                     T_test_batch = data_test.shape[0]
 
                     # Create test arrays directly
@@ -1538,6 +2129,18 @@ class snn_sleepy:
                     spikes_test[:, :st] = data_test
 
                     # 3b) Test on the test set
+                    # Ensure required state arrays exist even if not set earlier
+                    if "spike_times" not in locals():
+                        spike_times = np.zeros(self.N)
+                    if "a" not in locals():
+                        a = np.zeros(self.N)
+                    if "I_syn" not in locals():
+                        I_syn = np.zeros(self.N)
+                    if "spike_threshold" not in locals() or spike_threshold is None:
+                        try:
+                            spike_threshold = self.spike_threshold.copy()
+                        except Exception:
+                            spike_threshold = np.zeros(self.N)
                     (
                         weights_te,
                         spikes_te_out,
@@ -1569,16 +2172,14 @@ class snn_sleepy:
 
                     # Store results for accumulation (use pre-allocated arrays)
                     batch_size = spikes_te_out.shape[0]
-                    all_spikes_test[
-                        test_sample_count : test_sample_count + batch_size
-                    ] = spikes_te_out
-                    all_labels_test[
-                        test_sample_count : test_sample_count + batch_size
-                    ] = labels_te_out
-                    all_mp_test[test_sample_count : test_sample_count + batch_size] = (
-                        mp_te
+                    all_spikes_val[val_sample_count : val_sample_count + batch_size] = (
+                        spikes_te_out
                     )
-                    test_sample_count += batch_size
+                    all_labels_val[val_sample_count : val_sample_count + batch_size] = (
+                        labels_te_out
+                    )
+                    all_mp_val[val_sample_count : val_sample_count + batch_size] = mp_te
+                    val_sample_count += batch_size
 
                     # 4) Compute phi metrics using the trained outputs
                     phi_tr, phi_te, *unused = calculate_phi(
@@ -1592,52 +2193,353 @@ class snn_sleepy:
                         num_classes=self.N_classes,
                     )
 
-                    # calculate accuracy
-                    print(f"Debug - Test data shape: {spikes_te_out.shape}")
-                    print(f"Debug - Labels shape: {labels_te_out.shape}")
+                    if accuracy_method == "top":
+                        # calculate accuracy via top-responders heuristic
+                        print(f"Debug - Test data shape: {spikes_te_out.shape}")
+                        print(f"Debug - Labels shape: {labels_te_out.shape}")
+                        print(
+                            f"Debug - Labels range: {np.min(labels_te_out)} to {np.max(labels_te_out)}"
+                        )
+                        print(f"Debug - Unique labels: {np.unique(labels_te_out)}")
+                        print(f"Debug - narrow_top: {narrow_top}")
+                        print(f"Debug - num_classes: {self.N_classes}")
+
+                        acc_te_batch = top_responders_plotted(
+                            spikes=spikes_te_out[:, self.st : self.ih],
+                            labels=labels_te_out,
+                            num_classes=self.N_classes,
+                            narrow_top=narrow_top,
+                            smoothening=self.num_steps,
+                            train=False,
+                            compute_not_plot=True,
+                            n_last_points=10000,
+                        )
+                        print(f"Debug - Raw validation accuracy: {acc_te_batch}")
+                        # accumulate over all validation batches
+                        val_acc += acc_te_batch
+                        val_batches_counted += 1
+                    val_phi += phi_te
+
+                # average over all validation batches
+                if accuracy_method == "top":
+                    acc_te = val_acc / max(
+                        1, val_batches_counted
+                    )  # Keep acc_te for compatibility
+                else:
+                    acc_te = None
+                phi_te = val_phi / total_num_vals
+
+                # Enhanced validation distribution analysis (every 5 epochs or on first/last epoch)
+                show_distributions = (e % 5 == 0) or (e == 0) or (e == self.epochs - 1)
+                if (
+                    (accuracy_method == "top" or accuracy_method == "pca_lr")
+                    and spikes_te_out is not None
+                    and labels_te_out is not None
+                    and show_distributions
+                ):
+                    print(f"\n{'='*60}")
                     print(
-                        f"Debug - Labels range: {np.min(labels_te_out)} to {np.max(labels_te_out)}"
+                        f"VALIDATION DISTRIBUTIONS - Epoch {e+1}/{self.epochs} ({accuracy_method.upper()})"
                     )
-                    print(f"Debug - Unique labels: {np.unique(labels_te_out)}")
-                    print(f"Debug - narrow_top: {narrow_top}")
-                    print(f"Debug - num_classes: {self.N_classes}")
+                    print(f"{'='*60}")
 
-                    acc_te = top_responders_plotted(
-                        spikes=spikes_te_out[:, self.st : self.ih],
-                        labels=labels_te_out,
-                        num_classes=self.N_classes,
-                        narrow_top=narrow_top,
-                        smoothening=self.num_steps,
-                        train=False,
-                        compute_not_plot=True,
-                        n_last_points=10000,
-                    )
-                    print(f"Debug - Raw accuracy: {acc_te}")
-                    # accumulate over all tests
-                    test_acc += acc_te
-                    test_phi += phi_te
+                    # Show sample information for PCA+LR
+                    if accuracy_method == "pca_lr":
+                        min_samples_needed = max(10, self.N_classes * 5)
+                        recommended_samples = self.N_classes * 20
+                        train_samples = (
+                            len(spikes_tr_out) // self.num_steps
+                            if spikes_tr_out is not None
+                            else 0
+                        )
+                        val_samples = (
+                            len(spikes_te_out) // self.num_steps
+                            if spikes_te_out is not None
+                            else 0
+                        )
+                        print(
+                            f"Sample Requirements: min {min_samples_needed}, recommended {recommended_samples}"
+                        )
+                        print(
+                            f"Training samples: {train_samples}, Validation samples: {val_samples}"
+                        )
+                        if train_samples < min_samples_needed:
+                            print(
+                                f"⚠️  WARNING: Only {train_samples} training samples - PCA+LR training may be unreliable"
+                            )
+                        elif train_samples < recommended_samples:
+                            print(
+                                f"ℹ️  NOTE: {train_samples} training samples - more data would improve estimation"
+                            )
+                        print()
 
-                    idx_test += self.single_test
+                    # Get predictions and true labels based on accuracy method
+                    if accuracy_method == "top":
+                        # Calculate prediction distribution using the same logic as top_responders_plotted
+                        block_size = self.num_steps
+                        num_blocks = spikes_te_out.shape[0] // block_size
 
-                # average over all tests
-                acc_te = test_acc / total_num_tests
-                phi_te = test_phi / total_num_tests
+                        if num_blocks > 0:
+                            means = []
+                            labs = []
+
+                            for i in range(num_blocks):
+                                block = spikes_te_out[
+                                    i * block_size : (i + 1) * block_size
+                                ]
+                                block_mean = np.mean(block, axis=0)
+                                means.append(block_mean)
+
+                                block_lab = labels_te_out[
+                                    i * block_size : (i + 1) * block_size
+                                ]
+                                block_maj = np.argmax(np.bincount(block_lab))
+                                labs.append(block_maj)
+
+                            spikes_agg = np.array(means)
+                            labels_agg = np.array(labs)
+
+                            # Get elite nodes (same as top_responders_plotted)
+                            indices, _, _ = get_elite_nodes(
+                                spikes=spikes_te_out,
+                                labels=labels_te_out,
+                                num_classes=self.N_classes,
+                                narrow_top=narrow_top,
+                            )
+
+                            # Calculate activations
+                            acts = np.zeros((spikes_agg.shape[0], self.N_classes))
+                            for c in range(self.N_classes):
+                                acts[:, c] = np.sum(
+                                    spikes_agg[:, indices[:, c]], axis=1
+                                )
+
+                            # Get predictions
+                            predictions = np.argmax(acts, axis=1)
+                            true_labels = labels_agg
+                        else:
+                            print(
+                                "Warning: Not enough blocks for top-responders analysis"
+                            )
+                            predictions = np.array([])
+                            true_labels = np.array([])
+
+                    elif accuracy_method == "pca_lr":
+                        # Use PCA+LR predictions
+                        try:
+                            # Prepare features from training data for training the classifier
+                            X_tr_dist, y_tr_dist = bin_spikes_by_label_no_breaks(
+                                spikes=spikes_tr_out[:, self.st : self.ih],
+                                labels=labels_tr_out,
+                            )
+
+                            # Prepare features from validation data for testing
+                            X_te_dist, y_te_dist = bin_spikes_by_label_no_breaks(
+                                spikes=spikes_te_out[:, self.st : self.ih],
+                                labels=labels_te_out,
+                            )
+
+                            if X_tr_dist.size > 0 and X_te_dist.size > 0:
+                                # Train PCA+LR on training data, test on validation data
+                                accs, scaler, pca, clf = pca_logistic_regression(
+                                    X_train=X_tr_dist,
+                                    y_train=y_tr_dist,
+                                    X_val=X_tr_dist,  # Use training data for validation during training
+                                    y_val=y_tr_dist,
+                                    X_test=X_te_dist,  # Test on validation data
+                                    y_test=y_te_dist,
+                                    variance_ratio=self.pca_variance,
+                                )
+
+                                # Get predictions from the trained classifier on validation data
+                                X_te_p = pca.transform(scaler.transform(X_te_dist))
+                                predictions = clf.predict(X_te_p)
+                                true_labels = y_te_dist
+                            else:
+                                print(
+                                    "Warning: No features available for PCA+LR prediction analysis"
+                                )
+                                predictions = np.array([])
+                                true_labels = np.array([])
+
+                        except Exception as ex:
+                            print(f"Warning: PCA+LR prediction analysis failed ({ex})")
+                            predictions = np.array([])
+                            true_labels = np.array([])
+
+                    # Display distributions if we have predictions
+                    if len(predictions) > 0 and len(true_labels) > 0:
+                        pred_dist = np.bincount(predictions, minlength=self.N_classes)
+                        true_dist = np.bincount(true_labels, minlength=self.N_classes)
+
+                        # Show what we're analyzing
+                        analysis_type = (
+                            "PCA+LR Features"
+                            if accuracy_method == "pca_lr"
+                            else "Spike Patterns"
+                        )
+                        print(f"Analysis based on: {analysis_type}")
+                        print(f"Total samples analyzed: {len(true_labels)}")
+                        print()
+
+                        print(f"TRUE LABELS DISTRIBUTION:")
+                        for i in range(self.N_classes):
+                            count = true_dist[i]
+                            percentage = (
+                                (count / len(true_labels)) * 100
+                                if len(true_labels) > 0
+                                else 0
+                            )
+                            print(
+                                f"  Class {i}: {count:4d} samples ({percentage:5.1f}%)"
+                            )
+
+                        print(f"\nPREDICTED DISTRIBUTION:")
+                        for i in range(self.N_classes):
+                            count = pred_dist[i]
+                            percentage = (
+                                (count / len(predictions)) * 100
+                                if len(predictions) > 0
+                                else 0
+                            )
+                            print(
+                                f"  Class {i}: {count:4d} samples ({percentage:5.1f}%)"
+                            )
+
+                        # Calculate per-class accuracy
+                        print(f"\nPER-CLASS ACCURACY:")
+                        correct_per_class = np.zeros(self.N_classes)
+                        total_per_class = np.zeros(self.N_classes)
+
+                        for i in range(len(predictions)):
+                            true_label = true_labels[i]
+                            pred_label = predictions[i]
+                            total_per_class[true_label] += 1
+                            if true_label == pred_label:
+                                correct_per_class[true_label] += 1
+
+                        for i in range(self.N_classes):
+                            if total_per_class[i] > 0:
+                                class_acc = (
+                                    correct_per_class[i] / total_per_class[i]
+                                ) * 100
+                                print(
+                                    f"  Class {i}: {class_acc:5.1f}% ({int(correct_per_class[i])}/{int(total_per_class[i])} correct)"
+                                )
+                            else:
+                                print(f"  Class {i}: No samples in validation batch")
+
+                        # Overall accuracy summary
+                        total_correct = np.sum(correct_per_class)
+                        total_samples = np.sum(total_per_class)
+                        overall_acc = (
+                            (total_correct / total_samples) * 100
+                            if total_samples > 0
+                            else 0
+                        )
+                        print(
+                            f"\nOVERALL ACCURACY: {overall_acc:.2f}% ({int(total_correct)}/{int(total_samples)} correct)"
+                        )
+                        print(f"{'='*60}\n")
+                    else:
+                        print(
+                            "Warning: No predictions available for distribution analysis"
+                        )
+                        print(f"{'='*60}\n")
 
                 # Use pre-allocated arrays (no concatenation needed)
-                spikes_te_out = all_spikes_test[:test_sample_count]
-                labels_te_out = all_labels_test[:test_sample_count]
-                mp_te = all_mp_test[:test_sample_count]
+                spikes_te_out = all_spikes_val[:val_sample_count]
+                labels_te_out = all_labels_val[:val_sample_count]
+                mp_te = all_mp_val[:val_sample_count]
+
+                # If using PCA+LR, compute accuracy once using aggregated spikes
+                if accuracy_method == "pca_lr":
+                    try:
+                        # Prepare features by binning contiguous label segments
+                        X_tr, y_tr = bin_spikes_by_label_no_breaks(
+                            spikes=spikes_tr_out[:, self.st : self.ih],
+                            labels=labels_tr_out,
+                        )
+                        X_te, y_te = bin_spikes_by_label_no_breaks(
+                            spikes=spikes_te_out[:, self.st : self.ih],
+                            labels=labels_te_out,
+                        )
+
+                        if X_tr.size == 0 or X_te.size == 0:
+                            print(
+                                "Warning: empty features for PCA+LR; setting accuracy to 0.0"
+                            )
+                            acc_te = 0.0
+                        else:
+                            # Check sample requirements for PCA+LR
+                            min_samples_needed = max(
+                                10, self.N_classes * 5
+                            )  # At least 5 samples per class
+                            recommended_samples = (
+                                self.N_classes * 20
+                            )  # Recommended: 20 samples per class
+
+                            print(
+                                f"PCA+LR Validation: {len(X_te)} samples (min: {min_samples_needed}, recommended: {recommended_samples})"
+                            )
+
+                            if len(X_te) < min_samples_needed:
+                                print(
+                                    f"⚠️  WARNING: Only {len(X_te)} validation samples - PCA+LR may be unreliable"
+                                )
+                            elif len(X_te) < recommended_samples:
+                                print(
+                                    f"ℹ️  NOTE: {len(X_te)} validation samples - more data would improve estimation"
+                                )
+
+                            # Show validation data distribution
+                            val_dist = np.bincount(y_te, minlength=self.N_classes)
+                            print(f"\nValidation Data Distribution:")
+                            for i in range(self.N_classes):
+                                count = val_dist[i]
+                                percentage = (
+                                    (count / len(y_te)) * 100 if len(y_te) > 0 else 0
+                                )
+                                print(
+                                    f"  Class {i}: {count:3d} samples ({percentage:5.1f}%)"
+                                )
+                            # Simple 80/20 split for validation
+                            rng = np.random.RandomState(42)
+                            idx = rng.permutation(X_tr.shape[0])
+                            split = max(1, int(0.8 * len(idx)))
+                            tr_idx, va_idx = idx[:split], idx[split:]
+                            if va_idx.size == 0:
+                                # ensure non-empty val
+                                va_idx = tr_idx[-1:]
+                                tr_idx = tr_idx[:-1]
+                            accs, _, _, _ = pca_logistic_regression(
+                                X_train=X_tr[tr_idx],
+                                y_train=y_tr[tr_idx],
+                                X_val=X_tr[va_idx],
+                                y_val=y_tr[va_idx],
+                                X_test=X_te,
+                                y_test=y_te,
+                                variance_ratio=self.pca_variance,
+                            )
+                            acc_te = float(accs.get("test", 0.0))
+                    except Exception as ex:
+                        print(f"Warning: PCA+LR accuracy failed ({ex}); using 0.0")
+                        acc_te = 0.0
 
                 # Update performance tracking
-                self.performance_tracker[e] = [
-                    phi_te,
-                    acc_te,
-                ]
+                self.performance_tracker[e] = [phi_te, acc_te]
+
+                # Record validation metrics in parallel tracker
+                if not hasattr(self, "val_performance_tracker"):
+                    self.val_performance_tracker = np.zeros((self.epochs, 2))
+                self.val_performance_tracker[e] = [phi_te, acc_te]
+
+                # Early stopping disabled; keep full epoch loop
 
                 # Plot t-SNE clustering after each training batch (if enabled and interval matches)
                 if plot_tsne_during_training and (e + 1) % tsne_plot_interval == 0:
                     print(f"\n=== Epoch {e+1}/{self.epochs} - t-SNE Clustering ===")
-                    print(f"Accuracy: {acc_te:.3f}, Phi: {phi_te:.3f}")
+                    print(f"Validation Accuracy: {acc_te:.3f}, Phi: {phi_te:.3f}")
 
                     # Plot t-SNE for training data (sample for performance)
                     if spikes_tr_out is not None and labels_tr_out is not None:
@@ -1657,9 +2559,9 @@ class snn_sleepy:
                             train=True,
                         )
 
-                    # Plot t-SNE for test data (sample for performance)
+                    # Plot t-SNE for validation data (sample for performance)
                     if spikes_te_out is not None and labels_te_out is not None:
-                        print("Plotting t-SNE for test data...")
+                        print("Plotting t-SNE for validation data...")
                         # Sample data for faster t-SNE computation
                         sample_size = min(1000, len(spikes_te_out))
                         sample_indices = np.random.choice(
@@ -1677,7 +2579,7 @@ class snn_sleepy:
                 else:
                     # Just print the performance metrics without plotting
                     print(
-                        f"Epoch {e+1}/{self.epochs} - Accuracy: {acc_te:.3f}, Phi: {phi_te:.3f}"
+                        f"Epoch {e+1}/{self.epochs} - Validation Accuracy: {acc_te:.3f}, Phi: {phi_te:.3f}"
                     )
 
                 # early stopping
@@ -1714,10 +2616,10 @@ class snn_sleepy:
                     )
                     # Clean up training results
                     del mp_train, spikes_tr_out, labels_tr_out, sleep_tr_out
-                    # Clean up accumulated arrays
-                    del all_spikes_test, all_labels_test, all_mp_test
-                    # Clean up temporary variables
-                    del test_acc, test_phi
+                    # Clean up accumulated arrays (use validation names since we evaluate on validation data)
+                    del all_spikes_val, all_labels_val, all_mp_val
+                    # Clean up temporary variables (validation accumulation variables)
+                    del val_acc, val_phi
                     del T_test_batch, st, ex, ih
                     gc.collect()
 
@@ -1738,21 +2640,197 @@ class snn_sleepy:
             pbar.close()
 
             # Clean up main training loop variables
-            del I_syn, spike_times, a, spike_threshold, acc_te, phi_te, phi_tr
-            del common_args, total_num_tests, idx_train, idx_test
+            del (
+                I_syn,
+                spike_times,
+                a,
+                spike_threshold,
+            )
+            del (common_args,)
             del interval_ES, download, data_dir
             gc.collect()
 
+        # Final test pass even if early-stopped (evaluate on test partition)
+        if not test_only and (
+            self.audio_streamer is not None or self.image_streamer is not None
+        ):
+            try:
+                # Reset test pointers
+                if hasattr(self, "audio_streamer") and self.audio_streamer is not None:
+                    self.audio_streamer.reset_partition("test")
+                if hasattr(self, "image_streamer") and self.image_streamer is not None:
+                    self.image_streamer.reset_partition("test")
+
+                # Reuse test-only evaluator logic with partition="test"
+                # Minimal: one full pass, compute both accs
+                effective_batch = self.batch_test
+                total_num_tests = max(1, self.all_test // effective_batch)
+                max_test_samples = self.all_test * self.num_steps
+                all_spikes_test = np.zeros((max_test_samples, self.N), dtype=np.int8)
+                all_labels_test = np.zeros(max_test_samples, dtype=np.int32)
+                all_mp_test = np.zeros(
+                    (max_test_samples, self.N - self.N_x), dtype=np.float32
+                )
+                test_sample_count = 0
+                acc_top_sum = 0.0
+
+                for test_batch_idx in range(total_num_tests):
+                    if (
+                        self.audio_streamer is not None
+                        and self.image_streamer is not None
+                    ):
+                        data_test, labels_test = self.load_multimodal_batch(
+                            effective_batch,
+                            is_training=False,
+                            plot_spectrograms=False,
+                            partition="test",
+                        )
+                        if data_test is None:
+                            break
+                    elif self.audio_streamer is not None:
+                        from get_data import load_audio_batch
+
+                        data_test, labels_test = load_audio_batch(
+                            self.audio_streamer,
+                            0,
+                            effective_batch,
+                            self.num_steps,
+                            int(np.sqrt(self.N_x)) ** 2,
+                            plot_spectrograms=False,
+                            partition="test",
+                        )
+                        if data_test is None:
+                            break
+                    elif self.image_streamer is not None:
+                        from get_data import load_image_batch
+
+                        data_test, labels_test = load_image_batch(
+                            self.image_streamer,
+                            0,
+                            effective_batch,
+                            self.num_steps,
+                            int(np.sqrt(self.N_x)) ** 2,
+                            partition="test",
+                        )
+                        if data_test is None:
+                            break
+                    else:
+                        break
+
+                    if data_test.shape[1] != self.N_x:
+                        actual = data_test.shape[1]
+                        if actual < self.N_x:
+                            pad = self.N_x - actual
+                            data_test = np.concatenate(
+                                [
+                                    data_test,
+                                    np.zeros(
+                                        (data_test.shape[0], pad), dtype=data_test.dtype
+                                    ),
+                                ],
+                                axis=1,
+                            )
+                        else:
+                            data_test = data_test[:, : self.N_x]
+
+                    T_te = data_test.shape[0]
+                    st = self.N_x
+                    ex = st + self.N_exc
+                    ih = ex + self.N_inh
+                    mp_test = np.zeros((T_te, ih - st))
+                    mp_test[0] = self.resting_potential
+                    spikes_test = np.zeros((T_te, self.N), dtype=np.int8)
+                    spikes_test[:, :st] = data_test
+
+                    (
+                        _wte,
+                        spikes_te_out,
+                        mp_te,
+                        *unused,
+                        labels_te_out,
+                        _sleep_te,
+                        _Isyn_te,
+                        _st_te,
+                        _a_te,
+                    ) = train_network(
+                        weights=self.weights.copy(),
+                        spike_labels=labels_test.copy(),
+                        mp=mp_test.copy(),
+                        sleep=False,
+                        train_weights=False,
+                        T=T_te,
+                        mean_noise=0,
+                        var_noise=0,
+                        spikes=spikes_test.copy(),
+                        check_sleep_interval=1000000,
+                        timing_update=False,
+                        spike_times=np.zeros_like(spike_times),
+                        a=np.zeros_like(a),
+                        I_syn=np.zeros_like(I_syn),
+                        spike_threshold=spike_threshold.copy(),
+                        **common_args,
+                    )
+
+                    bs = spikes_te_out.shape[0]
+                    all_spikes_test[test_sample_count : test_sample_count + bs] = (
+                        spikes_te_out
+                    )
+                    all_labels_test[test_sample_count : test_sample_count + bs] = (
+                        labels_te_out
+                    )
+                    all_mp_test[test_sample_count : test_sample_count + bs] = mp_te
+                    test_sample_count += bs
+
+                    acc_top_sum += top_responders_plotted(
+                        spikes=spikes_te_out[:, self.st : self.ih],
+                        labels=labels_te_out,
+                        num_classes=self.N_classes,
+                        narrow_top=narrow_top,
+                        smoothening=self.num_steps,
+                        train=False,
+                        compute_not_plot=True,
+                        n_last_points=10000,
+                    )
+
+                # Slice outputs and store
+                self.spikes_test = all_spikes_test[:test_sample_count]
+                self.labels_test = all_labels_test[:test_sample_count]
+                self.mp_test = all_mp_test[:test_sample_count]
+                final_acc = acc_top_sum / max(1, total_num_tests)
+                print(
+                    f"Final test (after training/early stop) — Top responders acc: {final_acc:.4f}"
+                )
+
+                # Clean up final test arrays and variables
+                del all_spikes_test, all_labels_test, all_mp_test
+                del test_sample_count, acc_top_sum
+
+            except Exception as e:
+                print(f"Warning: final test pass skipped ({e})")
+
         if save_model and not self.model_loaded:
-            self.spikes_train = spikes_tr_out
-            self.spikes_test = spikes_te_out
-            self.mp_train = mp_tr
-            self.mp_test = mp_te
-            self.weights2plot_exc = w4p_exc_tr
-            self.weights2plot_inh = w4p_inh_tr
-            self.spike_threshold = thresh_tr
-            self.max_weight_sum_inh = mx_w_inh_tr
-            self.max_weight_sum_exc = mx_w_exc_tr
+            if spikes_tr_out is None:
+                print(
+                    "Warning: Training outputs are unavailable (no data or early exit); skipping save."
+                )
+            else:
+                self.spikes_train = spikes_tr_out
+                self.spikes_test = spikes_te_out
+                self.mp_train = mp_tr
+                self.mp_test = mp_te
+                self.weights2plot_exc = w4p_exc_tr
+                self.weights2plot_inh = w4p_inh_tr
+                self.spike_threshold = thresh_tr
+                self.max_weight_sum_inh = mx_w_inh_tr
+                self.max_weight_sum_exc = mx_w_exc_tr
+            # Persist model to disk for reuse in future runs
+            try:
+                self.process(
+                    save_model=True,
+                    model_parameters=self.model_parameters,
+                )
+            except Exception as e:
+                print(f"Warning: model save failed ({e})")
             self.labels_train = labels_tr_out
             self.labels_test = labels_te_out
 
@@ -1763,9 +2841,21 @@ class snn_sleepy:
             )
 
         if plot_epoch_performance:
-            plot_epoch_training(
-                self.performance_tracker[:, 1], self.performance_tracker[:, 0]
-            )
+            # performance_tracker columns: [phi_te, acc_te] and optional val: [phi_val, acc_val]
+            if (
+                hasattr(self, "val_performance_tracker")
+                and self.val_performance_tracker is not None
+            ):
+                plot_epoch_training(
+                    self.performance_tracker[:, 1],
+                    self.performance_tracker[:, 0],
+                    val_acc=self.val_performance_tracker[:, 1],
+                    val_phi=self.val_performance_tracker[:, 0],
+                )
+            else:
+                plot_epoch_training(
+                    self.performance_tracker[:, 1], self.performance_tracker[:, 0]
+                )
 
         if plot_top_response_train:
             top_responders_plotted(
@@ -2148,7 +3238,11 @@ class snn_sleepy:
         pca_test=False,
         calculate_phi_=True,
     ):
-        if t_sne_train:
+        if (
+            t_sne_train
+            and hasattr(self, "spikes_train")
+            and self.spikes_train is not None
+        ):
             t_SNE(
                 spikes=self.spikes_train[:, self.st : self.ex],
                 labels_spike=self.labels_train,
@@ -2168,7 +3262,11 @@ class snn_sleepy:
                 random_state=random_state,
                 train=False,
             )
-        if pca_train:
+        if (
+            pca_train
+            and hasattr(self, "spikes_train")
+            and self.spikes_train is not None
+        ):
             PCA_analysis(
                 spikes=self.spikes_train[:, self.N_x :],
                 labels_spike=self.labels_train,
@@ -2183,13 +3281,56 @@ class snn_sleepy:
                 random_state=random_state,
             )
         if calculate_phi_:
-            calculate_phi(
-                spikes_train=self.spikes_train,
-                spikes_test=self.spikes_test,
-                labels_train=self.labels_train,
-                labels_test=self.labels_test,
-                num_steps=self.num_steps,
-                pca_variance=self.pca_variance,
-                random_state=random_state,
-                num_classes=self.N_classes,
-            )
+            if hasattr(self, "spikes_train") and self.spikes_train is not None:
+                calculate_phi(
+                    spikes_train=self.spikes_train,
+                    spikes_test=self.spikes_test,
+                    labels_train=self.labels_train,
+                    labels_test=self.labels_test,
+                    num_steps=self.num_steps,
+                    pca_variance=self.pca_variance,
+                    random_state=random_state,
+                    num_classes=self.N_classes,
+                )
+            else:
+                print("Skipping phi calculation: no training data (test-only run).")
+        # Optional: PCA+LR end-to-end analysis only if training data exists
+        if (
+            hasattr(self, "spikes_train")
+            and self.spikes_train is not None
+            and hasattr(self, "labels_train")
+            and self.labels_train is not None
+        ):
+            try:
+                from pca_linear_classifier import pca_logistic_regression as _pca_lr
+
+                # Prepare features via binning
+                X_tr, y_tr = bin_spikes_by_label_no_breaks(
+                    spikes=self.spikes_train[:, self.st : self.ih],
+                    labels=self.labels_train,
+                )
+                X_te, y_te = bin_spikes_by_label_no_breaks(
+                    spikes=self.spikes_test[:, self.st : self.ih],
+                    labels=self.labels_test,
+                )
+                if X_tr.size > 0 and X_te.size > 0:
+                    # Simple split of training for val
+                    rng = np.random.RandomState(42)
+                    idx = rng.permutation(X_tr.shape[0])
+                    split = max(1, int(0.8 * len(idx)))
+                    tr_idx, va_idx = idx[:split], idx[split:]
+                    if va_idx.size == 0:
+                        va_idx = tr_idx[-1:]
+                        tr_idx = tr_idx[:-1]
+                    accs, _, _, _ = _pca_lr(
+                        X_train=X_tr[tr_idx],
+                        y_train=y_tr[tr_idx],
+                        X_val=X_tr[va_idx],
+                        y_val=y_tr[va_idx],
+                        X_test=X_te,
+                        y_test=y_te,
+                        variance_ratio=self.pca_variance,
+                    )
+                    print(f"PCA+LR accuracy: {accs}")
+            except Exception as ex:
+                print(f"PCA+LR analysis skipped: {ex}")

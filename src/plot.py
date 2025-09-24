@@ -55,7 +55,7 @@ def get_elite_nodes(spikes, labels, num_classes, narrow_top):
     return final_indices, spikes, labels
 
 
-def plot_epoch_training(acc, cluster):
+def plot_epoch_training(acc, cluster, val_acc=None, val_phi=None):
     fig, ax0 = plt.subplots()
 
     # Left y-axis
@@ -65,7 +65,11 @@ def plot_epoch_training(acc, cluster):
 
     # Right y-axis
     ax1 = ax0.twinx()
-    (line1,) = ax1.plot(acc, color="tab:red", label="Accuracy")
+    (line1,) = ax1.plot(acc, color="tab:red", label="Train Acc")
+    if val_acc is not None:
+        (line1b,) = ax1.plot(
+            val_acc, color="tab:orange", linestyle="--", label="Val Acc"
+        )
     ax1.set_ylabel("Accuracy", color="tab:red")
     ax1.tick_params(axis="y", labelcolor="tab:red")
 
@@ -75,6 +79,12 @@ def plot_epoch_training(acc, cluster):
 
     # Common legend
     lines = [line0, line1]
+    if val_acc is not None:
+        lines.append(line1b)
+    if val_phi is not None:
+        # Overlay val Phi on left axis for simplicity
+        (line2,) = ax0.plot(val_phi, color="tab:green", linestyle=":", label="Val Phi")
+        lines.append(line2)
     labels = [line.get_label() for line in lines]
     ax0.legend(lines, labels, loc="upper center")
 

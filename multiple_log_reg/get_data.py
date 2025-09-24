@@ -60,9 +60,9 @@ def collect_imageMNIST(pixel_size=11, data_dir="data/MNIST", download=True):
         all_images.numpy(),
         all_labels_array,
         max_total_samples=30000,
-        train_ratio=0.6,
-        val_ratio=0.2,
-        test_ratio=0.2,
+        train=22000,
+        test=7900,
+        val=100,
     )
 
     # Convert back to tensors
@@ -219,9 +219,9 @@ def load_audio_batch(
         X_full,
         y_full,
         max_total_samples=30000,
-        train_ratio=0.6,
-        val_ratio=0.2,
-        test_ratio=0.2,
+        train=22000,
+        test=7900,
+        val=100,
     )
 
     # Save cache for next runs
@@ -242,7 +242,7 @@ def load_audio_batch(
 
 
 def get_data(
-    pixel_size: int = 11,
+    pixel_size: int = 15,
     num_steps: int = 1000,
     batch_size: int = 30000,
     imageMNIST: bool = True,
@@ -339,6 +339,11 @@ def get_data(
         else:
 
             def _align_and_concat(X_img, y_img, X_aud, y_aud):
+                # reduce size of X_img and X_aud to sum to pixel_size**2 with random sampling
+                size = int(np.floor(pixel_size // (np.sqrt(2))) ** 2)
+                X_img = X_img[:, :size]
+                X_aud = X_aud[:, :size]
+
                 classes_img = np.unique(y_img)
                 classes_aud = np.unique(y_aud)
                 classes = sorted(set(classes_img.tolist()) & set(classes_aud.tolist()))
