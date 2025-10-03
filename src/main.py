@@ -44,7 +44,7 @@ snn_N.prepare_network(
 
 # train network
 snn_N.train_network(
-    train_weights=True,
+    train_weights=False,
     noisy_potential=True,  # Add small noise to break symmetry
     compare_decay_rates=False,
     check_sleep_interval=10000,
@@ -77,7 +77,7 @@ snn_N.train_network(
     learning_rate_exc=0.0008,
     learning_rate_inh=0.005,
     accuracy_method="pca_lr",
-    test_only=False,
+    test_only=True,
 )
 
 # analyze results

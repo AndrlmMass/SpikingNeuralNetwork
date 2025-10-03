@@ -1304,7 +1304,8 @@ class snn_sleepy:
 
         # Always attempt to load a matching model if not forcing a fresh run,
         # regardless of data_loaded (streaming modes don't set data_loaded).
-        if not force_train:
+        # In test-only inference with frozen weights, skip loading any saved model
+        if not force_train and not (test_only and not train_weights):
             try:
                 model_dir = self.process(
                     load_model=True,
@@ -1494,7 +1495,23 @@ class snn_sleepy:
                         if (test_batch_size is not None and int(test_batch_size) > 0)
                         else self.batch_test
                     )
-                    total_num_tests = max(1, self.all_test // effective_batch)
+                    # Number of test batches (ceil division to include remainder)
+                    total_num_tests = max(
+                        1, (self.all_test + effective_batch - 1) // effective_batch
+                    )
+
+                    # Replace the generic epoch pbar with a dedicated test-only pbar
+                    try:
+                        pbar.close()
+                    except Exception:
+                        pass
+                    pbar = tqdm(
+                        total=total_num_tests,
+                        desc=f"Test 0/{total_num_tests}",
+                        unit="batch",
+                        ncols=80,
+                        bar_format="{desc} [{bar}] ETA: {remaining} |{postfix}",
+                    )
 
                     # Pre-allocate accumulation buffers
                     max_test_samples = self.all_test * self.num_steps
@@ -1508,9 +1525,10 @@ class snn_sleepy:
                     test_sample_count = 0
                     test_acc = 0.0
                     test_phi = 0.0
+                    test_acc_top = 0.0  # accumulate only if accuracy_method == "top"
 
                     for test_batch_idx in range(total_num_tests):
-                        # Load validation data for monitoring training progress
+                        # Load test data for test-only evaluation
                         if (
                             self.audio_streamer is not None
                             and self.image_streamer is not None
@@ -1520,19 +1538,19 @@ class snn_sleepy:
                                 effective_batch,
                                 is_training=False,
                                 plot_spectrograms=plot_spectrograms,
-                                partition="val",  # Use validation data for training monitoring
+                                partition="test",
                             )
                             if data_test is None or labels_test is None:
-                                raise ValueError("No validation data available")
+                                raise ValueError("No test data available")
                         elif self.audio_streamer is not None:
                             data_test, labels_test = self.load_audio_batch_streaming(
                                 batch_size=effective_batch,
                                 is_training=False,
                                 plot_spectrograms=plot_spectrograms,
-                                partition="val",  # Use validation data
+                                partition="test",
                             )
                             if data_test is None:
-                                raise ValueError("No validation data available")
+                                raise ValueError("No test data available")
                             self.current_test_idx += effective_batch
                         elif self.image_streamer is not None:
                             data_test, labels_test = load_image_batch(
@@ -1541,26 +1559,23 @@ class snn_sleepy:
                                 effective_batch,
                                 self.num_steps,
                                 int(np.sqrt(self.N_x)) ** 2,
-                                partition="val",  # Use validation data
+                                partition="test",
                             )
                             if data_test is None:
-                                raise ValueError("No validation data available")
+                                raise ValueError("No test data available")
                             self.current_test_idx += effective_batch
                         else:
-                            # Pre-loaded data path - for validation, use a subset of test data or separate validation data
-                            if hasattr(self, "data_val") and self.data_val is not None:
-                                # Use dedicated validation data if available
+                            # Pre-loaded data path - prefer full test data
+                            if self.data_test is not None:
+                                data_test = self.data_test
+                                labels_test = self.labels_test
+                            elif (
+                                hasattr(self, "data_val") and self.data_val is not None
+                            ):
                                 data_test = self.data_val
                                 labels_test = self.labels_val
-                            elif self.data_test is not None:
-                                # Fallback: use a portion of test data for validation
-                                val_size = min(
-                                    len(self.data_test) // 5, 1000
-                                )  # Use 20% or max 1000 samples
-                                data_test = self.data_test[:val_size]
-                                labels_test = self.labels_test[:val_size]
                             else:
-                                raise ValueError("No validation data available")
+                                raise ValueError("No test data available")
 
                         # Adjust width if needed
                         if data_test.shape[1] != self.N_x:
@@ -1630,26 +1645,41 @@ class snn_sleepy:
                         all_mp_test[test_sample_count : test_sample_count + bs] = mp_te
                         test_sample_count += bs
 
-                        # Always compute top-responders accuracy per batch for reporting
-                        acc_te_batch = top_responders_plotted(
-                            spikes=spikes_te_out[:, self.st : self.ih],
-                            labels=labels_te_out,
-                            num_classes=self.N_classes,
-                            narrow_top=narrow_top,
-                            smoothening=self.num_steps,
-                            train=False,
-                            compute_not_plot=True,
-                            n_last_points=10000,
+                        # Compute batch accuracy depending on requested method
+                        if (
+                            isinstance(accuracy_method, str)
+                            and accuracy_method.lower() == "top"
+                        ):
+                            acc_te_batch = top_responders_plotted(
+                                spikes=spikes_te_out[:, self.st : self.ih],
+                                labels=labels_te_out,
+                                num_classes=self.N_classes,
+                                narrow_top=narrow_top,
+                                smoothening=self.num_steps,
+                                train=False,
+                                compute_not_plot=True,
+                                n_last_points=10000,
+                            )
+                            test_acc_top += acc_te_batch
+
+                        # progress bar update for test-only batches
+                        pbar.set_description(
+                            f"Test {test_batch_idx+1}/{total_num_tests}"
                         )
-                        test_acc_top += acc_te_batch
+                        pbar.update(1)
 
                     # finalize
                     spikes_te_out = all_spikes_test[:test_sample_count]
                     labels_te_out = all_labels_test[:test_sample_count]
                     mp_te = all_mp_test[:test_sample_count]
 
-                    # Compute both metrics at the end of test-only pass
-                    acc_top = test_acc_top / max(1, total_num_tests)
+                    # Compute metrics at the end of test-only pass
+                    acc_top = None
+                    if (
+                        isinstance(accuracy_method, str)
+                        and accuracy_method.lower() == "top"
+                    ):
+                        acc_top = test_acc_top / max(1, total_num_tests)
                     try:
                         # PCA+LR using only test features (split test into train/val/test internally)
                         X_te, y_te = bin_spikes_by_label_no_breaks(
@@ -1684,12 +1714,25 @@ class snn_sleepy:
 
                     # performance tracker for single pass: [top_acc, pca_lr_acc]
                     self.performance_tracker = np.zeros((1, 2))
-                    self.performance_tracker[0, 0] = acc_top
+                    self.performance_tracker[0, 0] = (
+                        float(acc_top) if acc_top is not None else 0.0
+                    )
                     self.performance_tracker[0, 1] = acc_pca
 
-                    print(
-                        f"Test-only summary — Top responders acc: {acc_top:.4f}, PCA+LR acc: {acc_pca:.4f}"
-                    )
+                    if acc_top is not None:
+                        print(
+                            f"Test-only summary — Top responders acc: {acc_top:.4f}, PCA+LR acc: {acc_pca:.4f}"
+                        )
+                    else:
+                        print(
+                            f"Test-only summary — PCA+LR acc: {acc_pca:.4f} (top metric disabled)"
+                        )
+
+                    # Close test-only pbar
+                    try:
+                        pbar.close()
+                    except Exception:
+                        pass
 
                     # expose outputs
                     self.spikes_test = spikes_te_out
