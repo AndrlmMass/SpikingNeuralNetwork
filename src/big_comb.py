@@ -2900,6 +2900,20 @@ class snn_sleepy:
                     self.performance_tracker[:, 1], self.performance_tracker[:, 0]
                 )
 
+        # Always expose latest train outputs for downstream analysis (phi/accuracy)
+        try:
+            if (
+                'spikes_tr_out' in locals()
+                and spikes_tr_out is not None
+                and 'labels_tr_out' in locals()
+                and labels_tr_out is not None
+            ):
+                self.spikes_train = spikes_tr_out
+                self.labels_train = labels_tr_out
+                self.mp_train = mp_tr if 'mp_tr' in locals() else getattr(self, 'mp_train', None)
+        except Exception:
+            pass
+
         if plot_top_response_train:
             top_responders_plotted(
                 spikes=self.spikes_train,
@@ -3377,3 +3391,127 @@ class snn_sleepy:
                     print(f"PCA+LR accuracy: {accs}")
             except Exception as ex:
                 print(f"PCA+LR analysis skipped: {ex}")
+
+    def sweep_sleep_rates(
+        self,
+        sleep_rates,
+        train_params=None,
+        reinit_network_each_rate=True,
+    ):
+        """Run training for multiple sleep decay rates λ and return accuracy and phi for each.
+
+        Requirements: call prepare_data(...) before this so that data/streamers are ready.
+
+        Args:
+            sleep_rates: iterable of λ values to test (used for both exc/inh).
+            train_params: optional dict to override training params (e.g., epochs config in prepare_data).
+            reinit_network_each_rate: if True, re-create weights before each run.
+
+        Returns:
+            List of dicts with keys: {'lambda', 'accuracy_top', 'phi_test'}
+        """
+        results = []
+
+        # Default training overrides (kept minimal; inherit class defaults otherwise)
+        base_train_kwargs = dict(
+            train_weights=True,
+            save_model=False,
+            plot_epoch_performance=False,
+            compare_decay_rates=False,
+            accuracy_method="top",
+        )
+        if isinstance(train_params, dict):
+            base_train_kwargs.update(train_params)
+
+        for lam in sleep_rates:
+            # Reinitialize network weights if requested
+            if reinit_network_each_rate:
+                try:
+                    self.prepare_network(create_network=False)
+                except Exception as e:
+                    print(f"Warning: network re-init failed ({e}); continuing with current weights")
+
+            # Train with given sleep rate (used for both exc/inh)
+            self.train_network(
+                weight_decay_rate_exc=[lam],
+                weight_decay_rate_inh=[lam],
+                **base_train_kwargs,
+            )
+
+            # Ensure test outputs exist for accuracy; if not, attempt a lightweight test-only pass
+            if not hasattr(self, 'spikes_test') or self.spikes_test is None:
+                try:
+                    self.train_network(
+                        test_only=True,
+                        train_weights=False,
+                        weight_decay_rate_exc=[lam],
+                        weight_decay_rate_inh=[lam],
+                        plot_epoch_performance=False,
+                        compare_decay_rates=False,
+                    )
+                except Exception as e:
+                    print(f"Warning: test-only evaluation failed ({e})")
+
+            # Compute top-responders accuracy on available test spikes
+            acc_top = None
+            try:
+                if (
+                    hasattr(self, 'spikes_test')
+                    and self.spikes_test is not None
+                    and hasattr(self, 'labels_test')
+                    and self.labels_test is not None
+                ):
+                    acc_top = top_responders_plotted(
+                        spikes=self.spikes_test[:, self.st:self.ih],
+                        labels=self.labels_test,
+                        num_classes=self.N_classes,
+                        narrow_top=getattr(self, 'narrow_top', 0.2),
+                        smoothening=getattr(self, 'num_steps', 1000),
+                        train=False,
+                        compute_not_plot=True,
+                        n_last_points=10000,
+                    )
+            except Exception as e:
+                print(f"Warning: accuracy computation failed ({e})")
+
+            # Compute phi_test using current train/test spikes
+            phi_test = None
+            try:
+                if (
+                    hasattr(self, 'spikes_train')
+                    and self.spikes_train is not None
+                    and hasattr(self, 'spikes_test')
+                    and self.spikes_test is not None
+                    and hasattr(self, 'labels_train')
+                    and self.labels_train is not None
+                    and hasattr(self, 'labels_test')
+                    and self.labels_test is not None
+                ):
+                    _, phi_test, *_ = calculate_phi(
+                        spikes_train=self.spikes_train[:, self.st:],
+                        spikes_test=self.spikes_test[:, self.st:],
+                        labels_train=self.labels_train,
+                        labels_test=self.labels_test,
+                        num_steps=getattr(self, 'num_steps', 1000),
+                        pca_variance=getattr(self, 'pca_variance', 0.95),
+                        random_state=48,
+                        num_classes=self.N_classes,
+                    )
+            except Exception as e:
+                print(f"Warning: phi computation failed ({e})")
+
+            results.append({
+                'lambda': float(lam),
+                'accuracy_top': float(acc_top) if acc_top is not None else None,
+                'phi_test': float(phi_test) if phi_test is not None else None,
+            })
+
+        # Nicely print results
+        try:
+            print("\nSleep-rate sweep results (λ → accuracy_top, phi_test):")
+            for r in results:
+                print(f"  λ={r['lambda']}: acc_top={r['accuracy_top']}, phi_test={r['phi_test']}")
+        except Exception:
+            pass
+
+        return results
