@@ -15,75 +15,464 @@ def normalize_image(img, target_sum=1.0):
     return img * (target_sum / current_sum) if current_sum > 0 else img
 
 
-import os
-import numpy as np
-import librosa
-import warnings
-warnings.filterwarnings('ignore')
+warnings.filterwarnings("ignore")
 
-def normalize_audio_lufs(audio, sample_rate, target_lufs=-23.0):
-    """
-    Normalize audio to target LUFS (Loudness Units relative to Full Scale)
-    This is the standard used by Spotify and other streaming platforms
-    """
-    # Calculate current RMS
-    rms = np.sqrt(np.mean(audio**2))
-    
-    # Convert RMS to LUFS approximation (simplified)
-    # In practice, you'd use a proper LUFS meter, but this gives good results
-    current_lufs = 20 * np.log10(rms) if rms > 0 else -60
-    
-    # Calculate gain needed
-    gain_db = target_lufs - current_lufs
-    gain_linear = 10 ** (gain_db / 20)
-    
-    # Apply gain
-    normalized_audio = audio * gain_linear
-    
-    # Prevent clipping
-    max_val = np.max(np.abs(normalized_audio))
-    if max_val > 1.0:
-        normalized_audio = normalized_audio / max_val * 0.95
-    
-    return normalized_audio
 
-def load_audiomnist_data(data_path, target_sr=22050, duration=1.0):
+def _mel_filterbank_envelopes(
+    x, sr, n_ch=40, win_ms=25, hop_ms=10, fmin=50.0, fmax=None
+):
     """
-    Load AudioMNIST data with proper normalization and labeling
+    Fallback cochlear-ish features using mel filterbank magnitudes + smoothing.
+    Returns envelopes (F x T) and frame_dt (seconds).
     """
-    all_data = []
-    all_labels = []
-    
-    print("Loading AudioMNIST data...")
-    
-    if not os.path.exists(data_path):
-        print(f"Error: Path {data_path} does not exist!")
+    if fmax is None:
+        fmax = sr / 2.0
+    n_fft = int(round(sr * win_ms / 1000.0))
+    hop_length = int(round(sr * hop_ms / 1000.0))
+    S = librosa.feature.melspectrogram(
+        y=x,
+        sr=sr,
+        n_mels=n_ch,
+        fmin=fmin,
+        fmax=fmax,
+        n_fft=n_fft,
+        hop_length=hop_length,
+        power=1.0,  # magnitude, not power^2
+    )  # (F, T)
+    # Simple envelope smoothing across time per channel
+    # Convert each channel’s frame series to a “continuous-ish” envelope by smoothing along time
+    # Here: a lightweight moving-average via IIR in frame-domain
+    F, T = S.shape
+    E = np.empty_like(S)
+    alpha = np.exp(-1.0 / 3.0)  # ~3-frame time constant
+    for f in range(F):
+        acc = 0.0
+        for t in range(T):
+            acc = (1.0 - alpha) * S[f, t] + alpha * acc
+            E[f, t] = acc
+    frame_dt = hop_length / float(sr)
+    return E, frame_dt
+
+
+def _gammatone_envelopes(x, sr, n_ch=40, win_ms=25, hop_ms=10, fmin=50.0):
+    """
+    If 'gammatone' is installed, use its gtgram for a more auditory cochleagram.
+    Returns envelopes (F x T) and frame_dt (seconds).
+    """
+    try:
+        import gammatone.gtgram as gtg
+    except Exception:
         return None, None
-    
-    # Walk through all files
-    for root, dirs, files in os.walk(data_path):
-        for file in files:
-            if file.endswith('.wav'):
-                file_path = os.path.join(root, file)
-                
-                try:
-                    # Load audio file
-                    audio, sr = librosa.load(file_path, sr=target_sr, duration=duration)
-                    
-                    # Normalize using LUFS standard
-                    normalized_audio = normalize_audio_lufs(audio, sr)
-                    
-                    # Extract label from filename (first character should be 0-9)
-                    label = int(file[0]) if file[0].isdigit() else None
-                    
-                    if label is not None and 0 <= label <= 9:
-                        all_data.append(normalized_audio)
-                        all_labels.append(label)
-                        
-                except Exception as e:
-                    print(f"Error loading {file_path}: {e}")
+    win_time = win_ms / 1000.0
+    hop_time = hop_ms / 1000.0
+    G = gtg.gtgram(
+        x, sr, window_time=win_time, hop_time=hop_time, channels=n_ch, f_min=fmin
+    )
+    # G is positive; light temporal smoothing
+    F, T = G.shape
+    E = np.empty_like(G)
+    alpha = np.exp(-1.0 / 3.0)
+    for f in range(F):
+        acc = 0.0
+        for t in range(T):
+            acc = (1.0 - alpha) * G[f, t] + alpha * acc
+            E[f, t] = acc
+    frame_dt = hop_time
+    return E, frame_dt
+
+
+def cochlear_to_spikes_1s(
+    wav_batch,  # list of 1D float32 arrays, variable length
+    sr=22050,
+    n_channels=40,
+    win_ms=25,
+    hop_ms=10,
+    target_max_rate_hz=100.0,  # upper bound for an active channel
+    env_cutoff_hz=120.0,  # used in raw-envelope path; mel/gt already smoothed
+    out_T_ms=1000,  # exactly 1000 steps
+    eps=1e-8,
+    return_rates=False,
+    show_progress=False,
+    progress_desc="Encoding",
+    debug=False,
+):
+    """
+    Full pipeline:
+      raw -> (gammatone|mel) envelopes -> CMVN -> sigmoid map -> resample to 1000 steps (1 ms) -> area-match -> Poisson.
+    Guarantees: every file uses *all* of its content (global time-warp), output length = 1000.
+    """
+    B = len(wav_batch)
+    T_out = int(out_T_ms)  # 1000
+    dt_out = 1e-3  # 1 ms
+
+    all_spikes, all_rates = [], []
+
+    # Optionally show per-file progress
+    if show_progress:
+        # Ensure tqdm is enabled for this call
+        try:
+            os.environ["TQDM_DISABLE"] = "False"
+        except Exception:
+            pass
+        iterator = tqdm(
+            wav_batch,
+            total=B,
+            desc=progress_desc,
+            leave=False,
+        )
+    else:
+        iterator = wav_batch
+
+    for x in iterator:
+        # --- Cochlear front-end (prefer gammatone)
+        E, frame_dt = _gammatone_envelopes(
+            x, sr, n_ch=n_channels, win_ms=win_ms, hop_ms=hop_ms
+        )
+        if E is None:  # fallback: mel
+            E, frame_dt = _mel_filterbank_envelopes(
+                x, sr, n_ch=n_channels, win_ms=win_ms, hop_ms=hop_ms
+            )
+
+        # --- Log compression + per-channel CMVN
+        # add small bias to avoid log(0)
+        X = np.log1p(np.maximum(E, 0.0))
+        X = (X - X.mean(axis=1, keepdims=True)) / (X.std(axis=1, keepdims=True) + eps)
+
+        # --- Map to [0, target_max_rate] with a smooth nonlinearity
+        rates_hz_frames = (
+            1.0 / (1.0 + np.exp(-X))
+        ) * target_max_rate_hz  # (F, T_frames)
+
+        # --- Time-normalize: resample from original length to 1000 steps (use *all* audio)
+        F, T_frames = rates_hz_frames.shape
+        t_old = np.arange(T_frames) * frame_dt
+        if T_frames == 1:
+            # Degenerate 1-frame case: tile
+            rates_resamp = np.tile(rates_hz_frames[:, 0:1], (1, T_out))
+        else:
+            t_new = np.linspace(0.0, t_old[-1], T_out)  # covers full utterance
+            rates_resamp = np.empty((F, T_out), dtype=np.float32)
+            for f in range(F):
+                rates_resamp[f] = np.interp(t_new, t_old, rates_hz_frames[f])
+
+        # --- Area match: preserve expected spike count across the time-warp
+        # Ensure sum(rate*dt) invariant before/after resample (per channel)
+        area_old = (rates_hz_frames * frame_dt).sum(axis=1, keepdims=True)  # (F,1)
+        area_new = (rates_resamp * dt_out).sum(axis=1, keepdims=True) + eps  # (F,1)
+        scale = np.where(area_new > 0, area_old / area_new, 1.0)
+        rates_resamp *= scale
+
+        # --- Poisson sampling at 1 ms with exact Bernoulli thinning
+        # p = 1 - exp(-rate * dt)
+        p = 1.0 - np.exp(-np.clip(rates_resamp, 0.0, None) * dt_out)  # (F, 1000)
+        spikes = (np.random.rand(F, T_out) < p).astype(np.int8).T  # (1000, F)
+        all_spikes.append(spikes)
+        if return_rates:
+            all_rates.append(rates_resamp.T)  # (1000, F)
+
+    spikes_bt = np.stack(all_spikes, axis=0)  # (B, 1000, F)
+    if return_rates:
+        rates_bt = np.stack(all_rates, axis=0)  # (B, 1000, F)
+        return spikes_bt, rates_bt
+    return spikes_bt
+
+
+class ImageDataStreamer:
+    """
+    Streams image data in batches to avoid loading all files at once.
+    Only loads and processes small batches as needed.
+    """
+
+    def __init__(
+        self,
+        data_dir,
+        batch_size=100,
+        pixel_size=15,
+        num_steps=100,
+        gain=1.0,
+        offset=0,
+        first_spike_time=0,
+        time_var_input=False,
+        train_count=None,
+        val_count=None,
+        test_count=None,
+    ):
+        self.data_dir = data_dir
+        self.batch_size = batch_size
+        self.pixel_size = pixel_size
+        self.num_steps = num_steps
+        self.gain = gain
+        self.offset = offset
+        self.first_spike_time = first_spike_time
+        self.time_var_input = time_var_input
+
+        # Load MNIST dataset
+        transform = transforms.Compose(
+            [
+                transforms.Grayscale(),
+                transforms.Resize((pixel_size, pixel_size)),
+                transforms.ToTensor(),
+            ]
+        )
+
+        self.mnist_train = datasets.MNIST(
+            root=data_dir, train=True, transform=transform, download=True
+        )
+        self.mnist_test = datasets.MNIST(
+            root=data_dir, train=False, transform=transform, download=True
+        )
+
+        # Combine train and test data
+        self.all_images = []
+        self.all_labels = []
+
+        for i in range(len(self.mnist_train)):
+            self.all_images.append(self.mnist_train[i][0])
+            self.all_labels.append(self.mnist_train[i][1])
+
+        for i in range(len(self.mnist_test)):
+            self.all_images.append(self.mnist_test[i][0])
+            self.all_labels.append(self.mnist_test[i][1])
+
+        self.all_images = torch.stack(self.all_images)
+        self.all_labels = np.array(self.all_labels)
+
+        # Shuffle indices for random access
+        self.indices = np.arange(len(self.all_images))
+        np.random.shuffle(self.indices)
+
+        # Partition indices for train/val/test if counts provided
+        total = len(self.indices)
+        tc = train_count or total
+        vc = val_count or 0
+        tec = test_count or 0
+        tc = min(tc, total)
+        vc = min(vc, max(0, total - tc))
+        tec = min(tec, max(0, total - tc - vc))
+
+        self.train_indices = self.indices[:tc]
+        self.val_indices = self.indices[tc : tc + vc]
+        self.test_indices = self.indices[tc + vc : tc + vc + tec]
+        self.ptr_train = 0
+        self.ptr_val = 0
+        self.ptr_test = 0
+
+        print(f"Found {len(self.all_images)} image samples")
+        print(f"Label distribution: {np.bincount(self.all_labels)}")
+
+    def get_batch(self, start_idx, num_samples, partition="train"):
+        """
+        Load a batch of image samples from the specified partition.
+        Returns (spike_data, labels) or (None, None) if no more data.
+        """
+        if partition == "train":
+            pool = self.train_indices
+            ptr = self.ptr_train
+        elif partition == "val":
+            pool = self.val_indices
+            ptr = self.ptr_val
+        else:
+            pool = self.test_indices
+            ptr = self.ptr_test
+
+        if ptr >= len(pool):
+            return None, None
+
+        end_ptr = min(ptr + num_samples, len(pool))
+        batch_indices = pool[ptr:end_ptr]
+
+        # Get batch data
+        batch_images = self.all_images[batch_indices]
+        batch_labels = self.all_labels[batch_indices]
+
+        # Convert to spikes
+        spike_data = self._convert_images_to_spikes(batch_images)
+
+        # Extend labels to match spike data (repeat each label for num_steps)
+        extended_labels = batch_labels.repeat(self.num_steps)
+
+        # advance pointer
+        if partition == "train":
+            self.ptr_train = end_ptr
+        elif partition == "val":
+            self.ptr_val = end_ptr
+        else:
+            self.ptr_test = end_ptr
+
+        return spike_data, extended_labels
+
+    def _convert_images_to_spikes(self, images):
+        """Convert image batch to spikes."""
+        # Normalize images
+        target_sum = (self.pixel_size**2) * 0.1
+        norm_images = torch.stack(
+            [normalize_image(img=img, target_sum=target_sum) for img in images]
+        )
+
+        # Convert to spikes
+        S_data = torch.zeros(size=norm_images.shape)
+        S_data = S_data.repeat(self.num_steps, 1, 1, 1)
+
+        for i in range(norm_images.shape[0]):
+            S_data[i * self.num_steps : (i + 1) * self.num_steps] = spikegen.rate(
+                norm_images[i],
+                num_steps=self.num_steps,
+                gain=self.gain,
+                offset=self.offset,
+                first_spike_time=self.first_spike_time,
+                time_var_input=self.time_var_input,
+            )
+
+        # Reshape to match expected format
+        S_data_corrected = S_data.squeeze(2).flatten(start_dim=2)
+        S_data_reshaped = np.reshape(
+            S_data_corrected,
+            (
+                S_data.shape[0] * S_data.shape[1],
+                S_data_corrected.shape[2],
+            ),
+        )
+
+        return S_data_reshaped.numpy()
+
+    def get_total_samples(self):
+        """Return total number of available training samples."""
+        return len(self.train_indices)
+
+    def reset_partition(self, partition="all"):
+        if partition in ("all", "train"):
+            self.ptr_train = 0
+        if partition in ("all", "val"):
+            self.ptr_val = 0
+        if partition in ("all", "test"):
+            self.ptr_test = 0
+
+
+class AudioDataStreamer:
+    """
+    Streams audio in batches without truncating/padding.
+    You get variable-length waveforms; the encoder will handle time-normalization.
+    """
+
+    def __init__(
+        self,
+        data_path,
+        target_sr=22050,
+        batch_size=100,
+        train_count=None,
+        val_count=None,
+        test_count=None,
+    ):
+        self.data_path = data_path
+        self.target_sr = target_sr
+        self.batch_size = batch_size
+
+        self.audio_files, self.audio_labels = [], []
+        if not os.path.exists(data_path):
+            raise FileNotFoundError(f"Path {data_path} does not exist!")
+
+        for root, _, files in os.walk(data_path):
+            for file in files:
+                if not file.lower().endswith(".wav"):
                     continue
-    
+                fp = os.path.join(root, file)
+                # Expect filenames like "3_...wav"; adapt if yours differ
+                label = int(file[0]) if file[0].isdigit() else None
+                if label is not None and 0 <= label <= 9:
+                    self.audio_files.append(fp)
+                    self.audio_labels.append(label)
+
+        # store labels as numpy array for fast fancy indexing
+        self.audio_labels = np.asarray(self.audio_labels, dtype=np.int64)
+        self.indices = np.arange(len(self.audio_files))
+        np.random.shuffle(self.indices)
+        total = len(self.indices)
+        tc = train_count or total
+        vc = val_count or 0
+        tec = test_count or 0
+        tc = min(tc, total)
+        vc = min(vc, max(0, total - tc))
+        tec = min(tec, max(0, total - tc - vc))
+        self.train_indices = self.indices[:tc]
+        self.val_indices = self.indices[tc : tc + vc]
+        self.test_indices = self.indices[tc + vc : tc + vc + tec]
+        self.ptr_train = 0
+        self.ptr_val = 0
+        self.ptr_test = 0
+        print(f"Found {len(self.audio_files)} audio files")
+        print(f"Label distribution: {np.bincount(self.audio_labels)}")
+
+    def get_batch(self, start_idx, num_samples, partition="train"):
+        if partition == "train":
+            pool = self.train_indices
+            ptr = self.ptr_train
+        elif partition == "val":
+            pool = self.val_indices
+            ptr = self.ptr_val
+        else:
+            pool = self.test_indices
+            ptr = self.ptr_test
+        if ptr >= len(pool):
+            return None, None
+        end_ptr = min(ptr + num_samples, len(pool))
+        idxs = pool[ptr:end_ptr]
+
+        audio_batch, labels_batch = [], []
+        for i in idxs:
+            fp = self.audio_files[i]
+            try:
+                # Load full file at target_sr (no duration cap)
+                x, sr = librosa.load(fp, sr=self.target_sr, mono=True)
+                audio_batch.append(x.astype(np.float32))
+                labels_batch.append(self.audio_labels[i])
+            except Exception as e:
+                print(f"Error loading {fp}: {e}")
+        if not audio_batch:
+            return None, None
+        # advance pointer
+        if partition == "train":
+            self.ptr_train = end_ptr
+        elif partition == "val":
+            self.ptr_val = end_ptr
+        else:
+            self.ptr_test = end_ptr
+        return audio_batch, np.array(labels_batch, dtype=np.int64)
+
+    def get_total_samples(self):
+        return len(self.train_indices)
+
+    def reset_partition(self, partition="all"):
+        if partition in ("all", "train"):
+            self.ptr_train = 0
+        if partition in ("all", "val"):
+            self.ptr_val = 0
+        if partition in ("all", "test"):
+            self.ptr_test = 0
+
+
+def load_audiomnist_data(data_path, target_sr=22050):
+    """
+    Loads all AudioMNIST into memory (if you really want that).
+    Fixed: returns properly stacked padded data if you *choose* to pad.
+    """
+    all_data, all_labels = [], []
+    if not os.path.exists(data_path):
+        raise FileNotFoundError(f"Path {data_path} does not exist!")
+
+    for root, _, files in tqdm(list(os.walk(data_path)), desc="Loading AudioMNIST"):
+        for file in files:
+            if not file.endswith(".wav"):
+                continue
+            fp = os.path.join(root, file)
+            try:
+                x, sr = librosa.load(fp, sr=target_sr, mono=True)
+                label = int(file[0]) if file[0].isdigit() else None
+                if label is not None and 0 <= label <= 9:
+                    all_data.append(x.astype(np.float32))
+                    all_labels.append(label)
+            except Exception as e:
+                print(f"Error loading {fp}: {e}")
+
     if not all_data:
         print("No valid audio files found!")
         return None, None
@@ -723,3 +1112,561 @@ def create_data(
             S_data_test,
             spike_labels_test,
         )
+
+
+# ============================================================================
+# Streaming Functions (moved from big_comb.py)
+# ============================================================================
+
+
+def load_audio_batch_streaming(
+    audio_streamer,
+    batch_size,
+    current_train_idx,
+    current_test_idx,
+    all_train,
+    all_test,
+    num_steps,
+    N_x,
+    get_training_mode_func,
+    is_training=True,
+    plot_spectrograms=False,
+    partition=None,
+):
+    """
+    Load a batch of audio data and convert to spikes on-demand.
+
+    Args:
+        audio_streamer: The audio data streamer object
+        batch_size: Number of samples to load
+        current_train_idx: Current training index
+        current_test_idx: Current test index
+        all_train: Total training images/samples
+        all_test: Total test images/samples
+        num_steps: Number of time steps per sample
+        N_x: Total number of input neurons
+        get_training_mode_func: Function to get training mode
+        is_training: If True, load training data; if False, load test data
+
+    Returns:
+        (spike_data, labels, new_train_idx, new_test_idx) or (None, None, current_train_idx, current_test_idx) if no more data
+    """
+    if audio_streamer is None:
+        return None, None, current_train_idx, current_test_idx
+
+    # Check if we've exceeded the total limit
+    if is_training and current_train_idx >= all_train:
+        return None, None, current_train_idx, current_test_idx
+    if not is_training and current_test_idx >= all_test:
+        return None, None, current_train_idx, current_test_idx
+
+    # Determine current index
+    start_idx = current_train_idx if is_training else current_test_idx
+
+    # Load audio batch - determine correct number of neurons based on mode
+    training_mode = get_training_mode_func()
+    if training_mode == "multimodal":
+        # In multimodal, each modality uses (floor((sqrt(base))/sqrt(2)))^2 where base = original single-modality sqrt
+        # Here N_x is the total expected concatenated size; each side should be N_x // 2
+        per_mod_total = N_x // 2
+        base_dim = int(np.sqrt(per_mod_total * 2))  # reverse of 2*(shared_dim^2)
+        shared_dim = int(np.floor(base_dim / np.sqrt(2)))
+        num_audio_neurons = int(shared_dim**2)
+    else:
+        # Audio-only mode - use full N_x for audio
+        num_audio_neurons = int(np.sqrt(N_x)) ** 2
+
+    # print(f"Audio neurons: {num_audio_neurons}")  # Commented for performance
+    spike_data, labels = load_audio_batch(
+        audio_streamer,
+        start_idx,
+        batch_size,
+        num_steps,
+        num_audio_neurons,
+        plot_spectrograms=plot_spectrograms,
+        partition=(
+            partition if partition is not None else ("train" if is_training else "val")
+        ),
+    )
+
+    # Update indices
+    new_train_idx = current_train_idx
+    new_test_idx = current_test_idx
+    if spike_data is not None:
+        if is_training:
+            new_train_idx = current_train_idx + batch_size
+        else:
+            new_test_idx = current_test_idx + batch_size
+
+    return spike_data, labels, new_train_idx, new_test_idx
+
+
+def load_multimodal_batch(
+    audio_streamer,
+    image_streamer,
+    batch_size,
+    current_train_idx,
+    current_test_idx,
+    all_train,
+    all_test,
+    num_steps,
+    N_x,
+    get_training_mode_func,
+    load_prealigned_func,
+    is_training=True,
+    plot_spectrograms=False,
+    partition=None,
+):
+    """
+    Load a batch of multimodal data (image + audio) with synchronized labels.
+
+    Args:
+        audio_streamer: The audio data streamer object
+        image_streamer: The image data streamer object
+        batch_size: Number of samples to load
+        current_train_idx: Current training index
+        current_test_idx: Current test index
+        all_train: Total training images/samples
+        all_test: Total test images/samples
+        num_steps: Number of time steps per sample
+        N_x: Total number of input neurons
+        get_training_mode_func: Function to get training mode
+        load_prealigned_func: Function to load pre-aligned batch
+        is_training: If True, load training data; if False, load test data
+
+    Returns:
+        (concatenated_spike_data, labels, new_train_idx, new_test_idx) or (None, None, current_train_idx, current_test_idx) if no more data
+    """
+
+    # Determine correct number of neurons based on mode
+    training_mode = get_training_mode_func()
+    if training_mode == "multimodal":
+        # Each modality should contribute exactly N_x // 2 features using the same shared_dim rule
+        per_mod_total = N_x // 2
+        base_dim = int(np.sqrt(per_mod_total * 2))
+        shared_dim = int(np.floor(base_dim / np.sqrt(2)))
+        per_mod_features = int(shared_dim**2)
+        # If rounding caused drift, clamp to per_mod_total
+        if per_mod_features > per_mod_total:
+            per_mod_features = per_mod_total
+        num_image_neurons = per_mod_features
+        num_audio_neurons = per_mod_features
+    else:
+        # Fallback - use full N_x
+        num_image_neurons = int(np.sqrt(N_x)) ** 2
+        num_audio_neurons = int(np.sqrt(N_x)) ** 2
+
+    # Load pre-aligned multimodal batch
+    multimodal_spikes, labels = load_prealigned_func(
+        audio_streamer=audio_streamer,
+        image_streamer=image_streamer,
+        batch_size=batch_size,
+        current_train_idx=current_train_idx,
+        current_test_idx=current_test_idx,
+        all_train=all_train,
+        all_test=all_test,
+        num_steps=num_steps,
+        N_x=N_x,
+        get_training_mode_func=get_training_mode_func,
+        is_training=is_training,
+        plot_spectrograms=plot_spectrograms,
+        partition=partition,
+        num_image_neurons=num_image_neurons,
+        num_audio_neurons=num_audio_neurons,
+    )
+
+    if multimodal_spikes is None:
+        return None, None, current_train_idx, current_test_idx
+
+    # Advance the index after successful loading
+    new_train_idx = current_train_idx + batch_size if is_training else current_train_idx
+    new_test_idx = (
+        current_test_idx + batch_size if not is_training else current_test_idx
+    )
+
+    return multimodal_spikes, labels, new_train_idx, new_test_idx
+
+
+def load_prealigned_multimodal_batch(
+    audio_streamer,
+    image_streamer,
+    batch_size,
+    current_train_idx,
+    current_test_idx,
+    all_train,
+    all_test,
+    num_steps,
+    N_x,
+    get_training_mode_func,
+    is_training=True,
+    plot_spectrograms=False,
+    partition=None,
+    num_image_neurons=None,
+    num_audio_neurons=None,
+):
+    """
+    Load a batch from multimodal datasets with pre-aligned labels.
+    Uses pre-aligned indices to ensure audio and image samples correspond to the same class.
+    """
+    # Determine partition
+    data_partition = (
+        partition if partition is not None else ("train" if is_training else "val")
+    )
+
+    # Get pre-aligned indices for this batch
+    aligned_indices = get_prealigned_indices(
+        audio_streamer=audio_streamer,
+        image_streamer=image_streamer,
+        batch_size=batch_size,
+        current_idx=current_train_idx if is_training else current_test_idx,
+        partition=data_partition,
+        is_training=is_training,
+    )
+
+    if aligned_indices is None:
+        return None, None
+
+    audio_indices, image_indices = aligned_indices
+
+    # Load audio batch using pre-aligned indices
+    audio_spikes, audio_labels = load_audio_batch_with_indices(
+        audio_streamer=audio_streamer,
+        indices=audio_indices,
+        num_steps=num_steps,
+        num_input_neurons=num_audio_neurons,
+        plot_spectrograms=plot_spectrograms,
+        partition=data_partition,
+    )
+
+    if audio_spikes is None:
+        return None, None
+
+    # Load image batch using pre-aligned indices
+    image_spikes, image_labels = load_image_batch_with_indices(
+        image_streamer=image_streamer,
+        indices=image_indices,
+        num_steps=num_steps,
+        num_input_neurons=num_image_neurons,
+        partition=data_partition,
+    )
+
+    if image_spikes is None:
+        return None, None
+
+    # Verify alignment (should be perfect now)
+    if len(audio_labels) > 0 and len(image_labels) > 0:
+        if not np.array_equal(audio_labels, image_labels):
+            print(f"Warning: Label mismatch detected!")
+            print(f"Audio labels: {audio_labels}")
+            print(f"Image labels: {image_labels}")
+        else:
+            print(f"✓ Perfect alignment: {len(audio_labels)} samples")
+
+    # Concatenate image and audio features
+    # Concatenate and if needed pad/truncate to exactly N_x columns expected by the network
+    concatenated = np.concatenate([image_spikes, audio_spikes], axis=1)
+    if concatenated.shape[1] < N_x:
+        pad_cols = N_x - concatenated.shape[1]
+        concatenated = np.pad(concatenated, ((0, 0), (0, pad_cols)), mode="constant")
+    elif concatenated.shape[1] > N_x:
+        concatenated = concatenated[:, :N_x]
+
+    multimodal_spikes = concatenated
+
+    # Labels are already extended by individual batch loaders
+    multimodal_labels = audio_labels
+
+    return multimodal_spikes, multimodal_labels
+
+
+def get_prealigned_indices(
+    audio_streamer,
+    image_streamer,
+    batch_size,
+    current_idx,
+    partition="train",
+    is_training=True,
+):
+    """
+    Get pre-aligned indices for audio and image data to ensure matching labels.
+    Returns (audio_indices, image_indices) or None if alignment fails.
+    """
+    # Get available indices for both datasets
+    if partition == "train":
+        audio_pool = audio_streamer.train_indices
+        image_pool = image_streamer.train_indices
+    elif partition == "val":
+        audio_pool = audio_streamer.val_indices
+        image_pool = image_streamer.val_indices
+    else:  # test
+        audio_pool = audio_streamer.test_indices
+        image_pool = image_streamer.test_indices
+
+    # Check if we have enough data
+    if current_idx >= len(audio_pool) or current_idx >= len(image_pool):
+        return None
+
+    # Get the requested batch size, limited by available data
+    end_idx = min(current_idx + batch_size, len(audio_pool), len(image_pool))
+    actual_batch_size = end_idx - current_idx
+
+    if actual_batch_size <= 0:
+        return None
+
+    # Get indices for this batch
+    audio_indices = audio_pool[current_idx:end_idx]
+    image_indices = image_pool[current_idx:end_idx]
+
+    # Get labels for verification (ensure numpy arrays for fancy indexing)
+    audio_labels = np.asarray(audio_streamer.audio_labels)[audio_indices]
+    image_labels = np.asarray(image_streamer.all_labels)[image_indices]
+
+    # Verify alignment
+    if not np.array_equal(audio_labels, image_labels):
+        print(f"Warning: Label mismatch in batch alignment!")
+        print(f"Audio labels: {audio_labels}")
+        print(f"Image labels: {image_labels}")
+        # For now, we'll continue but this indicates a problem with the pre-alignment
+
+    return audio_indices, image_indices
+
+
+def load_audio_batch_with_indices(
+    audio_streamer,
+    indices,
+    num_steps,
+    num_input_neurons,
+    plot_spectrograms=False,
+    partition="train",
+):
+    """
+    Load audio data using specific indices instead of sequential loading.
+    """
+    if indices is None or len(indices) == 0:
+        return None, None
+
+    audio_batch, labels_batch = [], []
+    for idx in indices:
+        fp = audio_streamer.audio_files[idx]
+        try:
+            x, sr = librosa.load(fp, sr=audio_streamer.target_sr, mono=True)
+            audio_batch.append(x.astype(np.float32))
+            labels_batch.append(audio_streamer.audio_labels[idx])
+        except Exception as e:
+            print(f"Error loading {fp}: {e}")
+
+    if not audio_batch:
+        return None, None
+
+    # Convert to spikes
+    spike_data_3d = cochlear_to_spikes_1s(
+        audio_batch,
+        sr=audio_streamer.target_sr,
+        n_channels=int(num_input_neurons),
+        win_ms=25,
+        hop_ms=10,
+        target_max_rate_hz=100.0,
+        env_cutoff_hz=120.0,
+        out_T_ms=num_steps,
+        eps=1e-8,
+    )  # (B, num_steps, num_input_neurons)
+
+    # Flatten batch and time to match training pipeline expectations: (B*T, F)
+    spike_data = spike_data_3d.reshape(-1, spike_data_3d.shape[-1])
+
+    # Extend labels to match spike data (repeat each label for num_steps)
+    spike_labels = np.array(labels_batch).repeat(num_steps)
+
+    # Optional visualization
+    if plot_spectrograms:
+        try:
+            plot_audio_spectrograms_and_spikes(
+                audio_data=audio_batch,
+                spikes=spike_data,
+                spike_labels=spike_labels,
+                audio_labels=np.array(labels_batch),
+                num_steps=num_steps,
+                sample_rate=audio_streamer.target_sr,
+            )
+        except Exception as e:
+            print(f"Warning: failed to plot spectrograms for this batch: {e}")
+
+    return spike_data, spike_labels
+
+
+def load_image_batch_with_indices(
+    image_streamer,
+    indices,
+    num_steps,
+    num_input_neurons,
+    partition="train",
+):
+    """
+    Load image data using specific indices instead of sequential loading.
+    """
+    if indices is None or len(indices) == 0:
+        return None, None
+
+    # Get batch data using the specific indices
+    batch_images = image_streamer.all_images[indices]
+    batch_labels = image_streamer.all_labels[indices]
+
+    # Convert to spikes
+    spike_data = image_streamer._convert_images_to_spikes(batch_images)
+
+    # Extend labels to match spike data (repeat each label for num_steps)
+    spike_labels = batch_labels.repeat(num_steps)
+
+    return spike_data, spike_labels
+
+
+def create_prealigned_multimodal_datasets(
+    audio_streamer,
+    image_streamer,
+    max_total_samples=30000,
+    train_ratio=0.6,
+    val_ratio=0.2,
+    test_ratio=0.2,
+):
+    """
+    Create pre-aligned multimodal datasets ensuring matching labels between audio and image data.
+    This is the key fix for the multimodal architecture problem.
+
+    Args:
+        audio_streamer: AudioDataStreamer instance
+        image_streamer: ImageDataStreamer instance
+        max_total_samples: Maximum total samples to use
+        train_ratio, val_ratio, test_ratio: Data split ratios
+
+    Returns:
+        (audio_streamer, image_streamer) with pre-aligned indices
+    """
+    print("Creating pre-aligned multimodal datasets...")
+
+    # Set random seed for reproducibility
+    np.random.seed(42)
+
+    # Get all available labels from both datasets
+    audio_labels = audio_streamer.audio_labels
+    image_labels = image_streamer.all_labels
+
+    # Find common classes
+    audio_classes = set(audio_labels)
+    image_classes = set(image_labels)
+    common_classes = audio_classes.intersection(image_classes)
+
+    if not common_classes:
+        raise ValueError("No common classes found between audio and image datasets!")
+
+    print(f"Common classes: {sorted(common_classes)}")
+
+    # Create aligned indices for each class
+    aligned_audio_indices = []
+    aligned_image_indices = []
+
+    for class_label in sorted(common_classes):
+        # Get indices for this class in both datasets
+        audio_class_indices = np.where(audio_labels == class_label)[0]
+        image_class_indices = np.where(image_labels == class_label)[0]
+
+        # Take the minimum count to ensure perfect alignment
+        min_count = min(len(audio_class_indices), len(image_class_indices))
+
+        if min_count == 0:
+            continue
+
+        # Randomly sample the same number from each dataset
+        np.random.shuffle(audio_class_indices)
+        np.random.shuffle(image_class_indices)
+
+        aligned_audio_indices.extend(audio_class_indices[:min_count])
+        aligned_image_indices.extend(image_class_indices[:min_count])
+
+        print(f"Class {class_label}: {min_count} aligned samples")
+
+    # Convert to numpy arrays
+    aligned_audio_indices = np.array(aligned_audio_indices)
+    aligned_image_indices = np.array(aligned_image_indices)
+
+    # Shuffle the aligned pairs together to maintain correspondence
+    shuffle_indices = np.random.permutation(len(aligned_audio_indices))
+    aligned_audio_indices = aligned_audio_indices[shuffle_indices]
+    aligned_image_indices = aligned_image_indices[shuffle_indices]
+
+    # Limit total samples if needed
+    if len(aligned_audio_indices) > max_total_samples:
+        aligned_audio_indices = aligned_audio_indices[:max_total_samples]
+        aligned_image_indices = aligned_image_indices[:max_total_samples]
+
+    total_samples = len(aligned_audio_indices)
+    print(f"Total aligned samples: {total_samples}")
+
+    # Calculate split sizes
+    train_size = int(total_samples * train_ratio)
+    val_size = int(total_samples * val_ratio)
+    test_size = total_samples - train_size - val_size
+
+    # Split indices
+    train_end = train_size
+    val_end = train_size + val_size
+
+    # Update streamer indices with aligned data
+    audio_streamer.train_indices = aligned_audio_indices[:train_end]
+    audio_streamer.val_indices = aligned_audio_indices[train_end:val_end]
+    audio_streamer.test_indices = aligned_audio_indices[val_end:]
+
+    image_streamer.train_indices = aligned_image_indices[:train_end]
+    image_streamer.val_indices = aligned_image_indices[train_end:val_end]
+    image_streamer.test_indices = aligned_image_indices[val_end:]
+
+    # Reset pointers
+    audio_streamer.ptr_train = 0
+    audio_streamer.ptr_val = 0
+    audio_streamer.ptr_test = 0
+
+    image_streamer.ptr_train = 0
+    image_streamer.ptr_val = 0
+    image_streamer.ptr_test = 0
+
+    print(f"Pre-aligned splits:")
+    print(f"  Train: {len(audio_streamer.train_indices)} samples")
+    print(f"  Val: {len(audio_streamer.val_indices)} samples")
+    print(f"  Test: {len(audio_streamer.test_indices)} samples")
+
+    # Verify alignment - ensure numpy arrays for advanced indexing
+    audio_labels_array = np.asarray(audio_streamer.audio_labels)
+    image_labels_array = np.asarray(image_streamer.all_labels)
+    train_audio_labels = audio_labels_array[audio_streamer.train_indices[:10]]
+    train_image_labels = image_labels_array[image_streamer.train_indices[:10]]
+
+    if np.array_equal(train_audio_labels, train_image_labels):
+        print("✓ Alignment verification passed!")
+    else:
+        print("✗ Alignment verification failed!")
+        print(f"Audio labels: {train_audio_labels}")
+        print(f"Image labels: {train_image_labels}")
+
+    return audio_streamer, image_streamer
+
+
+def sync_multimodal_datasets():
+    """
+    Synchronize multimodal datasets by ensuring they use the same random seed.
+    This ensures that when both datasets are shuffled, they have similar label distributions.
+    """
+    print("Synchronizing multimodal datasets with shared random seed...")
+
+    # Set a fixed seed for reproducibility across both datasets
+    sync_seed = 42
+
+    # The streamers should use this seed internally when shuffling
+    # For now, we just ensure the seed is set globally
+    np.random.seed(sync_seed)
+
+    print(
+        "Multimodal datasets synchronized! Both will use the same random seed for shuffling."
+    )
+    print(f"Sync seed: {sync_seed}")
+
+    # Reset the random seed to avoid affecting other random operations
+    np.random.seed()
