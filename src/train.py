@@ -198,8 +198,10 @@ def update_membrane_potential(
     tau_syn,
     mean_noise,
     var_noise,
+    sleep_exc,
+    sleep_inh,
 ):
-    if noisy_potential:
+    if noisy_potential and (sleep_exc or sleep_inh):
         gaussian_noise = np.random.normal(
             loc=mean_noise, scale=var_noise, size=mp.shape
         )
@@ -388,6 +390,8 @@ def train_network(
             var_noise=var_noise,
             I_syn=I_syn,
             tau_syn=tau_syn,
+            sleep_exc=sleep_now_exc,
+            sleep_inh=sleep_now_inh,
         )
 
         # update spikes array

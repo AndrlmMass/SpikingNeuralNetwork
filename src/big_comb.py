@@ -31,9 +31,9 @@ from analysis import (
     t_SNE,
     PCA_analysis,
     calculate_phi,
-    pca_logistic_regression,
     bin_spikes_by_label_no_breaks,
 )
+from pca_linear_classifier import pca_classifier
 from create_network import create_weights, create_arrays
 
 
@@ -1087,17 +1087,17 @@ class snn_sleepy:
         self,
         plot_weights=False,
         plot_network=False,
-        w_dense_ee=0.01,
-        w_dense_se=0.05,
-        w_dense_ei=0.05,
-        w_dense_ie=0.05,
+        w_dense_ee=0.15,  # Moderate excitatory connectivity
+        w_dense_se=0.1,  # Sensory input density
+        w_dense_ei=0.2,  # Higher EI density for inhibition regulation
+        w_dense_ie=0.25,  # Higher IE density for lateral inhibition
         resting_membrane=-70,
         max_time=100,
         retur=False,
-        se_weights=0.1,
-        ee_weights=0.3,
-        ei_weights=0.3,
-        ie_weights=-0.2,
+        se_weights=0.15,  # Moderate sensory strength
+        ee_weights=0.3,  # Balanced excitation
+        ei_weights=0.6,  # Strong EI for inhibitory control
+        ie_weights=-0.8,  # Strong lateral inhibition
         create_network=False,
     ):
         # create weights
@@ -1172,14 +1172,14 @@ class snn_sleepy:
         plot_threshold=False,
         plot_traces_=False,
         train_weights=False,
-        learning_rate_exc=0.0008,
-        learning_rate_inh=0.005,
-        w_target_exc=0.01,
-        w_target_inh=-0.01,
-        var_noise=1,
-        min_weight_inh=-25,
+        learning_rate_exc=0.002,  # Increased for stronger weights (typical: 0.001-0.01)
+        learning_rate_inh=0.008,  # Increased for stronger inhibition (typical: 0.005-0.02)
+        w_target_exc=0.15,  # Aligned with ee_weights target (typical: 0.1-0.3)
+        w_target_inh=-0.4,  # Aligned with ie_weights target (typical: -0.3 to -0.8)
+        var_noise=2,  # Membrane potential noise (typical: 1-3)
+        min_weight_inh=-5.0,  # Reasonable bound for inhibitory weights (typical: -1 to -5)
         max_weight_inh=-0.01,
-        max_weight_exc=25,
+        max_weight_exc=2.0,  # Reasonable bound for excitatory weights (typical: 0.5-2.0)
         min_weight_exc=0.01,
         spike_threshold_default=-55,
         check_sleep_interval=50000,  # Reduced frequency for better performance
@@ -1191,7 +1191,8 @@ class snn_sleepy:
         weight_decay=False,
         weight_decay_rate_exc=[0.9999],
         weight_decay_rate_inh=[0.9999],
-        compare_decay_rates=True,
+        compare_decay_rates=False,
+        compare_sleep_rates=False,
         noisy_potential=True,
         noisy_threshold=False,
         noisy_weights=False,
@@ -1205,8 +1206,8 @@ class snn_sleepy:
         clip_inh_weights=False,
         alpha=1.1,
         beta=1.0,
-        A_plus=0.5,
-        A_minus=0.5,
+        A_plus=0.8,  # Stronger LTP than LTD (typical: 0.5-1.0)
+        A_minus=0.3,  # Weaker LTD (typical: 0.2-0.5)
         tau_LTD=10,
         tau_LTP=10,
         early_stopping=False,
@@ -1236,8 +1237,8 @@ class snn_sleepy:
         num_inh=10,
         num_exc=50,
         plot_epoch_performance=True,
-        narrow_top=0.2,  # Increased from 0.05 to 0.2 (20% of neurons)
-        wide_top=0.15,
+        narrow_top=0.3,  # Top 30% for narrow accuracy (good for 10-class problems)
+        wide_top=0.2,  # Top 20% for wide accuracy
         tau_syn=30,
         smoothening=350,
         plot_top_response_train=False,
@@ -1252,10 +1253,14 @@ class snn_sleepy:
         test_only=False,
         test_batch_size=None,
         patience=None,
+        use_QDA=False,
+        use_LR=True,
     ):
         self.dt = dt
         self.pca_variance = pca_variance
         self.use_validation_data = use_validation_data
+        self.use_QDA = use_QDA
+        self.use_LR = use_LR
 
         # Save current parameters
         self.model_parameters = {**locals()}
@@ -1553,15 +1558,13 @@ class snn_sleepy:
                                 raise ValueError("No test data available")
                             self.current_test_idx += effective_batch
                         elif self.image_streamer is not None:
-                            data_test, labels_test = load_image_batch(
-                                self.image_streamer,
+                            # Stream image test data directly from the ImageDataStreamer
+                            data_test, labels_test = self.image_streamer.get_batch(
                                 self.current_test_idx,
                                 effective_batch,
-                                self.num_steps,
-                                int(np.sqrt(self.N_x)) ** 2,
                                 partition="test",
                             )
-                            if data_test is None:
+                            if data_test is None or labels_test is None:
                                 raise ValueError("No test data available")
                             self.current_test_idx += effective_batch
                         else:
@@ -1605,6 +1608,23 @@ class snn_sleepy:
                         spikes_test = np.zeros((T_te, self.N), dtype=np.int8)
                         spikes_test[:, :st] = data_test
 
+                        # Ensure labels vector matches time dimension (T_te)
+                        if labels_test is not None and labels_test.shape[0] != T_te:
+                            try:
+                                repeat_factor = T_te // max(1, labels_test.shape[0])
+                                if repeat_factor * labels_test.shape[0] == T_te:
+                                    labels_aligned = np.repeat(
+                                        labels_test, repeat_factor
+                                    )
+                                else:
+                                    labels_aligned = np.repeat(
+                                        labels_test, self.num_steps
+                                    )
+                            except Exception:
+                                labels_aligned = np.repeat(labels_test, self.num_steps)
+                        else:
+                            labels_aligned = labels_test
+
                         (
                             _weights_te,
                             spikes_te_out,
@@ -1617,7 +1637,11 @@ class snn_sleepy:
                             _a_te,
                         ) = train_network(
                             weights=self.weights.copy(),
-                            spike_labels=labels_test.copy(),
+                            spike_labels=(
+                                labels_aligned.copy()
+                                if labels_aligned is not None
+                                else None
+                            ),
                             mp=mp_test.copy(),
                             sleep=False,
                             train_weights=False,
@@ -1639,9 +1663,28 @@ class snn_sleepy:
                         all_spikes_test[test_sample_count : test_sample_count + bs] = (
                             spikes_te_out
                         )
-                        all_labels_test[test_sample_count : test_sample_count + bs] = (
-                            labels_te_out
-                        )
+                        # Expand per-sample labels to per-timestep labels if needed
+                        if labels_te_out is not None and labels_te_out.shape[0] != bs:
+                            # Expect labels provided per sample; expand by num_steps
+                            if (
+                                bs % self.num_steps == 0
+                                and labels_te_out.shape[0] == bs // self.num_steps
+                            ):
+                                labels_expanded = np.repeat(
+                                    labels_te_out, self.num_steps
+                                )
+                            else:
+                                # Fallback: broadcast last known label
+                                labels_expanded = np.full(
+                                    bs, labels_te_out[-1], dtype=labels_te_out.dtype
+                                )
+                            all_labels_test[
+                                test_sample_count : test_sample_count + bs
+                            ] = labels_expanded
+                        else:
+                            all_labels_test[
+                                test_sample_count : test_sample_count + bs
+                            ] = labels_te_out
                         all_mp_test[test_sample_count : test_sample_count + bs] = mp_te
                         test_sample_count += bs
 
@@ -1698,7 +1741,7 @@ class snn_sleepy:
                             te_idx = idx[split_va:]
                             if te_idx.size == 0:
                                 te_idx = va_idx
-                            accs, _, _, _ = pca_logistic_regression(
+                            accs, _, _, _ = pca_classifier(
                                 X_train=X_te[tr_idx],
                                 y_train=y_te[tr_idx],
                                 X_val=X_te[va_idx],
@@ -1706,6 +1749,8 @@ class snn_sleepy:
                                 X_test=X_te[te_idx],
                                 y_test=y_te[te_idx],
                                 variance_ratio=self.pca_variance,
+                                use_LR=self.use_LR,
+                                use_QDA=self.use_QDA,
                             )
                             acc_pca = float(accs.get("test", 0.0))
                     except Exception as ex:
@@ -1815,18 +1860,14 @@ class snn_sleepy:
                     # Update training index
                     self.current_train_idx = new_train_idx
                 elif self.image_streamer is not None:
-                    # Image only streaming mode (missing branch)
-                    from get_data import load_image_batch
-
+                    # Image-only streaming mode: pull batch directly from streamer
                     train_start_idx = self.current_train_idx
-                    data_train, labels_train = load_image_batch(
-                        self.image_streamer,
+                    data_train, labels_train = self.image_streamer.get_batch(
                         train_start_idx,
                         self.batch_train,
-                        self.num_steps,
-                        int(np.sqrt(self.N_x)) ** 2,  # Image-only uses full N_x
+                        partition="train",
                     )
-                    if data_train is None:
+                    if data_train is None or labels_train is None:
                         print(f"No more image data available at epoch {e}")
                         break
                     # Advance training index for streaming
@@ -1999,7 +2040,7 @@ class snn_sleepy:
                                     X_tr_split, X_te_split = X_tr, X_tr
                                     y_tr_split, y_te_split = y_tr, y_tr
 
-                                accs, scaler, pca, clf = pca_logistic_regression(
+                                accs, scaler, pca, clf = pca_classifier(
                                     X_train=X_tr_split,
                                     y_train=y_tr_split,
                                     X_val=X_tr_split,  # Use training split for validation
@@ -2007,6 +2048,8 @@ class snn_sleepy:
                                     X_test=X_te_split,  # Use test split for final evaluation
                                     y_test=y_te_split,
                                     variance_ratio=self.pca_variance,
+                                    use_LR=self.use_LR,
+                                    use_QDA=self.use_QDA,
                                 )
                                 train_acc_pca = float(accs.get("test", 0.0))
                                 print(
@@ -2108,19 +2151,13 @@ class snn_sleepy:
                             break
                     elif self.image_streamer is not None:
                         # Image only streaming mode
-                        from get_data import load_image_batch
-
                         val_start_idx = val_batch_idx * self.batch_test
-                        data_test, labels_test = load_image_batch(
-                            self.image_streamer,
+                        data_test, labels_test = self.image_streamer.get_batch(
                             val_start_idx,
                             self.batch_test,
-                            self.num_steps,
-                            int(np.sqrt(self.N_x))
-                            ** 2,  # Image-only mode uses full N_x
                             partition="val",  # Use validation data
                         )
-                        if data_test is None:
+                        if data_test is None or labels_test is None:
                             print(f"No more validation image data available")
                             break
                     else:
@@ -2384,7 +2421,7 @@ class snn_sleepy:
 
                             if X_tr_dist.size > 0 and X_te_dist.size > 0:
                                 # Train PCA+LR on training data, test on validation data
-                                accs, scaler, pca, clf = pca_logistic_regression(
+                                accs, scaler, pca, clf = pca_classifier(
                                     X_train=X_tr_dist,
                                     y_train=y_tr_dist,
                                     X_val=X_tr_dist,  # Use training data for validation during training
@@ -2392,6 +2429,8 @@ class snn_sleepy:
                                     X_test=X_te_dist,  # Test on validation data
                                     y_test=y_te_dist,
                                     variance_ratio=self.pca_variance,
+                                    use_LR=self.use_LR,
+                                    use_QDA=self.use_QDA,
                                 )
 
                                 # Get predictions from the trained classifier on validation data
@@ -2555,7 +2594,7 @@ class snn_sleepy:
                                 # ensure non-empty val
                                 va_idx = tr_idx[-1:]
                                 tr_idx = tr_idx[:-1]
-                            accs, _, _, _ = pca_logistic_regression(
+                            accs, _, _, _ = pca_classifier(
                                 X_train=X_tr[tr_idx],
                                 y_train=y_tr[tr_idx],
                                 X_val=X_tr[va_idx],
@@ -2563,6 +2602,8 @@ class snn_sleepy:
                                 X_test=X_te,
                                 y_test=y_te,
                                 variance_ratio=self.pca_variance,
+                                use_LR=self.use_LR,
+                                use_QDA=self.use_QDA,
                             )
                             acc_te = float(accs.get("test", 0.0))
                     except Exception as ex:
@@ -3269,6 +3310,306 @@ class snn_sleepy:
                 all_scores=self.phi_all_scores,
             )
 
+        if compare_sleep_rates:
+            # Use weight_decay_rate_exc as sleep rates (assuming exc and inh rates are the same)
+            sleep_rates = weight_decay_rate_exc
+
+            # try loading previous sleep rates run
+            self.process(
+                sleep_scores=sleep_rates,
+                model_dir_=model_dir,
+                load_phi_model=True,
+            )
+
+            # retrain if phi model not loaded
+            if not self.loaded_phi_model:
+                # For sleep rates comparison, always generate fresh data to ensure fair comparison
+                # Define data parameters
+                data_parameters = {"pixel_size": int(np.sqrt(self.N_x)), "train_": True}
+
+                # Ensure data/mdata directory exists
+                if not os.path.exists("data/mdata"):
+                    os.makedirs("data/mdata", exist_ok=True)
+
+                # Create new folder for fresh data (don't try to load existing)
+                rand_nums = np.random.randint(low=0, high=9, size=5)
+                folder_name = "".join(
+                    str(x) for x in rand_nums
+                )  # Convert to proper string
+                while folder_name in os.listdir("data/mdata"):
+                    rand_nums = np.random.randint(low=0, high=9, size=5)
+                    folder_name = "".join(str(x) for x in rand_nums)
+
+                data_dir = os.path.join("data/mdata", folder_name)
+                os.makedirs(data_dir, exist_ok=True)
+
+                # Save data parameters for this fresh data
+                filepath = os.path.join(data_dir, "data_parameters.json")
+                with open(filepath, "w") as outfile:
+                    json.dump(data_parameters, outfile)
+
+                # Allocate array: [n_sleep_rates, n_samples, 8 metrics]
+                self.phi_all_scores = np.zeros((len(sleep_rates), samples, 9))
+
+                # Main loop: over samples and sleep-rate settings
+                with tqdm(
+                    total=len(sleep_rates) * samples,
+                    desc="Computing φ scores for sleep rates",
+                ) as pbar:
+                    # Clean up variables that are no longer needed
+                    del folders, folder, json_file_path, ex_params
+                    gc.collect()
+                    for t in range(samples):
+                        # 1) Generate fresh data for this sample
+                        (
+                            data_train,
+                            labels_train,
+                            data_test,
+                            labels_test,
+                        ) = create_data(
+                            pixel_size=int(np.sqrt(self.N_x)),
+                            num_steps=self.num_steps,
+                            plot_comparison=False,
+                            gain=self.gain,
+                            gain_labels=self.gain_labels,
+                            train_=True,
+                            offset=self.offset,
+                            download=False,
+                            data_dir=data_dir,
+                            true_labels=False,
+                            N_classes=self.N_classes,
+                            first_spike_time=self.first_spike_time,
+                            time_var_input=self.time_var_input,
+                            num_images=self.num_images,
+                            add_breaks=self.add_breaks,
+                            break_lengths=self.break_lengths,
+                            noisy_data=self.noisy_data,
+                            noise_level=self.noise_level,
+                            classes=self.classes,
+                            test_data_ratio=self.test_data_ratio,
+                        )
+
+                        # 2) Convert raw data into simulation arrays
+                        (
+                            mp_train,
+                            mp_test,
+                            spikes_train_init,
+                            spikes_test_init,
+                        ) = create_arrays(
+                            N=self.N,
+                            N_exc=self.N_exc,
+                            N_inh=self.N_inh,
+                            resting_membrane=self.resting_potential,
+                            total_time_train=self.T_train,
+                            total_time_test=self.T_test,
+                            data_train=data_train,
+                            data_test=data_test,
+                            N_classes=self.N_classes,
+                            N_x=self.N_x,
+                        )
+
+                        # 3) Loop over each sleep rate
+                        for r, sleep_rate in enumerate(sleep_rates):
+                            # Bundle common training arguments
+                            common_args = dict(
+                                N_classes=self.N_classes,
+                                supervised=self.supervised,
+                                unsupervised=self.unsupervised,
+                                tau_pre_trace_exc=tau_pre_trace_exc,
+                                tau_pre_trace_inh=tau_pre_trace_inh,
+                                tau_post_trace_exc=tau_post_trace_exc,
+                                tau_post_trace_inh=tau_post_trace_inh,
+                                resting_potential=self.resting_potential,
+                                membrane_resistance=membrane_resistance,
+                                min_weight_exc=min_weight_exc,
+                                max_weight_exc=max_weight_exc,
+                                min_weight_inh=min_weight_inh,
+                                max_weight_inh=max_weight_inh,
+                                N_exc=self.N_exc,
+                                N_inh=self.N_inh,
+                                beta=beta,
+                                num_exc=num_exc,
+                                num_inh=num_inh,
+                                weight_decay=weight_decay,
+                                weight_decay_rate_exc=sleep_rate,  # Use sleep rate for both
+                                weight_decay_rate_inh=sleep_rate,
+                                learning_rate_exc=learning_rate_exc,
+                                learning_rate_inh=learning_rate_inh,
+                                w_interval=w_interval,
+                                interval=interval,
+                                w_target_exc=w_target_exc,
+                                w_target_inh=w_target_inh,
+                                tau_LTP=tau_LTP,
+                                tau_LTD=tau_LTD,
+                                tau_m=tau_m,
+                                max_mp=max_mp,
+                                min_mp=min_mp,
+                                dt=self.dt,
+                                N=self.N,
+                                clip_exc_weights=clip_exc_weights,
+                                clip_inh_weights=clip_inh_weights,
+                                A_plus=A_plus,
+                                A_minus=A_minus,
+                                trace_update=trace_update,
+                                spike_adaption=spike_adaption,
+                                delta_adaption=delta_adaption,
+                                tau_adaption=tau_adaption,
+                                spike_threshold_default=spike_threshold_default,
+                                spike_intercept=spike_intercept,
+                                spike_slope=spike_slope,
+                                noisy_threshold=noisy_threshold,
+                                reset_potential=reset_potential,
+                                noisy_potential=noisy_potential,
+                                noisy_weights=noisy_weights,
+                                weight_mean_noise=weight_mean_noise,
+                                weight_var_noise=weight_var_noise,
+                                vectorized_trace=vectorized_trace,
+                                N_x=self.N_x,
+                            )
+
+                            # 3a) Train on the training set
+                            (
+                                weights_tr,
+                                spikes_tr_out,
+                                *unused,
+                                labels_tr_out,
+                                sleep_tr_out,
+                            ) = train_network(
+                                weights=self.weights.copy(),
+                                spike_labels=labels_train.copy(),
+                                mp=mp_train.copy(),
+                                sleep=sleep,
+                                train_weights=train_weights,
+                                T=self.T_train,
+                                mean_noise=mean_noise,
+                                var_noise=var_noise,
+                                spikes=spikes_train_init.copy(),
+                                check_sleep_interval=check_sleep_interval,
+                                timing_update=timing_update,
+                                spike_times=spike_times.copy(),
+                                final=False,
+                                **common_args,
+                            )
+
+                            # Clean up unused variables
+                            del unused
+
+                            # 3b) Test on the test set
+                            (
+                                weights_te,
+                                spikes_te_out,
+                                *unused,
+                                labels_te_out,
+                                sleep_te_out,
+                            ) = train_network(
+                                weights=weights_tr.copy(),
+                                spike_labels=labels_test.copy(),
+                                mp=mp_test.copy(),
+                                sleep=False,  # No sleep during testing
+                                train_weights=False,
+                                T=self.T_test,
+                                mean_noise=mean_noise,
+                                var_noise=var_noise,
+                                spikes=spikes_test_init.copy(),
+                                check_sleep_interval=check_sleep_interval,
+                                timing_update=timing_update,
+                                spike_times=spike_times.copy(),
+                                final=False,
+                                **common_args,
+                            )
+
+                            # Clean up unused variables
+                            del unused
+
+                            # 4) Compute phi metrics using the trained outputs
+                            phi_tr, phi_te, wcss_tr, wcss_te, bcss_tr, bcss_te = (
+                                calculate_phi(
+                                    spikes_train=spikes_tr_out[:, self.st :],
+                                    spikes_test=spikes_te_out[:, self.st :],
+                                    labels_train=labels_tr_out,
+                                    labels_test=labels_te_out,
+                                    num_steps=self.num_steps,
+                                    pca_variance=self.pca_variance,
+                                    random_state=random_state,
+                                    num_classes=self.N_classes,
+                                )
+                            )
+
+                            # calculate accuracy
+                            acc_te = top_responders_plotted(
+                                spikes=spikes_te_out,
+                                labels=labels_te_out,
+                                ih=self.ih,
+                                st=self.st,
+                                num_classes=self.N_classes,
+                                narrow_top=narrow_top,
+                                smoothening=self.num_steps,
+                                train=False,
+                                compute_not_plot=True,
+                            )
+
+                            # Store acc
+                            # 5) Store results and update progress bar
+                            self.phi_all_scores[r, t] = [
+                                phi_tr,
+                                phi_te,
+                                sleep_rate,  # Store sleep rate instead of decay rate
+                                sleep_tr_out,
+                                wcss_tr,
+                                wcss_te,
+                                bcss_tr,
+                                bcss_te,
+                                acc_te,
+                            ]
+
+                            pbar.update(1)
+
+                            # Print summary for this sleep rate and sample
+                            print(
+                                f"  Sleep rate {sleep_rate:.3f}, Sample {t+1}/{samples}: "
+                                f"φ={phi_te:.3f}, Acc={acc_te:.3f}, Sleep%={sleep_tr_out:.1f}%"
+                            )
+
+                        # Print sleep rate summary after all samples
+                        avg_phi = np.mean(self.phi_all_scores[r, :, 1])  # phi_te
+                        avg_acc = np.mean(self.phi_all_scores[r, :, 8])  # acc_te
+                        avg_sleep = np.mean(
+                            self.phi_all_scores[r, :, 3]
+                        )  # sleep_tr_out
+                        print(
+                            f"  Sleep rate {sleep_rate:.3f} completed: "
+                            f"Avg φ={avg_phi:.3f}, Avg Acc={avg_acc:.3f}, Avg Sleep%={avg_sleep:.1f}%"
+                        )
+                        print("-" * 60)
+
+                        # 6) Clean up per-sample data to free memory
+                        del data_train, labels_train, data_test, labels_test
+                        del mp_train, mp_test
+                        del spikes_train_init, spikes_test_init
+                        # Clean up training and test results from decay rate loop
+                        del weights_tr, spikes_tr_out, labels_tr_out, sleep_tr_out
+                        del weights_te, spikes_te_out, labels_te_out, sleep_te_out
+                        del phi_tr, phi_te, wcss_tr, wcss_te, bcss_tr, bcss_te, acc_te
+                        # Clean up common_args for this decay rate iteration
+                        del common_args
+                        gc.collect()
+
+                # save phi scores, sleep lengths and amounts
+                self.process(
+                    save_phi_model=True,
+                    model_dir_=model_dir,
+                    sleep_scores=sleep_rates,
+                )
+
+                # Clean up compare_sleep_rates variables
+                del pbar
+                gc.collect()
+
+            # plot phi and sleep amounts with linear regression
+            plot_phi_acc(
+                all_scores=self.phi_all_scores,
+            )
+
     def analyze_results(
         self,
         perplexity=8,
@@ -3345,7 +3686,7 @@ class snn_sleepy:
             and self.labels_train is not None
         ):
             try:
-                from pca_linear_classifier import pca_logistic_regression as _pca_lr
+                from pca_linear_classifier import pca_classifier as _pca_lr
 
                 # Prepare features via binning
                 X_tr, y_tr = bin_spikes_by_label_no_breaks(
@@ -3373,6 +3714,8 @@ class snn_sleepy:
                         X_test=X_te,
                         y_test=y_te,
                         variance_ratio=self.pca_variance,
+                        use_LR=self.use_LR,
+                        use_QDA=self.use_QDA,
                     )
                     print(f"PCA+LR accuracy: {accs}")
             except Exception as ex:

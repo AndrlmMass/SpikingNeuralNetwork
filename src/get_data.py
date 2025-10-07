@@ -291,6 +291,9 @@ class ImageDataStreamer:
         # Convert to spikes
         spike_data = self._convert_images_to_spikes(batch_images)
 
+        # Extend labels to match spike data (repeat each label for num_steps)
+        extended_labels = batch_labels.repeat(self.num_steps)
+
         # advance pointer
         if partition == "train":
             self.ptr_train = end_ptr
@@ -299,7 +302,7 @@ class ImageDataStreamer:
         else:
             self.ptr_test = end_ptr
 
-        return spike_data, batch_labels
+        return spike_data, extended_labels
 
     def _convert_images_to_spikes(self, images):
         """Convert image batch to spikes."""
@@ -1401,7 +1404,10 @@ def load_prealigned_multimodal_batch(
 
     multimodal_spikes = concatenated
 
-    return multimodal_spikes, audio_labels
+    # Labels are already extended by individual batch loaders
+    multimodal_labels = audio_labels
+
+    return multimodal_spikes, multimodal_labels
 
 
 def get_prealigned_indices(
