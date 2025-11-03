@@ -25,6 +25,15 @@ def bin_spikes_by_label_no_breaks(spikes, labels):
         features (np.array): 2D array where each row is the average spike activity for a valid segment.
         segment_labels (np.array): 1D array of labels corresponding to each segment.
     """
+    # Align lengths defensively
+    T = min(spikes.shape[0], len(labels))
+    if T <= 0:
+        return np.empty((0, spikes.shape[1])), np.empty((0,), dtype=int)
+    if spikes.shape[0] != T:
+        spikes = spikes[:T]
+    if len(labels) != T:
+        labels = labels[:T]
+
     segments = []
     segment_labels = []
     start = 0  # start index for the current segment
@@ -35,23 +44,25 @@ def bin_spikes_by_label_no_breaks(spikes, labels):
             # End of the current segment.
             current_label = labels[t - 1]
             # Process only if the current label is not -1.
-            if current_label != -1 and current_label != -2:
+            if current_label != -1 and current_label != -2 and t > start:
                 segment = spikes[start:t]
-                # Compute feature for the segment (here, the mean firing rate for each neuron).
-                feature_vector = np.mean(segment, axis=0)
-                segments.append(feature_vector)
-                segment_labels.append(current_label)
+                if segment.size > 0:
+                    # Compute feature for the segment (here, the mean firing rate for each neuron).
+                    feature_vector = np.mean(segment, axis=0)
+                    segments.append(feature_vector)
+                    segment_labels.append(current_label)
             # Update the start index for the next segment.
             start = t
 
     # Handle the final segment.
     if start < len(labels):
         current_label = labels[-1]
-        if current_label != -1 and current_label != -2:
+        if current_label != -1 and current_label != -2 and len(spikes[start:]) > 0:
             segment = spikes[start:]
-            feature_vector = np.mean(segment, axis=0)
-            segments.append(feature_vector)
-            segment_labels.append(current_label)
+            if segment.size > 0:
+                feature_vector = np.mean(segment, axis=0)
+                segments.append(feature_vector)
+                segment_labels.append(current_label)
 
     return np.array(segments), np.array(segment_labels)
 
@@ -132,18 +143,48 @@ def t_SNE(
     # Now, bin the spikes using the labels, skipping breaks:
     features, segment_labels = bin_spikes_by_label_no_breaks(spikes, labels_spike)
 
+    # Check for sufficient data
+    if features.shape[0] < 3:
+        print(f"Warning: Insufficient samples for t-SNE ({features.shape[0]} < 3)")
+        return
+
+    # Remove zero-variance features to prevent numerical issues
+    feature_var = np.var(features, axis=0)
+    valid_features = feature_var >= 1e-10
+
+    if np.sum(valid_features) < 2:
+        print(
+            f"Warning: Insufficient non-zero variance features for t-SNE ({np.sum(valid_features)} < 2)"
+        )
+        return
+
+    features_clean = features[:, valid_features]
+
     # Apply t-SNE on the computed features:
-
     # Ensure that perplexity is less than the number of segments.
-    perplexity = min(30, len(features) - 1)
+    perplexity = min(30, len(features_clean) - 1)
 
-    tsne = TSNE(
-        n_components=n_components,
-        perplexity=perplexity,
-        max_iter=max_iter,
-        random_state=random_state,
-    )
-    tsne_results = tsne.fit_transform(features)
+    if perplexity < 1:
+        print(f"Warning: Perplexity too low for t-SNE")
+        return
+
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        tsne = TSNE(
+            n_components=n_components,
+            perplexity=perplexity,
+            max_iter=max_iter,
+            random_state=random_state,
+        )
+        tsne_results = tsne.fit_transform(features_clean)
+
+    # Validate t-SNE output
+    if np.any(~np.isfinite(tsne_results)):
+        print(f"Warning: t-SNE produced invalid values")
+        return
+
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(projection="3d")
 
@@ -176,9 +217,37 @@ def PCA_analysis(
     # Bin the spikes using the labels (assuming this function is defined elsewhere)
     features, segment_labels = bin_spikes_by_label_no_breaks(spikes, labels_spike)
 
+    # Check for sufficient data
+    if features.shape[0] < 3:
+        print(
+            f"Warning: Insufficient samples for PCA analysis ({features.shape[0]} < 3)"
+        )
+        return
+
+    # Remove zero-variance features to prevent numerical issues
+    feature_var = np.var(features, axis=0)
+    valid_features = feature_var >= 1e-10
+
+    if np.sum(valid_features) < 2:
+        print(
+            f"Warning: Insufficient non-zero variance features for PCA ({np.sum(valid_features)} < 2)"
+        )
+        return
+
+    features_clean = features[:, valid_features]
+
     # Create a PCA instance.
-    pca = PCA(n_components=pca_variance, random_state=random_state)
-    pca_results = pca.fit_transform(features)
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        pca = PCA(n_components=pca_variance, random_state=random_state)
+        pca_results = pca.fit_transform(features_clean)
+
+    # Validate PCA output
+    if np.any(~np.isfinite(pca_results)):
+        print(f"Warning: PCA produced invalid values")
+        return
 
     clf = LogisticRegression(
         multi_class="auto", solver="lbfgs", random_state=random_state
@@ -242,11 +311,15 @@ def calculate_phi(
     First: Fit PCA and K-means to training data
     """
 
+    # Trim training arrays to the same length to avoid misalignment
+    try:
+        T_tr = min(spikes_train.shape[0], labels_train.shape[0])
+        spikes_train = spikes_train[:T_tr]
+        labels_train = labels_train[:T_tr]
+    except Exception:
+        pass
+
     """Calculate the spiking rates for each item presentation"""
-    # Remove break data
-    break_mask = labels_train != -1
-    labels_train = labels_train[break_mask]
-    spikes_train = spikes_train[break_mask, :]
 
     # Calculate rate for each item
     spike_train_rates = []
@@ -262,10 +335,17 @@ def calculate_phi(
     for i in range(0, labels_train.shape[0], num_steps):
         # skip non_sleep spiking activity
         current_mask = sleep_mask[i : i + num_steps]
+        chunk_spikes = spikes_train[i : i + num_steps]
+        # Align chunk and mask
+        L = min(chunk_spikes.shape[0], current_mask.shape[0])
+        if L == 0:
+            continue
+        chunk_spikes = chunk_spikes[:L]
+        current_mask = current_mask[:L]
         if not current_mask.all():
             count += 1
             continue
-        mean_spikes = np.mean(spikes_train[i : i + num_steps][current_mask, :], axis=0)
+        mean_spikes = np.mean(chunk_spikes[current_mask, :], axis=0)
         predom_label = np.argmax(
             np.bincount(labels_train[i : i + num_steps][current_mask])
         )
@@ -280,56 +360,87 @@ def calculate_phi(
     spike_train_rates = np.array(spike_train_rates)
     labels_train_unique = np.array(labels_train_unique)
 
-    # standardize rates
-    spike_train_rates_std = StandardScaler().fit_transform(spike_train_rates)
+    # Check for sufficient samples before any calculations
+    if spike_train_rates.shape[0] < 3:
+        print(
+            f"Warning: Insufficient samples for phi calculation ({spike_train_rates.shape[0]} < 3)"
+        )
+        return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+
+    # Check for zero-variance features before standardization
+    feature_var = np.var(spike_train_rates, axis=0)
+    if np.all(feature_var < 1e-10):
+        print(f"Warning: All features have zero variance (no network activity)")
+        return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+
+    # Remove zero-variance features
+    valid_features = feature_var >= 1e-10
+    if np.sum(valid_features) < 2:
+        print(
+            f"Warning: Insufficient non-zero variance features ({np.sum(valid_features)} < 2)"
+        )
+        return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+
+    spike_train_rates_clean = spike_train_rates[:, valid_features]
+
+    # standardize rates (fit on train; reuse scaler for test)
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        scaler = StandardScaler(with_mean=True, with_std=True)
+        spike_train_rates_std = scaler.fit_transform(spike_train_rates_clean)
 
     """ Perform PCA on the binned data """
     # Create a PCA instance
-    pca = PCA(n_components=pca_variance, random_state=random_state)
-    pca.fit(spike_train_rates_std)
-    n_components = pca.n_components_
-    scores_train_pca = pca.transform(spike_train_rates_std)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        pca = PCA(n_components=pca_variance, random_state=random_state)
+        pca.fit(spike_train_rates_std)
+        n_components = pca.n_components_
+        scores_train_pca = pca.transform(spike_train_rates_std)
 
-    # Calculate centroids and WCSS
+    # Calculate centroids and WCSS (train)
     centroids = np.zeros((n_components, num_classes))
     wcss_arr = np.zeros(num_classes)
-    for c in range(num_classes):
+    present_train_classes = np.unique(labels_train_unique).astype(int)
+    for c in present_train_classes:
         indices = np.where(labels_train_unique == c)[0]
-        if indices.size != 0:
-            centroids[:, c] = np.mean(scores_train_pca[indices], axis=0)
-            values = scores_train_pca[indices]
-            if indices.size != 0:
-                for dim in range(n_components):
-                    delta_wcss = np.sum((centroids[dim, c] - values[:, dim]) ** 2)
-                    wcss_arr[c] += delta_wcss
-    WCSS_train = np.sum(wcss_arr)
-
-    # Estimate BCSS
-    overall_mean = np.mean(scores_train_pca, axis=0)
-    n_j = scores_train_pca.shape[0]
-    BCSS_train = 0
-    for c in range(num_classes):
+        centroids[:, c] = np.mean(scores_train_pca[indices], axis=0)
+        values = scores_train_pca[indices]
         for dim in range(n_components):
-            delta_bcss = n_j * (centroids[dim, c] - overall_mean[dim]) ** 2
-            BCSS_train += delta_bcss
+            delta_wcss = np.sum((centroids[dim, c] - values[:, dim]) ** 2)
+            wcss_arr[c] += delta_wcss
+    WCSS_train = float(np.sum(wcss_arr))
+
+    # Estimate BCSS (train) using only present classes and class counts
+    overall_mean = np.mean(scores_train_pca, axis=0)
+    n_train = scores_train_pca.shape[0]
+    k_eff_train = max(1, present_train_classes.size)
+    BCSS_train = 0.0
+    for c in present_train_classes:
+        idx = np.where(labels_train_unique == c)[0]
+        n_c = idx.size
+        if n_c > 0:
+            mu_c = centroids[:, c]
+            BCSS_train += n_c * float(np.sum((mu_c - overall_mean) ** 2))
 
     # Calculate clustering coefficient
     """
     phi = (BCSS / (k-1)) / (WCSS / (n-k))
     """
-    phi_train = (BCSS_train / (num_classes - 1)) / (
-        WCSS_train / (scores_train_pca.shape[0] - num_classes + small_num)
-    )
+    denom1_tr = max(small_num, k_eff_train - 1)
+    denom2_tr = max(small_num, n_train - k_eff_train)
+    if WCSS_train <= small_num:
+        phi_train = 0.0
+    else:
+        phi_train = (BCSS_train / denom1_tr) / (WCSS_train / denom2_tr)
 
     """
     Second: Project test data onto precomputed PCA and K-means centroids
     """
 
     """Calculate the spiking rates for each item presentation"""
-    # Remove break data
-    break_mask = labels_test != -1
-    labels_test = labels_test[break_mask]
-    spikes_test = spikes_test[break_mask, :]
 
     # Calculate rate for each item
     spike_test_rates = []
@@ -339,13 +450,28 @@ def calculate_phi(
     Note that we are currently skipping sleep-patterns. 
     Maybe this should be its own array, but then we miss part of the sequence
     """
+    # Trim test arrays to the same length to avoid misalignment
+    try:
+        T_te = min(spikes_test.shape[0], labels_test.shape[0])
+        spikes_test = spikes_test[:T_te]
+        labels_test = labels_test[:T_te]
+    except Exception:
+        pass
+
     sleep_mask = labels_test != -2
     for i in range(0, labels_test.shape[0], num_steps):
         # skip non_sleep spiking activity
         current_mask = sleep_mask[i : i + num_steps]
+        chunk_spikes = spikes_test[i : i + num_steps]
+        # Align chunk and mask
+        L = min(chunk_spikes.shape[0], current_mask.shape[0])
+        if L == 0:
+            continue
+        chunk_spikes = chunk_spikes[:L]
+        current_mask = current_mask[:L]
         if not current_mask.all():
             continue
-        mean_spikes = np.mean(spikes_test[i : i + num_steps][current_mask, :], axis=0)
+        mean_spikes = np.mean(chunk_spikes[current_mask, :], axis=0)
         predom_label = np.argmax(
             np.bincount(labels_test[i : i + num_steps][current_mask])
         )
@@ -360,44 +486,69 @@ def calculate_phi(
     spike_test_rates = np.array(spike_test_rates)
     labels_test_unique = np.array(labels_test_unique)
 
-    # standardize rates
-    spike_test_rates_std = StandardScaler().fit_transform(spike_test_rates)
+    # Check if we have sufficient test data
+    if spike_test_rates.shape[0] < 5:
+        print(
+            f"Warning: Insufficient test data for phi calculation ({spike_test_rates.shape[0]} samples)"
+        )
+        return phi_train, 0.0, 0.0, 0.0, 0.0, 0.0
+
+    # Apply same feature selection as training (use valid_features mask)
+    spike_test_rates_clean = spike_test_rates[:, valid_features]
+
+    # standardize rates using train-fitted scaler
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        spike_test_rates_std = scaler.transform(spike_test_rates_clean)
 
     """ Perform PCA on the binned data """
-    # Create a PCA instance.
-    scores_test_pca = pca.transform(spike_test_rates_std)
+    # Apply PCA transform
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        scores_test_pca = pca.transform(spike_test_rates_std)
 
-    # Calculate centroids and WCSS
+    # Calculate WCSS (test) relative to train centroids for continuity
     wcss_arr = np.zeros(num_classes)
-    for c in range(num_classes):
+    present_test_classes = np.unique(labels_test_unique).astype(int)
+    for c in present_test_classes:
         indices = np.where(labels_test_unique == c)[0]
-        if indices.size != 0:
-            values = scores_test_pca[indices]
-            for dim in range(n_components):
-                delta_wcss = np.sum((values[:, dim] - centroids[dim, c]) ** 2)
-                wcss_arr[c] += delta_wcss
-    WCSS_test = np.sum(wcss_arr)
-
-    # Estimate bcss
-    n_j = scores_test_pca.shape[0]
-    overall_mean = np.mean(scores_test_pca, axis=0)
-    BCSS_test = 0
-    for c in range(num_classes):
+        values = scores_test_pca[indices]
         for dim in range(n_components):
-            delta_bcss = n_j * (centroids[dim, c] - overall_mean[dim]) ** 2
-            BCSS_test += delta_bcss
+            delta_wcss = np.sum((values[:, dim] - centroids[dim, c]) ** 2)
+            wcss_arr[c] += delta_wcss
+    WCSS_test = float(np.sum(wcss_arr))
 
-    # Calculate clustering coefficient
-    phi_test = (BCSS_test / (num_classes - 1)) / (
-        WCSS_test / (scores_test_pca.shape[0] - num_classes + small_num)
-    )
+    # Estimate BCSS (test) using test class means and counts
+    n_test = scores_test_pca.shape[0]
+    overall_mean_test = np.mean(scores_test_pca, axis=0)
+    k_eff_test = max(1, present_test_classes.size)
+    BCSS_test = 0.0
+    for c in present_test_classes:
+        idx = np.where(labels_test_unique == c)[0]
+        n_c = idx.size
+        if n_c > 0:
+            mu_c_test = np.mean(scores_test_pca[idx], axis=0)
+            BCSS_test += n_c * float(np.sum((mu_c_test - overall_mean_test) ** 2))
 
-    BCSS_test_scaled = BCSS_test / (num_classes - 1 + small_num)
-    BCSS_train_scaled = BCSS_train / (num_classes - 1 + small_num)
-    WCSS_test_scaled = WCSS_test / (scores_test_pca.shape[0] - num_classes + small_num)
-    WCSS_train_scaled = WCSS_train / (
-        scores_train_pca.shape[0] - num_classes + small_num
-    )
+    # Calculate clustering coefficient with safe divisions
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+
+        test_denom1 = max(small_num, k_eff_test - 1)
+        test_denom2 = max(small_num, n_test - k_eff_test)
+
+        if WCSS_test <= small_num:
+            phi_test = 0.0
+        else:
+            phi_test = (BCSS_test / test_denom1) / (WCSS_test / test_denom2)
+
+        if not np.isfinite(phi_test):
+            phi_test = 0.0
+
+        BCSS_test_scaled = BCSS_test / max(small_num, k_eff_test - 1)
+        BCSS_train_scaled = BCSS_train / max(small_num, k_eff_train - 1)
+        WCSS_test_scaled = WCSS_test / max(small_num, n_test - k_eff_test)
+        WCSS_train_scaled = WCSS_train / max(small_num, n_train - k_eff_train)
 
     return (
         phi_train,

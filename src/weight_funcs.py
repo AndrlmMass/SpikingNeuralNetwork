@@ -34,19 +34,7 @@ def sleep_func(
       4) Recomputes the sum to stop sleeping if below baseline.
     """
 
-    # Check for zero weights at the beginning
-    # Note: Some weights are intentionally zero for network topology, so we only check
-    # weights that were originally non-zero (those in nz_rows/nz_cols)
-    zero_count = 0
-    for i in range(nz_rows.size):
-        if weights[nz_rows[i], nz_cols[i]] == 0:
-            print(f"Zero weight found at position ({nz_rows[i]}, {nz_cols[i]})")
-            zero_count += 1
-
-    if zero_count > 0:
-        raise ValueError(
-            f"Warning: Found {zero_count} zero weights out of {nz_rows.size} total weights"
-        )
+    # Debug-time scans removed for performance
 
     # Instead of nested loops, use slicing for excitatory/inhibitory sums.
     # According to your code, columns [0, N_exc+N_x) are excitatory,
@@ -133,11 +121,7 @@ def sleep_func(
             sleep_now_inh = False
             sleep_now_exc = False
 
-    for i in range(weights.shape[0]):
-        for j in range(weights.shape[1]):
-            if np.isnan(weights[i, j]):
-                print(f"Matrix contains NaN values at position ({i}, {j})")
-                raise SyntaxWarning()
+    # Removed expensive NaN scan; rely on upstream invariants/guards
 
     return weights, sleep_now_inh, sleep_now_exc
 

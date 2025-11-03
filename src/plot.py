@@ -1160,3 +1160,120 @@ def plot_phi_acc(all_scores):
     plt.savefig(os.path.join(path, "sleep_subplots.png"))
     plt.tight_layout()
     plt.show()
+
+
+def plot_weight_evolution_during_sleep_epoch(weight_tracking_epoch, epoch):
+    """Plot weight changes during sleep for a single epoch, overlaying all sleep periods."""
+    import matplotlib.pyplot as plt
+
+    if len(weight_tracking_epoch["exc_mean"]) == 0:
+        return
+
+    times = np.array(weight_tracking_epoch["times"])
+    exc_mean = np.array(weight_tracking_epoch["exc_mean"])
+    exc_std = np.array(weight_tracking_epoch["exc_std"])
+    exc_samples = np.array(weight_tracking_epoch["exc_samples"])  # (n_t, n_s)
+    inh_mean = np.array(weight_tracking_epoch["inh_mean"])
+    inh_std = np.array(weight_tracking_epoch["inh_std"])
+    inh_samples = np.array(weight_tracking_epoch["inh_samples"])  # (n_t, n_s)
+
+    fig, axes = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+
+    # Excitatory
+    ax = axes[0]
+    ax.plot(times, exc_mean, color="#ff7f68", label="Exc mean")
+    ax.fill_between(
+        times, exc_mean - exc_std, exc_mean + exc_std, color="#ffe5e1", alpha=0.6
+    )
+    # Sampled connections (thin)
+    if exc_samples.ndim == 2 and exc_samples.shape[0] == times.shape[0]:
+        for i in range(min(10, exc_samples.shape[1])):
+            ax.plot(times, exc_samples[:, i], color="#ffbfb3", alpha=0.4, linewidth=0.8)
+    ax.set_ylabel("Exc weight")
+    ax.set_title(f"Sleep weight evolution (epoch {epoch})")
+
+    # Inhibitory
+    ax = axes[1]
+    ax.plot(times, inh_mean, color="#05af9b", label="Inh mean")
+    ax.fill_between(
+        times, inh_mean - inh_std, inh_mean + inh_std, color="#c7fdf7", alpha=0.6
+    )
+    if inh_samples.ndim == 2 and inh_samples.shape[0] == times.shape[0]:
+        for i in range(min(10, inh_samples.shape[1])):
+            ax.plot(times, inh_samples[:, i], color="#6afae9", alpha=0.4, linewidth=0.8)
+    ax.set_ylabel("Inh weight")
+    ax.set_xlabel("Sleep time (ms)")
+
+    os.makedirs("figures", exist_ok=True)
+    save_path = os.path.join("figures", f"weight_sleep_epoch_{epoch:03d}.png")
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close(fig)
+
+
+def plot_weight_evolution_during_sleep(weight_tracking_sleep):
+    """Plot weight changes during sleep periods only (accumulated across all epochs)."""
+    import matplotlib.pyplot as plt
+    from scipy.ndimage import uniform_filter1d
+
+    if len(weight_tracking_sleep["exc_mean"]) == 0:
+        print("Warning: No sleep weight tracking data available")
+        return
+
+    fig, axes = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+
+    # Plot excitatory weights during sleep
+    ax = axes[0]
+    sleep_times = np.array(weight_tracking_sleep["times"])  # concatenated
+    sleep_exc = np.array(weight_tracking_sleep["exc_mean"])  # concatenated
+
+    # Smooth the data for better visualization
+    try:
+        sleep_exc_sm = uniform_filter1d(sleep_exc, size=5)
+    except Exception:
+        sleep_exc_sm = sleep_exc
+    ax.plot(sleep_times, sleep_exc_sm, color="#ff7f68", label="Exc mean (smoothed)")
+    if "exc_std" in weight_tracking_sleep:
+        exc_std = np.array(weight_tracking_sleep["exc_std"])
+        try:
+            exc_std_sm = uniform_filter1d(exc_std, size=5)
+        except Exception:
+            exc_std_sm = exc_std
+        ax.fill_between(
+            sleep_times,
+            sleep_exc_sm - exc_std_sm,
+            sleep_exc_sm + exc_std_sm,
+            color="#ffe5e1",
+            alpha=0.6,
+        )
+    ax.set_ylabel("Exc weight")
+
+    # Plot inhibitory weights during sleep
+    ax = axes[1]
+    sleep_inh = np.array(weight_tracking_sleep["inh_mean"])  # concatenated
+    try:
+        sleep_inh_sm = uniform_filter1d(sleep_inh, size=5)
+    except Exception:
+        sleep_inh_sm = sleep_inh
+    ax.plot(sleep_times, sleep_inh_sm, color="#05af9b", label="Inh mean (smoothed)")
+    if "inh_std" in weight_tracking_sleep:
+        inh_std = np.array(weight_tracking_sleep["inh_std"])  # concatenated
+        try:
+            inh_std_sm = uniform_filter1d(inh_std, size=5)
+        except Exception:
+            inh_std_sm = inh_std
+        ax.fill_between(
+            sleep_times,
+            sleep_inh_sm - inh_std_sm,
+            sleep_inh_sm + inh_std_sm,
+            color="#c7fdf7",
+            alpha=0.6,
+        )
+    ax.set_ylabel("Inh weight")
+    ax.set_xlabel("Sleep time (ms)")
+
+    os.makedirs("figures", exist_ok=True)
+    save_path = os.path.join("figures", "weight_sleep_all.png")
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close(fig)

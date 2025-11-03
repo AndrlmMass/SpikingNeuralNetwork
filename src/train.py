@@ -5,6 +5,25 @@ import numpy as np
 from weight_funcs import sleep_func, spike_timing, vectorized_trace_func
 
 
+def report_numba_status():
+    """Print a minimal Numba status summary (no large IR dumps)."""
+    try:
+        funcs = [
+            ("clip_weights", clip_weights),
+            ("sleep_func", sleep_func),
+            ("spike_timing", spike_timing),
+            ("vectorized_trace_func", vectorized_trace_func),
+        ]
+        msgs = []
+        for name, func in funcs:
+            sigs = getattr(func, "signatures", []) or []
+            status = "compiled" if len(sigs) > 0 else "pending"
+            msgs.append(f"{name}:{status}")
+        print("Numba status — " + ", ".join(msgs))
+    except Exception:
+        pass
+
+
 @njit
 def clip_weights(
     weights,
@@ -110,36 +129,7 @@ def update_weights(
         max_weight_inh=max_weight_inh,
     )
 
-    if sleep:
-        now = t % check_sleep_interval
-        if now == 0 or sleep_now_inh or sleep_now_exc:
-            # Recompute nonzero indices to reflect current weight state
-            st = N_x
-            ex = st + N_exc
-            ih = ex + N_inh
-
-            weights, sleep_now_inh, sleep_now_exc = sleep_func(
-                weights=weights,
-                max_sum_exc=max_sum_exc,
-                max_sum_inh=max_sum_inh,
-                sleep_now_inh=sleep_now_inh,
-                sleep_now_exc=sleep_now_exc,
-                w_target_exc=w_target_exc,
-                w_target_inh=w_target_inh,
-                weight_decay_rate_exc=weight_decay_rate_exc,
-                weight_decay_rate_inh=weight_decay_rate_inh,
-                baseline_sum_exc=baseline_sum_exc,
-                baseline_sum_inh=baseline_sum_inh,
-                sleep_synchronized=sleep_synchronized,
-                baseline_sum=baseline_sum,
-                nz_rows=nz_rows,
-                nz_cols=nz_cols,
-                max_sum=max_sum,
-                nz_rows_exc=nz_rows_exc,
-                nz_rows_inh=nz_rows_inh,
-                nz_cols_exc=nz_cols_exc,
-                nz_cols_inh=nz_cols_inh,
-            )
+    # Old threshold-based sleep removed; now using schedule-based sleep only
 
     if timing_update:
         weights = spike_timing(
@@ -334,6 +324,17 @@ def train_network(
     I_syn,
     a,
     spike_threshold,
+    sleep_ratio=0.0,
+    normalize_weights=False,
+    initial_sum_exc=None,
+    initial_sum_inh=None,
+    initial_sum_total=None,
+    # Hard-pause sleep settings
+    sleep_hard_pause: bool = True,
+    sleep_epsilon: float = 1e-8,
+    sleep_tol_frac: float = 1e-3,
+    sleep_max_iters: int = 5000,
+    on_timeout: str = "scale_to_target",  # one of {"scale_to_target","extend","give_up"}
 ):
 
     st = N_x  # stimulation
@@ -344,11 +345,10 @@ def train_network(
     idx_exc = np.random.choice(exc_interval, size=num_exc, replace=False)
     idx_inh = np.random.choice(inh_interval, size=num_inh, replace=False)
 
-    plot_positions = np.arange(1, T, interval)
-    weights_4_plotting_exc = np.zeros((plot_positions.shape[0], num_exc, ih - st))
-    weights_4_plotting_inh = np.zeros((plot_positions.shape[0], num_inh, ex - st))
-    weights_4_plotting_exc[0] = weights[idx_exc, st:ih]
-    weights_4_plotting_inh[0] = weights[idx_inh, st:ex]
+    # Disable training-time plotting snapshots for performance
+    plot_positions = np.array([1])
+    weights_4_plotting_exc = np.empty((0, 0, 0))
+    weights_4_plotting_inh = np.empty((0, 0, 0))
 
     delta_w = np.zeros(shape=weights.shape)
 
@@ -359,6 +359,20 @@ def train_network(
     nz_rows, nz_cols = np.nonzero(weights)
     sleep_now_inh = False
     sleep_now_exc = False
+
+    # Precompute scheduled sleep window per interval
+    # e.g., sleep_ratio=0.1 means 10% of each interval is sleep
+    if sleep and sleep_ratio is not None and sleep_ratio > 0.0:
+        sleep_window = max(1, int(round(check_sleep_interval * sleep_ratio)))
+    else:
+        sleep_window = 0
+
+    # Print sleep configuration
+    if sleep and sleep_window > 0:
+        expected_sleep_pct = (sleep_window / check_sleep_interval) * 100
+        print(
+            f"Sleep scheduled: {sleep_window}/{check_sleep_interval} timesteps per interval ({expected_sleep_pct:.1f}%)"
+        )
 
     # Suppose weights is your initial 2D numpy array of weights.
     # Here, we assume that the columns correspond to post-neurons.
@@ -375,12 +389,276 @@ def train_network(
 
     idx = 0
     sleep_amount = 0
-    for t in tqdm(range(1, T), desc=desc, leave=False):
-        # update membrane potential
+    virtual_sleep_iters_epoch = 0
+
+    # Maintain previous-step state explicitly so we can evolve during hard-pause sleep
+    mp_prev = mp[0].copy()
+    spikes_prev = spikes[0].copy()
+    t_virtual = 0  # virtual time used only inside sleep loop
+
+    # Disable weight tracking during training for performance; keep empty shell for API compatibility
+    weight_tracking_sleep = {
+        "exc_mean": [],
+        "exc_std": [],
+        "exc_min": [],
+        "exc_max": [],
+        "exc_samples": [],
+        "inh_mean": [],
+        "inh_std": [],
+        "inh_min": [],
+        "inh_max": [],
+        "inh_samples": [],
+        "times": [],
+    }
+
+    pbar = tqdm(range(1, T), desc=desc, leave=False)
+    last_sleep_flag = -1  # unknown
+    last_stats_update_t = -1000
+    for t in pbar:
+        # Reset sleep flags for this timestep
+        sleep_now_inh = False
+        sleep_now_exc = False
+
+        # Trigger hard-pause only at the start of a window
+        is_window_start = (
+            sleep and sleep_window > 0 and ((t % check_sleep_interval) == 0)
+        )
+
+        # Hard-pause sleep: run inner loop without advancing real time t
+        slept_this_step = False
+        if train_weights and sleep and sleep_hard_pause and is_window_start:
+            # Mark current real timestep as sleep once
+            if spike_labels is not None:
+                spike_labels[t] = -2
+
+            # Targets derived from baseline and beta
+            target_exc = (
+                baseline_sum_exc * beta if baseline_sum_exc is not None else None
+            )
+            target_inh = (
+                baseline_sum_inh * beta if baseline_sum_inh is not None else None
+            )
+
+            sleep_iter = 0
+            sleep_time_counter = 0
+
+            while True:
+                # Compute current sums
+                current_sum_exc = np.sum(np.abs(weights[:ex, st:ih]))
+                current_sum_inh = np.sum(np.abs(weights[ex:ih, st:ex]))
+
+                # Check convergence to targets using fractional tolerance if targets exist
+                eps_exc = (
+                    sleep_tol_frac * target_exc
+                    if (target_exc is not None)
+                    else sleep_epsilon
+                )
+                eps_inh = (
+                    sleep_tol_frac * target_inh
+                    if (target_inh is not None)
+                    else sleep_epsilon
+                )
+                reached_exc = (
+                    target_exc is None
+                    or np.abs(current_sum_exc - target_exc) <= eps_exc
+                )
+                reached_inh = (
+                    target_inh is None
+                    or np.abs(current_sum_inh - target_inh) <= eps_inh
+                )
+                if reached_exc and reached_inh:
+                    break
+
+                # Safety cap: handle non-convergence
+                if sleep_iter >= sleep_max_iters or sleep_iter >= sleep_window:
+                    if on_timeout == "scale_to_target":
+                        # Scale weights to hit targets exactly (if defined)
+                        if target_exc is not None and current_sum_exc > 1e-12:
+                            scale_exc = target_exc / current_sum_exc
+                            weights[:ex, st:ih] *= scale_exc
+                        if target_inh is not None and current_sum_inh > 1e-12:
+                            scale_inh = target_inh / current_sum_inh
+                            weights[ex:ih, st:ex] *= scale_inh
+                        # Clip to bounds after scaling
+                        weights = clip_weights(
+                            weights=weights,
+                            nz_cols_exc=nz_cols_exc,
+                            nz_cols_inh=nz_cols_inh,
+                            nz_rows_exc=nz_rows_exc,
+                            nz_rows_inh=nz_rows_inh,
+                            min_weight_exc=min_weight_exc,
+                            max_weight_exc=max_weight_exc,
+                            min_weight_inh=min_weight_inh,
+                            max_weight_inh=max_weight_inh,
+                        )
+                    elif on_timeout == "extend":
+                        # Allow additional internal iterations up to sleep_max_iters
+                        if sleep_iter < sleep_max_iters:
+                            sleep_window = sleep_max_iters
+                            # continue sleeping
+                        else:
+                            pass  # fall through to break
+                    # Exit hard-pause sleep
+                    break
+
+                # Run one internal sleep iteration: evolve dynamics with no sensory input
+                sleep_now_exc = True
+                sleep_now_inh = True
+                slept_this_step = True
+
+                # Zero sensory input (do not consume data)
+                spikes_prev[:st] = 0
+
+                # Update membrane potentials using previous step spikes
+                mp_prev, I_syn = update_membrane_potential(
+                    mp=mp_prev,
+                    weights=weights[:, st:ih],
+                    spikes=spikes_prev,
+                    resting_potential=resting_potential,
+                    membrane_resistance=membrane_resistance,
+                    tau_m=tau_m,
+                    dt=dt,
+                    noisy_potential=noisy_potential,
+                    mean_noise=mean_noise,
+                    var_noise=var_noise,
+                    I_syn=I_syn,
+                    tau_syn=tau_syn,
+                    sleep_exc=sleep_now_exc,
+                    sleep_inh=sleep_now_inh,
+                )
+
+                # Prepare current spikes vector (no sensory spikes during sleep)
+                sleep_spikes_cur = np.zeros_like(spikes_prev)
+
+                # Update spikes and thresholds
+                (
+                    mp_prev,
+                    sleep_spikes_cur,
+                    spike_times,
+                    spike_threshold,
+                    a,
+                ) = update_spikes(
+                    st=st,
+                    ih=ih,
+                    mp=mp_prev,
+                    dt=dt,
+                    a=a,
+                    spikes=sleep_spikes_cur,
+                    spike_times=spike_times,
+                    spike_intercept=spike_intercept,
+                    spike_slope=spike_slope,
+                    noisy_threshold=noisy_threshold,
+                    spike_adaption=spike_adaption,
+                    tau_adaption=tau_adaption,
+                    delta_adaption=delta_adaption,
+                    max_mp=max_mp,
+                    min_mp=min_mp,
+                    spike_threshold=spike_threshold,
+                    spike_threshold_default=spike_threshold_default,
+                    reset_potential=reset_potential,
+                )
+
+                # Update weights once per internal sleep iteration (use previous spikes_prev)
+                if train_weights:
+                    weights, _, _ = update_weights(
+                        spikes=spikes_prev,
+                        weights=weights,
+                        max_sum_exc=max_sum_exc,
+                        max_sum_inh=max_sum_inh,
+                        baseline_sum_exc=baseline_sum_exc,
+                        baseline_sum_inh=baseline_sum_inh,
+                        check_sleep_interval=check_sleep_interval,
+                        sleep=True,
+                        nonzero_pre_idx=nonzero_pre_idx,
+                        N_x=N_x,
+                        vectorized_trace=vectorized_trace,
+                        delta_w=delta_w,
+                        N_exc=N_exc,
+                        timing_update=timing_update,
+                        trace_update=trace_update,
+                        spike_times=spike_times,
+                        weight_decay_rate_exc=weight_decay_rate_exc,
+                        weight_decay_rate_inh=weight_decay_rate_inh,
+                        min_weight_exc=min_weight_exc,
+                        max_weight_exc=max_weight_exc,
+                        min_weight_inh=min_weight_inh,
+                        max_weight_inh=max_weight_inh,
+                        noisy_weights=noisy_weights,
+                        weight_mean_noise=weight_mean_noise,
+                        weight_var_noise=weight_var_noise,
+                        w_target_exc=w_target_exc,
+                        w_target_inh=w_target_inh,
+                        sleep_now_inh=True,
+                        sleep_now_exc=True,
+                        t=t_virtual,
+                        N=N,
+                        sleep_synchronized=sleep_synchronized,
+                        baseline_sum=baseline_sum,
+                        nz_rows=nz_rows,
+                        nz_cols=nz_cols,
+                        max_sum=max_sum,
+                        nz_cols_exc=nz_cols_exc,
+                        nz_cols_inh=nz_cols_inh,
+                        nz_rows_exc=nz_rows_exc,
+                        nz_rows_inh=nz_rows_inh,
+                        N_inh=N_inh,
+                        A_plus=A_plus,
+                        A_minus=A_minus,
+                        learning_rate_exc=learning_rate_exc,
+                        learning_rate_inh=learning_rate_inh,
+                        tau_LTP=tau_LTP,
+                        tau_LTD=tau_LTD,
+                        dt=dt,
+                    )
+
+                    # Apply exponential decay toward targets during sleep (combine with STDP)
+                    weights, sleep_now_inh, sleep_now_exc = sleep_func(
+                        weights=weights,
+                        max_sum=max_sum,
+                        max_sum_exc=max_sum_exc,
+                        max_sum_inh=max_sum_inh,
+                        sleep_now_inh=True,
+                        sleep_now_exc=True,
+                        w_target_exc=w_target_exc,
+                        w_target_inh=w_target_inh,
+                        weight_decay_rate_exc=weight_decay_rate_exc,
+                        weight_decay_rate_inh=weight_decay_rate_inh,
+                        baseline_sum_exc=baseline_sum_exc,
+                        baseline_sum_inh=baseline_sum_inh,
+                        sleep_synchronized=sleep_synchronized,
+                        nz_rows=nz_rows,
+                        nz_cols=nz_cols,
+                        baseline_sum=baseline_sum,
+                        nz_rows_exc=nz_rows_exc,
+                        nz_rows_inh=nz_rows_inh,
+                        nz_cols_exc=nz_cols_exc,
+                        nz_cols_inh=nz_cols_inh,
+                    )
+
+                # Optional normalization at every step if enabled
+                if normalize_weights and initial_sum_exc is not None:
+                    cur_exc = np.sum(np.abs(weights[:ex, st:ih]))
+                    if cur_exc > 1e-10:
+                        weights[:ex, st:ih] *= initial_sum_exc / cur_exc
+                    cur_inh = np.sum(np.abs(weights[ex:ih, st:ex]))
+                    if cur_inh > 1e-10:
+                        weights[ex:ih, st:ex] *= initial_sum_inh / cur_inh
+
+                # Tracking disabled
+
+                # Advance internal counters and previous-step states
+                spikes_prev = sleep_spikes_cur
+                sleep_iter += 1
+                sleep_time_counter += 1
+                virtual_sleep_iters_epoch += 1
+                t_virtual += 1
+
+            # End hard-pause sleep; do not advance real t here (the loop continues below)
+        # update membrane potential (use maintained previous state)
         mp[t], I_syn = update_membrane_potential(
-            mp=mp[t - 1],
+            mp=mp_prev,
             weights=weights[:, st:ih],
-            spikes=spikes[t - 1],
+            spikes=spikes_prev,
             resting_potential=resting_potential,
             membrane_resistance=membrane_resistance,
             tau_m=tau_m,
@@ -421,12 +699,11 @@ def train_network(
             spike_threshold_default=spike_threshold_default,
             reset_potential=reset_potential,
         )
-        # print(np.mean(spike_threshold))
 
         # update weights
         if train_weights:
             weights, sleep_now_inh, sleep_now_exc = update_weights(
-                spikes=spikes[t - 1],
+                spikes=spikes_prev,
                 weights=weights,
                 max_sum_exc=max_sum_exc,
                 max_sum_inh=max_sum_inh,
@@ -476,23 +753,72 @@ def train_network(
                 dt=dt,
             )
 
-            if t == plot_positions[idx]:
-                weights_4_plotting_exc[idx] = weights[idx_exc, st:ih]
-                weights_4_plotting_inh[idx] = weights[idx_inh, st:ex]
-                idx += 1
-                if plot_positions.size <= idx:
-                    idx -= 1
+            # Removed per-step weight normalization due to performance impact
 
-        # remove training data during sleep
-        if sleep:
-            if sleep_now_exc and t < T - 2:
-                spikes[t + 1, :st] = 0
+            # After first successful compilation, report numba status once
+            if t == 1:
+                report_numba_status()
+
+            # snapshots disabled
+
+        # Apply scheduled sleep flags (non-hard-pause mode only). For hard-pause we only mark at window start.
+        if sleep and sleep_window > 0 and not sleep_hard_pause:
+            if (t % check_sleep_interval) < sleep_window:
+                sleep_now_exc = True
+                sleep_now_inh = True
+                slept_this_step = True
+            else:
+                sleep_now_exc = False
+                sleep_now_inh = False
+
+        # Mark sleep status and update progress bar
+        if sleep and (sleep_now_exc or sleep_now_inh or slept_this_step):
+
+            if t < T - 1 and spike_labels is not None:
                 spike_labels[t] = -2
                 sleep_amount += 1
-            if sleep_now_inh and t < T - 2:
-                spike_labels[t] = -2
+            sleep_flag = 1
+        else:
+            sleep_flag = 0
+
+        # Update postfix: sleep state on change; lightweight stats every 1000 steps
+        if sleep_flag != last_sleep_flag:
+            try:
+                pbar.set_postfix({"sleep": sleep_flag})
+            except Exception:
+                pass
+            last_sleep_flag = sleep_flag
+
+        if t - last_stats_update_t >= 1000:
+            try:
+                # Compute means on submatrices (abs) to avoid sign confusion
+                mean_exc = float(np.mean(np.abs(weights[:ex, st:ih])))
+                mean_inh = float(np.mean(np.abs(weights[ex:ih, st:ex])))
+                pbar.set_postfix(
+                    {
+                        "sleep": sleep_flag,
+                        "m_exc": f"{mean_exc:.3f}",
+                        "m_inh": f"{mean_inh:.3f}",
+                    }
+                )
+            except Exception:
+                pass
+            last_stats_update_t = t
+
+        # Update maintained previous-step state for next iteration
+        mp_prev = mp[t]
+        spikes_prev = spikes[t]
 
     sleep_percent = (sleep_amount / T) * 100
+
+    # Report virtual sleep duration for this epoch
+    try:
+        virtual_pct = (virtual_sleep_iters_epoch / max(1, T)) * 100
+        print(
+            f"Virtual sleep (epoch): {virtual_sleep_iters_epoch} iters (~{virtual_pct:.2f}% of real steps)"
+        )
+    except Exception:
+        pass
 
     return (
         weights,
@@ -508,4 +834,5 @@ def train_network(
         I_syn,
         spike_times,
         a,
+        weight_tracking_sleep,
     )

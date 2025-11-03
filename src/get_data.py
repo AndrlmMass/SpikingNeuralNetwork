@@ -90,7 +90,7 @@ def cochlear_to_spikes_1s(
     n_channels=40,
     win_ms=25,
     hop_ms=10,
-    target_max_rate_hz=100.0,  # upper bound for an active channel
+    target_max_rate_hz=150.0,  # upper bound for an active channel (balanced for audio-only networks)
     env_cutoff_hz=120.0,  # used in raw-envelope path; mel/gt already smoothed
     out_T_ms=1000,  # exactly 1000 steps
     eps=1e-8,
@@ -527,7 +527,7 @@ def load_audio_batch(
         n_channels=int(num_input_neurons),
         win_ms=25,
         hop_ms=10,
-        target_max_rate_hz=100.0,
+        target_max_rate_hz=150.0,  # Balanced for audio-only (use 300 for multimodal)
         env_cutoff_hz=120.0,
         out_T_ms=num_steps,
         eps=1e-8,
@@ -577,7 +577,7 @@ def load_image_batch(
     Returns:
         (spike_data, labels) or (None, None) if no more data
     """
-    # Load image batch
+    # Load image batch (labels returned are already per-timestep)
     spike_data, labels = image_streamer.get_batch(
         start_idx, batch_size, partition=partition
     )
@@ -585,10 +585,8 @@ def load_image_batch(
     if spike_data is None:
         return None, None
 
-    # Extend labels to match spike data (repeat each label for num_steps)
-    spike_labels = labels.repeat(num_steps)
-
-    return spike_data, spike_labels
+    # Do NOT repeat again; labels are already length = batch_size * num_steps
+    return spike_data, labels
 
 
 def example_audio_streaming_usage():
@@ -1496,7 +1494,7 @@ def load_audio_batch_with_indices(
         n_channels=int(num_input_neurons),
         win_ms=25,
         hop_ms=10,
-        target_max_rate_hz=100.0,
+        target_max_rate_hz=150.0,  # Balanced for audio-only (use 300 for multimodal)
         env_cutoff_hz=120.0,
         out_T_ms=num_steps,
         eps=1e-8,
