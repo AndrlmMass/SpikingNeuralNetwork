@@ -1,14 +1,11 @@
 from torchvision import datasets, transforms
-import os, sys
-from plot import plot_floats_and_spikes, plot_audio_spectrograms_and_spikes
-import librosa
-import gammatone.gtgram
+from plot import plot_floats_and_spikes
+import torch.nn.functional as F
 from snntorch import spikegen
 import numpy as np
 import torch
-from tqdm import tqdm
-import warnings
 import os
+import json
 
 os.environ["TQDM_DISABLE"] = "True"
 
@@ -477,15 +474,31 @@ def load_audiomnist_data(data_path, target_sr=22050):
                 print(f"Error loading {fp}: {e}")
 
     if not all_data:
+        print("No valid audio files found!")
         return None, None
 
-    # Optional: pad to the max length (not used downstream if you use the encoder below)
-    max_len = max(len(x) for x in all_data)
-    padded = [np.pad(x, (0, max_len - len(x))) for x in all_data]
-    data_array = np.stack(padded, axis=0)
-    labels_array = np.array(all_labels, dtype=np.int64)
-    print(f"Audio shape: {data_array.shape}  Labels shape: {labels_array.shape}")
+    # Convert to numpy arrays
+    # Pad/truncate all audio to same length
+    max_length = max(len(audio) for audio in all_data)
+    padded_data = []
+
+    for audio in all_data:
+        if len(audio) < max_length:
+            # Pad with zeros
+            padded_audio = np.pad(audio, (0, max_length - len(audio)), "constant")
+        else:
+            # Truncate
+            padded_audio = audio[:max_length]
+        padded_data.append(padded_audio)
+
+    data_array = np.array(padded_data)
+    labels_array = np.array(all_labels)
+
+    print(f"Loaded {len(data_array)} samples")
+    print(f"Audio shape: {data_array.shape}")
+    print(f"Labels shape: {labels_array.shape}")
     print(f"Label distribution: {np.bincount(labels_array)}")
+
     return data_array, labels_array
 
 
@@ -655,6 +668,10 @@ def create_balanced_splits(
     Create balanced train/validation/test splits maintaining fixed ratios
     Ensures equal representation of each class (0-9) in each split
     """
+    # Verify ratios sum to 1
+    assert (
+        abs(train_ratio + val_ratio + test_ratio - 1.0) < 1e-6
+    ), "Ratios must sum to 1.0"
 
     # Get unique labels and their counts
     unique_labels, counts = np.unique(labels, return_counts=True)
@@ -667,10 +684,28 @@ def create_balanced_splits(
     # Calculate samples per class based on actual available data
     samples_per_class = actual_max_samples // len(unique_labels)
 
+    # Calculate split sizes based on ratios
+    train_samples = int(actual_max_samples * train_ratio)
+    val_samples = int(actual_max_samples * val_ratio)
+    test_samples = (
+        actual_max_samples - train_samples - val_samples
+    )  # Ensure exact total
+
     # Calculate samples per class for each split
-    train_per_class = train // len(unique_labels)
-    val_per_class = val // len(unique_labels)
-    test_per_class = test // len(unique_labels)
+    train_per_class = train_samples // len(unique_labels)
+    val_per_class = val_samples // len(unique_labels)
+    test_per_class = test_samples // len(unique_labels)
+
+    print(f"Total available samples: {available_samples}")
+    print(f"Max samples limit: {max_total_samples}")
+    print(f"Actual samples used: {actual_max_samples}")
+    print(f"Samples per class: {samples_per_class}")
+    print(f"Train samples: {train_samples} ({train_ratio*100:.1f}%)")
+    print(f"Val samples: {val_samples} ({val_ratio*100:.1f}%)")
+    print(f"Test samples: {test_samples} ({test_ratio*100:.1f}%)")
+    print(f"Train samples per class: {train_per_class}")
+    print(f"Val samples per class: {val_per_class}")
+    print(f"Test samples per class: {test_per_class}")
 
     # First, limit total data to actual_max_samples if we have more
     if len(data) > actual_max_samples:
@@ -698,6 +733,7 @@ def create_balanced_splits(
     for label in unique_labels:
         # Get indices for this class
         class_indices = np.where(labels == label)[0]
+        np.random.shuffle(class_indices)
 
         # Split indices
         train_end = min(train_per_class, len(class_indices))
@@ -724,6 +760,9 @@ def create_balanced_splits(
     test_data = np.array(test_data)
     test_labels = np.array(test_labels)
 
+    # Set random seed for reproducibility
+    np.random.seed(42)
+
     # Shuffle each split
     train_indices = np.random.permutation(len(train_data))
     val_indices = np.random.permutation(len(val_data))
@@ -743,6 +782,75 @@ def create_balanced_splits(
     print(f"Test: {len(test_data)} samples")
 
     return (train_data, train_labels), (val_data, val_labels), (test_data, test_labels)
+
+
+def convert_audio_to_spikes(audio_data, num_steps, pixel_size):
+    """
+    Convert audio waveforms to spike trains using a cochlea-inspired approach.
+    Each neuron encodes a specific frequency band and spikes according to a Poisson process
+    with mean rate proportional to the energy in that band at each time step.
+    """
+    import numpy as np
+    import torch
+
+    batch_size = len(audio_data)
+    spike_data = []
+
+    # Define frequency bands (one per neuron/pixel)
+    n_freqs = pixel_size * pixel_size
+    sr = 22050  # Assume AudioMNIST default sample rate
+
+    # Center frequencies spaced on a mel scale for biological plausibility
+    mel_min, mel_max = 0, 2595 * np.log10(1 + (sr // 2) / 700)
+    mel_points = np.linspace(mel_min, mel_max, n_freqs + 2)[1:-1]
+    hz_points = 700 * (10 ** (mel_points / 2595) - 1)
+
+    for i, audio_sample in enumerate(audio_data):
+        if i % 1000 == 0:
+            print(f"Converting audio sample {i+1}/{batch_size} to spikes...")
+
+        # Pad or trim audio to fixed length
+        audio = np.array(audio_sample)
+        if len(audio) < sr:
+            audio = np.pad(audio, (0, sr - len(audio)))
+        else:
+            audio = audio[:sr]
+
+        # Compute STFT
+        hop_length = sr // num_steps
+        stft = np.abs(np.fft.rfft(audio, n=sr))
+        freqs = np.fft.rfftfreq(sr, 1 / sr)
+
+        # For each time step, get the spectrum in a window
+        spikes_t = []
+        for t in range(num_steps):
+            start = t * hop_length
+            end = start + hop_length
+            segment = audio[start:end] if end <= len(audio) else audio[start:]
+            if len(segment) < 8:  # skip if too short
+                segment = np.pad(segment, (0, 8 - len(segment)))
+            spectrum = np.abs(np.fft.rfft(segment, n=hop_length))
+            # For each frequency band, compute mean energy
+            band_energies = []
+            for f in hz_points:
+                idx = np.argmin(np.abs(freqs - f))
+                band_energies.append(spectrum[idx] if idx < len(spectrum) else 0)
+            band_energies = np.array(band_energies)
+            # Normalize energies to [0, 1]
+            if band_energies.max() > 0:
+                band_energies = band_energies / band_energies.max()
+            # Poisson mean rate: scale to reasonable spike rate (e.g., max 1 per timestep)
+            lam = band_energies
+            # Generate Poisson spikes for each neuron (frequency band)
+            spikes_flat = np.random.poisson(lam)
+            # Reshape to (pixel_size, pixel_size)
+            spikes_img = spikes_flat.reshape(pixel_size, pixel_size).astype(np.float32)
+            spikes_t.append(spikes_img)
+        sample_spike_array = np.stack(spikes_t, axis=0)
+        spike_data.append(sample_spike_array)
+
+    spike_tensor = torch.tensor(np.array(spike_data), dtype=torch.float32)
+    return spike_tensor
 
 
 def combine_audio_image_data(audio_data, audio_labels, image_data, image_labels):
@@ -781,15 +889,13 @@ def create_data(
     plot_comparison,
     download,
     data_dir,
-    use_validation_data=False,
-    idx_train=0,
-    idx_val=0,
-    idx_test=0,
-    val_split=0.2,
-    train_split=0.6,
-    test_split=0.2,
+    max_total_samples,
+    train_ratio,
+    test_ratio,
+    val_ratio,
     audioMNIST=True,
     imageMNIST=False,
+    use_validation_data=True,
 ):
     """
     Optionally splits off a validation set from the training data if use_validation_data is True.
@@ -807,25 +913,27 @@ def create_data(
     images_test, labels_test = None, None
 
     if audioMNIST:
-        # Define data path
-        data_path = "/home/andreas/Documents/GitHub/AudioMNIST/data"
+        # Load data
+        data_path = r"C:\Users\Andreas\Documents\GitHub\AudioMNIST\data"
+        audio_data, audio_labels = load_audiomnist_data(data_path)
 
-        # Create audio streamer for efficient batch loading
-        audio_streamer = AudioDataStreamer(data_path, batch_size=100)
-
-        if audio_streamer.get_total_samples() > 0:
-            print(
-                f"Audio streamer initialized with {audio_streamer.get_total_samples()} total samples"
+        if audio_data is not None:
+            # Create balanced splits maintaining 60/20/20 ratio
+            (
+                (audio_train_data, audio_train_labels),
+                (audio_val_data, audio_val_labels),
+                (audio_test_data, audio_test_labels),
+            ) = create_balanced_splits(
+                audio_data,
+                audio_labels,
+                max_total_samples=max_total_samples,
+                train_ratio=train_ratio,
+                val_ratio=val_ratio,
+                test_ratio=test_ratio,
             )
-            print("Audio data will be loaded in batches during training/testing")
-
-            # Store streamer for later use instead of pre-loaded data
-            audio_train_data = audio_streamer
-            audio_train_labels = None  # Will be loaded per batch
-            audio_val_data = audio_streamer
-            audio_val_labels = None
-            audio_test_data = audio_streamer
-            audio_test_labels = None
+            print(
+                f"Audio data loaded: {len(audio_train_data)} train, {len(audio_val_data)} val, {len(audio_test_data)} test"
+            )
 
     if imageMNIST:
         # set transform rule
@@ -946,53 +1054,107 @@ def create_data(
             norm_images_val = torch.stack(
                 [normalize_image(img=img, target_sum=target_sum) for img in images_val]
             )
-    else:
-        # If no image data, create dummy data for compatibility
+
+        # Use the specified number of temporal steps
+        temporal_steps = num_steps
+
+    # Process audio data if available
+    if audio_train_data is not None:
+        print(
+            f"Converting audio data to spike trains with {temporal_steps} temporal steps..."
+        )
+
+        # Convert audio to spike trains
+        audio_spikes_train = convert_audio_to_spikes(
+            audio_train_data, temporal_steps, pixel_size
+        )
+        audio_spikes_test = convert_audio_to_spikes(
+            audio_test_data, temporal_steps, pixel_size
+        )
+        if use_validation_data and audio_val_data is not None:
+            audio_spikes_val = convert_audio_to_spikes(
+                audio_val_data, temporal_steps, pixel_size
+            )
+
+        print(f"Audio spike conversion complete:")
+        print(f"Train audio spikes shape: {audio_spikes_train.shape}")
+        print(f"Test audio spikes shape: {audio_spikes_test.shape}")
+
+        # If no image data, use audio data for the main processing
+        if images_train is None:
+            print("Using audio data as primary data source")
+            norm_images_train = audio_spikes_train
+            norm_images_test = audio_spikes_test
+            if use_validation_data and audio_val_data is not None:
+                norm_images_val = audio_spikes_val
+            # Use audio labels
+            labels_train = torch.tensor(audio_train_labels)
+            labels_test = torch.tensor(audio_test_labels)
+            if use_validation_data and audio_val_labels is not None:
+                labels_val = torch.tensor(audio_val_labels)
+
+    # If no image data but we have audio data, create dummy image data
+    if images_train is None and audio_train_data is None:
         print("No image data available, creating dummy data for compatibility")
-        norm_images_train = torch.zeros((1, 1, pixel_size, pixel_size))
-        norm_images_test = torch.zeros((1, 1, pixel_size, pixel_size))
+        norm_images_train = torch.zeros((1, temporal_steps, pixel_size, pixel_size))
+        norm_images_test = torch.zeros((1, temporal_steps, pixel_size, pixel_size))
         if use_validation_data:
-            norm_images_val = torch.zeros((1, 1, pixel_size, pixel_size))
+            norm_images_val = torch.zeros((1, temporal_steps, pixel_size, pixel_size))
         labels_train = torch.zeros(1, dtype=torch.long)
         labels_test = torch.zeros(1, dtype=torch.long)
         if use_validation_data:
             labels_val = torch.zeros(1, dtype=torch.long)
 
-    # Convert floats to poisson sequences
-    S_data_train = torch.zeros(size=norm_images_train.shape)
-    S_data_train = S_data_train.repeat(num_steps, 1, 1, 1)
-    for i in range(norm_images_train.shape[0]):
-        S_data_train[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
-            norm_images_train[i],
-            num_steps=num_steps,
-            gain=gain,
-            offset=offset,
-            first_spike_time=first_spike_time,
-            time_var_input=time_var_input,
-        )
-    S_data_test = torch.zeros(size=norm_images_test.shape)
-    S_data_test = S_data_test.repeat(num_steps, 1, 1, 1)
-    for i in range(norm_images_test.shape[0]):
-        S_data_test[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
-            norm_images_test[i],
-            num_steps=num_steps,
-            gain=gain,
-            offset=offset,
-            first_spike_time=first_spike_time,
-            time_var_input=time_var_input,
-        )
-    if use_validation_data:
-        S_data_val = torch.zeros(size=norm_images_val.shape)
-        S_data_val = S_data_val.repeat(num_steps, 1, 1, 1)
-        for i in range(norm_images_val.shape[0]):
-            S_data_val[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
-                norm_images_val[i],
+    # Handle different data types for spike generation
+    # Check if data is already in spike format (from audio conversion) or needs conversion (images)
+
+    if (
+        norm_images_train.shape[1] == num_steps
+        and norm_images_train.shape[2] == pixel_size
+    ):
+        # Data is already in spike format (converted from audio)
+        print("Using pre-converted spike data (audio or processed data)")
+        S_data_train = norm_images_train
+        S_data_test = norm_images_test
+        if use_validation_data:
+            S_data_val = norm_images_val
+    else:
+        # Data needs spike conversion (traditional image data)
+        print("Converting image data to spike trains using Poisson process")
+        S_data_train = torch.zeros(size=norm_images_train.shape)
+        S_data_train = S_data_train.repeat(num_steps, 1, 1, 1)
+        for i in range(norm_images_train.shape[0]):
+            S_data_train[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
+                norm_images_train[i],
                 num_steps=num_steps,
                 gain=gain,
                 offset=offset,
                 first_spike_time=first_spike_time,
                 time_var_input=time_var_input,
             )
+        S_data_test = torch.zeros(size=norm_images_test.shape)
+        S_data_test = S_data_test.repeat(num_steps, 1, 1, 1)
+        for i in range(norm_images_test.shape[0]):
+            S_data_test[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
+                norm_images_test[i],
+                num_steps=num_steps,
+                gain=gain,
+                offset=offset,
+                first_spike_time=first_spike_time,
+                time_var_input=time_var_input,
+            )
+        if use_validation_data:
+            S_data_val = torch.zeros(size=norm_images_val.shape)
+            S_data_val = S_data_val.repeat(num_steps, 1, 1, 1)
+            for i in range(norm_images_val.shape[0]):
+                S_data_val[i * num_steps : (i + 1) * num_steps] = spikegen.rate(
+                    norm_images_val[i],
+                    num_steps=num_steps,
+                    gain=gain,
+                    offset=offset,
+                    first_spike_time=first_spike_time,
+                    time_var_input=time_var_input,
+                )
 
     # Extend labels based on num_steps
     spike_labels_train = labels_train.numpy().repeat(num_steps)
@@ -1093,6 +1255,63 @@ def create_data(
         ).astype(int)
         S_data_train = S_data_train | break_activity
 
+    # Combine audio and image data if both are present
+    if (
+        audioMNIST
+        and imageMNIST
+        and audio_train_data is not None
+        and images_train is not None
+    ):
+        print("\nCombining audio and image data into unified dataset...")
+
+        # Get the spike trains for both modalities
+        audio_spikes_train = convert_audio_to_spikes(
+            audio_train_data, num_steps, pixel_size
+        )
+        audio_spikes_test = convert_audio_to_spikes(
+            audio_test_data, num_steps, pixel_size
+        )
+
+        # Combine by concatenating along channel/feature dimension
+        # Original shape: (batch, time_steps, pixel_size, pixel_size)
+        # Combined shape: (batch, time_steps, pixel_size, pixel_size * 2)
+
+        # For now, we'll use image data as primary and add audio as additional channels
+        # You could also implement different fusion strategies here
+        S_data_train_combined = torch.cat(
+            [
+                S_data_train.view(-1, num_steps, pixel_size, pixel_size),
+                audio_spikes_train,
+            ],
+            dim=-1,
+        )
+        S_data_test_combined = torch.cat(
+            [
+                S_data_test.view(-1, num_steps, pixel_size, pixel_size),
+                audio_spikes_test,
+            ],
+            dim=-1,
+        )
+
+        # Update data references
+        S_data_train = S_data_train_combined.view(-1, pixel_size * 2)
+        S_data_test = S_data_test_combined.view(-1, pixel_size * 2)
+
+        if use_validation_data:
+            audio_spikes_val = convert_audio_to_spikes(
+                audio_val_data, num_steps, pixel_size
+            )
+            S_data_val_combined = torch.cat(
+                [
+                    S_data_val.view(-1, num_steps, pixel_size, pixel_size),
+                    audio_spikes_val,
+                ],
+                dim=-1,
+            )
+            S_data_val = S_data_val_combined.view(-1, pixel_size * 2)
+
+        print(f"Combined modalities - New feature dimension: {pixel_size * 2}")
+
     # Print final data statistics
     print(f"\n=== Final Data Summary ===")
     print(f"Training data: {len(S_data_train)} samples")
@@ -1110,21 +1329,10 @@ def create_data(
             f"Image data included: {len(images_train)} train, {len(images_val) if images_val is not None else 0} val, {len(images_test)} test"
         )
 
-    # Handle audio streaming data
-    if audioMNIST and audio_train_data is not None:
-        print(
-            f"Audio data: Streaming mode (total samples: {audio_train_data.get_total_samples()})"
-        )
-        print("Audio data will be loaded in batches during training/testing")
-
-    # Handle image data
-    if imageMNIST and images_train is not None:
-        print(
-            f"Image data: {len(images_train)} train, {len(images_val) if images_val is not None else 0} val, {len(images_test)} test"
-        )
     print(f"Data shape: {S_data_train.shape}")
     print(f"Labels shape: {spike_labels_train.shape}")
-
+    print(f"Temporal steps: {num_steps}")
+    print(f"Spatial dimensions: {pixel_size}x{pixel_size}")
     print("=" * 30)
 
     if use_validation_data:

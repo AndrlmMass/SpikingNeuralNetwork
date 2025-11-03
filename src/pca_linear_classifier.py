@@ -4,11 +4,10 @@ from typing import Dict, Tuple, Optional
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
-from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.metrics import accuracy_score
 
 
-def pca_classifier(
+def pca_logistic_regression(
     X_train: np.ndarray,
     y_train: np.ndarray,
     X_val: np.ndarray,
@@ -20,8 +19,6 @@ def pca_classifier(
     whiten: bool = True,
     standardize: bool = True,
     max_iter: int = 1000,
-    use_LR: bool = True,
-    use_QDA: bool = False,
 ) -> Tuple[Dict[str, float], StandardScaler, PCA, LogisticRegression]:
     """
     Reduce high-dimensional features with PCA, then classify with multinomial Logistic Regression.
@@ -51,32 +48,18 @@ def pca_classifier(
     X_val_p = pca.transform(X_val_s)
     X_test_p = pca.transform(X_test_s)
 
-    if use_LR:
-        clf = LogisticRegression(
-            multi_class="multinomial", solver="lbfgs", max_iter=max_iter
-        )
-        clf.fit(X_train_p, y_train)
+    clf = LogisticRegression(
+        multi_class="multinomial", solver="lbfgs", max_iter=max_iter
+    )
+    clf.fit(X_train_p, y_train)
 
-        accs = {
-            "train": float(accuracy_score(y_train, clf.predict(X_train_p))),
-            "val": float(accuracy_score(y_val, clf.predict(X_val_p))),
-            "test": float(accuracy_score(y_test, clf.predict(X_test_p))),
-        }
-    elif use_QDA:
-        clf = QuadraticDiscriminantAnalysis()
-        clf.fit(X_train_p, y_train)
-        accs = {
-            "train": float(accuracy_score(y_train, clf.predict(X_train_p))),
-            "val": float(accuracy_score(y_val, clf.predict(X_val_p))),
-            "test": float(accuracy_score(y_test, clf.predict(X_test_p))),
-        }
+    accs = {
+        "train": float(accuracy_score(y_train, clf.predict(X_train_p))),
+        "val": float(accuracy_score(y_val, clf.predict(X_val_p))),
+        "test": float(accuracy_score(y_test, clf.predict(X_test_p))),
+    }
 
     return accs, scaler, pca, clf
-
-
-# Backwards-compatibility alias
-def pca_logistic_regression(*args, **kwargs):
-    return pca_classifier(*args, **kwargs)
 
 
 if __name__ == "__main__":
@@ -107,7 +90,7 @@ if __name__ == "__main__":
         ) = get_data(imageMNIST=True, audioMNIST=True, combined=True)
 
         if comb_tr is not None:
-            accs, _, _, _ = pca_classifier(
+            accs, _, _, _ = pca_logistic_regression(
                 comb_tr,
                 comb_tr_y,
                 comb_v,

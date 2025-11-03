@@ -33,9 +33,9 @@ from analysis import (
     t_SNE,
     PCA_analysis,
     calculate_phi,
+    pca_logistic_regression,
     bin_spikes_by_label_no_breaks,
 )
-from pca_linear_classifier import pca_classifier
 from create_network import create_weights, create_arrays
 
 
@@ -1080,17 +1080,17 @@ class snn_sleepy:
         self,
         plot_weights=False,
         plot_network=False,
-        w_dense_ee=0.15,  # Moderate excitatory connectivity
-        w_dense_se=0.1,  # Sensory input density
-        w_dense_ei=0.2,  # Higher EI density for inhibition regulation
-        w_dense_ie=0.25,  # Higher IE density for lateral inhibition
+        w_dense_ee=0.01,
+        w_dense_se=0.05,
+        w_dense_ei=0.05,
+        w_dense_ie=0.05,
         resting_membrane=-70,
         max_time=100,
         retur=False,
-        se_weights=0.15,  # Moderate sensory strength
-        ee_weights=0.3,  # Balanced excitation
-        ei_weights=0.6,  # Strong EI for inhibitory control
-        ie_weights=-0.8,  # Strong lateral inhibition
+        se_weights=0.1,
+        ee_weights=0.3,
+        ei_weights=0.3,
+        ie_weights=-0.2,
         create_network=False,
     ):
         # create weights
@@ -1165,14 +1165,14 @@ class snn_sleepy:
         plot_threshold=False,
         plot_traces_=False,
         train_weights=False,
-        learning_rate_exc=0.002,  # Increased for stronger weights (typical: 0.001-0.01)
-        learning_rate_inh=0.008,  # Increased for stronger inhibition (typical: 0.005-0.02)
-        w_target_exc=0.15,  # Aligned with ee_weights target (typical: 0.1-0.3)
-        w_target_inh=-0.4,  # Aligned with ie_weights target (typical: -0.3 to -0.8)
-        var_noise=2,  # Membrane potential noise (typical: 1-3)
-        min_weight_inh=-5.0,  # Reasonable bound for inhibitory weights (typical: -1 to -5)
+        learning_rate_exc=0.0008,
+        learning_rate_inh=0.005,
+        w_target_exc=0.01,
+        w_target_inh=-0.01,
+        var_noise=1,
+        min_weight_inh=-25,
         max_weight_inh=-0.01,
-        max_weight_exc=2.0,  # Reasonable bound for excitatory weights (typical: 0.5-2.0)
+        max_weight_exc=25,
         min_weight_exc=0.01,
         spike_threshold_default=-55,
         check_sleep_interval=50000,  # Reduced frequency for better performance
@@ -1200,8 +1200,8 @@ class snn_sleepy:
         clip_inh_weights=False,
         alpha=1.1,
         beta=1.0,
-        A_plus=0.8,  # Stronger LTP than LTD (typical: 0.5-1.0)
-        A_minus=0.3,  # Weaker LTD (typical: 0.2-0.5)
+        A_plus=0.5,
+        A_minus=0.5,
         tau_LTD=10,
         tau_LTP=10,
         early_stopping=False,
@@ -1232,8 +1232,8 @@ class snn_sleepy:
         num_inh=10,
         num_exc=50,
         plot_epoch_performance=True,
-        narrow_top=0.3,  # Top 30% for narrow accuracy (good for 10-class problems)
-        wide_top=0.2,  # Top 20% for wide accuracy
+        narrow_top=0.2,  # Increased from 0.05 to 0.2 (20% of neurons)
+        wide_top=0.15,
         tau_syn=30,
         smoothening=350,
         plot_top_response_train=False,
@@ -1586,13 +1586,15 @@ class snn_sleepy:
                                 raise ValueError("No test data available")
                             self.current_test_idx += effective_batch
                         elif self.image_streamer is not None:
-                            # Stream image test data directly from the ImageDataStreamer
-                            data_test, labels_test = self.image_streamer.get_batch(
+                            data_test, labels_test = load_image_batch(
+                                self.image_streamer,
                                 self.current_test_idx,
                                 effective_batch,
+                                self.num_steps,
+                                int(np.sqrt(self.N_x)) ** 2,
                                 partition="test",
                             )
-                            if data_test is None or labels_test is None:
+                            if data_test is None:
                                 raise ValueError("No test data available")
                             self.current_test_idx += effective_batch
                         else:
@@ -1636,23 +1638,6 @@ class snn_sleepy:
                         spikes_test = np.zeros((T_te, self.N), dtype=np.int8)
                         spikes_test[:, :st] = data_test
 
-                        # Ensure labels vector matches time dimension (T_te)
-                        if labels_test is not None and labels_test.shape[0] != T_te:
-                            try:
-                                repeat_factor = T_te // max(1, labels_test.shape[0])
-                                if repeat_factor * labels_test.shape[0] == T_te:
-                                    labels_aligned = np.repeat(
-                                        labels_test, repeat_factor
-                                    )
-                                else:
-                                    labels_aligned = np.repeat(
-                                        labels_test, self.num_steps
-                                    )
-                            except Exception:
-                                labels_aligned = np.repeat(labels_test, self.num_steps)
-                        else:
-                            labels_aligned = labels_test
-
                         (
                             _weights_te,
                             spikes_te_out,
@@ -1666,11 +1651,7 @@ class snn_sleepy:
                             _weight_tracking_te,
                         ) = train_network(
                             weights=self.weights.copy(),
-                            spike_labels=(
-                                labels_aligned.copy()
-                                if labels_aligned is not None
-                                else None
-                            ),
+                            spike_labels=labels_test.copy(),
                             mp=mp_test.copy(),
                             sleep=False,
                             train_weights=False,
@@ -1696,28 +1677,9 @@ class snn_sleepy:
                         all_spikes_test[test_sample_count : test_sample_count + bs] = (
                             spikes_te_out
                         )
-                        # Expand per-sample labels to per-timestep labels if needed
-                        if labels_te_out is not None and labels_te_out.shape[0] != bs:
-                            # Expect labels provided per sample; expand by num_steps
-                            if (
-                                bs % self.num_steps == 0
-                                and labels_te_out.shape[0] == bs // self.num_steps
-                            ):
-                                labels_expanded = np.repeat(
-                                    labels_te_out, self.num_steps
-                                )
-                            else:
-                                # Fallback: broadcast last known label
-                                labels_expanded = np.full(
-                                    bs, labels_te_out[-1], dtype=labels_te_out.dtype
-                                )
-                            all_labels_test[
-                                test_sample_count : test_sample_count + bs
-                            ] = labels_expanded
-                        else:
-                            all_labels_test[
-                                test_sample_count : test_sample_count + bs
-                            ] = labels_te_out
+                        all_labels_test[test_sample_count : test_sample_count + bs] = (
+                            labels_te_out
+                        )
                         all_mp_test[test_sample_count : test_sample_count + bs] = mp_te
                         test_sample_count += bs
 
@@ -1909,14 +1871,18 @@ class snn_sleepy:
                     # Update training index
                     self.current_train_idx = new_train_idx
                 elif self.image_streamer is not None:
-                    # Image-only streaming mode: pull batch directly from streamer
+                    # Image only streaming mode (missing branch)
+                    from get_data import load_image_batch
+
                     train_start_idx = self.current_train_idx
-                    data_train, labels_train = self.image_streamer.get_batch(
+                    data_train, labels_train = load_image_batch(
+                        self.image_streamer,
                         train_start_idx,
                         self.batch_train,
-                        partition="train",
+                        self.num_steps,
+                        int(np.sqrt(self.N_x)) ** 2,  # Image-only uses full N_x
                     )
-                    if data_train is None or labels_train is None:
+                    if data_train is None:
                         print(f"No more image data available at epoch {e}")
                         break
                     # Advance training index for streaming
@@ -2274,13 +2240,19 @@ class snn_sleepy:
                             break
                     elif self.image_streamer is not None:
                         # Image only streaming mode
+                        from get_data import load_image_batch
+
                         val_start_idx = val_batch_idx * self.batch_test
-                        data_test, labels_test = self.image_streamer.get_batch(
+                        data_test, labels_test = load_image_batch(
+                            self.image_streamer,
                             val_start_idx,
                             self.batch_test,
+                            self.num_steps,
+                            int(np.sqrt(self.N_x))
+                            ** 2,  # Image-only mode uses full N_x
                             partition="val",  # Use validation data
                         )
-                        if data_test is None or labels_test is None:
+                        if data_test is None:
                             print(f"No more validation image data available")
                             break
                     else:
