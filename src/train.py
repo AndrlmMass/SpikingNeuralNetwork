@@ -521,8 +521,6 @@ def train_network(
                     var_noise=var_noise,
                     I_syn=I_syn,
                     tau_syn=tau_syn,
-                    sleep_exc=sleep_now_exc,
-                    sleep_inh=sleep_now_inh,
                 )
 
                 # Prepare current spikes vector (no sensory spikes during sleep)

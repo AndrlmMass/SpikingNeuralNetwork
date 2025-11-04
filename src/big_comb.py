@@ -1058,7 +1058,9 @@ class snn_sleepy:
     def _pca_eval(self, X_train, y_train, X_val, y_val, X_test, y_test):
         """Run PCA-based classifier with configured options, return (accs, scaler, pca, clf)."""
         try:
-            return pca_classifier(
+            from pca_linear_classifier import pca_logistic_regression
+
+            return pca_logistic_regression(
                 X_train=X_train,
                 y_train=y_train,
                 X_val=X_val,
@@ -1066,8 +1068,6 @@ class snn_sleepy:
                 X_test=X_test,
                 y_test=y_test,
                 variance_ratio=self.pca_variance,
-                use_LR=getattr(self, "use_LR", True),
-                use_QDA=getattr(self, "use_QDA", False),
             )
         except Exception as ex:
             print(f"Warning: PCA classification failed ({ex}); using zeros")
