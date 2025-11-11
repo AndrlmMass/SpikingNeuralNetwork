@@ -58,6 +58,27 @@ class snn_sleepy:
         self.N = N_exc + N_inh + N_x
         # One-time plotting guard
         self._did_plot_spectrograms = False
+        self._image_preview_done = False
+
+    def preview_loaded_data(
+        self, num_image_samples: int = 9, save_path: str | None = None
+    ):
+        """
+        Plot a small grid of images from the loaded dataset once so the user can
+        verify that the expected dataset is being used.
+        """
+        if getattr(self, "_image_preview_done", False):
+            return
+        if not hasattr(self, "image_streamer") or self.image_streamer is None:
+            return
+        try:
+            self.image_streamer.show_preview(
+                num_samples=num_image_samples, save_path=save_path
+            )
+        except Exception as exc:  # pragma: no cover - visualization fallback
+            print(f"Dataset preview skipped ({exc})")
+        finally:
+            self._image_preview_done = True
 
     def process(
         self,
@@ -289,6 +310,7 @@ class snn_sleepy:
         batch_image_test=200,
         all_images_val=1000,
         batch_image_val=100,
+        image_dataset="mnist",
     ):
         # Save current parameters
         self.data_parameters = {**locals()}
@@ -317,6 +339,7 @@ class snn_sleepy:
         self.offset = offset
         self.first_spike_time = first_spike_time
         self.time_var_input = time_var_input
+        self.image_dataset = (image_dataset or "mnist").lower()
         self.plot_spectrograms = plot_spectrograms
         self.all_images_train = all_images_train
         self.all_images_test = all_images_test
@@ -592,6 +615,10 @@ class snn_sleepy:
                                 )
                                 else "image_only"
                             ),
+                            "dataset": self.image_dataset,
+                            "train_count": all_images_train,
+                            "val_count": all_images_val,
+                            "test_count": all_images_test,
                         }
 
                         if ex_params == expected_params:
@@ -633,6 +660,10 @@ class snn_sleepy:
                         )
                         else "image_only"
                     ),
+                    "dataset": self.image_dataset,
+                    "train_count": all_images_train,
+                    "val_count": all_images_val,
+                    "test_count": all_images_test,
                 }
 
                 with open(
@@ -658,6 +689,7 @@ class snn_sleepy:
                 train_count=all_images_train,
                 val_count=all_images_val,
                 test_count=all_images_test,
+                dataset=self.image_dataset,
             )
             print(
                 f"Image streamer initialized with {self.image_streamer.get_total_samples()} total samples"

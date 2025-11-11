@@ -5,6 +5,8 @@ import random
 import json
 from datetime import datetime
 import os
+import cProfile
+import pstats
 
 
 def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False):
@@ -27,7 +29,7 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         batch_audio_val=200,
         all_images_train=6000,
         batch_image_train=300,
-        all_images_test=2000,
+        all_images_test=1000,
         batch_image_test=200,
         all_images_val=100,
         batch_image_val=100,
@@ -40,7 +42,16 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         imageMNIST=True,
         create_data=False,
         plot_spectrograms=False,
+        image_dataset=args.image_dataset,
     )
+
+    if run_idx == 0 and getattr(args, "preview_dataset", False):
+        if disable_plotting:
+            print(
+                "Preview requested via --preview-dataset; displaying dataset sample "
+                "before batch runs."
+            )
+        snn_N.preview_loaded_data(num_image_samples=9)
 
     # set up network for training
     snn_N.prepare_network(
@@ -56,44 +67,100 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         create_network=False,
     )
 
-    snn_N.train_network(
-        train_weights=True,
-        noisy_potential=True,
-        compare_decay_rates=False,
-        check_sleep_interval=35000,
-        weight_decay_rate_exc=[0.99997],
-        weight_decay_rate_inh=[0.99997],
-        samples=10,
-        force_train=True,
-        plot_spikes_train=False,
-        plot_weights=False,
-        plot_epoch_performance=False,
-        sleep_synchronized=False,
-        plot_top_response_test=False,
-        plot_top_response_train=False,
-        plot_tsne_during_training=False,
-        tsne_plot_interval=1,
-        plot_spectrograms=False,
-        use_validation_data=False,
-        var_noise=2,
-        sleep=not args.no_sleep,
-        tau_syn=30,
-        narrow_top=0.2,
-        A_minus=0.3,
-        A_plus=0.5,
-        tau_LTD=7.5,
-        tau_LTP=10,
-        learning_rate_exc=0.0008,
-        learning_rate_inh=0.005,
-        accuracy_method="pca_lr",
-        test_only=False,
-        use_QDA=True,
-        early_stopping=bool(args.early_stopping),
-        early_stopping_patience_pct=0.3,
-        sleep_ratio=float(args.sleep_rate),
-        sleep_max_iters=int(args.sleep_max_iters),
-        on_timeout=str(args.on_timeout),
-    )
+    if getattr(args, "profile", False):
+        pr = cProfile.Profile()
+        pr.enable()
+        snn_N.train_network(
+            train_weights=True,
+            noisy_potential=True,
+            compare_decay_rates=False,
+            check_sleep_interval=35000,
+            weight_decay_rate_exc=[0.99997],
+            weight_decay_rate_inh=[0.99997],
+            samples=10,
+            force_train=True,
+            plot_spikes_train=False,
+            plot_weights=False,
+            plot_epoch_performance=False,
+            sleep_synchronized=False,
+            plot_top_response_test=False,
+            plot_top_response_train=False,
+            plot_tsne_during_training=False,
+            tsne_plot_interval=1,
+            plot_spectrograms=False,
+            use_validation_data=False,
+            var_noise=2,
+            sleep=not args.no_sleep,
+            tau_syn=30,
+            narrow_top=0.2,
+            A_minus=0.3,
+            A_plus=0.5,
+            tau_LTD=7.5,
+            tau_LTP=10,
+            learning_rate_exc=0.0008,
+            learning_rate_inh=0.005,
+            accuracy_method="pca_lr",
+            test_only=False,
+            use_QDA=True,
+            early_stopping=bool(args.early_stopping),
+            early_stopping_patience_pct=0.3,
+            sleep_ratio=float(args.sleep_rate),
+            sleep_max_iters=int(args.sleep_max_iters),
+            on_timeout=str(args.on_timeout),
+            normalize_weights=bool(args.normalize_weights),
+        )
+        pr.disable()
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        profile_path = args.profile_output or os.path.join(
+            "results", f"profile_{ts}_sr{args.sleep_rate}_run{run_idx+1}.prof"
+        )
+        try:
+            pr.dump_stats(profile_path)
+            print(f"Profile saved to: {profile_path}")
+            # Print top hotspots by cumulative time
+            pstats.Stats(pr).sort_stats("cumtime").print_stats(20)
+        except Exception as e:
+            print(f"WARNING: could not write/print profile stats: {e}")
+    else:
+        snn_N.train_network(
+            train_weights=True,
+            noisy_potential=True,
+            compare_decay_rates=False,
+            check_sleep_interval=35000,
+            weight_decay_rate_exc=[0.99997],
+            weight_decay_rate_inh=[0.99997],
+            samples=10,
+            force_train=True,
+            plot_spikes_train=False,
+            plot_weights=False,
+            plot_epoch_performance=False,
+            sleep_synchronized=False,
+            plot_top_response_test=False,
+            plot_top_response_train=False,
+            plot_tsne_during_training=False,
+            tsne_plot_interval=1,
+            plot_spectrograms=False,
+            use_validation_data=False,
+            var_noise=2,
+            sleep=not args.no_sleep,
+            tau_syn=30,
+            narrow_top=0.2,
+            A_minus=0.3,
+            A_plus=0.5,
+            tau_LTD=7.5,
+            tau_LTP=10,
+            learning_rate_exc=0.0008,
+            learning_rate_inh=0.005,
+            accuracy_method="pca_lr",
+            test_only=False,
+            use_QDA=True,
+            early_stopping=bool(args.early_stopping),
+            early_stopping_patience_pct=0.3,
+            sleep_ratio=float(args.sleep_rate),
+            sleep_max_iters=int(args.sleep_max_iters),
+            on_timeout=str(args.on_timeout),
+            normalize_weights=bool(args.normalize_weights),
+        )
 
     if disable_plotting:
         result = snn_N.analyze_results(
@@ -115,7 +182,10 @@ def main():
         type=float,
         nargs="+",
         default=[0.1],
-        help="sleep rate(s) during training (can specify multiple, e.g., --sleep_rate 0.5 0.6 0.7)",
+        help=(
+            "sleep rate(s) during training "
+            "(can specify multiple, e.g., --sleep_rate 0.5 0.6 0.7)"
+        ),
     )
     parser.add_argument(
         "--sleep_max_iters",
@@ -135,7 +205,46 @@ def main():
         default=False,
         help="disable sleep during training (default: sleep enabled)",
     )
+    parser.add_argument(
+        "--normalize-weights",
+        action="store_true",
+        default=False,
+        help="enable per-group weight-sum normalization (may slow training)",
+    )
+    parser.add_argument(
+        "--preview-dataset",
+        action="store_true",
+        default=False,
+        help="plot a quick sample of the selected dataset before training",
+    )
+    parser.add_argument(
+        "--image_dataset",
+        type=str,
+        choices=[
+            "mnist",
+            "kmnist",
+            "fmnist",
+            "fashionmnist",
+            "fashion",
+            "notmnist",
+        ],
+        default="mnist",
+        help="image dataset to use for image-only or multimodal modes",
+    )
+    parser.add_argument(
+        "--profile",
+        action="store_true",
+        default=False,
+        help="enable cProfile around training to find hotspots",
+    )
+    parser.add_argument(
+        "--profile_output",
+        type=str,
+        default=None,
+        help="optional path for .prof output (default: results/profile_*.prof)",
+    )
     args, _ = parser.parse_known_args()
+
     # Ensure sleep_rate is a list
     sleep_rates = (
         args.sleep_rate if isinstance(args.sleep_rate, list) else [args.sleep_rate]
@@ -161,10 +270,13 @@ def main():
         except (ValueError, TypeError):
             return None
 
-    # Initialize results file with metadata
+    # Initial JSON structure
+    dataset_name = args.image_dataset
+
     initial_results_data = {
         "timestamp": datetime.now().isoformat(),
         "status": "in_progress",
+        "image_dataset": dataset_name,
         "args": {
             "runs": args.runs,
             "sleep_rates": [float(sr) for sr in sleep_rates],
@@ -172,6 +284,8 @@ def main():
             "on_timeout": args.on_timeout,
             "early_stopping": args.early_stopping,
             "no_sleep": args.no_sleep,
+            "normalize_weights": args.normalize_weights,
+            "image_dataset": dataset_name,
         },
         "results_by_sleep_rate": {str(sr): [] for sr in sleep_rates},
     }
@@ -190,15 +304,12 @@ def main():
         if results_filename is None:
             return
         try:
-            # Read existing results
             try:
                 with open(results_filename, "r") as f:
                     results_data = json.load(f)
             except (FileNotFoundError, json.JSONDecodeError):
-                # If file doesn't exist or is corrupted, reinitialize
                 results_data = initial_results_data.copy()
 
-            # Add new result
             sleep_rate_key = str(sleep_rate)
             if isinstance(result, tuple) and len(result) >= 2:
                 acc_dict, phi = result[0], result[1]
@@ -210,6 +321,7 @@ def main():
             result_entry = {
                 "run": int(run_idx + 1),
                 "sleep_rate": float(sleep_rate),
+                "image_dataset": dataset_name,
                 "test_accuracy": (
                     safe_float(acc_dict.get("test"))
                     if isinstance(acc_dict, dict)
@@ -233,27 +345,31 @@ def main():
 
             results_data["results_by_sleep_rate"][sleep_rate_key].append(result_entry)
 
-            # Save updated results
             with open(results_filename, "w") as f:
                 json.dump(results_data, f, indent=2)
         except Exception as e:
             print(f"WARNING: Could not save incremental results: {e}")
 
     # Run for each sleep rate
+    preview_requested = bool(getattr(args, "preview_dataset", False))
+    preview_consumed = False
+
     for sleep_rate_idx, sleep_rate in enumerate(sleep_rates):
         print(f"\n{'='*70}")
         print(f"Sleep Rate: {sleep_rate} ({sleep_rate_idx + 1}/{len(sleep_rates)})")
         print(f"{'='*70}")
 
         for run_idx in range(args.runs):
-            # Create a modified args object with this sleep_rate
             args_copy = argparse.Namespace(**vars(args))
-            args_copy.sleep_rate = float(sleep_rate)  # Ensure it's a float, not a list
+            args_copy.sleep_rate = float(sleep_rate)
+            preview_this_run = preview_requested and not preview_consumed
+            args_copy.preview_dataset = preview_this_run
             result = run_once(
                 run_idx, args.runs, args_copy, disable_plotting=disable_plotting
             )
+            if preview_this_run:
+                preview_consumed = True
             all_results.append((sleep_rate, run_idx, result))
-            # Save immediately after each run
             save_results_incremental(sleep_rate, run_idx, result)
 
     if args.runs > 0 and len(all_results) > 0:
@@ -264,159 +380,134 @@ def main():
         # Group results by sleep rate
         results_by_sleep_rate = {}
         for sleep_rate, run_idx, result in all_results:
-            if sleep_rate not in results_by_sleep_rate:
-                results_by_sleep_rate[sleep_rate] = []
-            results_by_sleep_rate[sleep_rate].append((run_idx, result))
+            results_by_sleep_rate.setdefault(sleep_rate, []).append((run_idx, result))
 
         all_test_accs = []
         all_test_phis = []
 
-        # Print summary for each sleep rate
+        # Per-sleep-rate summary
         for sleep_rate in sorted(results_by_sleep_rate.keys(), key=lambda x: float(x)):
             results = results_by_sleep_rate[sleep_rate]
             valid_results = [
                 (run_idx, r)
                 for run_idx, r in results
-                if (r[0] is not None) or (r[1] is not None)
+                if (r[0] is not None) or (len(r) > 1 and r[1] is not None)
             ]
 
-            if valid_results:
-                print(f"\n{'='*70}")
-                print(f"Sleep Rate: {sleep_rate}")
-                print(f"{'='*70}")
-                print(f"\n{'Run':<6} {'Test Accuracy':<15} {'Final Test Phi':<16}")
+            if not valid_results:
+                continue
+
+            print(f"\n{'='*70}")
+            print(f"Sleep Rate: {sleep_rate}")
+            print(f"{'='*70}")
+            print(f"\n{'Run':<6} {'Test Accuracy':<15} {'Final Test Phi':<16}")
+            print("-" * 70)
+
+            test_accs = []
+            test_phis = []
+
+            for run_idx, (acc_dict, phi) in valid_results:
+                test_acc = (
+                    acc_dict.get("test", "N/A") if isinstance(acc_dict, dict) else "N/A"
+                )
+                phi_str = (
+                    f"{phi:.4f}"
+                    if (phi is not None and isinstance(phi, (int, float)))
+                    else "N/A"
+                )
+
+                if isinstance(test_acc, (int, float)):
+                    test_accs.append(test_acc)
+                    all_test_accs.append(test_acc)
+                    print(f"{run_idx+1:<6} {test_acc:<15.4f} {phi_str:<16}")
+                else:
+                    print(f"{run_idx+1:<6} {test_acc:<15} {phi_str:<16}")
+
+                if phi is not None and isinstance(phi, (int, float)):
+                    test_phis.append(phi)
+                    all_test_phis.append(phi)
+                else:
+                    test_phis.append(float("nan"))
+
+            if test_accs:
                 print("-" * 70)
-                test_accs = []
-                test_phis = []
-                for run_idx, (acc_dict, phi) in valid_results:
-                    test_acc = (
-                        acc_dict.get("test", "N/A")
-                        if isinstance(acc_dict, dict)
-                        else "N/A"
+                # Best / mean acc
+                try:
+                    best_acc_idx = max(
+                        range(len(test_accs)), key=lambda i: test_accs[i]
                     )
-                    phi_str = (
-                        f"{phi:.4f}"
-                        if (phi is not None and isinstance(phi, (int, float)))
-                        else "N/A"
+                    best_run = valid_results[best_acc_idx][0] + 1
+                    print(
+                        f"Best test accuracy: Run {best_run} ({test_accs[best_acc_idx]:.4f})"
                     )
-                    if isinstance(test_acc, (int, float)):
-                        test_accs.append(test_acc)
-                        all_test_accs.append(test_acc)
-                        print(f"{run_idx+1:<6} {test_acc:<15.4f} {phi_str:<16}")
-                    else:
-                        print(f"{run_idx+1:<6} {test_acc:<15} {phi_str:<16}")
-                    phi_val = (
-                        phi
-                        if phi is not None and isinstance(phi, (int, float))
-                        else float("nan")
-                    )
-                    test_phis.append(phi_val)
-                    if phi is not None and isinstance(phi, (int, float)):
-                        all_test_phis.append(phi)
+                except Exception as e:
+                    print(f"Could not determine best accuracy: {e}")
 
-                if test_accs:
-                    print("-" * 70)
-                    if len(test_accs) > 1:
-                        try:
-                            best_acc_idx = max(
-                                range(len(test_accs)), key=lambda i: test_accs[i]
-                            )
-                            valid_phi_indices = [
-                                i
-                                for i, phi in enumerate(test_phis)
-                                if not (
-                                    phi is None
-                                    or (isinstance(phi, float) and (phi != phi))
-                                )
-                            ]
-                            if valid_phi_indices:
-                                try:
-                                    best_phi_idx = max(
-                                        valid_phi_indices, key=lambda i: test_phis[i]
-                                    )
-                                    print(
-                                        f"Best final test phi: Run {valid_results[best_phi_idx][0]+1} ({test_phis[best_phi_idx]:.4f})"
-                                    )
-                                except Exception as e:
-                                    print(f"Could not determine best phi: {e}")
-                            print(
-                                f"Best test accuracy: Run {valid_results[best_acc_idx][0]+1} ({test_accs[best_acc_idx]:.4f})"
-                            )
-                        except Exception as e:
-                            print(f"Could not determine best values: {e}")
+                try:
+                    mean_acc = float(np.mean(test_accs))
+                    std_acc = float(np.std(test_accs))
+                    print(f"Mean test accuracy: {mean_acc:.4f} ± {std_acc:.4f}")
+                except Exception as e:
+                    print(f"Could not compute accuracy stats: {e}")
+
+                # Phi stats (only valid numbers)
+                valid_phis_only = [
+                    p
+                    for p in test_phis
+                    if isinstance(p, (int, float)) and not np.isnan(p)
+                ]
+                if valid_phis_only:
                     try:
-                        mean_acc = float(np.mean(test_accs))
-                        std_acc = float(np.std(test_accs))
-                        print(f"Mean test accuracy: {mean_acc:.4f} ± {std_acc:.4f}")
+                        mean_phi = float(np.mean(valid_phis_only))
+                        std_phi = float(np.std(valid_phis_only))
+                        print(f"Mean final test phi: {mean_phi:.4f} ± {std_phi:.4f}")
                     except Exception as e:
-                        print(f"Could not compute test accuracy stats: {e}")
+                        print(f"Could not compute phi stats: {e}")
 
-                    if any(
-                        not (phi is None or (isinstance(phi, float) and (phi != phi)))
-                        for phi in test_phis
-                    ):
-                        valid_phis_only = [
-                            p
-                            for p in test_phis
-                            if not (p is None or (isinstance(p, float) and (p != p)))
-                        ]
-                        if valid_phis_only:
-                            try:
-                                mean_phi = float(np.mean(valid_phis_only))
-                                std_phi = float(np.std(valid_phis_only))
-                                print(
-                                    f"Mean final test phi: {mean_phi:.4f} ± {std_phi:.4f}"
-                                )
-                            except Exception as e:
-                                print(f"Could not compute test phi stats: {e}")
-
-        # Overall summary across all sleep rates
+        # Overall summary
         if all_test_accs:
             print(f"\n{'='*70}")
             print("OVERALL SUMMARY (All Sleep Rates)")
             print(f"{'='*70}")
             print(f"Total runs: {len(all_test_accs)}")
-            if len(all_test_accs) > 1:
-                try:
-                    best_overall_acc = max(all_test_accs)
-                    # Find which sleep rate this came from by tracking through all results
-                    acc_count = 0
-                    found = False
-                    for sleep_rate in sorted(
-                        results_by_sleep_rate.keys(), key=lambda x: float(x)
-                    ):
-                        results = results_by_sleep_rate[sleep_rate]
-                        valid_results = [
-                            (run_idx, r)
-                            for run_idx, r in results
-                            if (r[0] is not None)
-                            and isinstance(r[0], dict)
-                            and isinstance(r[0].get("test"), (int, float))
-                        ]
-                        # Check if best accuracy is in this group
-                        for run_idx, (acc_dict, phi) in valid_results:
-                            test_acc = acc_dict.get("test")
-                            if (
-                                test_acc is not None
-                                and abs(float(test_acc) - float(best_overall_acc))
-                                < 1e-6
-                            ):
-                                print(
-                                    f"Best overall test accuracy: Sleep Rate {sleep_rate}, Run {run_idx+1} ({best_overall_acc:.4f})"
-                                )
-                                found = True
-                                break
-                        if found:
+
+            try:
+                best_overall_acc = max(all_test_accs)
+                found = False
+                for sleep_rate in sorted(
+                    results_by_sleep_rate.keys(), key=lambda x: float(x)
+                ):
+                    results = results_by_sleep_rate[sleep_rate]
+                    valid_results = [
+                        (run_idx, r)
+                        for run_idx, r in results
+                        if (r[0] is not None)
+                        and isinstance(r[0], dict)
+                        and isinstance(r[0].get("test"), (int, float))
+                    ]
+                    for run_idx, (acc_dict, phi) in valid_results:
+                        test_acc = acc_dict.get("test")
+                        if (
+                            test_acc is not None
+                            and abs(float(test_acc) - float(best_overall_acc)) < 1e-6
+                        ):
+                            print(
+                                f"Best overall test accuracy: Sleep Rate {sleep_rate}, "
+                                f"Run {run_idx+1} ({best_overall_acc:.4f})"
+                            )
+                            found = True
                             break
-                except Exception as e:
-                    print(f"Could not determine best overall accuracy: {e}")
+                    if found:
+                        break
+            except Exception as e:
+                print(f"Could not determine best overall accuracy: {e}")
 
             try:
                 mean_acc = float(np.mean(all_test_accs))
                 std_acc = float(np.std(all_test_accs))
                 print(f"Overall mean test accuracy: {mean_acc:.4f} ± {std_acc:.4f}")
             except Exception as e:
-                print(f"Could not compute overall test accuracy stats: {e}")
+                print(f"Could not compute overall accuracy stats: {e}")
 
             if all_test_phis:
                 try:
@@ -426,37 +517,30 @@ def main():
                         f"Overall mean final test phi: {mean_phi:.4f} ± {std_phi:.4f}"
                     )
                 except Exception as e:
-                    print(f"Could not compute overall test phi stats: {e}")
+                    print(f"Could not compute overall phi stats: {e}")
 
         print("=" * 70)
 
-        # Add summary statistics to existing results file
-        # Helper functions for summary statistics
+        # ---- Write summary back to JSON ----
+
         def safe_stat_mean(values):
-            if not values or len(values) == 0:
-                return None
             try:
-                return float(np.mean(values))
+                return float(np.mean(values)) if values else None
             except (ValueError, TypeError):
                 return None
 
         def safe_stat_std(values):
-            if not values or len(values) == 0:
-                return None
             try:
-                return float(np.std(values))
+                return float(np.std(values)) if values else None
             except (ValueError, TypeError):
                 return None
 
         def safe_stat_max(values):
-            if not values or len(values) == 0:
-                return None
             try:
-                return float(max(values))
+                return float(max(values)) if values else None
             except (ValueError, TypeError):
                 return None
 
-        # Read existing results or create new structure
         if results_filename and os.path.exists(results_filename):
             try:
                 with open(results_filename, "r") as f:
@@ -467,7 +551,8 @@ def main():
         else:
             results_data = initial_results_data.copy()
 
-        # Compute summary statistics from saved results
+        results_data["image_dataset"] = dataset_name
+
         all_test_accs_from_file = []
         all_test_phis_from_file = []
 
@@ -489,7 +574,6 @@ def main():
             "per_sleep_rate_summary": {},
         }
 
-        # Add per-sleep-rate summaries from saved results
         for sleep_rate_key in sorted(
             results_data["results_by_sleep_rate"].keys(), key=lambda x: float(x)
         ):
@@ -515,24 +599,13 @@ def main():
                     "best_final_test_phi": safe_stat_max(test_phis),
                 }
 
-        # Update status to completed and save final version
         results_data["status"] = "completed"
         results_data["completed_timestamp"] = datetime.now().isoformat()
 
         try:
-            if results_filename:
-                with open(results_filename, "w") as f:
-                    json.dump(results_data, f, indent=2)
-                print(f"\nFinal results with summary saved to: {results_filename}")
-            else:
-                # If filename wasn't set, save now
-                output_dir = "results"
-                os.makedirs(output_dir, exist_ok=True)
-                timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"{output_dir}/results_{timestamp_str}.json"
-                with open(filename, "w") as f:
-                    json.dump(results_data, f, indent=2)
-                print(f"\nFinal results saved to: {filename}")
+            with open(results_filename, "w") as f:
+                json.dump(results_data, f, indent=2)
+            print(f"\nFinal results with summary saved to: {results_filename}")
         except Exception as e:
             print(f"\nWARNING: Failed to save final results: {e}")
             print("Results were computed but could not be saved.")

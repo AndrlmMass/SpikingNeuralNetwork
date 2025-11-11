@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import os
 import json
+from PIL import Image
 
 os.environ["TQDM_DISABLE"] = "True"
 
@@ -180,10 +181,114 @@ def cochlear_to_spikes_1s(
     return spikes_bt
 
 
+def _normalize_split_value(split_value):
+    """Convert Deeplake split tensor values to lowercase strings."""
+    if split_value is None:
+        return "train"
+    if isinstance(split_value, bytes):
+        return split_value.decode("utf-8").lower()
+    if isinstance(split_value, str):
+        return split_value.lower()
+    if hasattr(split_value, "tolist"):
+        return _normalize_split_value(split_value.tolist())
+    if isinstance(split_value, (list, tuple)) and split_value:
+        return _normalize_split_value(split_value[0])
+    return str(split_value).lower()
+
+
+def _load_notmnist_deeplake(transform):
+    """
+    Load NotMNIST from Deeplake and return torch tensors for train/test splits.
+    """
+    try:
+        import deeplake
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise ImportError(
+            "Loading NotMNIST requires the 'deeplake' package. "
+            "Install it via 'pip install deeplake'."
+        ) from exc
+
+    try:
+        ds = deeplake.load("hub://activeloop/not-mnist-small", read_only=True)
+    except Exception as exc:
+        raise RuntimeError(f"Failed to load NotMNIST from Deeplake ({exc})") from exc
+
+    train_images = []
+    train_labels = []
+    test_images = []
+    test_labels = []
+
+    for sample in ds:
+        try:
+            img_np = sample["images"].numpy()
+            lbl = sample["labels"].numpy()
+        except KeyError as exc:  # pragma: no cover - dataset schema check
+            raise KeyError(
+                "NotMNIST sample missing expected 'images' or 'labels' tensors."
+            ) from exc
+
+        split_value = None
+        if "split" in sample:
+            try:
+                split_value = sample["split"].numpy()
+            except Exception:
+                split_value = None
+
+        split_name = _normalize_split_value(split_value)
+        label_int = int(np.asarray(lbl).flatten()[0])
+
+        img_np = np.asarray(img_np)
+        if img_np.ndim == 3 and img_np.shape[0] == 1:
+            img_np = img_np[0]
+        if img_np.ndim != 2:
+            raise ValueError(
+                f"Unexpected NotMNIST image shape {img_np.shape}; expected (H, W)."
+            )
+
+        img_pil = Image.fromarray(img_np.astype(np.uint8), mode="L")
+        img_tensor = transform(img_pil)
+
+        if split_name in {"test", "validation", "val"}:
+            test_images.append(img_tensor)
+            test_labels.append(label_int)
+        else:
+            train_images.append(img_tensor)
+            train_labels.append(label_int)
+
+    if not train_images:
+        raise RuntimeError("Failed to load any NotMNIST samples from Deeplake.")
+
+    if not test_images:
+        # Dataset may not include a split tensor; perform an internal split.
+        total_samples = len(train_images)
+        if total_samples < 2:
+            raise RuntimeError(
+                "NotMNIST dataset too small to create train/test splits."
+            )
+        rng = np.random.default_rng(seed=42)
+        perm = rng.permutation(total_samples)
+        test_size = max(1, int(0.1 * total_samples))
+        test_indices = perm[:test_size]
+        train_indices = perm[test_size:]
+
+        test_images = [train_images[idx] for idx in test_indices]
+        test_labels = [train_labels[idx] for idx in test_indices]
+        train_images = [train_images[idx] for idx in train_indices]
+        train_labels = [train_labels[idx] for idx in train_indices]
+
+    train_images = torch.stack(train_images)
+    test_images = torch.stack(test_images)
+    train_labels = np.asarray(train_labels, dtype=np.int64)
+    test_labels = np.asarray(test_labels, dtype=np.int64)
+
+    return train_images, train_labels, test_images, test_labels
+
+
 class ImageDataStreamer:
     """
-    Streams image data in batches to avoid loading all files at once.
-    Only loads and processes small batches as needed.
+    Eagerly loads and preprocesses the configured dataset into RAM so the
+    training loop can request batches without incurring per-iteration
+    torchvision/disk overhead.
     """
 
     def __init__(
@@ -199,6 +304,7 @@ class ImageDataStreamer:
         train_count=None,
         val_count=None,
         test_count=None,
+        dataset: str = "mnist",
     ):
         self.data_dir = data_dir
         self.batch_size = batch_size
@@ -208,8 +314,9 @@ class ImageDataStreamer:
         self.offset = offset
         self.first_spike_time = first_spike_time
         self.time_var_input = time_var_input
+        self.dataset = (dataset or "mnist").lower()
 
-        # Load MNIST dataset
+        # Load image dataset
         transform = transforms.Compose(
             [
                 transforms.Grayscale(),
@@ -218,30 +325,68 @@ class ImageDataStreamer:
             ]
         )
 
-        self.mnist_train = datasets.MNIST(
-            root=data_dir, train=True, transform=transform, download=True
-        )
-        self.mnist_test = datasets.MNIST(
-            root=data_dir, train=False, transform=transform, download=True
-        )
+        ds_map = {
+            "mnist": datasets.MNIST,
+            "kmnist": datasets.KMNIST,
+            "fashionmnist": datasets.FashionMNIST,
+            "fmnist": datasets.FashionMNIST,
+            "fashion": datasets.FashionMNIST,
+        }
+        if self.dataset == "notmnist":
+            (
+                self.train_images,
+                self.train_labels,
+                self.test_images,
+                self.test_labels,
+            ) = _load_notmnist_deeplake(transform)
+            self.len_train = len(self.train_images)
+            self.len_test = len(self.test_images)
+            train_label_targets = self.train_labels
+            test_label_targets = self.test_labels
+        else:
+            if self.dataset not in ds_map:
+                raise ValueError(f"Unsupported image dataset: {self.dataset}")
+            ds_cls = ds_map[self.dataset]
 
-        # Combine train and test data
-        self.all_images = []
-        self.all_labels = []
+            # Use a stable on-disk cache for torchvision datasets to avoid re-downloads
+            torch_root = os.path.join("data", "torchvision")
+            os.makedirs(torch_root, exist_ok=True)
 
-        for i in range(len(self.mnist_train)):
-            self.all_images.append(self.mnist_train[i][0])
-            self.all_labels.append(self.mnist_train[i][1])
+            mnist_train = ds_cls(
+                root=torch_root, train=True, transform=transform, download=True
+            )
+            mnist_test = ds_cls(
+                root=torch_root, train=False, transform=transform, download=True
+            )
 
-        for i in range(len(self.mnist_test)):
-            self.all_images.append(self.mnist_test[i][0])
-            self.all_labels.append(self.mnist_test[i][1])
+            # Eagerly materialize tensors for faster repeated access
+            self.len_train = len(mnist_train)
+            self.len_test = len(mnist_test)
+            self.train_images = torch.zeros(
+                (self.len_train, 1, pixel_size, pixel_size), dtype=torch.float32
+            )
+            self.train_labels = np.zeros(self.len_train, dtype=np.int64)
+            for idx in range(self.len_train):
+                img, lbl = mnist_train[idx]
+                self.train_images[idx] = img
+                self.train_labels[idx] = int(lbl)
 
-        self.all_images = torch.stack(self.all_images)
-        self.all_labels = np.array(self.all_labels)
+            self.test_images = torch.zeros(
+                (self.len_test, 1, pixel_size, pixel_size), dtype=torch.float32
+            )
+            self.test_labels = np.zeros(self.len_test, dtype=np.int64)
+            for idx in range(self.len_test):
+                img, lbl = mnist_test[idx]
+                self.test_images[idx] = img
+                self.test_labels[idx] = int(lbl)
 
-        # Shuffle indices for random access
-        self.indices = np.arange(len(self.all_images))
+            train_label_targets = np.array(getattr(mnist_train, "targets", []))
+            test_label_targets = np.array(getattr(mnist_test, "targets", []))
+
+        total = self.len_train + self.len_test
+
+        # Shuffle indices for random access over the combined (train+test) space
+        self.indices = np.arange(total)
         np.random.shuffle(self.indices)
 
         # Partition indices for train/val/test if counts provided
@@ -260,8 +405,63 @@ class ImageDataStreamer:
         self.ptr_val = 0
         self.ptr_test = 0
 
-        print(f"Found {len(self.all_images)} image samples")
-        print(f"Label distribution: {np.bincount(self.all_labels)}")
+        # Lightweight summary (use dataset targets if available)
+        print(f"Found {total} image samples")
+        try:
+            tr_t = np.array(train_label_targets)
+            te_t = np.array(test_label_targets)
+            if tr_t.size or te_t.size:
+                lab_dist = np.bincount(np.concatenate([tr_t, te_t]).astype(int))
+                print(f"Label distribution: {lab_dist}")
+        except Exception:
+            pass
+
+    def show_preview(self, num_samples: int = 9, save_path: str | None = None):
+        """
+        Display a small grid of cached images so the user can confirm the dataset.
+        """
+        if self.train_images is None or len(self.train_images) == 0:
+            print("No cached images available for preview.")
+            return
+
+        try:
+            import matplotlib.pyplot as plt
+        except Exception as exc:
+            print(f"Matplotlib unavailable; skipping dataset preview ({exc})")
+            return
+
+        num = max(1, min(int(num_samples), len(self.train_images)))
+        images = self.train_images[:num].cpu().numpy().squeeze(1)
+        labels = self.train_labels[:num]
+
+        cols = int(np.ceil(np.sqrt(num)))
+        rows = int(np.ceil(num / cols))
+        fig, axes = plt.subplots(rows, cols, figsize=(cols * 2.5, rows * 2.5))
+        axes = np.atleast_2d(axes)
+
+        for idx in range(rows * cols):
+            r, c = divmod(idx, cols)
+            ax = axes[r, c]
+            if idx < num:
+                ax.imshow(images[idx], cmap="gray")
+                ax.set_title(f"Label {labels[idx]}")
+            ax.axis("off")
+
+        fig.suptitle(f"{self.dataset.upper()} preview ({num} samples)", fontsize=14)
+        plt.tight_layout()
+
+        try:
+            if save_path is None:
+                os.makedirs("plots", exist_ok=True)
+                save_path = os.path.join("plots", f"{self.dataset}_preview.png")
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            fig.savefig(save_path)
+            print(f"Dataset preview saved to {save_path}")
+        except Exception as exc:
+            print(f"Failed to save dataset preview ({exc})")
+
+        plt.show()
+        plt.close(fig)
 
     def get_batch(self, start_idx, num_samples, partition="train"):
         """
@@ -284,15 +484,26 @@ class ImageDataStreamer:
         end_ptr = min(ptr + num_samples, len(pool))
         batch_indices = pool[ptr:end_ptr]
 
-        # Get batch data
-        batch_images = self.all_images[batch_indices]
-        batch_labels = self.all_labels[batch_indices]
+        # Pull batch data from cached tensors in RAM
+        images_list = []
+        labels_list = []
+        for gi in batch_indices:
+            if gi < self.len_train:
+                images_list.append(self.train_images[int(gi)])
+                labels_list.append(self.train_labels[int(gi)])
+            else:
+                idx = int(gi - self.len_train)
+                images_list.append(self.test_images[idx])
+                labels_list.append(self.test_labels[idx])
+
+        batch_images = torch.stack(images_list)
+        batch_labels = np.asarray(labels_list, dtype=np.int64)
 
         # Convert to spikes
         spike_data = self._convert_images_to_spikes(batch_images)
 
         # Extend labels to match spike data (repeat each label for num_steps)
-        extended_labels = batch_labels.repeat(self.num_steps)
+        extended_labels = np.repeat(batch_labels, self.num_steps)
 
         # advance pointer
         if partition == "train":
