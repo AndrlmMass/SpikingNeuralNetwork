@@ -17,7 +17,10 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
     random.seed(seed)
 
     # init class
-    snn_N = snn_sleepy()
+    if getattr(args, "dataset", None) and args.dataset.lower() == "geomfig":
+        snn_N = snn_sleepy(classes=[0, 1, 2, 3])
+    else:
+        snn_N = snn_sleepy()
 
     # acquire data
     snn_N.prepare_data(
@@ -39,10 +42,14 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         gain=1.0,
         noise_level=0.0,
         audioMNIST=False,
-        imageMNIST=True,
+        imageMNIST=False if (getattr(args, "dataset", None) and args.dataset.lower() == "geomfig") else True,
         create_data=False,
         plot_spectrograms=False,
-        image_dataset=args.image_dataset,
+        image_dataset=(args.dataset if getattr(args, "dataset", None) else args.image_dataset),
+        geom_noise_var=getattr(args, "geom_noise_var", 0.02),
+        geom_noise_mean=getattr(args, "geom_noise_mean", 0.0),
+        geom_jitter=getattr(args, "geom_jitter", False),
+        geom_jitter_amount=getattr(args, "geom_jitter_amount", 0.05),
     )
 
     if run_idx == 0 and getattr(args, "preview_dataset", False):
@@ -218,6 +225,21 @@ def main():
         help="plot a quick sample of the selected dataset before training",
     )
     parser.add_argument(
+        "--dataset",
+        type=str,
+        choices=[
+            "mnist",
+            "kmnist",
+            "fmnist",
+            "fashionmnist",
+            "fashion",
+            "notmnist",
+            "geomfig",
+        ],
+        default="mnist",
+        help="dataset to use (image-only or geomfig)",
+    )
+    parser.add_argument(
         "--image_dataset",
         type=str,
         choices=[
@@ -230,6 +252,30 @@ def main():
         ],
         default="mnist",
         help="image dataset to use for image-only or multimodal modes",
+    )
+    parser.add_argument(
+        "--geom-noise-var",
+        type=float,
+        default=0.02,
+        help="per-pixel Gaussian noise variance for geomfig generation",
+    )
+    parser.add_argument(
+        "--geom-noise-mean",
+        type=float,
+        default=0.0,
+        help="noise mean offset for geomfig generation",
+    )
+    parser.add_argument(
+        "--geom-jitter",
+        action="store_true",
+        default=False,
+        help="enable random jitter of size/thickness for geomfig (disabled by default)",
+    )
+    parser.add_argument(
+        "--geom-jitter-amount",
+        type=float,
+        default=0.05,
+        help="relative jitter amount for geomfig size/thickness (0.05 = ±5%)",
     )
     parser.add_argument(
         "--profile",
@@ -271,7 +317,7 @@ def main():
             return None
 
     # Initial JSON structure
-    dataset_name = args.image_dataset
+    dataset_name = args.dataset if getattr(args, "dataset", None) else args.image_dataset
 
     initial_results_data = {
         "timestamp": datetime.now().isoformat(),

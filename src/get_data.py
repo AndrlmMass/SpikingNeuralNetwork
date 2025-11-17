@@ -10,6 +10,7 @@ import torch
 import os
 import json
 from PIL import Image
+from gen_symbol import gen_triangle, gen_circle, gen_square, gen_x
 
 os.environ["TQDM_DISABLE"] = "True"
 
@@ -2121,3 +2122,144 @@ def sync_multimodal_datasets():
 
     # Reset the random seed to avoid affecting other random operations
     np.random.seed()
+
+
+# ============================================================================
+# Geometric Figures (geomfig) dataset generation
+# ============================================================================
+
+
+def _geomfig_generate_one(
+    cls_id: int,
+    pixel_size: int,
+    noise_var: float,
+    jitter: bool = False,
+    jitter_amount: float = 0.05,
+) -> np.ndarray:
+    """
+    Generate a single geometric figure image in [0,1] of shape (pixel_size, pixel_size).
+    Class mapping: 0=triangle, 1=circle, 2=square, 3=x.
+    """
+    # Base params from legacy usage
+    tri_size, tri_thick = 0.7, 250
+    cir_size, cir_thick = 0.7, 3
+    sqr_size, sqr_thick = 0.6, 4
+    x_size, x_thick = 0.8, 350
+
+    def j(val, rel=True, clamp_min=None, clamp_max=None):
+        if not jitter:
+            return val
+        delta = (np.random.rand() * 2 - 1) * jitter_amount
+        out = val * (1.0 + delta) if rel else val + delta
+        if clamp_min is not None:
+            out = max(clamp_min, out)
+        if clamp_max is not None:
+            out = min(clamp_max, out)
+        return out
+
+    if cls_id == 0:  # triangle
+        img = gen_triangle(
+            input_dims=pixel_size,
+            triangle_size=float(j(tri_size, rel=True, clamp_min=0.05, clamp_max=0.95)),
+            triangle_thickness=int(max(1, j(tri_thick, rel=True))),
+            noise_rand=True,
+            noise_variance=float(max(0.0, noise_var)),
+        )
+    elif cls_id == 1:  # circle
+        img = gen_circle(
+            input_dims=pixel_size,
+            circle_size=float(j(cir_size, rel=True, clamp_min=0.05, clamp_max=0.95)),
+            circle_thickness=int(max(1, j(cir_thick, rel=True))),
+            noise_rand=True,
+            noise_variance=float(max(0.0, noise_var)),
+        )
+    elif cls_id == 2:  # square
+        img = gen_square(
+            input_dims=pixel_size,
+            square_size=float(j(sqr_size, rel=True, clamp_min=0.05, clamp_max=0.95)),
+            square_thickness=int(max(1, j(sqr_thick, rel=True))),
+            noise_rand=True,
+            noise_variance=float(max(0.0, noise_var)),
+        )
+    else:  # 3: x
+        img = gen_x(
+            input_dims=pixel_size,
+            x_size=float(j(x_size, rel=True, clamp_min=0.05, clamp_max=0.95)),
+            x_thickness=int(max(1, j(x_thick, rel=True))),
+            noise_rand=True,
+            noise_variance=float(max(0.0, noise_var)),
+        )
+    # Ensure numeric array in [0,1]
+    img = np.asarray(img, dtype=np.float32)
+    img = np.clip(img, 0.0, 1.0)
+    return img
+
+
+def create_geomfig_data(
+    pixel_size: int,
+    num_steps: int,
+    gain: float,
+    train_count: int,
+    val_count: int,
+    test_count: int,
+    noise_var: float = 0.02,
+    noise_mean: float = 0.0,  # reserved; current generators use per-pixel mean
+    jitter: bool = False,
+    jitter_amount: float = 0.05,
+    seed: int = 42,
+):
+    """
+    Generate geometric figures dataset and convert to spike trains.
+    Returns time-series arrays shaped (total_timesteps, pixel_size*pixel_size)
+    with per-timestep integer labels.
+    """
+    rng = np.random.default_rng(seed)
+    n_classes = 4
+
+    def make_split(total_samples: int):
+        # Round down to multiple of 4 for class balance
+        total = max(0, (int(total_samples) // n_classes) * n_classes)
+        if total == 0:
+            return np.zeros((0, pixel_size * pixel_size), dtype=np.int8), np.zeros(
+                (0,), dtype=np.int32
+            )
+        imgs = np.zeros((total, pixel_size, pixel_size), dtype=np.float32)
+        labels = np.zeros((total,), dtype=np.int32)
+        # Cycle through classes 0..3
+        for i in range(total):
+            cls = i % n_classes
+            labels[i] = cls
+            imgs[i] = _geomfig_generate_one(
+                cls_id=cls,
+                pixel_size=pixel_size,
+                noise_var=noise_var,
+                jitter=jitter,
+                jitter_amount=jitter_amount,
+            )
+        # Shuffle for randomness
+        idx = rng.permutation(total)
+        imgs = imgs[idx]
+        labels = labels[idx]
+
+        # Poisson/Bernoulli rate coding to spikes: (total * num_steps, N_x)
+        N_x = pixel_size * pixel_size
+        probs = np.clip(imgs.reshape(total, N_x) * float(gain), 0.0, 1.0)
+        spikes = (rng.random((total, num_steps, N_x)) < probs[:, None, :]).astype(
+            np.int8
+        )
+        spikes_ts = spikes.reshape(total * num_steps, N_x)
+        labels_ts = np.repeat(labels, num_steps).astype(np.int32)
+        return spikes_ts, labels_ts
+
+    data_train, labels_train = make_split(train_count)
+    data_val, labels_val = make_split(val_count)
+    data_test, labels_test = make_split(test_count)
+
+    return (
+        data_train,
+        labels_train,
+        data_val,
+        labels_val,
+        data_test,
+        labels_test,
+    )

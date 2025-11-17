@@ -69,6 +69,51 @@ class snn_sleepy:
         """
         if getattr(self, "_image_preview_done", False):
             return
+        # Special handling for geomfig: show one example per class (0..3)
+        if getattr(self, "image_dataset", "").lower() == "geomfig":
+            try:
+                import matplotlib.pyplot as plt
+                from get_data import _geomfig_generate_one  # type: ignore
+            except Exception as exc:
+                print(f"Dataset preview skipped ({exc})")
+                self._image_preview_done = True
+                return
+            try:
+                pixel_size = int(np.sqrt(self.N_x))
+                classes = [0, 1, 2, 3]
+                figs = [
+                    _geomfig_generate_one(
+                        cls_id=c,
+                        pixel_size=pixel_size,
+                        noise_var=getattr(self, "noise_level", 0.02),
+                        jitter=getattr(self, "geom_jitter", False),
+                        jitter_amount=getattr(self, "geom_jitter_amount", 0.05),
+                    )
+                    for c in classes
+                ]
+                titles = ["Triangle (0)", "Circle (1)", "Square (2)", "X (3)"]
+                fig, axes = plt.subplots(2, 2, figsize=(6, 6))
+                for i, ax in enumerate(axes.flat):
+                    ax.imshow(figs[i], cmap="gray")
+                    ax.set_title(titles[i], fontsize=10)
+                    ax.axis("off")
+                plt.tight_layout()
+                try:
+                    if save_path is None:
+                        os.makedirs("plots", exist_ok=True)
+                        save_path = os.path.join("plots", "geomfig_preview.png")
+                    fig.savefig(save_path)
+                    print(f"Dataset preview saved to {save_path}")
+                except Exception as exc:
+                    print(f"Failed to save dataset preview ({exc})")
+                plt.show()
+                plt.close(fig)
+            except Exception as exc:
+                print(f"Dataset preview skipped ({exc})")
+            finally:
+                self._image_preview_done = True
+            return
+        # Default: use image streamer preview if available
         if not hasattr(self, "image_streamer") or self.image_streamer is None:
             return
         try:
@@ -311,6 +356,10 @@ class snn_sleepy:
         all_images_val=1000,
         batch_image_val=100,
         image_dataset="mnist",
+        geom_noise_var=0.02,
+        geom_noise_mean=0.0,
+        geom_jitter=False,
+        geom_jitter_amount=0.05,
     ):
         # Save current parameters
         self.data_parameters = {**locals()}
@@ -344,6 +393,9 @@ class snn_sleepy:
         self.all_images_train = all_images_train
         self.all_images_test = all_images_test
         self.all_images_val = all_images_val
+        # Geomfig-specific knobs (optional)
+        self.geom_jitter = locals().get("geom_jitter", False)
+        self.geom_jitter_amount = locals().get("geom_jitter_amount", 0.05)
         self.all_audio_train = all_audio_train
         self.all_audio_test = all_audio_test
         self.all_audio_val = all_audio_val
@@ -386,6 +438,8 @@ class snn_sleepy:
         self.labels_train = None
         self.data_test = None
         self.labels_test = None
+        self.data_val = None
+        self.labels_val = None
 
         # Set batch sizes and validate total limits
         if audioMNIST and imageMNIST:
@@ -456,6 +510,44 @@ class snn_sleepy:
             self.ex = self.st + self.N_exc  # excitatory
             self.ih = self.ex + self.N_inh  # inhibitory
             self.N = self.N_exc + self.N_inh + self.N_x  # total neurons
+
+        # Geomfig dataset (non-streaming) — generate fixed arrays
+        if self.image_dataset == "geomfig":
+            from get_data import create_geomfig_data
+
+            pixel_size = int(np.sqrt(self.N_x))
+            # Use configured counts
+            train_count = int(self.all_images_train)
+            val_count = int(self.all_images_val)
+            test_count = int(self.all_images_test)
+            noise_var = locals().get("geom_noise_var", 0.02)
+            noise_mean = locals().get("geom_noise_mean", 0.0)
+            data_tr, lab_tr, data_va, lab_va, data_te, lab_te = create_geomfig_data(
+                pixel_size=pixel_size,
+                num_steps=num_steps,
+                gain=gain,
+                train_count=train_count,
+                val_count=val_count,
+                test_count=test_count,
+                noise_var=noise_var,
+                noise_mean=noise_mean,
+                jitter=getattr(self, "geom_jitter", False),
+                jitter_amount=getattr(self, "geom_jitter_amount", 0.05),
+            )
+            self.data_train = data_tr if data_tr is not None and len(data_tr) else None
+            self.labels_train = lab_tr if lab_tr is not None and len(lab_tr) else None
+            self.data_val = data_va if data_va is not None and len(data_va) else None
+            self.labels_val = lab_va if lab_va is not None and len(lab_va) else None
+            self.data_test = data_te if data_te is not None and len(data_te) else None
+            self.labels_test = lab_te if lab_te is not None and len(lab_te) else None
+            self.N_classes = 4
+            # Short summary
+            def _s(x):
+                return 0 if x is None else len(x)
+
+            print(
+                f"Geomfig data prepared — train:{_s(self.data_train)} val:{_s(self.data_val)} test:{_s(self.data_test)} timesteps"
+            )
 
         # Initialize streamers if needed
         if audioMNIST and not create_data:
