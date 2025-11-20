@@ -1277,3 +1277,102 @@ def plot_weight_evolution_during_sleep(weight_tracking_sleep):
     plt.tight_layout()
     plt.savefig(save_path)
     plt.close(fig)
+
+
+def plot_weight_trajectories_with_sleep_epoch(
+    weight_tracking_epoch, epoch, max_lines=8
+):
+    """
+    Plot sampled weight trajectories across snapshot time with sleeps shaded in blue.
+    - Top: excitatory group (absolute weights)
+    - Bottom: inhibitory group (absolute weights)
+    Sleep segments are provided as (start,end) in the same snapshot-time reference.
+    """
+    import matplotlib.pyplot as plt
+
+    times = np.array(weight_tracking_epoch.get("times", []), dtype=float)
+    if times.size == 0:
+        return
+
+    exc_samples = weight_tracking_epoch.get("exc_samples", [])
+    inh_samples = weight_tracking_epoch.get("inh_samples", [])
+    exc_mean = np.array(weight_tracking_epoch.get("exc_mean", []), dtype=float)
+    exc_std = np.array(weight_tracking_epoch.get("exc_std", []), dtype=float)
+    inh_mean = np.array(weight_tracking_epoch.get("inh_mean", []), dtype=float)
+    inh_std = np.array(weight_tracking_epoch.get("inh_std", []), dtype=float)
+    sleep_segments = weight_tracking_epoch.get("sleep_segments", [])
+
+    # Convert list-of-lists to arrays (n_snapshots x K)
+    def _to_array(list_of_lists):
+        if not list_of_lists:
+            return np.zeros((0, 0), dtype=float)
+        max_len = max(len(row) for row in list_of_lists)
+        if max_len == 0:
+            return np.zeros((len(list_of_lists), 0), dtype=float)
+        arr = np.full((len(list_of_lists), max_len), np.nan, dtype=float)
+        for r, row in enumerate(list_of_lists):
+            k = min(max_len, len(row))
+            if k > 0:
+                arr[r, :k] = np.array(row[:k], dtype=float)
+        return arr
+
+    exc_arr = _to_array(exc_samples)
+    inh_arr = _to_array(inh_samples)
+
+    os.makedirs("plots", exist_ok=True)
+    fig, axes = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+
+    # Shade sleep segments
+    for ax in axes:
+        for s, e in sleep_segments:
+            try:
+                ax.axvspan(float(s), float(e), color="#a3c5ff", alpha=0.25, zorder=0)
+            except Exception:
+                pass
+
+    # Excitatory trajectories
+    ax = axes[0]
+    if exc_arr.size > 0 and exc_arr.shape[0] == times.size:
+        lines_to_plot = min(max_lines, exc_arr.shape[1])
+        for i in range(lines_to_plot):
+            ax.plot(times, exc_arr[:, i], color="#ffbfb3", alpha=0.5, linewidth=1.0)
+    if exc_mean.size == times.size:
+        ax.plot(times, exc_mean, color="#ff7f68", linewidth=2.0, label="Exc mean")
+        if exc_std.size == times.size:
+            ax.fill_between(
+                times,
+                exc_mean - exc_std,
+                exc_mean + exc_std,
+                color="#ffe5e1",
+                alpha=0.6,
+                label="±1 std",
+            )
+    ax.set_ylabel("Exc abs(weight)")
+    ax.set_title(f"Epoch {epoch} — Sampled weight trajectories with sleep shaded")
+    ax.legend(loc="upper right")
+
+    # Inhibitory trajectories
+    ax = axes[1]
+    if inh_arr.size > 0 and inh_arr.shape[0] == times.size:
+        lines_to_plot = min(max_lines, inh_arr.shape[1])
+        for i in range(lines_to_plot):
+            ax.plot(times, inh_arr[:, i], color="#6afae9", alpha=0.5, linewidth=1.0)
+    if inh_mean.size == times.size:
+        ax.plot(times, inh_mean, color="#05af9b", linewidth=2.0, label="Inh mean")
+        if inh_std.size == times.size:
+            ax.fill_between(
+                times,
+                inh_mean - inh_std,
+                inh_mean + inh_std,
+                color="#c7fdf7",
+                alpha=0.6,
+                label="±1 std",
+            )
+    ax.set_ylabel("Inh abs(weight)")
+    ax.set_xlabel("Snapshot index (training + sleep)")
+    ax.legend(loc="upper right")
+
+    plt.tight_layout()
+    out_path = os.path.join("plots", f"weights_trajectories_epoch_{int(epoch):03d}.png")
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)

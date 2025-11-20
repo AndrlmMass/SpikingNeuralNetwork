@@ -1,0 +1,48 @@
+{
+  "timestamp": "2025-11-17T19:31:11.572634",
+  "status": "completed",
+  "image_dataset": "geomfig",
+  "args": {
+    "runs": 1,
+    "sleep_rates": [
+      0.1
+    ],
+    "sleep_max_iters": 10000,
+    "on_timeout": "give_up",
+    "early_stopping": false,
+    "no_sleep": false,
+    "normalize_weights": false,
+    "image_dataset": "geomfig"
+  },
+  "results_by_sleep_rate": {
+    "0.1": [
+      {
+        "run": 1,
+        "sleep_rate": 0.1,
+        "image_dataset": "geomfig",
+        "test_accuracy": 0.25,
+        "train_accuracy": 0.6666666666666666,
+        "val_accuracy": 0.0,
+        "final_test_phi": null
+      }
+    ]
+  },
+  "summary": {
+    "total_runs": 1,
+    "overall_mean_test_accuracy": 0.25,
+    "overall_std_test_accuracy": 0.0,
+    "overall_mean_final_test_phi": null,
+    "overall_std_final_test_phi": null,
+    "per_sleep_rate_summary": {
+      "0.1": {
+        "mean_test_accuracy": 0.25,
+        "std_test_accuracy": 0.0,
+        "mean_final_test_phi": null,
+        "std_final_test_phi": null,
+        "best_test_accuracy": 0.25,
+        "best_final_test_phi": null
+      }
+    }
+  },
+  "completed_timestamp": "2025-11-17T19:32:24.992038"
+}

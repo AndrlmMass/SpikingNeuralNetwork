@@ -11,6 +11,7 @@ import os
 import json
 from PIL import Image
 from gen_symbol import gen_triangle, gen_circle, gen_square, gen_x
+import hashlib
 
 os.environ["TQDM_DISABLE"] = "True"
 
@@ -363,20 +364,37 @@ class ImageDataStreamer:
             # Eagerly materialize tensors for faster repeated access
             self.len_train = len(mnist_train)
             self.len_test = len(mnist_test)
+            print(f"Loading {self.dataset.upper()} train set into RAM...")
+            # Enable progress bars for this block
+            try:
+                os.environ["TQDM_DISABLE"] = "False"
+            except Exception:
+                pass
             self.train_images = torch.zeros(
                 (self.len_train, 1, pixel_size, pixel_size), dtype=torch.float32
             )
             self.train_labels = np.zeros(self.len_train, dtype=np.int64)
-            for idx in range(self.len_train):
+            for idx in tqdm(
+                range(self.len_train),
+                total=self.len_train,
+                desc=f"Loading {self.dataset} train",
+                leave=False,
+            ):
                 img, lbl = mnist_train[idx]
                 self.train_images[idx] = img
                 self.train_labels[idx] = int(lbl)
 
+            print(f"Loading {self.dataset.upper()} test set into RAM...")
             self.test_images = torch.zeros(
                 (self.len_test, 1, pixel_size, pixel_size), dtype=torch.float32
             )
             self.test_labels = np.zeros(self.len_test, dtype=np.int64)
-            for idx in range(self.len_test):
+            for idx in tqdm(
+                range(self.len_test),
+                total=self.len_test,
+                desc=f"Loading {self.dataset} test",
+                leave=False,
+            ):
                 img, lbl = mnist_test[idx]
                 self.test_images[idx] = img
                 self.test_labels[idx] = int(lbl)
@@ -555,6 +573,144 @@ class ImageDataStreamer:
         return len(self.train_indices)
 
     def reset_partition(self, partition="all"):
+        if partition in ("all", "train"):
+            self.ptr_train = 0
+        if partition in ("all", "val"):
+            self.ptr_val = 0
+        if partition in ("all", "test"):
+            self.ptr_test = 0
+
+
+class GeomfigDataStreamer:
+    """
+    Streamer for pre-generated geomfig spike data.
+    Provides batched access to train/val/test splits.
+    """
+
+    def __init__(
+        self,
+        data_train,
+        labels_train,
+        data_val,
+        labels_val,
+        data_test,
+        labels_test,
+        batch_size=100,
+        num_steps=100,
+    ):
+        """
+        Initialize with pre-generated spike arrays.
+
+        Args:
+            data_train: (T_train, N_x) numpy array of spikes
+            labels_train: (T_train,) numpy array of labels
+            data_val: (T_val, N_x) numpy array of spikes
+            labels_val: (T_val,) numpy array of labels
+            data_test: (T_test, N_x) numpy array of spikes
+            labels_test: (T_test,) numpy array of labels
+            batch_size: Default batch size (for compatibility)
+            num_steps: Number of timesteps per image sample (needed to convert num_samples to timesteps)
+        """
+        # Determine N_x from first available array
+        n_x = 225  # default
+        if data_train is not None and len(data_train) > 0:
+            n_x = data_train.shape[1]
+        elif data_val is not None and len(data_val) > 0:
+            n_x = data_val.shape[1]
+        elif data_test is not None and len(data_test) > 0:
+            n_x = data_test.shape[1]
+
+        self.data_train = (
+            data_train
+            if data_train is not None and len(data_train) > 0
+            else np.zeros((0, n_x), dtype=np.int8)
+        )
+        self.labels_train = (
+            labels_train
+            if labels_train is not None and len(labels_train) > 0
+            else np.zeros((0,), dtype=np.int32)
+        )
+        self.data_val = (
+            data_val
+            if data_val is not None and len(data_val) > 0
+            else np.zeros((0, n_x), dtype=np.int8)
+        )
+        self.labels_val = (
+            labels_val
+            if labels_val is not None and len(labels_val) > 0
+            else np.zeros((0,), dtype=np.int32)
+        )
+        self.data_test = (
+            data_test
+            if data_test is not None and len(data_test) > 0
+            else np.zeros((0, n_x), dtype=np.int8)
+        )
+        self.labels_test = (
+            labels_test
+            if labels_test is not None and len(labels_test) > 0
+            else np.zeros((0,), dtype=np.int32)
+        )
+        self.batch_size = batch_size
+        self.num_steps = num_steps
+
+        # Pointers for each partition
+        self.ptr_train = 0
+        self.ptr_val = 0
+        self.ptr_test = 0
+
+    def get_batch(self, start_idx, num_samples, partition="train"):
+        """
+        Load a batch of spike data from the specified partition.
+        Returns (spike_data, labels) or (None, None) if no more data.
+
+        Args:
+            start_idx: Starting index (ignored, uses internal pointer)
+            num_samples: Number of image samples to return (will be converted to timesteps)
+            partition: "train", "val", or "test"
+
+        Returns:
+            (spike_data, labels) where:
+                spike_data: (num_samples * num_steps, N_x) numpy array
+                labels: (num_samples * num_steps,) numpy array
+        """
+        if partition == "train":
+            data = self.data_train
+            labels = self.labels_train
+            ptr = self.ptr_train
+        elif partition == "val":
+            data = self.data_val
+            labels = self.labels_val
+            ptr = self.ptr_val
+        else:  # test
+            data = self.data_test
+            labels = self.labels_test
+            ptr = self.ptr_test
+
+        if ptr >= len(data):
+            return None, None
+
+        # Convert num_samples (image samples) to timesteps
+        num_timesteps = num_samples * self.num_steps
+        end_ptr = min(ptr + num_timesteps, len(data))
+        batch_data = data[ptr:end_ptr]
+        batch_labels = labels[ptr:end_ptr]
+
+        # Update pointer
+        if partition == "train":
+            self.ptr_train = end_ptr
+        elif partition == "val":
+            self.ptr_val = end_ptr
+        else:
+            self.ptr_test = end_ptr
+
+        return batch_data, batch_labels
+
+    def get_total_samples(self):
+        """Return total number of available training timesteps."""
+        return len(self.data_train)
+
+    def reset_partition(self, partition="all"):
+        """Reset the pointer for the specified partition(s)."""
         if partition in ("all", "train"):
             self.ptr_train = 0
         if partition in ("all", "val"):
@@ -2135,11 +2291,18 @@ def _geomfig_generate_one(
     noise_var: float,
     jitter: bool = False,
     jitter_amount: float = 0.05,
+    worker_seed: int | None = None,
 ) -> np.ndarray:
     """
     Generate a single geometric figure image in [0,1] of shape (pixel_size, pixel_size).
     Class mapping: 0=triangle, 1=circle, 2=square, 3=x.
     """
+    # Optional per-task seeding for parallel generation reproducibility
+    if worker_seed is not None:
+        try:
+            np.random.seed(int(worker_seed))
+        except Exception:
+            pass
     # Base params from legacy usage
     tri_size, tri_thick = 0.7, 250
     cir_size, cir_thick = 0.7, 3
@@ -2207,6 +2370,7 @@ def create_geomfig_data(
     jitter: bool = False,
     jitter_amount: float = 0.05,
     seed: int = 42,
+    num_workers: int | None = None,
 ):
     """
     Generate geometric figures dataset and convert to spike trains.
@@ -2216,7 +2380,7 @@ def create_geomfig_data(
     rng = np.random.default_rng(seed)
     n_classes = 4
 
-    def make_split(total_samples: int):
+    def make_split(total_samples: int, split_name: str):
         # Round down to multiple of 4 for class balance
         total = max(0, (int(total_samples) // n_classes) * n_classes)
         if total == 0:
@@ -2226,16 +2390,94 @@ def create_geomfig_data(
         imgs = np.zeros((total, pixel_size, pixel_size), dtype=np.float32)
         labels = np.zeros((total,), dtype=np.int32)
         # Cycle through classes 0..3
-        for i in range(total):
-            cls = i % n_classes
-            labels[i] = cls
-            imgs[i] = _geomfig_generate_one(
-                cls_id=cls,
-                pixel_size=pixel_size,
-                noise_var=noise_var,
-                jitter=jitter,
-                jitter_amount=jitter_amount,
-            )
+        cls_seq = np.array([i % n_classes for i in range(total)], dtype=np.int32)
+        labels[:] = cls_seq
+
+        # Enable progress bars for generation
+        try:
+            os.environ["TQDM_DISABLE"] = "False"
+        except Exception:
+            pass
+
+        # Decide on parallel vs sequential
+        use_workers = 1
+        try:
+            if num_workers is not None:
+                use_workers = max(1, int(num_workers))
+        except Exception:
+            use_workers = 1
+
+        if use_workers <= 1:
+            for i in tqdm(
+                range(total),
+                total=total,
+                desc=f"Generating geomfig {split_name}",
+                leave=False,
+            ):
+                imgs[i] = _geomfig_generate_one(
+                    cls_id=int(cls_seq[i]),
+                    pixel_size=pixel_size,
+                    noise_var=noise_var,
+                    jitter=jitter,
+                    jitter_amount=jitter_amount,
+                )
+        else:
+            try:
+                from concurrent.futures import ProcessPoolExecutor, as_completed
+            except Exception:
+                ProcessPoolExecutor = None
+                as_completed = None
+
+            if ProcessPoolExecutor is None:
+                # Fallback to sequential if concurrent.futures unavailable
+                for i in tqdm(
+                    range(total),
+                    total=total,
+                    desc=f"Generating geomfig {split_name}",
+                    leave=False,
+                ):
+                    imgs[i] = _geomfig_generate_one(
+                        cls_id=int(cls_seq[i]),
+                        pixel_size=pixel_size,
+                        noise_var=noise_var,
+                        jitter=jitter,
+                        jitter_amount=jitter_amount,
+                    )
+            else:
+                # Pre-draw independent seeds for each sample to avoid identical substreams across forks
+                seeds = rng.integers(0, 2**31 - 1, size=total, dtype=np.int64)
+                with ProcessPoolExecutor(max_workers=use_workers) as ex:
+                    futures = {}
+                    for i in range(total):
+                        futures[
+                            ex.submit(
+                                _geomfig_generate_one,
+                                int(cls_seq[i]),
+                                int(pixel_size),
+                                float(noise_var),
+                                bool(jitter),
+                                float(jitter_amount),
+                                int(seeds[i]),
+                            )
+                        ] = i
+                    for fut in tqdm(
+                        as_completed(futures),
+                        total=total,
+                        desc=f"Generating geomfig {split_name} (x{use_workers})",
+                        leave=False,
+                    ):
+                        i = futures[fut]
+                        try:
+                            imgs[i] = fut.result()
+                        except Exception:
+                            # In case of worker failure, fallback to inline generation for this sample
+                            imgs[i] = _geomfig_generate_one(
+                                cls_id=int(cls_seq[i]),
+                                pixel_size=pixel_size,
+                                noise_var=noise_var,
+                                jitter=jitter,
+                                jitter_amount=jitter_amount,
+                            )
         # Shuffle for randomness
         idx = rng.permutation(total)
         imgs = imgs[idx]
@@ -2251,9 +2493,116 @@ def create_geomfig_data(
         labels_ts = np.repeat(labels, num_steps).astype(np.int32)
         return spikes_ts, labels_ts
 
-    data_train, labels_train = make_split(train_count)
-    data_val, labels_val = make_split(val_count)
-    data_test, labels_test = make_split(test_count)
+    data_train, labels_train = make_split(train_count, "train")
+    data_val, labels_val = make_split(val_count, "val")
+    data_test, labels_test = make_split(test_count, "test")
+
+    return (
+        data_train,
+        labels_train,
+        data_val,
+        labels_val,
+        data_test,
+        labels_test,
+    )
+
+
+def load_or_create_geomfig_data(
+    pixel_size: int,
+    num_steps: int,
+    gain: float,
+    train_count: int,
+    val_count: int,
+    test_count: int,
+    noise_var: float = 0.02,
+    noise_mean: float = 0.0,
+    jitter: bool = False,
+    jitter_amount: float = 0.05,
+    seed: int = 42,
+    force_recreate: bool = False,
+    cache_root: str = os.path.join("data", "cache", "geomfig"),
+    num_workers: int | None = None,
+):
+    """
+    Load geomfig spike data from disk cache if available; otherwise generate and cache it.
+    """
+    os.makedirs(cache_root, exist_ok=True)
+    meta = {
+        "pixel_size": int(pixel_size),
+        "num_steps": int(num_steps),
+        "gain": float(gain),
+        "train_count": int(train_count),
+        "val_count": int(val_count),
+        "test_count": int(test_count),
+        "noise_var": float(noise_var),
+        "noise_mean": float(noise_mean),
+        "jitter": bool(jitter),
+        "jitter_amount": float(jitter_amount),
+        "seed": int(seed),
+        "version": 1,
+    }
+    key_json = json.dumps(meta, sort_keys=True)
+    key_hash = hashlib.sha1(key_json.encode("utf-8")).hexdigest()  # nosec - cache key
+    cache_path = os.path.join(cache_root, f"geomfig_{key_hash}.npz")
+
+    if (not force_recreate) and os.path.exists(cache_path):
+        try:
+            npz = np.load(cache_path, allow_pickle=False)
+            data_train = npz["data_train"]
+            labels_train = npz["labels_train"]
+            data_val = npz["data_val"]
+            labels_val = npz["labels_val"]
+            data_test = npz["data_test"]
+            labels_test = npz["labels_test"]
+            print(f"Geomfig cache loaded: {os.path.basename(cache_path)}")
+            return (
+                data_train,
+                labels_train,
+                data_val,
+                labels_val,
+                data_test,
+                labels_test,
+            )
+        except Exception as exc:
+            print(f"Warning: failed to load geomfig cache ({exc}); regenerating...")
+
+    # Generate fresh and cache
+    (
+        data_train,
+        labels_train,
+        data_val,
+        labels_val,
+        data_test,
+        labels_test,
+    ) = create_geomfig_data(
+        pixel_size=pixel_size,
+        num_steps=num_steps,
+        gain=gain,
+        train_count=train_count,
+        val_count=val_count,
+        test_count=test_count,
+        noise_var=noise_var,
+        noise_mean=noise_mean,
+        jitter=jitter,
+        jitter_amount=jitter_amount,
+        seed=seed,
+        num_workers=num_workers,
+    )
+
+    try:
+        np.savez_compressed(
+            cache_path,
+            data_train=data_train.astype(np.int8, copy=False),
+            labels_train=labels_train.astype(np.int32, copy=False),
+            data_val=data_val.astype(np.int8, copy=False),
+            labels_val=labels_val.astype(np.int32, copy=False),
+            data_test=data_test.astype(np.int8, copy=False),
+            labels_test=labels_test.astype(np.int32, copy=False),
+            meta=key_json,
+        )
+        print(f"Geomfig cache saved: {os.path.basename(cache_path)}")
+    except Exception as exc:
+        print(f"Warning: failed to save geomfig cache ({exc})")
 
     return (
         data_train,

@@ -17,12 +17,25 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
     random.seed(seed)
 
     # init class
-    if getattr(args, "dataset", None) and args.dataset.lower() == "geomfig":
-        snn_N = snn_sleepy(classes=[0, 1, 2, 3])
-    else:
-        snn_N = snn_sleepy()
+    snn_N = (
+        snn_sleepy(classes=[0, 1, 2, 3])
+        if getattr(args, "dataset", None) and args.dataset.lower() == "geomfig"
+        else snn_sleepy()
+    )
 
     # acquire data
+    use_geomfig = getattr(args, "dataset", None) and args.dataset.lower() == "geomfig"
+    is_test_mode = bool(getattr(args, "test_mode", False))
+    # Use a lower gain for geomfig to reduce input drive
+    gain_for_dataset = float(getattr(args, "geom_gain", 0.5)) if use_geomfig else 1.0
+    if is_test_mode and use_geomfig:
+        img_tr, img_va, img_te = 4, 4, 4
+        b_tr, b_va, b_te = 4, 4, 4
+        force_recreate_flag = True
+    else:
+        img_tr, img_va, img_te = 6000, 100, 1000
+        b_tr, b_va, b_te = 300, 100, 200
+        force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
         batch_audio_train=100,
@@ -30,26 +43,31 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         batch_audio_test=600,
         all_audio_val=200,
         batch_audio_val=200,
-        all_images_train=6000,
-        batch_image_train=300,
-        all_images_test=1000,
-        batch_image_test=200,
-        all_images_val=100,
-        batch_image_val=100,
+        all_images_train=img_tr,
+        batch_image_train=b_tr,
+        all_images_test=img_te,
+        batch_image_test=b_te,
+        all_images_val=img_va,
+        batch_image_val=b_va,
         add_breaks=False,
-        force_recreate=False,
+        force_recreate=force_recreate_flag,
         noisy_data=False,
-        gain=1.0,
+        gain=gain_for_dataset,
         noise_level=0.0,
         audioMNIST=False,
-        imageMNIST=False if (getattr(args, "dataset", None) and args.dataset.lower() == "geomfig") else True,
+        imageMNIST=(False if use_geomfig else True),
         create_data=False,
         plot_spectrograms=False,
-        image_dataset=(args.dataset if getattr(args, "dataset", None) else args.image_dataset),
+        image_dataset=(
+            args.dataset if getattr(args, "dataset", None) else args.image_dataset
+        ),
         geom_noise_var=getattr(args, "geom_noise_var", 0.02),
         geom_noise_mean=getattr(args, "geom_noise_mean", 0.0),
         geom_jitter=getattr(args, "geom_jitter", False),
         geom_jitter_amount=getattr(args, "geom_jitter_amount", 0.05),
+        geom_workers=int(
+            getattr(args, "geom_workers", max(1, (os.cpu_count() or 2) - 1))
+        ),
     )
 
     if run_idx == 0 and getattr(args, "preview_dataset", False):
@@ -58,7 +76,7 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
                 "Preview requested via --preview-dataset; displaying dataset sample "
                 "before batch runs."
             )
-        snn_N.preview_loaded_data(num_image_samples=9)
+        snn_N.preview_loaded_data(num_image_samples=1)
 
     # set up network for training
     snn_N.prepare_network(
@@ -69,7 +87,7 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         w_dense_ie=0.25,
         se_weights=0.15,
         ee_weights=0.3,
-        ei_weights=0.6,
+        ei_weights=0.4,
         ie_weights=-0.5,
         create_network=False,
     )
@@ -84,11 +102,15 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
             check_sleep_interval=35000,
             weight_decay_rate_exc=[0.99997],
             weight_decay_rate_inh=[0.99997],
+            max_weight_exc=25,
+            min_weight_inh=-25,
             samples=10,
             force_train=True,
             plot_spikes_train=False,
             plot_weights=False,
             plot_epoch_performance=False,
+            plot_weights_per_epoch=bool(getattr(args, "plot_weights_per_epoch", False)),
+            plot_spikes_per_epoch=bool(getattr(args, "plot_spikes_per_epoch", False)),
             sleep_synchronized=False,
             plot_top_response_test=False,
             plot_top_response_train=False,
@@ -98,14 +120,15 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
             use_validation_data=False,
             var_noise=2,
             sleep=not args.no_sleep,
+            sleep_mode=str(args.sleep_mode),
             tau_syn=30,
             narrow_top=0.2,
             A_minus=0.3,
-            A_plus=0.5,
+            A_plus=0.3,
             tau_LTD=7.5,
-            tau_LTP=10,
+            tau_LTP=7.5,
             learning_rate_exc=0.0008,
-            learning_rate_inh=0.005,
+            learning_rate_inh=0.0008,
             accuracy_method="pca_lr",
             test_only=False,
             use_QDA=True,
@@ -141,6 +164,8 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
             plot_spikes_train=False,
             plot_weights=False,
             plot_epoch_performance=False,
+            plot_weights_per_epoch=bool(getattr(args, "plot_weights_per_epoch", False)),
+            plot_spikes_per_epoch=bool(getattr(args, "plot_spikes_per_epoch", False)),
             sleep_synchronized=False,
             plot_top_response_test=False,
             plot_top_response_train=False,
@@ -149,7 +174,10 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
             plot_spectrograms=False,
             use_validation_data=False,
             var_noise=2,
+            max_weight_exc=25,
+            min_weight_inh=-25,
             sleep=not args.no_sleep,
+            sleep_mode=str(args.sleep_mode),
             tau_syn=30,
             narrow_top=0.2,
             A_minus=0.3,
@@ -157,7 +185,7 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
             tau_LTD=7.5,
             tau_LTP=10,
             learning_rate_exc=0.0008,
-            learning_rate_inh=0.005,
+            learning_rate_inh=0.0008,
             accuracy_method="pca_lr",
             test_only=False,
             use_QDA=True,
@@ -178,6 +206,12 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
 
     acc_dict = result[0] if isinstance(result, tuple) else result
     final_test_phi = getattr(snn_N, "final_test_phi", None)
+    # Optional: plot accuracy histories at end
+    try:
+        if getattr(args, "plot_acc_history", False) and not disable_plotting:
+            snn_N.plot_accuracy_history()
+    except Exception as e:
+        print(f"Warning: failed to plot accuracy history ({e})")
     return acc_dict, final_test_phi
 
 
@@ -223,6 +257,12 @@ def main():
         action="store_true",
         default=False,
         help="plot a quick sample of the selected dataset before training",
+    )
+    parser.add_argument(
+        "--test-mode",
+        action="store_true",
+        default=False,
+        help="create minimal dataset (geomfig: 4 per split) and force recreate",
     )
     parser.add_argument(
         "--dataset",
@@ -278,6 +318,18 @@ def main():
         help="relative jitter amount for geomfig size/thickness (0.05 = ±5%)",
     )
     parser.add_argument(
+        "--geom-gain",
+        type=float,
+        default=0.5,
+        help="rate-coding gain for geomfig (multiplies pixel intensities before Poisson sampling)",
+    )
+    parser.add_argument(
+        "--geom-workers",
+        type=int,
+        default=max(1, (os.cpu_count() or 2) - 1),
+        help="number of parallel workers for geomfig generation (process-based)",
+    )
+    parser.add_argument(
         "--profile",
         action="store_true",
         default=False,
@@ -288,6 +340,31 @@ def main():
         type=str,
         default=None,
         help="optional path for .prof output (default: results/profile_*.prof)",
+    )
+    parser.add_argument(
+        "--plot-acc-history",
+        action="store_true",
+        default=False,
+        help="plot accuracy history at end (train+val together, test separate)",
+    )
+    parser.add_argument(
+        "--plot-weights-per-epoch",
+        action="store_true",
+        default=False,
+        help="plot and save weights after each epoch (for debugging, saves to plots/weights_epoch_*.png)",
+    )
+    parser.add_argument(
+        "--plot-spikes-per-epoch",
+        action="store_true",
+        default=False,
+        help="plot and save spikes after each epoch (for debugging, saves to plots/spikes_*_epoch_*.png)",
+    )
+    parser.add_argument(
+        "--sleep-mode",
+        type=str,
+        choices=["static", "group", "post"],
+        default="static",
+        help="sleep target mode: static uses fixed targets; group uses group-mean magnitudes; post uses per-post mean magnitudes",
     )
     args, _ = parser.parse_known_args()
 
@@ -317,7 +394,9 @@ def main():
             return None
 
     # Initial JSON structure
-    dataset_name = args.dataset if getattr(args, "dataset", None) else args.image_dataset
+    dataset_name = (
+        args.dataset if getattr(args, "dataset", None) else args.image_dataset
+    )
 
     initial_results_data = {
         "timestamp": datetime.now().isoformat(),

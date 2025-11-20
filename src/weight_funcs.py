@@ -13,6 +13,9 @@ def sleep_func(
     sleep_now_exc,
     w_target_exc,
     w_target_inh,
+    use_post_targets,
+    w_target_exc_vec,
+    w_target_inh_vec,
     weight_decay_rate_exc,
     weight_decay_rate_inh,
     baseline_sum_exc,
@@ -69,7 +72,11 @@ def sleep_func(
             current_weight = weights[nz_rows_exc[i], nz_cols_exc[i]]
             # Work with absolute values to avoid complex numberst
             abs_weight = np.abs(current_weight)
-            abs_target = np.abs(w_target_exc)
+            # Use per-post target if requested, otherwise scalar target
+            if use_post_targets:
+                abs_target = np.abs(w_target_exc_vec[nz_cols_exc[i]])
+            else:
+                abs_target = np.abs(w_target_exc)
 
             # Apply decay to absolute values
             new_abs_weight = (
@@ -95,7 +102,11 @@ def sleep_func(
             current_weight = weights[nz_rows_inh[i], nz_cols_inh[i]]
             # Work with absolute values to avoid complex numbers
             abs_weight = np.abs(current_weight)
-            abs_target = np.abs(w_target_inh)
+            # Use per-post target if requested, otherwise scalar target
+            if use_post_targets:
+                abs_target = np.abs(w_target_inh_vec[nz_cols_inh[i]])
+            else:
+                abs_target = np.abs(w_target_inh)
 
             # Apply decay to absolute values
             new_abs_weight = (
