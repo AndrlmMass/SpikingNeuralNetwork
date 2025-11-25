@@ -1,0 +1,20 @@
+{
+  "timestamp": "2025-11-21T19:33:17.125045",
+  "status": "in_progress",
+  "image_dataset": "geomfig",
+  "args": {
+    "runs": 1,
+    "sleep_rates": [
+      0.1
+    ],
+    "sleep_max_iters": 10000,
+    "on_timeout": "give_up",
+    "early_stopping": false,
+    "no_sleep": false,
+    "normalize_weights": false,
+    "image_dataset": "geomfig"
+  },
+  "results_by_sleep_rate": {
+    "0.1": []
+  }
+}

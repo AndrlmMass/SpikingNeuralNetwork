@@ -31,3 +31,11 @@
 {"timestamp": "2025-11-20T09:41:39.397647", "split": "train", "epoch": 16, "accuracy": 0.9555555555555556}
 {"timestamp": "2025-11-20T09:41:49.621120", "split": "val", "epoch": 16, "accuracy": 0.96}
 {"timestamp": "2025-11-20T09:44:17.779245", "split": "train", "epoch": 17, "accuracy": 0.9777777777777777}
+{"timestamp": "2025-11-20T09:44:28.783011", "split": "val", "epoch": 17, "accuracy": 0.9866666666666667}
+{"timestamp": "2025-11-20T09:46:39.257659", "split": "train", "epoch": 18, "accuracy": 0.8888888888888888}
+{"timestamp": "2025-11-20T09:46:49.429362", "split": "val", "epoch": 18, "accuracy": 1.0}
+{"timestamp": "2025-11-20T09:49:03.431029", "split": "train", "epoch": 19, "accuracy": 0.9555555555555556}
+{"timestamp": "2025-11-20T09:49:13.522879", "split": "val", "epoch": 19, "accuracy": 0.96}
+{"timestamp": "2025-11-20T09:51:27.859646", "split": "train", "epoch": 20, "accuracy": 0.9555555555555556}
+{"timestamp": "2025-11-20T09:51:38.056663", "split": "val", "epoch": 20, "accuracy": 0.96}
+{"timestamp": "2025-11-20T10:09:57.421382", "split": "test", "epoch": null, "accuracy": 0.9868421052631579}

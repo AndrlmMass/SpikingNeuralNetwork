@@ -30,7 +30,9 @@ from plot import (
     get_elite_nodes,
     plot_weight_evolution_during_sleep_epoch,
     plot_weight_evolution_during_sleep,
+    plot_weight_evolution,
     plot_weight_trajectories_with_sleep_epoch,
+    save_weight_distribution_gif,
 )
 from analysis import (
     t_SNE,
@@ -1515,7 +1517,7 @@ class snn_sleepy:
         spike_slope=-0.1,
         spike_intercept=-4,
         pca_variance=0.95,
-        w_interval=5,
+        w_interval=5,  # not sure what this is
         start_time_spike_plot=None,
         stop_time_spike_plot=None,
         start_index_mp=None,
@@ -1525,17 +1527,20 @@ class snn_sleepy:
         mean_noise=0,
         max_mp=40,
         sleep_synchronized=True,
-        tau_pre_trace_exc=1,
-        tau_pre_trace_inh=1,
-        tau_post_trace_exc=1,
-        tau_post_trace_inh=1,
-        weight_mean_noise=0.05,
-        weight_var_noise=0.005,
-        num_inh=10,
-        num_exc=50,
+        tau_pre_trace_exc=1,  # these are not being used
+        tau_pre_trace_inh=1,  # these are not being used
+        tau_post_trace_exc=1,  # these are not being used
+        tau_post_trace_inh=1,  # these are not being used
+        weight_mean_noise=0.05,  # these are not being used
+        weight_var_noise=0.005,  # these are not being used
+        num_inh=10,  # not sure what this is
+        num_exc=50,  # not sure what this is
         plot_epoch_performance=True,
         plot_weights_per_epoch=False,  # Plot weights after each epoch (for debugging)
         plot_spikes_per_epoch=False,  # Plot spikes after each epoch (for debugging)
+        weight_track_samples=32,
+        weight_track_interval=0,
+        weight_track_sleep_interval=0,
         narrow_top=0.2,  # Increased from 0.05 to 0.2 (20% of neurons)
         wide_top=0.15,
         tau_syn=30,
@@ -1698,6 +1703,22 @@ class snn_sleepy:
             # To prevent sleep from fragmenting data into too few segments
             timesteps_per_epoch = self.batch_train * self.num_steps
 
+            # Configure weight tracking granularity
+            try:
+                weight_track_samples_int = max(1, int(weight_track_samples))
+            except Exception:
+                weight_track_samples_int = 32
+            track_interval = (
+                int(weight_track_interval)
+                if weight_track_interval and weight_track_interval > 0
+                else None
+            )
+            track_sleep_interval = (
+                int(weight_track_sleep_interval)
+                if weight_track_sleep_interval and weight_track_sleep_interval > 0
+                else None
+            )
+
             # Bundle common training arguments
             common_args = dict(
                 tau_syn=tau_syn,
@@ -1760,6 +1781,10 @@ class snn_sleepy:
                 on_timeout=on_timeout,
                 sleep_tol_frac=sleep_tol_frac,
                 sleep_mode=sleep_mode,
+                weight_track_samples_exc=weight_track_samples_int,
+                weight_track_samples_inh=weight_track_samples_int,
+                train_snapshot_interval=track_interval,
+                sleep_snapshot_interval=track_sleep_interval,
             )
 
             # Keep weight calculation variables available for final test pass
@@ -3098,6 +3123,7 @@ class snn_sleepy:
                             max_iter=500,  # Reduced iterations for speed
                             random_state=random_state,
                             train=True,
+                            show_plot=False,
                         )
 
                     # Plot t-SNE for validation data (sample for performance)
@@ -3116,6 +3142,7 @@ class snn_sleepy:
                             max_iter=500,  # Reduced iterations for speed
                             random_state=random_state,
                             train=False,
+                            show_plot=False,
                         )
                 else:
                     # Just print the performance metrics without plotting
@@ -3258,15 +3285,20 @@ class snn_sleepy:
                             and len(weight_tracking_epoch.get("times", [])) > 0
                         ):
                             plot_weight_trajectories_with_sleep_epoch(
-                                weight_tracking_epoch, e + 1
+                                weight_tracking_epoch,
+                                e + 1,
+                                sleep_enabled=sleep,
                             )
                             print(
-                                f"  Saved weight trajectories with sleep: plots/weights_trajectories_epoch_{e+1:03d}.png"
+                                f"  Saved weight trajectories with sleep: plots/weights_trajectories_epoch_{e+1:03d}.pdf"
                             )
                     except Exception as exc:
                         print(
                             f"  Warning: failed to save weight trajectories plot ({exc})"
                         )
+                        import traceback
+
+                        traceback.print_exc()
 
                 if plot_spikes_per_epoch:
                     # Safely fetch local variables to avoid UnboundLocalError
@@ -3351,113 +3383,44 @@ class snn_sleepy:
             # Plot weight evolution over epochs if tracking was enabled
             if plot_weights_per_epoch and len(weight_evolution["epochs"]) > 0:
                 try:
-                    import matplotlib.pyplot as plt
-
                     os.makedirs("plots", exist_ok=True)
+                    output_path = os.path.join("plots", "weights_evolution.png")
+                    data_path = os.path.join("plots", "weight_evolution_data.npz")
 
-                    epochs = weight_evolution["epochs"]
-                    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-                    fig.suptitle(
-                        "Weight Evolution During Training",
-                        fontsize=14,
-                        fontweight="bold",
+                    # Save raw data first to ensure persistence
+                    np.savez_compressed(
+                        data_path,
+                        epochs=np.array(weight_evolution["epochs"], dtype=float),
+                        exc_mean=np.array(weight_evolution["exc_mean"], dtype=float),
+                        exc_std=np.array(weight_evolution["exc_std"], dtype=float),
+                        exc_min=np.array(weight_evolution["exc_min"], dtype=float),
+                        exc_max=np.array(weight_evolution["exc_max"], dtype=float),
+                        inh_mean=np.array(weight_evolution["inh_mean"], dtype=float),
+                        inh_std=np.array(weight_evolution["inh_std"], dtype=float),
+                        inh_min=np.array(weight_evolution["inh_min"], dtype=float),
+                        inh_max=np.array(weight_evolution["inh_max"], dtype=float),
                     )
+                    print(f"  Cached weight evolution data: {data_path}")
 
-                    # Excitatory weights: mean ± std
-                    ax = axes[0, 0]
-                    exc_mean = weight_evolution["exc_mean"]
-                    exc_std = weight_evolution["exc_std"]
-                    ax.plot(epochs, exc_mean, "b-", label="Mean", linewidth=2)
-                    ax.fill_between(
-                        epochs,
-                        np.array(exc_mean) - np.array(exc_std),
-                        np.array(exc_mean) + np.array(exc_std),
-                        alpha=0.3,
-                        color="blue",
-                        label="±1 std",
-                    )
-                    ax.set_xlabel("Epoch")
-                    ax.set_ylabel("Weight Value")
-                    ax.set_title("Excitatory Weights: Mean ± Std")
-                    ax.legend()
-                    ax.grid(True, alpha=0.3)
+                    # Now render the plot
+                    plot_weight_evolution(weight_evolution, output_path=output_path)
+                    print(f"\n✓ Saved weight evolution plot: {output_path}")
 
-                    # Excitatory weights: min/max
-                    ax = axes[0, 1]
-                    ax.plot(
-                        epochs,
-                        weight_evolution["exc_min"],
-                        "r--",
-                        label="Min",
-                        linewidth=1.5,
-                    )
-                    ax.plot(
-                        epochs,
-                        weight_evolution["exc_max"],
-                        "g--",
-                        label="Max",
-                        linewidth=1.5,
-                    )
-                    ax.plot(epochs, exc_mean, "b-", label="Mean", linewidth=2)
-                    ax.set_xlabel("Epoch")
-                    ax.set_ylabel("Weight Value")
-                    ax.set_title("Excitatory Weights: Min/Max/Mean")
-                    ax.legend()
-                    ax.grid(True, alpha=0.3)
+                except Exception as exc:
+                    print(f"\n⚠ Warning: failed to save/plot weight evolution ({exc})")
 
-                    # Inhibitory weights: mean ± std
-                    ax = axes[1, 0]
-                    inh_mean = weight_evolution["inh_mean"]
-                    inh_std = weight_evolution["inh_std"]
-                    ax.plot(epochs, inh_mean, "r-", label="Mean", linewidth=2)
-                    ax.fill_between(
-                        epochs,
-                        np.array(inh_mean) - np.array(inh_std),
-                        np.array(inh_mean) + np.array(inh_std),
-                        alpha=0.3,
-                        color="red",
-                        label="±1 std",
+                # Build an animated GIF from per-epoch histograms for quick review
+                try:
+                    gif_path = save_weight_distribution_gif(
+                        image_pattern=os.path.join("plots", "weights_epoch_*.png"),
+                        output_path=os.path.join("plots", "weights_epoch_progress.gif"),
+                        frame_duration=0.45,
                     )
-                    ax.set_xlabel("Epoch")
-                    ax.set_ylabel("Weight Value")
-                    ax.set_title("Inhibitory Weights: Mean ± Std")
-                    ax.legend()
-                    ax.grid(True, alpha=0.3)
-
-                    # Inhibitory weights: min/max
-                    ax = axes[1, 1]
-                    ax.plot(
-                        epochs,
-                        weight_evolution["inh_min"],
-                        "r--",
-                        label="Min",
-                        linewidth=1.5,
-                    )
-                    ax.plot(
-                        epochs,
-                        weight_evolution["inh_max"],
-                        "g--",
-                        label="Max",
-                        linewidth=1.5,
-                    )
-                    ax.plot(epochs, inh_mean, "r-", label="Mean", linewidth=2)
-                    ax.set_xlabel("Epoch")
-                    ax.set_ylabel("Weight Value")
-                    ax.set_title("Inhibitory Weights: Min/Max/Mean")
-                    ax.legend()
-                    ax.grid(True, alpha=0.3)
-
-                    plt.tight_layout()
-                    plt.savefig(
-                        "plots/weights_evolution.png", bbox_inches="tight", dpi=150
-                    )
-                    plt.close()
-                    print(
-                        "\n✓ Saved weight evolution plot: plots/weights_evolution.png"
-                    )
+                    if gif_path:
+                        print(f"✓ Saved weight distribution GIF: {gif_path}")
                 except Exception as exc:
                     print(
-                        f"\n⚠ Warning: failed to create weight evolution plot ({exc})"
+                        f"⚠ Warning: failed to create weight distribution GIF ({exc})"
                     )
 
             # Clean up main training loop variables
@@ -4087,6 +4050,10 @@ class snn_sleepy:
                                 weight_var_noise=weight_var_noise,
                                 vectorized_trace=vectorized_trace,
                                 N_x=self.N_x,
+                                weight_track_samples_exc=weight_track_samples_int,
+                                weight_track_samples_inh=weight_track_samples_int,
+                                train_snapshot_interval=track_interval,
+                                sleep_snapshot_interval=track_sleep_interval,
                             )
 
                             # 3a) Train on the training set
@@ -4255,6 +4222,7 @@ class snn_sleepy:
                 max_iter=max_iter,
                 random_state=random_state,
                 train=True,
+                show_plot=False,
             )
         if t_sne_test:
             t_SNE(
@@ -4265,6 +4233,7 @@ class snn_sleepy:
                 max_iter=max_iter,
                 random_state=random_state,
                 train=False,
+                show_plot=False,
             )
         if (
             pca_train

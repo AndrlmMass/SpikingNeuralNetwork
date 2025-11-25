@@ -1,5 +1,7 @@
 import os
 import random
+import shutil
+import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -1166,48 +1168,57 @@ def plot_weight_evolution_during_sleep_epoch(weight_tracking_epoch, epoch):
     """Plot weight changes during sleep for a single epoch, overlaying all sleep periods."""
     import matplotlib.pyplot as plt
 
-    if len(weight_tracking_epoch["exc_mean"]) == 0:
-        return
-
     times = np.array(weight_tracking_epoch["times"])
     exc_mean = np.array(weight_tracking_epoch["exc_mean"])
-    exc_std = np.array(weight_tracking_epoch["exc_std"])
     exc_samples = np.array(weight_tracking_epoch["exc_samples"])  # (n_t, n_s)
     inh_mean = np.array(weight_tracking_epoch["inh_mean"])
-    inh_std = np.array(weight_tracking_epoch["inh_std"])
     inh_samples = np.array(weight_tracking_epoch["inh_samples"])  # (n_t, n_s)
 
     fig, axes = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
 
     # Excitatory
     ax = axes[0]
-    ax.plot(times, exc_mean, color="#ff7f68", label="Exc mean")
-    ax.fill_between(
-        times, exc_mean - exc_std, exc_mean + exc_std, color="#ffe5e1", alpha=0.6
+    ax.plot(
+        times, exc_mean, color="black", linestyle="-", linewidth=2.0, label="Exc mean"
     )
     # Sampled connections (thin)
     if exc_samples.ndim == 2 and exc_samples.shape[0] == times.shape[0]:
+        # Use mono-color (black) and vary only linestyle; avoid solid which is used by the mean
         for i in range(min(10, exc_samples.shape[1])):
-            ax.plot(times, exc_samples[:, i], color="#ffbfb3", alpha=0.4, linewidth=0.8)
+            ax.plot(
+                times,
+                exc_samples[:, i],
+                color="black",
+                alpha=0.6,
+                linewidth=0.8,
+                linestyle="-",
+            )
     ax.set_ylabel("Exc weight")
     ax.set_title(f"Sleep weight evolution (epoch {epoch})")
 
     # Inhibitory
     ax = axes[1]
-    ax.plot(times, inh_mean, color="#05af9b", label="Inh mean")
-    ax.fill_between(
-        times, inh_mean - inh_std, inh_mean + inh_std, color="#c7fdf7", alpha=0.6
+    ax.plot(
+        times, inh_mean, color="black", linestyle="--", linewidth=2.0, label="Inh mean"
     )
     if inh_samples.ndim == 2 and inh_samples.shape[0] == times.shape[0]:
+        # Use mono-color (black) and vary only linestyle; avoid dashed which is used by the mean
         for i in range(min(10, inh_samples.shape[1])):
-            ax.plot(times, inh_samples[:, i], color="#6afae9", alpha=0.4, linewidth=0.8)
+            ax.plot(
+                times,
+                inh_samples[:, i],
+                color="black",
+                alpha=0.6,
+                linewidth=0.8,
+                linestyle="--",
+            )
     ax.set_ylabel("Inh weight")
     ax.set_xlabel("Sleep time (ms)")
 
     os.makedirs("figures", exist_ok=True)
-    save_path = os.path.join("figures", f"weight_sleep_epoch_{epoch:03d}.png")
+    pdf_path = os.path.join("figures", f"weight_sleep_epoch_{epoch:03d}.pdf")
     plt.tight_layout()
-    plt.savefig(save_path)
+    plt.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -1232,20 +1243,14 @@ def plot_weight_evolution_during_sleep(weight_tracking_sleep):
         sleep_exc_sm = uniform_filter1d(sleep_exc, size=5)
     except Exception:
         sleep_exc_sm = sleep_exc
-    ax.plot(sleep_times, sleep_exc_sm, color="#ff7f68", label="Exc mean (smoothed)")
-    if "exc_std" in weight_tracking_sleep:
-        exc_std = np.array(weight_tracking_sleep["exc_std"])
-        try:
-            exc_std_sm = uniform_filter1d(exc_std, size=5)
-        except Exception:
-            exc_std_sm = exc_std
-        ax.fill_between(
-            sleep_times,
-            sleep_exc_sm - exc_std_sm,
-            sleep_exc_sm + exc_std_sm,
-            color="#ffe5e1",
-            alpha=0.6,
-        )
+    ax.plot(
+        sleep_times,
+        sleep_exc_sm,
+        color="black",
+        linestyle="-",
+        linewidth=2.0,
+        label="Exc mean (smoothed)",
+    )
     ax.set_ylabel("Exc weight")
 
     # Plot inhibitory weights during sleep
@@ -1255,40 +1260,91 @@ def plot_weight_evolution_during_sleep(weight_tracking_sleep):
         sleep_inh_sm = uniform_filter1d(sleep_inh, size=5)
     except Exception:
         sleep_inh_sm = sleep_inh
-    ax.plot(sleep_times, sleep_inh_sm, color="#05af9b", label="Inh mean (smoothed)")
-    if "inh_std" in weight_tracking_sleep:
-        inh_std = np.array(weight_tracking_sleep["inh_std"])  # concatenated
-        try:
-            inh_std_sm = uniform_filter1d(inh_std, size=5)
-        except Exception:
-            inh_std_sm = inh_std
-        ax.fill_between(
-            sleep_times,
-            sleep_inh_sm - inh_std_sm,
-            sleep_inh_sm + inh_std_sm,
-            color="#c7fdf7",
-            alpha=0.6,
-        )
+    ax.plot(
+        sleep_times,
+        sleep_inh_sm,
+        color="black",
+        linestyle="--",
+        linewidth=2.0,
+        label="Inh mean (smoothed)",
+    )
     ax.set_ylabel("Inh weight")
     ax.set_xlabel("Sleep time (ms)")
 
     os.makedirs("figures", exist_ok=True)
-    save_path = os.path.join("figures", "weight_sleep_all.png")
+    pdf_path = os.path.join("figures", "weight_sleep_all.pdf")
     plt.tight_layout()
-    plt.savefig(save_path)
+    plt.savefig(pdf_path, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_weight_evolution(
+    weight_evolution: dict, output_path: str = "plots/weights_evolution.png"
+):
+    """
+    Render the per-epoch weight statistics (mean/std and min/max) for excitatory
+    and inhibitory synapses.
+    """
+    epochs = np.array(weight_evolution.get("epochs", []), dtype=float)
+    if epochs.size == 0:
+        raise ValueError("weight_evolution contains no epochs to plot")
+
+    exc_mean = np.array(weight_evolution.get("exc_mean", []), dtype=float)
+    exc_std = np.array(weight_evolution.get("exc_std", []), dtype=float)
+    exc_min = np.array(weight_evolution.get("exc_min", []), dtype=float)
+    exc_max = np.array(weight_evolution.get("exc_max", []), dtype=float)
+
+    inh_mean = np.array(weight_evolution.get("inh_mean", []), dtype=float)
+    inh_std = np.array(weight_evolution.get("inh_std", []), dtype=float)
+    inh_min = np.array(weight_evolution.get("inh_min", []), dtype=float)
+    inh_max = np.array(weight_evolution.get("inh_max", []), dtype=float)
+
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+
+    fig, ax = plt.subplots(figsize=(12, 9))
+
+    # Excitatory mean ± std
+    ax.plot(epochs, exc_mean, "b-", label="Exc Mean", linewidth=2)
+    ax.fill_between(
+        epochs,
+        exc_mean - exc_std,
+        exc_mean + exc_std,
+        alpha=0.3,
+        color="gray",
+        label="±1 std",
+    )
+    # Inhibitory mean ± std
+    ax.plot(epochs, inh_mean, "r-", label="Inh Mean", linewidth=2)
+    ax.fill_between(
+        epochs,
+        inh_mean - inh_std,
+        inh_mean + inh_std,
+        alpha=0.3,
+        color="red",
+        label="±1 std",
+    )
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Weight Value")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    fig.suptitle("No sleep", fontsize=16, fontweight="bold")
+    plt.tight_layout()
+    fig.savefig(output_path, bbox_inches="tight", dpi=150)
     plt.close(fig)
 
 
 def plot_weight_trajectories_with_sleep_epoch(
-    weight_tracking_epoch, epoch, max_lines=8
+    weight_tracking_epoch, epoch, max_lines=8, sleep_enabled=True
 ):
     """
-    Plot sampled weight trajectories across snapshot time with sleeps shaded in blue.
-    - Top: excitatory group (absolute weights)
-    - Bottom: inhibitory group (absolute weights)
+    Plot sampled weight trajectories across snapshot time with sleeps shaded (combined on one axis, BW).
+    - Exc mean: solid black; Exc samples: dotted black
+    - Inh mean: dashed black; Inh samples: dash-dot black
     Sleep segments are provided as (start,end) in the same snapshot-time reference.
     """
     import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
 
     times = np.array(weight_tracking_epoch.get("times", []), dtype=float)
     if times.size == 0:
@@ -1297,9 +1353,7 @@ def plot_weight_trajectories_with_sleep_epoch(
     exc_samples = weight_tracking_epoch.get("exc_samples", [])
     inh_samples = weight_tracking_epoch.get("inh_samples", [])
     exc_mean = np.array(weight_tracking_epoch.get("exc_mean", []), dtype=float)
-    exc_std = np.array(weight_tracking_epoch.get("exc_std", []), dtype=float)
     inh_mean = np.array(weight_tracking_epoch.get("inh_mean", []), dtype=float)
-    inh_std = np.array(weight_tracking_epoch.get("inh_std", []), dtype=float)
     sleep_segments = weight_tracking_epoch.get("sleep_segments", [])
 
     # Convert list-of-lists to arrays (n_snapshots x K)
@@ -1320,59 +1374,244 @@ def plot_weight_trajectories_with_sleep_epoch(
     inh_arr = _to_array(inh_samples)
 
     os.makedirs("plots", exist_ok=True)
-    fig, axes = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+    fig, ax = plt.subplots(1, 1, figsize=(12, 6))
 
     # Shade sleep segments
-    for ax in axes:
-        for s, e in sleep_segments:
+    for s, e in sleep_segments:
+        try:
+            patch = ax.axvspan(
+                float(s),
+                float(e),
+                facecolor="0.92",
+                edgecolor="0.92",
+                alpha=1.0,
+                zorder=0,
+            )
             try:
-                ax.axvspan(float(s), float(e), color="#a3c5ff", alpha=0.25, zorder=0)
+                patch.set_hatch("//")
             except Exception:
                 pass
+        except Exception:
+            pass
 
-    # Excitatory trajectories
-    ax = axes[0]
+    # Excitatory trajectories (samples: dotted; mean: solid)
     if exc_arr.size > 0 and exc_arr.shape[0] == times.size:
         lines_to_plot = min(max_lines, exc_arr.shape[1])
         for i in range(lines_to_plot):
-            ax.plot(times, exc_arr[:, i], color="#ffbfb3", alpha=0.5, linewidth=1.0)
-    if exc_mean.size == times.size:
-        ax.plot(times, exc_mean, color="#ff7f68", linewidth=2.0, label="Exc mean")
-        if exc_std.size == times.size:
-            ax.fill_between(
+            ax.plot(
                 times,
-                exc_mean - exc_std,
-                exc_mean + exc_std,
-                color="#ffe5e1",
+                exc_arr[:, i],
+                color="black",
                 alpha=0.6,
-                label="±1 std",
+                linewidth=0.9,
+                linestyle="-",
             )
-    ax.set_ylabel("Exc abs(weight)")
-    ax.set_title(f"Epoch {epoch} — Sampled weight trajectories with sleep shaded")
-    ax.legend(loc="upper right")
+    if exc_mean.size == times.size:
+        ax.plot(
+            times,
+            exc_mean,
+            color="black",
+            linestyle="-",
+            linewidth=2.0,
+            label="Exc mean",
+        )
 
-    # Inhibitory trajectories
-    ax = axes[1]
+    # Inhibitory trajectories (samples: dash-dot; mean: dashed)
     if inh_arr.size > 0 and inh_arr.shape[0] == times.size:
         lines_to_plot = min(max_lines, inh_arr.shape[1])
         for i in range(lines_to_plot):
-            ax.plot(times, inh_arr[:, i], color="#6afae9", alpha=0.5, linewidth=1.0)
-    if inh_mean.size == times.size:
-        ax.plot(times, inh_mean, color="#05af9b", linewidth=2.0, label="Inh mean")
-        if inh_std.size == times.size:
-            ax.fill_between(
+            ax.plot(
                 times,
-                inh_mean - inh_std,
-                inh_mean + inh_std,
-                color="#c7fdf7",
+                inh_arr[:, i],
+                color="black",
                 alpha=0.6,
-                label="±1 std",
+                linewidth=0.9,
+                linestyle="--",
             )
-    ax.set_ylabel("Inh abs(weight)")
-    ax.set_xlabel("Snapshot index (training + sleep)")
-    ax.legend(loc="upper right")
+    if inh_mean.size == times.size:
+        ax.plot(
+            times,
+            inh_mean,
+            color="black",
+            linestyle="--",
+            linewidth=2.0,
+            label="Inh mean",
+        )
 
+    def _apply_labels(latex_enabled: bool):
+        plt.rcParams["text.usetex"] = bool(latex_enabled)
+        ylabel = r"$\Delta w$" if latex_enabled else "Δw"
+        title = "Sleep + STDP learning" if sleep_enabled else "No sleep"
+
+        ax.set_ylabel(ylabel, fontsize=16)
+        ax.set_xlabel("time (ms)", fontsize=16)
+        ax.set_title(title, fontsize=16)
+
+        legend_lines = [
+            Line2D(
+                [0], [0], color="black", linestyle="-", linewidth=2.0, label="Exc mean"
+            ),
+            Line2D(
+                [0], [0], color="black", linestyle="--", linewidth=2.0, label="Inh mean"
+            ),
+            Line2D(
+                [0],
+                [0],
+                color="black",
+                linestyle="-",
+                linewidth=1.2,
+                label="Exc samples",
+            ),
+            Line2D(
+                [0],
+                [0],
+                color="black",
+                linestyle="--",
+                linewidth=1.2,
+                label="Inh samples",
+            ),
+        ]
+        legend = ax.legend(
+            handles=legend_lines,
+            loc="upper right",
+            frameon=True,
+            facecolor="white",
+            edgecolor="black",
+            fontsize=12,
+        )
+        legend.get_frame().set_alpha(1.0)
+
+    latex_available = shutil.which("latex") is not None
+    _apply_labels(latex_enabled=latex_available)
+    pdf_path = os.path.join("plots", f"weights_trajectories_epoch_{int(epoch):03d}.pdf")
     plt.tight_layout()
-    out_path = os.path.join("plots", f"weights_trajectories_epoch_{int(epoch):03d}.png")
-    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.savefig(pdf_path, dpi=300, bbox_inches="tight")
+    plt.rcParams["text.usetex"] = False
     plt.close(fig)
+
+
+def save_weight_distribution_gif(
+    image_pattern: str = "plots/weights_epoch_*.png",
+    output_path: str = "plots/weights_epoch_progress.gif",
+    frame_duration: float = 0.6,
+    loop: int = 0,
+) -> str | None:
+    """
+    Build an animated GIF showing how the per-epoch weight histograms evolve.
+
+    Parameters
+    ----------
+    image_pattern : str
+        Glob pattern matching the saved PNG snapshots (default: "plots/weights_epoch_*.png").
+    output_path : str
+        Destination GIF path.
+    frame_duration : float
+        Duration (seconds) of each frame.
+    loop : int
+        Loop count for the GIF (0 = infinite).
+
+    Returns
+    -------
+    str | None
+        Path to the created GIF, or None if generation failed / not enough frames.
+    """
+    import glob
+
+    files = sorted(glob.glob(image_pattern))
+    if len(files) < 2:
+        print("Not enough weight snapshots to create a GIF.")
+        return None
+
+    try:
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    except Exception:
+        pass
+
+    frame_duration = max(0.05, float(frame_duration))
+
+    # Try imageio first; fall back to Pillow if unavailable.
+    try:
+        import imageio.v2 as imageio
+    except ImportError:
+        imageio = None
+
+    frames_read = 0
+    if imageio is not None:
+        try:
+            frames = []
+            for path in files:
+                try:
+                    frames.append(imageio.imread(path))
+                    frames_read += 1
+                except Exception as exc:
+                    print(f"Skipping frame {path}: {exc}")
+            if frames_read < 2:
+                print("Not enough readable snapshots to create a GIF.")
+                return None
+            imageio.mimsave(
+                output_path, frames, duration=frame_duration, loop=loop or 0
+            )
+            print(f"Saved weight distribution GIF to {output_path}")
+            return output_path
+        except Exception as exc:
+            print(f"imageio failed to build GIF ({exc}); falling back to Pillow.")
+
+    # Pillow fallback
+    try:
+        from PIL import Image
+    except ImportError:
+        print(
+            "Install imageio or pillow to enable GIF export (pip install imageio pillow)."
+        )
+        return None
+
+    images = []
+    try:
+        for path in files:
+            try:
+                images.append(Image.open(path))
+                frames_read += 1
+            except Exception as exc:
+                print(f"Skipping frame {path}: {exc}")
+        if len(images) < 2:
+            print("Not enough readable snapshots to create a GIF.")
+            return None
+        duration_ms = int(round(frame_duration * 1000))
+        images[0].save(
+            output_path,
+            save_all=True,
+            append_images=images[1:],
+            duration=max(20, duration_ms),
+            loop=loop or 0,
+        )
+        print(f"Saved weight distribution GIF to {output_path}")
+        return output_path
+    finally:
+        for img in images:
+            try:
+                img.close()
+            except Exception:
+                pass
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Plotting utilities")
+    parser.add_argument(
+        "--weight-evolution-data",
+        type=str,
+        help="Path to a weight_evolution_data.npz file (created after training)",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="plots/weights_evolution.png",
+        help="Destination path for the rendered figure",
+    )
+    cli_args = parser.parse_args()
+
+    if cli_args.weight_evolution_data:
+        payload = np.load(cli_args.weight_evolution_data)
+        weight_evo = {key: payload[key].tolist() for key in payload.files}
+        plot_weight_evolution(weight_evo, output_path=cli_args.output)
+    else:
+        parser.print_help()

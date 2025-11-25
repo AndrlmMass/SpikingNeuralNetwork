@@ -34,7 +34,7 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         force_recreate_flag = True
     else:
         img_tr, img_va, img_te = 6000, 100, 1000
-        b_tr, b_va, b_te = 300, 100, 200
+        b_tr, b_va, b_te = 400, 100, 200
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -87,58 +87,65 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         w_dense_ie=0.25,
         se_weights=0.15,
         ee_weights=0.3,
-        ei_weights=0.4,
-        ie_weights=-0.5,
+        ei_weights=0.3,
+        ie_weights=-0.3,
         create_network=False,
     )
 
     if getattr(args, "profile", False):
         pr = cProfile.Profile()
         pr.enable()
-        snn_N.train_network(
-            train_weights=True,
-            noisy_potential=True,
-            compare_decay_rates=False,
-            check_sleep_interval=35000,
-            weight_decay_rate_exc=[0.99997],
-            weight_decay_rate_inh=[0.99997],
-            max_weight_exc=25,
-            min_weight_inh=-25,
-            samples=10,
-            force_train=True,
-            plot_spikes_train=False,
-            plot_weights=False,
-            plot_epoch_performance=False,
-            plot_weights_per_epoch=bool(getattr(args, "plot_weights_per_epoch", False)),
-            plot_spikes_per_epoch=bool(getattr(args, "plot_spikes_per_epoch", False)),
-            sleep_synchronized=False,
-            plot_top_response_test=False,
-            plot_top_response_train=False,
-            plot_tsne_during_training=False,
-            tsne_plot_interval=1,
-            plot_spectrograms=False,
-            use_validation_data=False,
-            var_noise=2,
-            sleep=not args.no_sleep,
-            sleep_mode=str(args.sleep_mode),
-            tau_syn=30,
-            narrow_top=0.2,
-            A_minus=0.3,
-            A_plus=0.3,
-            tau_LTD=7.5,
-            tau_LTP=7.5,
-            learning_rate_exc=0.0008,
-            learning_rate_inh=0.0008,
-            accuracy_method="pca_lr",
-            test_only=False,
-            use_QDA=True,
-            early_stopping=bool(args.early_stopping),
-            early_stopping_patience_pct=0.3,
-            sleep_ratio=float(args.sleep_rate),
-            sleep_max_iters=int(args.sleep_max_iters),
-            on_timeout=str(args.on_timeout),
-            normalize_weights=bool(args.normalize_weights),
-        )
+    snn_N.train_network(
+        train_weights=True,
+        noisy_potential=True,
+        compare_decay_rates=False,
+        check_sleep_interval=35000,
+        weight_decay_rate_exc=[0.99997],
+        weight_decay_rate_inh=[0.99997],
+        samples=10,
+        force_train=True,
+        plot_spikes_train=False,
+        plot_weights=False,
+        plot_epoch_performance=False,
+        plot_weights_per_epoch=bool(getattr(args, "plot_weights_per_epoch", False)),
+        plot_spikes_per_epoch=bool(getattr(args, "plot_spikes_per_epoch", False)),
+        weight_track_samples=int(getattr(args, "weight_track_samples", 32)),
+        weight_track_interval=int(getattr(args, "weight_track_interval", 0)),
+        weight_track_sleep_interval=int(
+            getattr(args, "weight_track_sleep_interval", 0)
+        ),
+        sleep_synchronized=False,
+        plot_top_response_test=False,
+        plot_top_response_train=False,
+        plot_tsne_during_training=False,
+        tsne_plot_interval=1,
+        plot_spectrograms=False,
+        use_validation_data=False,
+        var_noise=2,
+        max_weight_exc=25,
+        min_weight_inh=-25,
+        sleep=not args.no_sleep,
+        sleep_mode=str(args.sleep_mode),
+        tau_syn=30,
+        narrow_top=0.2,
+        A_minus=0.5,
+        A_plus=0.5,
+        tau_LTD=10,
+        tau_LTP=10,
+        learning_rate_exc=0.0005,
+        learning_rate_inh=0.0005,
+        accuracy_method="pca_lr",
+        test_only=False,
+        use_QDA=False,
+        early_stopping=bool(args.early_stopping),
+        early_stopping_patience_pct=0.3,
+        sleep_ratio=float(args.sleep_rate),
+        sleep_max_iters=int(args.sleep_max_iters),
+        on_timeout=str(args.on_timeout),
+        normalize_weights=bool(args.normalize_weights),
+    )
+
+    if getattr(args, "profile", False):
         pr.disable()
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         profile_path = args.profile_output or os.path.join(
@@ -151,51 +158,6 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
             pstats.Stats(pr).sort_stats("cumtime").print_stats(20)
         except Exception as e:
             print(f"WARNING: could not write/print profile stats: {e}")
-    else:
-        snn_N.train_network(
-            train_weights=True,
-            noisy_potential=True,
-            compare_decay_rates=False,
-            check_sleep_interval=35000,
-            weight_decay_rate_exc=[0.99997],
-            weight_decay_rate_inh=[0.99997],
-            samples=10,
-            force_train=True,
-            plot_spikes_train=False,
-            plot_weights=False,
-            plot_epoch_performance=False,
-            plot_weights_per_epoch=bool(getattr(args, "plot_weights_per_epoch", False)),
-            plot_spikes_per_epoch=bool(getattr(args, "plot_spikes_per_epoch", False)),
-            sleep_synchronized=False,
-            plot_top_response_test=False,
-            plot_top_response_train=False,
-            plot_tsne_during_training=False,
-            tsne_plot_interval=1,
-            plot_spectrograms=False,
-            use_validation_data=False,
-            var_noise=2,
-            max_weight_exc=25,
-            min_weight_inh=-25,
-            sleep=not args.no_sleep,
-            sleep_mode=str(args.sleep_mode),
-            tau_syn=30,
-            narrow_top=0.2,
-            A_minus=0.3,
-            A_plus=0.5,
-            tau_LTD=7.5,
-            tau_LTP=10,
-            learning_rate_exc=0.0008,
-            learning_rate_inh=0.0008,
-            accuracy_method="pca_lr",
-            test_only=False,
-            use_QDA=True,
-            early_stopping=bool(args.early_stopping),
-            early_stopping_patience_pct=0.3,
-            sleep_ratio=float(args.sleep_rate),
-            sleep_max_iters=int(args.sleep_max_iters),
-            on_timeout=str(args.on_timeout),
-            normalize_weights=bool(args.normalize_weights),
-        )
 
     if disable_plotting:
         result = snn_N.analyze_results(
@@ -271,8 +233,6 @@ def main():
             "mnist",
             "kmnist",
             "fmnist",
-            "fashionmnist",
-            "fashion",
             "notmnist",
             "geomfig",
         ],
@@ -280,23 +240,9 @@ def main():
         help="dataset to use (image-only or geomfig)",
     )
     parser.add_argument(
-        "--image_dataset",
-        type=str,
-        choices=[
-            "mnist",
-            "kmnist",
-            "fmnist",
-            "fashionmnist",
-            "fashion",
-            "notmnist",
-        ],
-        default="mnist",
-        help="image dataset to use for image-only or multimodal modes",
-    )
-    parser.add_argument(
         "--geom-noise-var",
         type=float,
-        default=0.02,
+        default=0.2,
         help="per-pixel Gaussian noise variance for geomfig generation",
     )
     parser.add_argument(
@@ -336,12 +282,6 @@ def main():
         help="enable cProfile around training to find hotspots",
     )
     parser.add_argument(
-        "--profile_output",
-        type=str,
-        default=None,
-        help="optional path for .prof output (default: results/profile_*.prof)",
-    )
-    parser.add_argument(
         "--plot-acc-history",
         action="store_true",
         default=False,
@@ -358,6 +298,24 @@ def main():
         action="store_true",
         default=False,
         help="plot and save spikes after each epoch (for debugging, saves to plots/spikes_*_epoch_*.png)",
+    )
+    parser.add_argument(
+        "--weight-track-samples",
+        type=int,
+        default=32,
+        help="number of excitatory/inhibitory synapses to track in weight trajectory plots",
+    )
+    parser.add_argument(
+        "--weight-track-interval",
+        type=int,
+        default=1,
+        help="training timesteps between tracked weight snapshots (0 = auto based on sleep interval)",
+    )
+    parser.add_argument(
+        "--weight-track-sleep-interval",
+        type=int,
+        default=0,
+        help="sleep-iteration stride between tracked snapshots during hard-pause sleep (0 = auto)",
     )
     parser.add_argument(
         "--sleep-mode",

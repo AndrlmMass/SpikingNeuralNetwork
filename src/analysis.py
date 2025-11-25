@@ -1,15 +1,49 @@
 import warnings
+import os
+from datetime import datetime
+from typing import Dict, Tuple, Optional
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 import matplotlib
+import argparse
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
 
 matplotlib.use("TkAgg")
 warnings.filterwarnings("error", category=RuntimeWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="matplotlib")
+
+_TSNE_CACHE_DIR = os.path.join("data", "tsne")
+
+
+def _save_tsne_inputs(
+    spikes: np.ndarray, labels: np.ndarray, split: str
+) -> Optional[str]:
+    """
+    Persist the raw spike activity and labels that seed the t-SNE plot so they
+    can be reloaded later without rerunning a full simulation.
+    """
+
+    if spikes is None or labels is None:
+        return None
+
+    T = min(spikes.shape[0], len(labels))
+    if T <= 0:
+        return None
+
+    os.makedirs(_TSNE_CACHE_DIR, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{split}_tsne_inputs_{T}samples_{timestamp}.npz"
+    path = os.path.join(_TSNE_CACHE_DIR, filename)
+    np.savez_compressed(
+        path,
+        spikes=spikes[:T],
+        labels=np.asarray(labels[:T]),
+    )
+    return path
 
 
 def bin_spikes_by_label_no_breaks(spikes, labels):
@@ -65,15 +99,6 @@ def bin_spikes_by_label_no_breaks(spikes, labels):
                 segment_labels.append(current_label)
 
     return np.array(segments), np.array(segment_labels)
-
-
-import numpy as np
-from typing import Dict, Tuple, Optional
-
-from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score
 
 
 def pca_logistic_regression(
@@ -139,6 +164,7 @@ def t_SNE(
     max_iter,
     random_state,
     train,
+    show_plot=False,
 ):
     # Now, bin the spikes using the labels, skipping breaks:
     features, segment_labels = bin_spikes_by_label_no_breaks(spikes, labels_spike)
@@ -159,6 +185,15 @@ def t_SNE(
         return
 
     features_clean = features[:, valid_features]
+
+    # Persist raw inputs for downstream analysis when working on held-out data.
+    if not train:
+        try:
+            saved_path = _save_tsne_inputs(spikes, labels_spike, split="test")
+            if saved_path:
+                print(f"t-SNE test inputs cached at {saved_path}")
+        except Exception as exc:
+            print(f"Warning: Failed to save t-SNE test inputs ({exc})")
 
     # Apply t-SNE on the computed features:
     # Ensure that perplexity is less than the number of segments.
@@ -186,8 +221,9 @@ def t_SNE(
         return
 
     fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(projection="3d")
+    ax = fig.add_subplot()
 
+    markers = {0: "o", 1: "s", 2: "^", 3: "D"}
     # Visualize the results:
     for label in np.unique(segment_labels):
         indices = segment_labels == label
@@ -195,17 +231,28 @@ def t_SNE(
             tsne_results[indices, 0],
             tsne_results[indices, 1],
             label=f"Class {label}",
+            marker=markers[label],
+            color="black",
+            s=40,
         )
     if train:
         title = "from training"
     else:
         title = "from testing"
 
-    plt.title(f"t-SNE results " + title)
-    plt.xlabel("t-SNE dimension 1")
-    plt.ylabel("t-SNE dimension 2")
-    plt.legend()
-    plt.show()
+    plt.xlabel("t-SNE dimension 1", fontsize=16)
+    plt.ylabel("t-SNE dimension 2", fontsize=16)
+    plt.legend(fontsize=14)
+    os.makedirs("plots", exist_ok=True)
+    suffix = "train" if train else "test"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    tsne_path = os.path.join("plots", f"tsne_{suffix}_{timestamp}.pdf")
+    plt.tight_layout()
+    plt.savefig(tsne_path, bbox_inches="tight")
+    print(f"t-SNE plot saved to {tsne_path}")
+    if show_plot:
+        plt.show()
+    plt.close(fig)
 
 
 def PCA_analysis(
@@ -558,3 +605,34 @@ def calculate_phi(
         BCSS_train_scaled,
         BCSS_test_scaled,
     )
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="t-SNE utilities")
+    parser.add_argument(
+        "--tsne-path",
+        type=str,
+        help="Path to a saved npz containing 'spikes' and 'labels' arrays",
+    )
+    parser.add_argument("--n-components", type=int, default=2)
+    parser.add_argument("--perplexity", type=int, default=30)
+    parser.add_argument("--max-iter", type=int, default=1000)
+    parser.add_argument("--random-state", type=int, default=48)
+    cli_args = parser.parse_args()
+
+    if cli_args.tsne_path:
+        payload = np.load(cli_args.tsne_path)
+        spikes = payload["spikes"]
+        labels = payload["labels"]
+        t_SNE(
+            spikes=spikes,
+            labels_spike=labels,
+            n_components=cli_args.n_components,
+            perplexity=cli_args.perplexity,
+            max_iter=cli_args.max_iter,
+            random_state=cli_args.random_state,
+            train=False,
+            show_plot=True,
+        )
+    else:
+        parser.print_help()
