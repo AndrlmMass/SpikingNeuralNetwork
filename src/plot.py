@@ -1279,7 +1279,7 @@ def plot_weight_evolution_during_sleep(weight_tracking_sleep):
 
 
 def plot_weight_evolution(
-    weight_evolution: dict, output_path: str = "plots/weights_evolution.png"
+    weight_evolution: dict, output_path: str = "plots/weights_evolution.pdf"
 ):
     """
     Render the per-epoch weight statistics (mean/std and min/max) for excitatory
@@ -1304,33 +1304,46 @@ def plot_weight_evolution(
     fig, ax = plt.subplots(figsize=(12, 9))
 
     # Excitatory mean ± std
-    ax.plot(epochs, exc_mean, "b-", label="Exc Mean", linewidth=2)
+    ax.plot(
+        epochs, exc_mean, label="Exc Mean", linewidth=2, linestyle="-", color="black"
+    )
     ax.fill_between(
         epochs,
-        exc_mean - exc_std,
-        exc_mean + exc_std,
-        alpha=0.3,
-        color="gray",
-        label="±1 std",
+        exc_min,
+        exc_max,
+        facecolor="none",
+        hatch="//",
+        edgecolor="black",
+        label="Exc min/max",
     )
     # Inhibitory mean ± std
-    ax.plot(epochs, inh_mean, "r-", label="Inh Mean", linewidth=2)
+    ax.plot(
+        epochs, inh_mean, label="Inh Mean", linewidth=2, linestyle="--", color="black"
+    )
     ax.fill_between(
         epochs,
-        inh_mean - inh_std,
-        inh_mean + inh_std,
-        alpha=0.3,
-        color="red",
-        label="±1 std",
+        inh_min,
+        inh_max,
+        facecolor="none",
+        hatch="\\\\",
+        edgecolor="black",
+        label="Inh min/max",
     )
-    ax.set_xlabel("Epoch")
-    ax.set_ylabel("Weight Value")
-    ax.legend()
+    ax.set_xlabel("Epoch", size=18)
+    ax.set_ylabel("Average weight", size=18)
+    legend = ax.legend(
+        facecolor="white",
+        edgecolor="black",
+        fontsize=14,
+        loc="upper right",
+        framealpha=1.0,
+    )
+    legend.get_frame().set_alpha(1.0)
     ax.grid(True, alpha=0.3)
 
-    fig.suptitle("No sleep", fontsize=16, fontweight="bold")
+    fig.suptitle("No sleep", fontsize=20, fontweight="bold")
     plt.tight_layout()
-    fig.savefig(output_path, bbox_inches="tight", dpi=150)
+    fig.savefig(output_path, bbox_inches="tight", dpi=900)
     plt.close(fig)
 
 

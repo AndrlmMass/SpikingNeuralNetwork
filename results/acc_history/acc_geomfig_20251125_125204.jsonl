@@ -22,3 +22,10 @@
 {"timestamp": "2025-11-25T13:30:40.159127", "split": "val", "epoch": 11, "accuracy": 0.88}
 {"timestamp": "2025-11-25T13:34:02.510618", "split": "train", "epoch": 12, "accuracy": 0.8666666666666667}
 {"timestamp": "2025-11-25T13:34:12.791811", "split": "val", "epoch": 12, "accuracy": 0.8533333333333334}
+{"timestamp": "2025-11-25T13:37:59.552643", "split": "train", "epoch": 13, "accuracy": 0.8833333333333333}
+{"timestamp": "2025-11-25T13:38:09.797408", "split": "val", "epoch": 13, "accuracy": 0.8666666666666667}
+{"timestamp": "2025-11-25T13:42:02.958014", "split": "train", "epoch": 14, "accuracy": 0.8333333333333334}
+{"timestamp": "2025-11-25T13:42:13.296347", "split": "val", "epoch": 14, "accuracy": 0.92}
+{"timestamp": "2025-11-25T13:45:14.475055", "split": "train", "epoch": 15, "accuracy": 0.8333333333333334}
+{"timestamp": "2025-11-25T13:45:25.306923", "split": "val", "epoch": 15, "accuracy": 0.8933333333333333}
+{"timestamp": "2025-11-25T13:47:02.871223", "split": "test", "epoch": null, "accuracy": 0.8157894736842105}

@@ -3215,14 +3215,35 @@ class snn_sleepy:
                         W_inh = self.weights[_ex:_ih, _st:_ex]
 
                         weight_evolution["epochs"].append(e + 1)
-                        weight_evolution["exc_mean"].append(float(np.mean(W_exc)))
-                        weight_evolution["exc_std"].append(float(np.std(W_exc)))
-                        weight_evolution["exc_min"].append(float(np.min(W_exc)))
-                        weight_evolution["exc_max"].append(float(np.max(W_exc)))
-                        weight_evolution["inh_mean"].append(float(np.mean(W_inh)))
-                        weight_evolution["inh_std"].append(float(np.std(W_inh)))
-                        weight_evolution["inh_min"].append(float(np.min(W_inh)))
-                        weight_evolution["inh_max"].append(float(np.max(W_inh)))
+
+                        # Compute stats on non-zero weights only to avoid zero-bias
+                        W_exc_nz = W_exc[W_exc != 0]
+                        if W_exc_nz.size > 0:
+                            weight_evolution["exc_mean"].append(
+                                float(np.mean(W_exc_nz))
+                            )
+                            weight_evolution["exc_std"].append(float(np.std(W_exc_nz)))
+                            weight_evolution["exc_min"].append(float(np.min(W_exc_nz)))
+                            weight_evolution["exc_max"].append(float(np.max(W_exc_nz)))
+                        else:
+                            weight_evolution["exc_mean"].append(0.0)
+                            weight_evolution["exc_std"].append(0.0)
+                            weight_evolution["exc_min"].append(0.0)
+                            weight_evolution["exc_max"].append(0.0)
+
+                        W_inh_nz = W_inh[W_inh != 0]
+                        if W_inh_nz.size > 0:
+                            weight_evolution["inh_mean"].append(
+                                float(np.mean(W_inh_nz))
+                            )
+                            weight_evolution["inh_std"].append(float(np.std(W_inh_nz)))
+                            weight_evolution["inh_min"].append(float(np.min(W_inh_nz)))
+                            weight_evolution["inh_max"].append(float(np.max(W_inh_nz)))
+                        else:
+                            weight_evolution["inh_mean"].append(0.0)
+                            weight_evolution["inh_std"].append(0.0)
+                            weight_evolution["inh_min"].append(0.0)
+                            weight_evolution["inh_max"].append(0.0)
 
                         # Save a lightweight snapshot: histograms of current weight distributions
                         os.makedirs("plots", exist_ok=True)

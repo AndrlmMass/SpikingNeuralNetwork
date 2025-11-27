@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-11-25T12:45:20.749163",
+  "timestamp": "2025-11-25T14:42:30.936571",
   "status": "completed",
   "image_dataset": "geomfig",
   "args": {
@@ -10,7 +10,7 @@
     "sleep_max_iters": 10000,
     "on_timeout": "give_up",
     "early_stopping": false,
-    "no_sleep": true,
+    "no_sleep": false,
     "normalize_weights": false,
     "image_dataset": "geomfig"
   },
@@ -20,29 +20,29 @@
         "run": 1,
         "sleep_rate": 0.1,
         "image_dataset": "geomfig",
-        "test_accuracy": 0.8157894736842105,
-        "train_accuracy": 0.9285714285714286,
-        "val_accuracy": 0.8,
+        "test_accuracy": 1.0,
+        "train_accuracy": 1.0,
+        "val_accuracy": 1.0,
         "final_test_phi": null
       }
     ]
   },
   "summary": {
     "total_runs": 1,
-    "overall_mean_test_accuracy": 0.8157894736842105,
+    "overall_mean_test_accuracy": 1.0,
     "overall_std_test_accuracy": 0.0,
     "overall_mean_final_test_phi": null,
     "overall_std_final_test_phi": null,
     "per_sleep_rate_summary": {
       "0.1": {
-        "mean_test_accuracy": 0.8157894736842105,
+        "mean_test_accuracy": 1.0,
         "std_test_accuracy": 0.0,
         "mean_final_test_phi": null,
         "std_final_test_phi": null,
-        "best_test_accuracy": 0.8157894736842105,
+        "best_test_accuracy": 1.0,
         "best_final_test_phi": null
       }
     }
   },
-  "completed_timestamp": "2025-11-25T13:47:03.193725"
+  "completed_timestamp": "2025-11-25T15:31:37.991015"
 }
