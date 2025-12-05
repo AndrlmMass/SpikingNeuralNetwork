@@ -33,7 +33,7 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 6000, 100, 1000
+        img_tr, img_va, img_te = 6000, 100, 2000
         b_tr, b_va, b_te = 400, 100, 200
         force_recreate_flag = False
     snn_N.prepare_data(
@@ -138,7 +138,7 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         test_only=False,
         use_QDA=False,
         early_stopping=bool(args.early_stopping),
-        early_stopping_patience_pct=0.3,
+        early_stopping_patience_pct=0.2,
         sleep_ratio=float(args.sleep_rate),
         sleep_max_iters=int(args.sleep_max_iters),
         on_timeout=str(args.on_timeout),
@@ -200,7 +200,10 @@ def main():
         "--on_timeout", type=str, default="give_up", help="action to take on timeout"
     )
     parser.add_argument(
-        "--early_stopping", type=bool, default=False, help="enable early stopping"
+        "--early_stopping",
+        action="store_true",
+        default=False,
+        help="enable early stopping",
     )
     parser.add_argument(
         "--no-sleep",
@@ -229,6 +232,7 @@ def main():
     parser.add_argument(
         "--dataset",
         type=str,
+        nargs="+",
         choices=[
             "mnist",
             "kmnist",
@@ -236,8 +240,8 @@ def main():
             "notmnist",
             "geomfig",
         ],
-        default="mnist",
-        help="dataset to use (image-only or geomfig)",
+        default=["mnist"],
+        help="dataset(s) to use - can specify multiple (e.g., --dataset mnist fmnist geomfig)",
     )
     parser.add_argument(
         "--geom-noise-var",
@@ -331,8 +335,11 @@ def main():
         args.sleep_rate if isinstance(args.sleep_rate, list) else [args.sleep_rate]
     )
 
-    all_results = []  # Store (sleep_rate, run_idx, result)
-    disable_plotting = args.runs > 1 or len(sleep_rates) > 1
+    # Ensure dataset is a list
+    datasets = args.dataset if isinstance(args.dataset, list) else [args.dataset]
+
+    all_results = []  # Store (dataset, sleep_rate, run_idx, result)
+    disable_plotting = args.runs > 1 or len(sleep_rates) > 1 or len(datasets) > 1
 
     # Initialize results file at the start
     output_dir = "results"
@@ -352,25 +359,21 @@ def main():
             return None
 
     # Initial JSON structure
-    dataset_name = (
-        args.dataset if getattr(args, "dataset", None) else args.image_dataset
-    )
-
     initial_results_data = {
         "timestamp": datetime.now().isoformat(),
         "status": "in_progress",
-        "image_dataset": dataset_name,
+        "datasets": datasets,
         "args": {
             "runs": args.runs,
             "sleep_rates": [float(sr) for sr in sleep_rates],
+            "datasets": datasets,
             "sleep_max_iters": args.sleep_max_iters,
             "on_timeout": args.on_timeout,
             "early_stopping": args.early_stopping,
             "no_sleep": args.no_sleep,
             "normalize_weights": args.normalize_weights,
-            "image_dataset": dataset_name,
         },
-        "results_by_sleep_rate": {str(sr): [] for sr in sleep_rates},
+        "results_by_dataset": {ds: {} for ds in datasets},
     }
 
     # Save initial file
@@ -383,7 +386,7 @@ def main():
         results_filename = None
 
     # Function to save results incrementally
-    def save_results_incremental(sleep_rate, run_idx, result):
+    def save_results_incremental(dataset_name, sleep_rate, run_idx, result):
         if results_filename is None:
             return
         try:
@@ -404,7 +407,7 @@ def main():
             result_entry = {
                 "run": int(run_idx + 1),
                 "sleep_rate": float(sleep_rate),
-                "image_dataset": dataset_name,
+                "dataset": dataset_name,
                 "test_accuracy": (
                     safe_float(acc_dict.get("test"))
                     if isinstance(acc_dict, dict)
@@ -423,162 +426,200 @@ def main():
                 "final_test_phi": safe_float(phi),
             }
 
-            if sleep_rate_key not in results_data["results_by_sleep_rate"]:
-                results_data["results_by_sleep_rate"][sleep_rate_key] = []
+            if dataset_name not in results_data["results_by_dataset"]:
+                results_data["results_by_dataset"][dataset_name] = {}
+            if sleep_rate_key not in results_data["results_by_dataset"][dataset_name]:
+                results_data["results_by_dataset"][dataset_name][sleep_rate_key] = []
 
-            results_data["results_by_sleep_rate"][sleep_rate_key].append(result_entry)
+            results_data["results_by_dataset"][dataset_name][sleep_rate_key].append(
+                result_entry
+            )
 
             with open(results_filename, "w") as f:
                 json.dump(results_data, f, indent=2)
         except Exception as e:
             print(f"WARNING: Could not save incremental results: {e}")
 
-    # Run for each sleep rate
+    # Run for each dataset, then sleep rate, then runs
     preview_requested = bool(getattr(args, "preview_dataset", False))
     preview_consumed = False
 
-    for sleep_rate_idx, sleep_rate in enumerate(sleep_rates):
-        print(f"\n{'='*70}")
-        print(f"Sleep Rate: {sleep_rate} ({sleep_rate_idx + 1}/{len(sleep_rates)})")
-        print(f"{'='*70}")
+    for dataset_idx, current_dataset in enumerate(datasets):
+        print(f"\n{'#'*70}")
+        print(
+            f"# DATASET: {current_dataset.upper()} ({dataset_idx + 1}/{len(datasets)})"
+        )
+        print(f"{'#'*70}")
 
-        for run_idx in range(args.runs):
-            args_copy = argparse.Namespace(**vars(args))
-            args_copy.sleep_rate = float(sleep_rate)
-            preview_this_run = preview_requested and not preview_consumed
-            args_copy.preview_dataset = preview_this_run
-            result = run_once(
-                run_idx, args.runs, args_copy, disable_plotting=disable_plotting
+        for sleep_rate_idx, sleep_rate in enumerate(sleep_rates):
+            print(f"\n{'='*70}")
+            print(
+                f"Dataset: {current_dataset} | Sleep Rate: {sleep_rate} ({sleep_rate_idx + 1}/{len(sleep_rates)})"
             )
-            if preview_this_run:
-                preview_consumed = True
-            all_results.append((sleep_rate, run_idx, result))
-            save_results_incremental(sleep_rate, run_idx, result)
+            print(f"{'='*70}")
+
+            for run_idx in range(args.runs):
+                args_copy = argparse.Namespace(**vars(args))
+                args_copy.dataset = current_dataset  # Set single dataset for this run
+                args_copy.sleep_rate = float(sleep_rate)
+                preview_this_run = preview_requested and not preview_consumed
+                args_copy.preview_dataset = preview_this_run
+                result = run_once(
+                    run_idx, args.runs, args_copy, disable_plotting=disable_plotting
+                )
+                if preview_this_run:
+                    preview_consumed = True
+                all_results.append((current_dataset, sleep_rate, run_idx, result))
+                save_results_incremental(current_dataset, sleep_rate, run_idx, result)
 
     if args.runs > 0 and len(all_results) > 0:
         print("\n" + "=" * 70)
         print("RESULTS SUMMARY")
         print("=" * 70)
 
-        # Group results by sleep rate
-        results_by_sleep_rate = {}
-        for sleep_rate, run_idx, result in all_results:
-            results_by_sleep_rate.setdefault(sleep_rate, []).append((run_idx, result))
+        # Group results by dataset and sleep rate
+        results_by_dataset = {}
+        for dataset, sleep_rate, run_idx, result in all_results:
+            if dataset not in results_by_dataset:
+                results_by_dataset[dataset] = {}
+            results_by_dataset[dataset].setdefault(sleep_rate, []).append(
+                (run_idx, result)
+            )
 
         all_test_accs = []
         all_test_phis = []
 
-        # Per-sleep-rate summary
-        for sleep_rate in sorted(results_by_sleep_rate.keys(), key=lambda x: float(x)):
-            results = results_by_sleep_rate[sleep_rate]
-            valid_results = [
-                (run_idx, r)
-                for run_idx, r in results
-                if (r[0] is not None) or (len(r) > 1 and r[1] is not None)
-            ]
-
-            if not valid_results:
+        # Per-dataset, per-sleep-rate summary
+        for dataset in datasets:
+            if dataset not in results_by_dataset:
                 continue
 
-            print(f"\n{'='*70}")
-            print(f"Sleep Rate: {sleep_rate}")
-            print(f"{'='*70}")
-            print(f"\n{'Run':<6} {'Test Accuracy':<15} {'Final Test Phi':<16}")
-            print("-" * 70)
+            print(f"\n{'#'*70}")
+            print(f"# DATASET: {dataset.upper()}")
+            print(f"{'#'*70}")
 
-            test_accs = []
-            test_phis = []
+            dataset_results = results_by_dataset[dataset]
 
-            for run_idx, (acc_dict, phi) in valid_results:
-                test_acc = (
-                    acc_dict.get("test", "N/A") if isinstance(acc_dict, dict) else "N/A"
-                )
-                phi_str = (
-                    f"{phi:.4f}"
-                    if (phi is not None and isinstance(phi, (int, float)))
-                    else "N/A"
-                )
-
-                if isinstance(test_acc, (int, float)):
-                    test_accs.append(test_acc)
-                    all_test_accs.append(test_acc)
-                    print(f"{run_idx+1:<6} {test_acc:<15.4f} {phi_str:<16}")
-                else:
-                    print(f"{run_idx+1:<6} {test_acc:<15} {phi_str:<16}")
-
-                if phi is not None and isinstance(phi, (int, float)):
-                    test_phis.append(phi)
-                    all_test_phis.append(phi)
-                else:
-                    test_phis.append(float("nan"))
-
-            if test_accs:
-                print("-" * 70)
-                # Best / mean acc
-                try:
-                    best_acc_idx = max(
-                        range(len(test_accs)), key=lambda i: test_accs[i]
-                    )
-                    best_run = valid_results[best_acc_idx][0] + 1
-                    print(
-                        f"Best test accuracy: Run {best_run} ({test_accs[best_acc_idx]:.4f})"
-                    )
-                except Exception as e:
-                    print(f"Could not determine best accuracy: {e}")
-
-                try:
-                    mean_acc = float(np.mean(test_accs))
-                    std_acc = float(np.std(test_accs))
-                    print(f"Mean test accuracy: {mean_acc:.4f} ± {std_acc:.4f}")
-                except Exception as e:
-                    print(f"Could not compute accuracy stats: {e}")
-
-                # Phi stats (only valid numbers)
-                valid_phis_only = [
-                    p
-                    for p in test_phis
-                    if isinstance(p, (int, float)) and not np.isnan(p)
+            for sleep_rate in sorted(dataset_results.keys(), key=lambda x: float(x)):
+                results = dataset_results[sleep_rate]
+                valid_results = [
+                    (run_idx, r)
+                    for run_idx, r in results
+                    if (r[0] is not None) or (len(r) > 1 and r[1] is not None)
                 ]
-                if valid_phis_only:
+
+                if not valid_results:
+                    continue
+
+                print(f"\n{'='*70}")
+                print(f"Dataset: {dataset} | Sleep Rate: {sleep_rate}")
+                print(f"{'='*70}")
+                print(f"\n{'Run':<6} {'Test Accuracy':<15} {'Final Test Phi':<16}")
+                print("-" * 70)
+
+                test_accs = []
+                test_phis = []
+
+                for run_idx, (acc_dict, phi) in valid_results:
+                    test_acc = (
+                        acc_dict.get("test", "N/A")
+                        if isinstance(acc_dict, dict)
+                        else "N/A"
+                    )
+                    phi_str = (
+                        f"{phi:.4f}"
+                        if (phi is not None and isinstance(phi, (int, float)))
+                        else "N/A"
+                    )
+
+                    if isinstance(test_acc, (int, float)):
+                        test_accs.append(test_acc)
+                        all_test_accs.append(test_acc)
+                        print(f"{run_idx+1:<6} {test_acc:<15.4f} {phi_str:<16}")
+                    else:
+                        print(f"{run_idx+1:<6} {test_acc:<15} {phi_str:<16}")
+
+                    if phi is not None and isinstance(phi, (int, float)):
+                        test_phis.append(phi)
+                        all_test_phis.append(phi)
+                    else:
+                        test_phis.append(float("nan"))
+
+                if test_accs:
+                    print("-" * 70)
+                    # Best / mean acc
                     try:
-                        mean_phi = float(np.mean(valid_phis_only))
-                        std_phi = float(np.std(valid_phis_only))
-                        print(f"Mean final test phi: {mean_phi:.4f} ± {std_phi:.4f}")
+                        best_acc_idx = max(
+                            range(len(test_accs)), key=lambda i: test_accs[i]
+                        )
+                        best_run = valid_results[best_acc_idx][0] + 1
+                        print(
+                            f"Best test accuracy: Run {best_run} ({test_accs[best_acc_idx]:.4f})"
+                        )
                     except Exception as e:
-                        print(f"Could not compute phi stats: {e}")
+                        print(f"Could not determine best accuracy: {e}")
+
+                    try:
+                        mean_acc = float(np.mean(test_accs))
+                        std_acc = float(np.std(test_accs))
+                        print(f"Mean test accuracy: {mean_acc:.4f} ± {std_acc:.4f}")
+                    except Exception as e:
+                        print(f"Could not compute accuracy stats: {e}")
+
+                    # Phi stats (only valid numbers)
+                    valid_phis_only = [
+                        p
+                        for p in test_phis
+                        if isinstance(p, (int, float)) and not np.isnan(p)
+                    ]
+                    if valid_phis_only:
+                        try:
+                            mean_phi = float(np.mean(valid_phis_only))
+                            std_phi = float(np.std(valid_phis_only))
+                            print(
+                                f"Mean final test phi: {mean_phi:.4f} ± {std_phi:.4f}"
+                            )
+                        except Exception as e:
+                            print(f"Could not compute phi stats: {e}")
 
         # Overall summary
         if all_test_accs:
             print(f"\n{'='*70}")
-            print("OVERALL SUMMARY (All Sleep Rates)")
+            print("OVERALL SUMMARY (All Datasets & Sleep Rates)")
             print(f"{'='*70}")
             print(f"Total runs: {len(all_test_accs)}")
 
             try:
                 best_overall_acc = max(all_test_accs)
                 found = False
-                for sleep_rate in sorted(
-                    results_by_sleep_rate.keys(), key=lambda x: float(x)
-                ):
-                    results = results_by_sleep_rate[sleep_rate]
-                    valid_results = [
-                        (run_idx, r)
-                        for run_idx, r in results
-                        if (r[0] is not None)
-                        and isinstance(r[0], dict)
-                        and isinstance(r[0].get("test"), (int, float))
-                    ]
-                    for run_idx, (acc_dict, phi) in valid_results:
-                        test_acc = acc_dict.get("test")
-                        if (
-                            test_acc is not None
-                            and abs(float(test_acc) - float(best_overall_acc)) < 1e-6
-                        ):
-                            print(
-                                f"Best overall test accuracy: Sleep Rate {sleep_rate}, "
-                                f"Run {run_idx+1} ({best_overall_acc:.4f})"
-                            )
-                            found = True
+                for dataset in datasets:
+                    if dataset not in results_by_dataset:
+                        continue
+                    for sleep_rate in sorted(
+                        results_by_dataset[dataset].keys(), key=lambda x: float(x)
+                    ):
+                        results = results_by_dataset[dataset][sleep_rate]
+                        valid_results = [
+                            (run_idx, r)
+                            for run_idx, r in results
+                            if (r[0] is not None)
+                            and isinstance(r[0], dict)
+                            and isinstance(r[0].get("test"), (int, float))
+                        ]
+                        for run_idx, (acc_dict, phi) in valid_results:
+                            test_acc = acc_dict.get("test")
+                            if (
+                                test_acc is not None
+                                and abs(float(test_acc) - float(best_overall_acc))
+                                < 1e-6
+                            ):
+                                print(
+                                    f"Best overall test accuracy: {dataset}, Sleep Rate {sleep_rate}, "
+                                    f"Run {run_idx+1} ({best_overall_acc:.4f})"
+                                )
+                                found = True
+                                break
+                        if found:
                             break
                     if found:
                         break
@@ -634,19 +675,19 @@ def main():
         else:
             results_data = initial_results_data.copy()
 
-        results_data["image_dataset"] = dataset_name
-
         all_test_accs_from_file = []
         all_test_phis_from_file = []
 
-        for sleep_rate_key, results_list in results_data[
-            "results_by_sleep_rate"
-        ].items():
-            for result_entry in results_list:
-                if result_entry.get("test_accuracy") is not None:
-                    all_test_accs_from_file.append(result_entry["test_accuracy"])
-                if result_entry.get("final_test_phi") is not None:
-                    all_test_phis_from_file.append(result_entry["final_test_phi"])
+        # Aggregate stats from all datasets and sleep rates
+        for dataset_key, sleep_rate_dict in results_data.get(
+            "results_by_dataset", {}
+        ).items():
+            for sleep_rate_key, results_list in sleep_rate_dict.items():
+                for result_entry in results_list:
+                    if result_entry.get("test_accuracy") is not None:
+                        all_test_accs_from_file.append(result_entry["test_accuracy"])
+                    if result_entry.get("final_test_phi") is not None:
+                        all_test_phis_from_file.append(result_entry["final_test_phi"])
 
         results_data["summary"] = {
             "total_runs": len(all_test_accs_from_file),
@@ -654,33 +695,39 @@ def main():
             "overall_std_test_accuracy": safe_stat_std(all_test_accs_from_file),
             "overall_mean_final_test_phi": safe_stat_mean(all_test_phis_from_file),
             "overall_std_final_test_phi": safe_stat_std(all_test_phis_from_file),
-            "per_sleep_rate_summary": {},
+            "per_dataset_summary": {},
         }
 
-        for sleep_rate_key in sorted(
-            results_data["results_by_sleep_rate"].keys(), key=lambda x: float(x)
-        ):
-            results_list = results_data["results_by_sleep_rate"][sleep_rate_key]
-            test_accs = [
-                r["test_accuracy"]
-                for r in results_list
-                if r.get("test_accuracy") is not None
-            ]
-            test_phis = [
-                r["final_test_phi"]
-                for r in results_list
-                if r.get("final_test_phi") is not None
-            ]
+        for dataset_key, sleep_rate_dict in results_data.get(
+            "results_by_dataset", {}
+        ).items():
+            results_data["summary"]["per_dataset_summary"][dataset_key] = {}
+            for sleep_rate_key in sorted(
+                sleep_rate_dict.keys(), key=lambda x: float(x)
+            ):
+                results_list = sleep_rate_dict[sleep_rate_key]
+                test_accs = [
+                    r["test_accuracy"]
+                    for r in results_list
+                    if r.get("test_accuracy") is not None
+                ]
+                test_phis = [
+                    r["final_test_phi"]
+                    for r in results_list
+                    if r.get("final_test_phi") is not None
+                ]
 
-            if test_accs or test_phis:
-                results_data["summary"]["per_sleep_rate_summary"][sleep_rate_key] = {
-                    "mean_test_accuracy": safe_stat_mean(test_accs),
-                    "std_test_accuracy": safe_stat_std(test_accs),
-                    "mean_final_test_phi": safe_stat_mean(test_phis),
-                    "std_final_test_phi": safe_stat_std(test_phis),
-                    "best_test_accuracy": safe_stat_max(test_accs),
-                    "best_final_test_phi": safe_stat_max(test_phis),
-                }
+                if test_accs or test_phis:
+                    results_data["summary"]["per_dataset_summary"][dataset_key][
+                        sleep_rate_key
+                    ] = {
+                        "mean_test_accuracy": safe_stat_mean(test_accs),
+                        "std_test_accuracy": safe_stat_std(test_accs),
+                        "mean_final_test_phi": safe_stat_mean(test_phis),
+                        "std_final_test_phi": safe_stat_std(test_phis),
+                        "best_test_accuracy": safe_stat_max(test_accs),
+                        "best_final_test_phi": safe_stat_max(test_phis),
+                    }
 
         results_data["status"] = "completed"
         results_data["completed_timestamp"] = datetime.now().isoformat()
