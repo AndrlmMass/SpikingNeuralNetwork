@@ -1,5 +1,6 @@
 from torchvision import datasets, transforms
 from plot import plot_floats_and_spikes
+from platform_utils import IS_WINDOWS
 import torch.nn.functional as F
 from snntorch import spikegen
 import librosa

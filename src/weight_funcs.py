@@ -3,7 +3,7 @@ import numpy as np
 from numba import njit, prange
 
 
-@njit
+@njit(cache=True)
 def sleep_func(
     weights,  # shape = (N_pre, N_post)
     max_sum,
@@ -219,7 +219,7 @@ def vectorized_trace_func(
     return weights, pre_trace, post_trace
 
 
-@njit
+@njit(cache=True)
 def trace_STDP(
     spikes: np.ndarray,
     weights: np.ndarray,
@@ -302,7 +302,7 @@ def trace_STDP(
     return post_trace, pre_trace, weights
 
 
-@njit(parallel=True)
+@njit(parallel=True, cache=True)
 def spike_timing(
     spike_times,  # Array of spike times
     tau_LTP,

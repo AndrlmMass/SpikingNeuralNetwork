@@ -3,16 +3,16 @@ import os
 from datetime import datetime
 from typing import Dict, Tuple, Optional
 import numpy as np
+import matplotlib
+from platform_utils import configure_matplotlib
+configure_matplotlib()
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
-import matplotlib
 import argparse
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
-
-matplotlib.use("TkAgg")
 warnings.filterwarnings("error", category=RuntimeWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="matplotlib")
 
