@@ -1,0 +1,40 @@
+{
+  "timestamp": "2025-11-30T09:18:37.590829",
+  "status": "in_progress",
+  "image_dataset": "mnist",
+  "args": {
+    "runs": 1,
+    "sleep_rates": [
+      0.0,
+      0.1,
+      0.2,
+      0.3,
+      0.4,
+      0.5,
+      0.6,
+      0.7,
+      0.8,
+      0.9,
+      1.0
+    ],
+    "sleep_max_iters": 10000,
+    "on_timeout": "give_up",
+    "early_stopping": false,
+    "no_sleep": false,
+    "normalize_weights": false,
+    "image_dataset": "mnist"
+  },
+  "results_by_sleep_rate": {
+    "0.0": [],
+    "0.1": [],
+    "0.2": [],
+    "0.3": [],
+    "0.4": [],
+    "0.5": [],
+    "0.6": [],
+    "0.7": [],
+    "0.8": [],
+    "0.9": [],
+    "1.0": []
+  }
+}

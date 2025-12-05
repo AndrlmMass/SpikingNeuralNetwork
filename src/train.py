@@ -35,18 +35,16 @@ def clip_weights(
     min_weight_inh,
     max_weight_inh,
 ):
+    # Only enforce sign boundaries: exc >= 0, inh <= 0
+    # This prevents weights from crossing over (exc->inh or inh->exc)
     for i_ in range(nz_rows_exc.shape[0]):
         i, j = nz_rows_exc[i_], nz_cols_exc[i_]
-        if weights[i, j] < min_weight_exc:
-            weights[i, j] = min_weight_exc
-        elif weights[i, j] > max_weight_exc:
-            weights[i, j] = max_weight_exc
+        if weights[i, j] < 0.0:
+            weights[i, j] = 0.0
     for i_ in range(nz_rows_inh.shape[0]):
         i, j = nz_rows_inh[i_], nz_cols_inh[i_]
-        if weights[i, j] < min_weight_inh:
-            weights[i, j] = min_weight_inh
-        elif weights[i, j] > max_weight_inh:
-            weights[i, j] = max_weight_inh
+        if weights[i, j] > 0.0:
+            weights[i, j] = 0.0
     return weights
 
 
@@ -338,6 +336,7 @@ def train_network(
     sleep_max_iters: int = 5000,
     on_timeout: str = "scale_to_target",  # one of {"scale_to_target","extend","give_up"}
     sleep_mode: str = "static",  # one of {"static","group","post"}
+    track_weights: bool = False,  # Enable weight tracking (adds overhead)
     weight_track_samples_exc=8,
     weight_track_samples_inh=8,
     train_snapshot_interval=None,
@@ -407,87 +406,105 @@ def train_network(
     t_virtual = 0  # virtual time used only inside sleep loop
 
     # Lightweight weight tracking focused around sleep periods (plus sparse training samples)
-    # - tracks a small, fixed set of non-zero synapses for both E and I pathways
-    # - records snapshots just before sleep, during sleep (decimated), just after sleep, and sparsely during training
-    weight_tracking_sleep = {
-        "times": [],  # monotonically increasing plot-time (snapshot index)
-        "exc_mean": [],
-        "exc_std": [],
-        "exc_min": [],
-        "exc_max": [],
-        "exc_samples": [],  # list of [K_exc] values (tracked weights)
-        "inh_mean": [],
-        "inh_std": [],
-        "inh_min": [],
-        "inh_max": [],
-        "inh_samples": [],  # list of [K_inh] values (tracked weights)
-        "sleep_segments": [],  # list of (t_start, t_end) in the same plot-time reference
-    }
-    # Select a small number of active synapses to track (prefer non-zero)
-    rng = np.random.default_rng(42)
-    try:
-        K_exc = max(1, int(weight_track_samples_exc))
-    except Exception:
-        K_exc = 8
-    try:
-        K_inh = max(1, int(weight_track_samples_inh))
-    except Exception:
-        K_inh = 8
-    # Candidates within the decayed submatrices
-    exc_cand = np.argwhere(weights[:ex, st:ih] != 0)
-    inh_cand = np.argwhere(weights[ex:ih, st:ex] != 0)
-    # Fall back to random positions if there are too few non-zero entries
-    if exc_cand.shape[0] >= K_exc:
-        choose_exc = rng.choice(exc_cand.shape[0], size=K_exc, replace=False)
-        exc_pairs = [
-            (int(exc_cand[i, 0]), int(st + exc_cand[i, 1])) for i in choose_exc
-        ]
-    else:
-        # Sample uniformly within the slice
-        if (ex > 0) and (ih - st > 0):
-            exc_pairs = [
-                (int(rng.integers(0, ex)), int(st + rng.integers(0, ih - st)))
-                for _ in range(K_exc)
-            ]
-        else:
-            exc_pairs = []
-    if inh_cand.shape[0] >= K_inh:
-        choose_inh = rng.choice(inh_cand.shape[0], size=K_inh, replace=False)
-        inh_pairs = [
-            (int(ex + inh_cand[i, 0]), int(st + inh_cand[i, 1])) for i in choose_inh
-        ]
-    else:
-        if (ih - ex > 0) and (ex - st > 0):
-            inh_pairs = [
-                (int(ex + rng.integers(0, ih - ex)), int(st + rng.integers(0, ex - st)))
-                for _ in range(K_inh)
-            ]
-        else:
-            inh_pairs = []
+    # Only initialize if track_weights is enabled to avoid overhead
+    weight_tracking_sleep = None
+    exc_pairs = []
+    inh_pairs = []
+    plot_time = 0
+    train_record_every = 1
+    sleep_record_every = 1
 
-    # Snapshot cadence
-    plot_time = 0  # increases by 1 per recorded snapshot (training or sleep)
-    custom_train_interval = None
-    try:
-        if train_snapshot_interval is not None and float(train_snapshot_interval) > 0:
-            custom_train_interval = max(1, int(train_snapshot_interval))
-    except Exception:
+    if track_weights:
+        weight_tracking_sleep = {
+            "times": [],  # monotonically increasing plot-time (snapshot index)
+            "exc_mean": [],
+            "exc_std": [],
+            "exc_min": [],
+            "exc_max": [],
+            "exc_samples": [],  # list of [K_exc] values (tracked weights)
+            "inh_mean": [],
+            "inh_std": [],
+            "inh_min": [],
+            "inh_max": [],
+            "inh_samples": [],  # list of [K_inh] values (tracked weights)
+            "sleep_segments": [],  # list of (t_start, t_end) in the same plot-time reference
+        }
+        # Select a small number of active synapses to track (prefer non-zero)
+        rng = np.random.default_rng(42)
+        try:
+            K_exc = max(1, int(weight_track_samples_exc))
+        except Exception:
+            K_exc = 8
+        try:
+            K_inh = max(1, int(weight_track_samples_inh))
+        except Exception:
+            K_inh = 8
+        # Candidates within the decayed submatrices
+        exc_cand = np.argwhere(weights[:ex, st:ih] != 0)
+        inh_cand = np.argwhere(weights[ex:ih, st:ex] != 0)
+        # Fall back to random positions if there are too few non-zero entries
+        if exc_cand.shape[0] >= K_exc:
+            choose_exc = rng.choice(exc_cand.shape[0], size=K_exc, replace=False)
+            exc_pairs = [
+                (int(exc_cand[i, 0]), int(st + exc_cand[i, 1])) for i in choose_exc
+            ]
+        else:
+            # Sample uniformly within the slice
+            if (ex > 0) and (ih - st > 0):
+                exc_pairs = [
+                    (int(rng.integers(0, ex)), int(st + rng.integers(0, ih - st)))
+                    for _ in range(K_exc)
+                ]
+            else:
+                exc_pairs = []
+        if inh_cand.shape[0] >= K_inh:
+            choose_inh = rng.choice(inh_cand.shape[0], size=K_inh, replace=False)
+            inh_pairs = [
+                (int(ex + inh_cand[i, 0]), int(st + inh_cand[i, 1])) for i in choose_inh
+            ]
+        else:
+            if (ih - ex > 0) and (ex - st > 0):
+                inh_pairs = [
+                    (
+                        int(ex + rng.integers(0, ih - ex)),
+                        int(st + rng.integers(0, ex - st)),
+                    )
+                    for _ in range(K_inh)
+                ]
+            else:
+                inh_pairs = []
+
+        # Snapshot cadence
         custom_train_interval = None
-    default_train_interval = max(1, check_sleep_interval // 20)
-    train_record_every = custom_train_interval or default_train_interval
-    custom_sleep_interval = None
-    try:
-        if sleep_snapshot_interval is not None and float(sleep_snapshot_interval) > 0:
-            custom_sleep_interval = max(1, int(sleep_snapshot_interval))
-    except Exception:
+        try:
+            if (
+                train_snapshot_interval is not None
+                and float(train_snapshot_interval) > 0
+            ):
+                custom_train_interval = max(1, int(train_snapshot_interval))
+        except Exception:
+            custom_train_interval = None
+        default_train_interval = max(1, check_sleep_interval // 20)
+        train_record_every = custom_train_interval or default_train_interval
         custom_sleep_interval = None
-    if sleep_window > 0:
-        default_sleep_interval = max(1, sleep_window // 100)
-    else:
-        default_sleep_interval = 5
-    sleep_record_every = custom_sleep_interval or default_sleep_interval
+        try:
+            if (
+                sleep_snapshot_interval is not None
+                and float(sleep_snapshot_interval) > 0
+            ):
+                custom_sleep_interval = max(1, int(sleep_snapshot_interval))
+        except Exception:
+            custom_sleep_interval = None
+        if sleep_window > 0:
+            default_sleep_interval = max(1, sleep_window // 100)
+        else:
+            default_sleep_interval = 5
+        sleep_record_every = custom_sleep_interval or default_sleep_interval
 
     def _record_snapshot():
+        nonlocal plot_time
+        if not track_weights or weight_tracking_sleep is None:
+            return False
         # Compute group stats over signed weights (preserve inhibitory sign)
         try:
             W_exc = weights[:ex, st:ih]
@@ -534,16 +551,11 @@ def train_network(
     last_sample = 0
     last_sleep_flag = -1  # unknown
     last_stats_update_t = -1000
-    # Initial snapshot
-    _record_snapshot()
-    plot_time += 1
-    for t in range(1, T):
-        # Update progress bar only when sample count changes (every 1000 timesteps)
-        # Display as 1-indexed (1 to total_samples)
-        current_sample = t // 1000
-        if current_sample > last_sample:
-            pbar.update(current_sample - last_sample)
-            last_sample = current_sample
+    # Initial snapshot (only if tracking enabled)
+    if track_weights:
+        _record_snapshot()
+        plot_time += 1
+    for t in pbar:
         # Reset sleep flags for this timestep
         sleep_now_inh = False
         sleep_now_exc = False
@@ -850,8 +862,8 @@ def train_network(
                     if cur_inh > 1e-10:
                         weights[ex:ih, st:ex] *= initial_sum_inh / cur_inh
 
-                # Record decimated snapshots during sleep
-                if (sleep_iter % sleep_record_every) == 0:
+                # Record decimated snapshots during sleep (only if tracking enabled)
+                if track_weights and (sleep_iter % sleep_record_every) == 0:
                     _record_snapshot()
                     plot_time += 1
 
@@ -863,18 +875,19 @@ def train_network(
                 t_virtual += 1
 
             # End of hard-pause sleep loop — record one more snapshot and mark the segment
-            try:
-                _record_snapshot()
-                plot_time += 1
-                # Sleep segment spans from the snapshot just before loop (plot_time - (sleep_time_counter + 1))
-                # to the snapshot we just took (plot_time - 1)
-                seg_end = plot_time - 1
-                seg_start = max(
-                    0, seg_end - max(1, (sleep_time_counter // sleep_record_every))
-                )
-                weight_tracking_sleep["sleep_segments"].append((seg_start, seg_end))
-            except Exception:
-                pass
+            if track_weights and weight_tracking_sleep is not None:
+                try:
+                    _record_snapshot()
+                    plot_time += 1
+                    # Sleep segment spans from the snapshot just before loop (plot_time - (sleep_time_counter + 1))
+                    # to the snapshot we just took (plot_time - 1)
+                    seg_end = plot_time - 1
+                    seg_start = max(
+                        0, seg_end - max(1, (sleep_time_counter // sleep_record_every))
+                    )
+                    weight_tracking_sleep["sleep_segments"].append((seg_start, seg_end))
+                except Exception:
+                    pass
 
             # End hard-pause sleep; do not advance real t here (the loop continues below)
             # Update cached transpose after sleep modified weights
@@ -1044,7 +1057,7 @@ def train_network(
         spikes_prev = spikes[t]
 
         # Sparse training snapshots (outside sleep) for context
-        if (t % train_record_every) == 0:
+        if track_weights and (t % train_record_every) == 0:
             _record_snapshot()
             plot_time += 1
 

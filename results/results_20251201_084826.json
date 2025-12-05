@@ -1,0 +1,114 @@
+{
+  "timestamp": "2025-12-01T08:48:26.346787",
+  "status": "in_progress",
+  "image_dataset": "mnist",
+  "args": {
+    "runs": 5,
+    "sleep_rates": [
+      0.0,
+      0.1,
+      0.2,
+      0.3,
+      0.4,
+      0.5,
+      0.6,
+      0.7,
+      0.8,
+      0.9,
+      1.0
+    ],
+    "sleep_max_iters": 10000,
+    "on_timeout": "give_up",
+    "early_stopping": false,
+    "no_sleep": false,
+    "normalize_weights": false,
+    "image_dataset": "mnist"
+  },
+  "results_by_sleep_rate": {
+    "0.0": [
+      {
+        "run": 1,
+        "sleep_rate": 0.0,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.4576271186440678,
+        "train_accuracy": 0.7157894736842105,
+        "val_accuracy": 0.3888888888888889,
+        "final_test_phi": null
+      },
+      {
+        "run": 2,
+        "sleep_rate": 0.0,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.4076086956521739,
+        "train_accuracy": 0.6398601398601399,
+        "val_accuracy": 0.4027777777777778,
+        "final_test_phi": null
+      },
+      {
+        "run": 3,
+        "sleep_rate": 0.0,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.40641711229946526,
+        "train_accuracy": 0.7972508591065293,
+        "val_accuracy": 0.4246575342465753,
+        "final_test_phi": null
+      },
+      {
+        "run": 4,
+        "sleep_rate": 0.0,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.4888888888888889,
+        "train_accuracy": 0.7353951890034365,
+        "val_accuracy": 0.5205479452054794,
+        "final_test_phi": null
+      },
+      {
+        "run": 5,
+        "sleep_rate": 0.0,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.5164835164835165,
+        "train_accuracy": 0.8517241379310345,
+        "val_accuracy": 0.4931506849315068,
+        "final_test_phi": null
+      }
+    ],
+    "0.1": [
+      {
+        "run": 1,
+        "sleep_rate": 0.1,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7853107344632768,
+        "train_accuracy": 0.9721254355400697,
+        "val_accuracy": 0.8472222222222222,
+        "final_test_phi": null
+      },
+      {
+        "run": 2,
+        "sleep_rate": 0.1,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7445652173913043,
+        "train_accuracy": 0.9860627177700348,
+        "val_accuracy": 0.7916666666666666,
+        "final_test_phi": null
+      },
+      {
+        "run": 3,
+        "sleep_rate": 0.1,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.786096256684492,
+        "train_accuracy": 0.9965870307167235,
+        "val_accuracy": 0.7702702702702703,
+        "final_test_phi": null
+      }
+    ],
+    "0.2": [],
+    "0.3": [],
+    "0.4": [],
+    "0.5": [],
+    "0.6": [],
+    "0.7": [],
+    "0.8": [],
+    "0.9": [],
+    "1.0": []
+  }
+}

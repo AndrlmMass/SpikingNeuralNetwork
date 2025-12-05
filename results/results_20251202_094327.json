@@ -1,0 +1,644 @@
+{
+  "timestamp": "2025-12-02T09:43:27.281775",
+  "status": "completed",
+  "image_dataset": "mnist",
+  "args": {
+    "runs": 5,
+    "sleep_rates": [
+      0.0,
+      0.1,
+      0.2,
+      0.3,
+      0.4,
+      0.5,
+      0.6,
+      0.7,
+      0.8,
+      0.9,
+      1.0
+    ],
+    "sleep_max_iters": 10000,
+    "on_timeout": "give_up",
+    "early_stopping": false,
+    "no_sleep": false,
+    "normalize_weights": false,
+    "image_dataset": "mnist"
+  },
+  "results_by_sleep_rate": {
+    "0.0": [
+      {
+        "run": 1,
+        "sleep_rate": 0.0,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.44623655913978494,
+        "train_accuracy": 0.9303135888501742,
+        "val_accuracy": 0.4583333333333333,
+        "final_test_phi": null
+      },
+      {
+        "run": 2,
+        "sleep_rate": 0.0,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.5777777777777777,
+        "train_accuracy": 0.8916083916083916,
+        "val_accuracy": 0.4861111111111111,
+        "final_test_phi": null
+      },
+      {
+        "run": 3,
+        "sleep_rate": 0.0,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.45454545454545453,
+        "train_accuracy": 0.7250859106529209,
+        "val_accuracy": 0.3972602739726027,
+        "final_test_phi": null
+      },
+      {
+        "run": 4,
+        "sleep_rate": 0.0,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.4585635359116022,
+        "train_accuracy": 0.6632302405498282,
+        "val_accuracy": 0.5342465753424658,
+        "final_test_phi": null
+      },
+      {
+        "run": 5,
+        "sleep_rate": 0.0,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.49162011173184356,
+        "train_accuracy": 0.8310344827586207,
+        "val_accuracy": 0.5068493150684932,
+        "final_test_phi": null
+      }
+    ],
+    "0.1": [
+      {
+        "run": 1,
+        "sleep_rate": 0.1,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7597765363128491,
+        "train_accuracy": 0.9964912280701754,
+        "val_accuracy": 0.8194444444444444,
+        "final_test_phi": null
+      },
+      {
+        "run": 2,
+        "sleep_rate": 0.1,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.8111111111111111,
+        "train_accuracy": 0.975609756097561,
+        "val_accuracy": 0.7222222222222222,
+        "final_test_phi": null
+      },
+      {
+        "run": 3,
+        "sleep_rate": 0.1,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7443181818181818,
+        "train_accuracy": 0.9965635738831615,
+        "val_accuracy": 0.7671232876712328,
+        "final_test_phi": null
+      },
+      {
+        "run": 4,
+        "sleep_rate": 0.1,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7292817679558011,
+        "train_accuracy": 0.9828767123287672,
+        "val_accuracy": 0.684931506849315,
+        "final_test_phi": null
+      },
+      {
+        "run": 5,
+        "sleep_rate": 0.1,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7653631284916201,
+        "train_accuracy": 0.8827586206896552,
+        "val_accuracy": 0.6986301369863014,
+        "final_test_phi": null
+      }
+    ],
+    "0.2": [
+      {
+        "run": 1,
+        "sleep_rate": 0.2,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7541899441340782,
+        "train_accuracy": 0.8912280701754386,
+        "val_accuracy": 0.8055555555555556,
+        "final_test_phi": null
+      },
+      {
+        "run": 2,
+        "sleep_rate": 0.2,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7888888888888889,
+        "train_accuracy": 0.8989547038327527,
+        "val_accuracy": 0.75,
+        "final_test_phi": null
+      },
+      {
+        "run": 3,
+        "sleep_rate": 0.2,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7613636363636364,
+        "train_accuracy": 0.8934707903780069,
+        "val_accuracy": 0.7534246575342466,
+        "final_test_phi": null
+      },
+      {
+        "run": 4,
+        "sleep_rate": 0.2,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7458563535911602,
+        "train_accuracy": 0.910958904109589,
+        "val_accuracy": 0.7808219178082192,
+        "final_test_phi": null
+      },
+      {
+        "run": 5,
+        "sleep_rate": 0.2,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7821229050279329,
+        "train_accuracy": 0.8620689655172413,
+        "val_accuracy": 0.684931506849315,
+        "final_test_phi": null
+      }
+    ],
+    "0.3": [
+      {
+        "run": 1,
+        "sleep_rate": 0.3,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.770949720670391,
+        "train_accuracy": 0.8105263157894737,
+        "val_accuracy": 0.7916666666666666,
+        "final_test_phi": null
+      },
+      {
+        "run": 2,
+        "sleep_rate": 0.3,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7444444444444445,
+        "train_accuracy": 0.7979094076655052,
+        "val_accuracy": 0.5694444444444444,
+        "final_test_phi": null
+      },
+      {
+        "run": 3,
+        "sleep_rate": 0.3,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7443181818181818,
+        "train_accuracy": 0.8419243986254296,
+        "val_accuracy": 0.7397260273972602,
+        "final_test_phi": null
+      },
+      {
+        "run": 4,
+        "sleep_rate": 0.3,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7348066298342542,
+        "train_accuracy": 0.815068493150685,
+        "val_accuracy": 0.863013698630137,
+        "final_test_phi": null
+      },
+      {
+        "run": 5,
+        "sleep_rate": 0.3,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.6703910614525139,
+        "train_accuracy": 0.7862068965517242,
+        "val_accuracy": 0.5205479452054794,
+        "final_test_phi": null
+      }
+    ],
+    "0.4": [
+      {
+        "run": 1,
+        "sleep_rate": 0.4,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7486033519553073,
+        "train_accuracy": 0.8175438596491228,
+        "val_accuracy": 0.8194444444444444,
+        "final_test_phi": null
+      },
+      {
+        "run": 2,
+        "sleep_rate": 0.4,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7444444444444445,
+        "train_accuracy": 0.8222996515679443,
+        "val_accuracy": 0.6666666666666666,
+        "final_test_phi": null
+      },
+      {
+        "run": 3,
+        "sleep_rate": 0.4,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7556818181818182,
+        "train_accuracy": 0.8419243986254296,
+        "val_accuracy": 0.684931506849315,
+        "final_test_phi": null
+      },
+      {
+        "run": 4,
+        "sleep_rate": 0.4,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7292817679558011,
+        "train_accuracy": 0.8561643835616438,
+        "val_accuracy": 0.8904109589041096,
+        "final_test_phi": null
+      },
+      {
+        "run": 5,
+        "sleep_rate": 0.4,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.6759776536312849,
+        "train_accuracy": 0.7758620689655172,
+        "val_accuracy": 0.6027397260273972,
+        "final_test_phi": null
+      }
+    ],
+    "0.5": [
+      {
+        "run": 1,
+        "sleep_rate": 0.5,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7597765363128491,
+        "train_accuracy": 0.8175438596491228,
+        "val_accuracy": 0.7916666666666666,
+        "final_test_phi": null
+      },
+      {
+        "run": 2,
+        "sleep_rate": 0.5,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7444444444444445,
+        "train_accuracy": 0.8292682926829268,
+        "val_accuracy": 0.6944444444444444,
+        "final_test_phi": null
+      },
+      {
+        "run": 3,
+        "sleep_rate": 0.5,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7443181818181818,
+        "train_accuracy": 0.8487972508591065,
+        "val_accuracy": 0.7397260273972602,
+        "final_test_phi": null
+      },
+      {
+        "run": 4,
+        "sleep_rate": 0.5,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7569060773480663,
+        "train_accuracy": 0.8527397260273972,
+        "val_accuracy": 0.863013698630137,
+        "final_test_phi": null
+      },
+      {
+        "run": 5,
+        "sleep_rate": 0.5,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.6703910614525139,
+        "train_accuracy": 0.7724137931034483,
+        "val_accuracy": 0.5068493150684932,
+        "final_test_phi": null
+      }
+    ],
+    "0.6": [
+      {
+        "run": 1,
+        "sleep_rate": 0.6,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7653631284916201,
+        "train_accuracy": 0.8070175438596491,
+        "val_accuracy": 0.8333333333333334,
+        "final_test_phi": null
+      },
+      {
+        "run": 2,
+        "sleep_rate": 0.6,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.75,
+        "train_accuracy": 0.8118466898954704,
+        "val_accuracy": 0.7222222222222222,
+        "final_test_phi": null
+      },
+      {
+        "run": 3,
+        "sleep_rate": 0.6,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7670454545454546,
+        "train_accuracy": 0.8487972508591065,
+        "val_accuracy": 0.7534246575342466,
+        "final_test_phi": null
+      },
+      {
+        "run": 4,
+        "sleep_rate": 0.6,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7403314917127072,
+        "train_accuracy": 0.8493150684931506,
+        "val_accuracy": 0.863013698630137,
+        "final_test_phi": null
+      },
+      {
+        "run": 5,
+        "sleep_rate": 0.6,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.6759776536312849,
+        "train_accuracy": 0.7931034482758621,
+        "val_accuracy": 0.589041095890411,
+        "final_test_phi": null
+      }
+    ],
+    "0.7": [
+      {
+        "run": 1,
+        "sleep_rate": 0.7,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.776536312849162,
+        "train_accuracy": 0.8105263157894737,
+        "val_accuracy": 0.7777777777777778,
+        "final_test_phi": null
+      },
+      {
+        "run": 2,
+        "sleep_rate": 0.7,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7666666666666667,
+        "train_accuracy": 0.8153310104529616,
+        "val_accuracy": 0.6388888888888888,
+        "final_test_phi": null
+      },
+      {
+        "run": 3,
+        "sleep_rate": 0.7,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7613636363636364,
+        "train_accuracy": 0.8625429553264605,
+        "val_accuracy": 0.726027397260274,
+        "final_test_phi": null
+      },
+      {
+        "run": 4,
+        "sleep_rate": 0.7,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7237569060773481,
+        "train_accuracy": 0.8527397260273972,
+        "val_accuracy": 0.8493150684931506,
+        "final_test_phi": null
+      },
+      {
+        "run": 5,
+        "sleep_rate": 0.7,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.6983240223463687,
+        "train_accuracy": 0.7793103448275862,
+        "val_accuracy": 0.5753424657534246,
+        "final_test_phi": null
+      }
+    ],
+    "0.8": [
+      {
+        "run": 1,
+        "sleep_rate": 0.8,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7653631284916201,
+        "train_accuracy": 0.8140350877192982,
+        "val_accuracy": 0.7777777777777778,
+        "final_test_phi": null
+      },
+      {
+        "run": 2,
+        "sleep_rate": 0.8,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7555555555555555,
+        "train_accuracy": 0.8222996515679443,
+        "val_accuracy": 0.6388888888888888,
+        "final_test_phi": null
+      },
+      {
+        "run": 3,
+        "sleep_rate": 0.8,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7613636363636364,
+        "train_accuracy": 0.8487972508591065,
+        "val_accuracy": 0.7397260273972602,
+        "final_test_phi": null
+      },
+      {
+        "run": 4,
+        "sleep_rate": 0.8,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.712707182320442,
+        "train_accuracy": 0.8493150684931506,
+        "val_accuracy": 0.8493150684931506,
+        "final_test_phi": null
+      },
+      {
+        "run": 5,
+        "sleep_rate": 0.8,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.659217877094972,
+        "train_accuracy": 0.7620689655172413,
+        "val_accuracy": 0.5753424657534246,
+        "final_test_phi": null
+      }
+    ],
+    "0.9": [
+      {
+        "run": 1,
+        "sleep_rate": 0.9,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7653631284916201,
+        "train_accuracy": 0.8035087719298246,
+        "val_accuracy": 0.7916666666666666,
+        "final_test_phi": null
+      },
+      {
+        "run": 2,
+        "sleep_rate": 0.9,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7555555555555555,
+        "train_accuracy": 0.8222996515679443,
+        "val_accuracy": 0.6805555555555556,
+        "final_test_phi": null
+      },
+      {
+        "run": 3,
+        "sleep_rate": 0.9,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.75,
+        "train_accuracy": 0.8419243986254296,
+        "val_accuracy": 0.7397260273972602,
+        "final_test_phi": null
+      },
+      {
+        "run": 4,
+        "sleep_rate": 0.9,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7513812154696132,
+        "train_accuracy": 0.8493150684931506,
+        "val_accuracy": 0.8356164383561644,
+        "final_test_phi": null
+      },
+      {
+        "run": 5,
+        "sleep_rate": 0.9,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.6871508379888268,
+        "train_accuracy": 0.7896551724137931,
+        "val_accuracy": 0.589041095890411,
+        "final_test_phi": null
+      }
+    ],
+    "1.0": [
+      {
+        "run": 1,
+        "sleep_rate": 1.0,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7430167597765364,
+        "train_accuracy": 0.8175438596491228,
+        "val_accuracy": 0.8333333333333334,
+        "final_test_phi": null
+      },
+      {
+        "run": 2,
+        "sleep_rate": 1.0,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7388888888888889,
+        "train_accuracy": 0.8362369337979094,
+        "val_accuracy": 0.6388888888888888,
+        "final_test_phi": null
+      },
+      {
+        "run": 3,
+        "sleep_rate": 1.0,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7556818181818182,
+        "train_accuracy": 0.8316151202749141,
+        "val_accuracy": 0.7397260273972602,
+        "final_test_phi": null
+      },
+      {
+        "run": 4,
+        "sleep_rate": 1.0,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.7237569060773481,
+        "train_accuracy": 0.8253424657534246,
+        "val_accuracy": 0.863013698630137,
+        "final_test_phi": null
+      },
+      {
+        "run": 5,
+        "sleep_rate": 1.0,
+        "image_dataset": "mnist",
+        "test_accuracy": 0.6536312849162011,
+        "train_accuracy": 0.7758620689655172,
+        "val_accuracy": 0.6027397260273972,
+        "final_test_phi": null
+      }
+    ]
+  },
+  "summary": {
+    "total_runs": 55,
+    "overall_mean_test_accuracy": 0.7176318239349655,
+    "overall_std_test_accuracy": 0.08147711668910396,
+    "overall_mean_final_test_phi": null,
+    "overall_std_final_test_phi": null,
+    "per_sleep_rate_summary": {
+      "0.0": {
+        "mean_test_accuracy": 0.4857486878212926,
+        "std_test_accuracy": 0.04853392541536189,
+        "mean_final_test_phi": null,
+        "std_final_test_phi": null,
+        "best_test_accuracy": 0.5777777777777777,
+        "best_final_test_phi": null
+      },
+      "0.1": {
+        "mean_test_accuracy": 0.7619701451379126,
+        "std_test_accuracy": 0.027608986233964097,
+        "mean_final_test_phi": null,
+        "std_final_test_phi": null,
+        "best_test_accuracy": 0.8111111111111111,
+        "best_final_test_phi": null
+      },
+      "0.2": {
+        "mean_test_accuracy": 0.7664843456011392,
+        "std_test_accuracy": 0.016428122995461664,
+        "mean_final_test_phi": null,
+        "std_final_test_phi": null,
+        "best_test_accuracy": 0.7888888888888889,
+        "best_final_test_phi": null
+      },
+      "0.3": {
+        "mean_test_accuracy": 0.732982007643957,
+        "std_test_accuracy": 0.03353326505441611,
+        "mean_final_test_phi": null,
+        "std_final_test_phi": null,
+        "best_test_accuracy": 0.770949720670391,
+        "best_final_test_phi": null
+      },
+      "0.4": {
+        "mean_test_accuracy": 0.7307978072337311,
+        "std_test_accuracy": 0.028740319229074034,
+        "mean_final_test_phi": null,
+        "std_final_test_phi": null,
+        "best_test_accuracy": 0.7556818181818182,
+        "best_final_test_phi": null
+      },
+      "0.5": {
+        "mean_test_accuracy": 0.7351672602752111,
+        "std_test_accuracy": 0.03299683039304472,
+        "mean_final_test_phi": null,
+        "std_final_test_phi": null,
+        "best_test_accuracy": 0.7597765363128491,
+        "best_final_test_phi": null
+      },
+      "0.6": {
+        "mean_test_accuracy": 0.7397435456762134,
+        "std_test_accuracy": 0.03338678413882672,
+        "mean_final_test_phi": null,
+        "std_final_test_phi": null,
+        "best_test_accuracy": 0.7670454545454546,
+        "best_final_test_phi": null
+      },
+      "0.7": {
+        "mean_test_accuracy": 0.7453295088606364,
+        "std_test_accuracy": 0.0295334559998951,
+        "mean_final_test_phi": null,
+        "std_final_test_phi": null,
+        "best_test_accuracy": 0.776536312849162,
+        "best_final_test_phi": null
+      },
+      "0.8": {
+        "mean_test_accuracy": 0.7308414759652452,
+        "std_test_accuracy": 0.04047943927392974,
+        "mean_final_test_phi": null,
+        "std_final_test_phi": null,
+        "best_test_accuracy": 0.7653631284916201,
+        "best_final_test_phi": null
+      },
+      "0.9": {
+        "mean_test_accuracy": 0.7418901475011231,
+        "std_test_accuracy": 0.02789253053594597,
+        "mean_final_test_phi": null,
+        "std_final_test_phi": null,
+        "best_test_accuracy": 0.7653631284916201,
+        "best_final_test_phi": null
+      },
+      "1.0": {
+        "mean_test_accuracy": 0.7229951315681585,
+        "std_test_accuracy": 0.03614919120097569,
+        "mean_final_test_phi": null,
+        "std_final_test_phi": null,
+        "best_test_accuracy": 0.7556818181818182,
+        "best_final_test_phi": null
+      }
+    }
+  },
+  "completed_timestamp": "2025-12-02T22:19:20.460285"
+}
