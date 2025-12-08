@@ -1,0 +1,92 @@
+{
+  "timestamp": "2025-12-08T18:18:10.794569",
+  "status": "completed",
+  "datasets": [
+    "geomfig"
+  ],
+  "args": {
+    "runs": 5,
+    "sleep_rates": [
+      0.2
+    ],
+    "datasets": [
+      "geomfig"
+    ],
+    "sleep_max_iters": 10000,
+    "on_timeout": "give_up",
+    "early_stopping": true,
+    "no_sleep": false,
+    "normalize_weights": false
+  },
+  "results_by_dataset": {
+    "geomfig": {
+      "0.2": [
+        {
+          "run": 1,
+          "sleep_rate": 0.2,
+          "dataset": "geomfig",
+          "test_accuracy": 1.0,
+          "train_accuracy": 1.0,
+          "val_accuracy": 0.9672131147540983,
+          "final_test_phi": null
+        },
+        {
+          "run": 2,
+          "sleep_rate": 0.2,
+          "dataset": "geomfig",
+          "test_accuracy": 1.0,
+          "train_accuracy": 1.0,
+          "val_accuracy": 1.0,
+          "final_test_phi": null
+        },
+        {
+          "run": 3,
+          "sleep_rate": 0.2,
+          "dataset": "geomfig",
+          "test_accuracy": 1.0,
+          "train_accuracy": 1.0,
+          "val_accuracy": 1.0,
+          "final_test_phi": null
+        },
+        {
+          "run": 4,
+          "sleep_rate": 0.2,
+          "dataset": "geomfig",
+          "test_accuracy": 1.0,
+          "train_accuracy": 1.0,
+          "val_accuracy": 1.0,
+          "final_test_phi": null
+        },
+        {
+          "run": 5,
+          "sleep_rate": 0.2,
+          "dataset": "geomfig",
+          "test_accuracy": 1.0,
+          "train_accuracy": 1.0,
+          "val_accuracy": 1.0,
+          "final_test_phi": null
+        }
+      ]
+    }
+  },
+  "summary": {
+    "total_runs": 5,
+    "overall_mean_test_accuracy": 1.0,
+    "overall_std_test_accuracy": 0.0,
+    "overall_mean_final_test_phi": null,
+    "overall_std_final_test_phi": null,
+    "per_dataset_summary": {
+      "geomfig": {
+        "0.2": {
+          "mean_test_accuracy": 1.0,
+          "std_test_accuracy": 0.0,
+          "mean_final_test_phi": null,
+          "std_final_test_phi": null,
+          "best_test_accuracy": 1.0,
+          "best_final_test_phi": null
+        }
+      }
+    }
+  },
+  "completed_timestamp": "2025-12-08T19:22:44.460500"
+}

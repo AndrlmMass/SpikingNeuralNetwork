@@ -195,14 +195,16 @@ def update_membrane_potential(
         I_syn_new = I_syn + (-I_syn + np.dot(weights_T, spikes)) * dt / tau_syn
     else:
         I_syn_new = I_syn + (-I_syn + np.dot(weights.T, spikes)) * dt / tau_syn
-    
+
     # Compute membrane potential update
-    mp_new = mp + ((-(mp - resting_potential) + membrane_resistance * I_syn_new) / tau_m * dt)
-    
+    mp_new = mp + (
+        (-(mp - resting_potential) + membrane_resistance * I_syn_new) / tau_m * dt
+    )
+
     # Add noise only during sleep
     if noisy_potential and (sleep_now_inh or sleep_now_exc):
         mp_new += np.random.normal(loc=mean_noise, scale=var_noise, size=mp.shape)
-    
+
     return mp_new, I_syn_new
 
 
@@ -228,7 +230,7 @@ def update_spikes(
 ):
     # Clip membrane potential
     np.clip(mp, min_mp, max_mp, out=mp)
-    
+
     # Threshold crossing - vectorized
     spiked = mp > spike_threshold
     spikes[st:ih][spiked] = 1
@@ -249,7 +251,7 @@ def update_spikes(
 
     # Reset spiked neurons
     mp[spikes[st:ih] == 1] = reset_potential
-    
+
     # Update spike times - use in-place where possible
     spike_times[spikes == 1] = 0
     spike_times[spikes == 0] += 1
@@ -365,7 +367,7 @@ def train_network(
     nz_rows, nz_cols = np.nonzero(weights)
     sleep_now_inh = False
     sleep_now_exc = False
-    
+
     # Pre-transpose weights for faster matrix multiply in membrane potential update
     weights_T_cache = weights[:, st:ih].T.copy()
 
@@ -545,9 +547,18 @@ def train_network(
         except Exception:
             return False
 
-    # Scale by 1000 so rate shows samples/s (1 sample = 1000 timesteps), displayed as "it/s"
-    total_samples = T // 1000
-    pbar = tqdm(total=total_samples, desc=desc, leave=False, unit="it", unit_scale=False, initial=1)
+    # Validate T parameter
+    if T is None or T <= 0:
+        raise ValueError(f"T (total timesteps) must be a positive integer, got: {T}")
+
+    # Create progress bar wrapping the timestep range
+    # Note: range(1, T) gives timesteps 1 to T-1 (T-1 total iterations)
+    pbar = tqdm(
+        range(1, T),
+        desc=desc,
+        leave=False,
+        unit="step",
+    )
     last_sample = 0
     last_sleep_flag = -1  # unknown
     last_stats_update_t = -1000
@@ -892,7 +903,7 @@ def train_network(
             # End hard-pause sleep; do not advance real t here (the loop continues below)
             # Update cached transpose after sleep modified weights
             weights_T_cache = weights[:, st:ih].T.copy()
-            
+
         # update membrane potential (use maintained previous state)
         mp[t], I_syn = update_membrane_potential(
             mp=mp_prev,

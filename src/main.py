@@ -186,26 +186,26 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", type=int, default=1, help="number of repeated runs")
     parser.add_argument(
-        "--sleep_rate",
+        "--sleep-rate",
         type=float,
         nargs="+",
         default=[0.1],
         help=(
             "sleep rate(s) during training "
-            "(can specify multiple, e.g., --sleep_rate 0.5 0.6 0.7)"
+            "(can specify multiple, e.g., --sleep-rate 0.5 0.6 0.7)"
         ),
     )
     parser.add_argument(
-        "--sleep_max_iters",
+        "--sleep-max-iters",
         type=int,
         default=10000,
         help="maximum number of iterations to sleep",
     )
     parser.add_argument(
-        "--on_timeout", type=str, default="give_up", help="action to take on timeout"
+        "--on-timeout", type=str, default="give_up", help="action to take on timeout"
     )
     parser.add_argument(
-        "--early_stopping",
+        "--early-stopping",
         action="store_true",
         default=False,
         help="enable early stopping",
