@@ -1,9 +1,12 @@
 import numpy as np
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+import matplotlib
+from platform_utils import configure_matplotlib
+configure_matplotlib()
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
-import matplotlib
-
-matplotlib.use("TkAgg")
 
 
 T = 1000

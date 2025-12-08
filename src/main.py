@@ -1,4 +1,5 @@
 from big_comb import snn_sleepy
+from platform_utils import PLATFORM_NAME, IS_WINDOWS, safe_cpu_count
 import argparse
 import numpy as np
 import random
@@ -280,7 +281,7 @@ def main():
     parser.add_argument(
         "--geom-workers",
         type=int,
-        default=max(1, (os.cpu_count() or 2) - 1),
+        default=safe_cpu_count(),
         help="number of parallel workers for geomfig generation (process-based)",
     )
     parser.add_argument(
@@ -332,7 +333,19 @@ def main():
         default="static",
         help="sleep target mode: static uses fixed targets; group uses group-mean magnitudes; post uses per-post mean magnitudes",
     )
+    parser.add_argument(
+        "--platform",
+        type=str,
+        choices=["linux", "windows", "auto"],
+        default="auto",
+        help=f"platform mode for compatibility (auto-detected: {PLATFORM_NAME})",
+    )
     args, _ = parser.parse_known_args()
+
+    # Handle platform override
+    if args.platform == "auto":
+        args.platform = PLATFORM_NAME
+    print(f"Running on platform: {args.platform}")
 
     # Ensure sleep_rate is a list
     sleep_rates = (

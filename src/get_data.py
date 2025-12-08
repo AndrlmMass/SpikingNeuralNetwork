@@ -1,5 +1,6 @@
 from torchvision import datasets, transforms
 from plot import plot_floats_and_spikes
+from platform_utils import IS_WINDOWS
 import torch.nn.functional as F
 from snntorch import spikegen
 import librosa
@@ -1284,8 +1285,11 @@ def create_data(
     images_test, labels_test = None, None
 
     if audioMNIST:
-        # Load data
-        data_path = r"C:\Users\Andreas\Documents\GitHub\AudioMNIST\data"
+        # Load data (path can be overridden via env var AUDIO_MNIST_PATH)
+        data_path = os.getenv(
+            "AUDIO_MNIST_PATH",
+            r"C:\Users\Andreas\Documents\GitHub\AudioMNIST\data",
+        )
         audio_data, audio_labels = load_audiomnist_data(data_path)
 
         if audio_data is not None:

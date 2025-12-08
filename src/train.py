@@ -12,7 +12,6 @@ def report_numba_status():
             ("clip_weights", clip_weights),
             ("sleep_func", sleep_func),
             ("spike_timing", spike_timing),
-            ("vectorized_trace_func", vectorized_trace_func),
         ]
         msgs = []
         for name, func in funcs:
@@ -24,7 +23,7 @@ def report_numba_status():
         pass
 
 
-@njit
+@njit(cache=True)
 def clip_weights(
     weights,
     nz_cols_exc,
@@ -189,21 +188,21 @@ def update_membrane_potential(
     var_noise,
     sleep_now_inh,
     sleep_now_exc,
+    weights_T=None,  # Pre-transposed weights for speed
 ):
-    if noisy_potential and (sleep_now_inh or sleep_now_exc):
-        gaussian_noise = np.random.normal(
-            loc=mean_noise, scale=var_noise, size=mp.shape
-        )
+    # Use pre-transposed weights if available
+    if weights_T is not None:
+        I_syn_new = I_syn + (-I_syn + np.dot(weights_T, spikes)) * dt / tau_syn
     else:
-        gaussian_noise = 0
-
-    mp_new = mp.copy()
-    # Update synaptic current (avoid in-place modification)
-    I_syn_new = I_syn + (-I_syn + np.dot(weights.T, spikes)) * dt / tau_syn
-    mp_delta = (
-        (-(mp - resting_potential) + membrane_resistance * I_syn_new) / tau_m * dt
-    )
-    mp_new += mp_delta + gaussian_noise
+        I_syn_new = I_syn + (-I_syn + np.dot(weights.T, spikes)) * dt / tau_syn
+    
+    # Compute membrane potential update
+    mp_new = mp + ((-(mp - resting_potential) + membrane_resistance * I_syn_new) / tau_m * dt)
+    
+    # Add noise only during sleep
+    if noisy_potential and (sleep_now_inh or sleep_now_exc):
+        mp_new += np.random.normal(loc=mean_noise, scale=var_noise, size=mp.shape)
+    
     return mp_new, I_syn_new
 
 
@@ -227,12 +226,13 @@ def update_spikes(
     spike_threshold_default,
     reset_potential,
 ):
+    # Clip membrane potential
+    np.clip(mp, min_mp, max_mp, out=mp)
+    
+    # Threshold crossing - vectorized
+    spiked = mp > spike_threshold
+    spikes[st:ih][spiked] = 1
 
-    # update spikes array
-    mp = np.clip(mp, a_min=min_mp, a_max=max_mp)
-    spikes[st:ih][mp > spike_threshold] = 1
-
-    # Add Solve's noisy membrane potential
     if noisy_threshold:
         delta_potential = spike_threshold - mp
         p_fire = np.exp(spike_slope * delta_potential + spike_intercept) / (
@@ -241,17 +241,18 @@ def update_spikes(
         additional_spikes = np.random.binomial(n=1, p=p_fire)
         spikes[st:ih] = spikes[st:ih] | additional_spikes
 
-    # add spike adaption
     if spike_adaption:
-        # --- each timestep ---
         a += (-a / tau_adaption) * dt
         a[spikes[st:ih] == 1] += delta_adaption
-
         spike_threshold = spike_threshold_default + a
-        spike_threshold = np.clip(spike_threshold, -90, 0)
+        np.clip(spike_threshold, -90, 0, out=spike_threshold)
 
+    # Reset spiked neurons
     mp[spikes[st:ih] == 1] = reset_potential
-    spike_times = np.where(spikes == 1, 0, spike_times + 1)
+    
+    # Update spike times - use in-place where possible
+    spike_times[spikes == 1] = 0
+    spike_times[spikes == 0] += 1
 
     return mp, spikes, spike_times, spike_threshold, a
 
@@ -364,6 +365,9 @@ def train_network(
     nz_rows, nz_cols = np.nonzero(weights)
     sleep_now_inh = False
     sleep_now_exc = False
+    
+    # Pre-transpose weights for faster matrix multiply in membrane potential update
+    weights_T_cache = weights[:, st:ih].T.copy()
 
     # Precompute scheduled sleep window per interval
     # e.g., sleep_ratio=0.1 means 10% of each interval is sleep
@@ -541,7 +545,10 @@ def train_network(
         except Exception:
             return False
 
-    pbar = tqdm(range(1, T), desc=desc, leave=False)
+    # Scale by 1000 so rate shows samples/s (1 sample = 1000 timesteps), displayed as "it/s"
+    total_samples = T // 1000
+    pbar = tqdm(total=total_samples, desc=desc, leave=False, unit="it", unit_scale=False, initial=1)
+    last_sample = 0
     last_sleep_flag = -1  # unknown
     last_stats_update_t = -1000
     # Initial snapshot (only if tracking enabled)
@@ -730,6 +737,7 @@ def train_network(
                     tau_syn=tau_syn,
                     sleep_now_inh=sleep_now_inh,
                     sleep_now_exc=sleep_now_exc,
+                    weights_T=weights_T_cache,
                 )
 
                 # Prepare current spikes vector: keep prior network activity but zero sensory inputs
@@ -882,6 +890,9 @@ def train_network(
                     pass
 
             # End hard-pause sleep; do not advance real t here (the loop continues below)
+            # Update cached transpose after sleep modified weights
+            weights_T_cache = weights[:, st:ih].T.copy()
+            
         # update membrane potential (use maintained previous state)
         mp[t], I_syn = update_membrane_potential(
             mp=mp_prev,
@@ -898,6 +909,7 @@ def train_network(
             tau_syn=tau_syn,
             sleep_now_inh=sleep_now_inh,
             sleep_now_exc=sleep_now_exc,
+            weights_T=weights_T_cache,
         )
 
         # update spikes array
@@ -983,10 +995,12 @@ def train_network(
 
             if not sleep:
                 # Prevent excitatory weights from becoming negative and inhibitory weights from becoming positive
-                weights[:ex, st:ih] = np.maximum(weights[:ex, st:ih], 0.0)
-                weights[ex:ih, st:ex] = np.minimum(weights[ex:ih, st:ex], 0.0)
+                np.maximum(weights[:ex, st:ih], 0.0, out=weights[:ex, st:ih])
+                np.minimum(weights[ex:ih, st:ex], 0.0, out=weights[ex:ih, st:ex])
 
-            # Removed per-step weight normalization due to performance impact
+            # Update weight transpose cache periodically (every 100 steps) for accuracy
+            if t % 100 == 0:
+                weights_T_cache = weights[:, st:ih].T.copy()
 
             # After first successful compilation, report numba status once
             if t == 1:
@@ -1047,6 +1061,7 @@ def train_network(
             _record_snapshot()
             plot_time += 1
 
+    pbar.close()
     sleep_percent = (sleep_amount / T) * 100
 
     # Report virtual sleep duration for this epoch

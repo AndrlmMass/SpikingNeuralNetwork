@@ -3,13 +3,13 @@ import random
 import shutil
 import argparse
 import numpy as np
+import matplotlib
+from platform_utils import configure_matplotlib
+configure_matplotlib()
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-import matplotlib
 import librosa
 import librosa.display
-
-matplotlib.use("TkAgg")
 
 
 def get_elite_nodes(spikes, labels, num_classes, narrow_top):
