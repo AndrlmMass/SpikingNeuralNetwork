@@ -170,8 +170,12 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
     final_test_phi = getattr(snn_N, "final_test_phi", None)
     # Optional: plot accuracy histories at end
     try:
-        if getattr(args, "plot_acc_history", False) and not disable_plotting:
-            snn_N.plot_accuracy_history()
+        if getattr(args, "plot_acc_history", False):
+            # Create filename suffix with run info to avoid overwriting
+            dataset_name = getattr(args, "dataset", "unknown")
+            sleep_rate = getattr(args, "sleep_rate", "unknown")
+            suffix = f"{dataset_name}_sr{sleep_rate}_run{run_idx+1}"
+            snn_N.plot_accuracy_history(filename_suffix=suffix)
     except Exception as e:
         print(f"Warning: failed to plot accuracy history ({e})")
     return acc_dict, final_test_phi

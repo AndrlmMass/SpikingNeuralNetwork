@@ -504,14 +504,14 @@ def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes, test):
         )
 
     plt.plot(accuracy, label="All classes", linewidth=3, color="black")
-    plt.legend(bbox_to_anchor=(1.1, 0.9), loc="upper right")
-    plt.ylabel("Accuracy")
-    plt.xlabel("Time (t)")
+    plt.legend(bbox_to_anchor=(1.1, 0.9), loc="upper right", fontsize=14)
+    plt.ylabel("Accuracy", fontsize=18)
+    plt.xlabel("Time (t)", fontsize=18)
     if test:
         title = f"Testing accuracy: {accuracy[-1]}"
     else:
-        title = f"Training accuracy: {accuracy[-1]}"
-    plt.title(title)
+        title = f"Training and validation accuracy"
+    plt.title(title, fontsize=20, fontweight="bold")
     plt.show()
 
     return accuracy[-1]
@@ -1454,11 +1454,11 @@ def plot_weight_trajectories_with_sleep_epoch(
     def _apply_labels(latex_enabled: bool):
         plt.rcParams["text.usetex"] = bool(latex_enabled)
         ylabel = r"$\Delta w$" if latex_enabled else "Δw"
-        title = "Sleep + STDP learning" if sleep_enabled else "No sleep"
+        title = "Sleep" if sleep_enabled else "No sleep"
 
-        ax.set_ylabel(ylabel, fontsize=16)
-        ax.set_xlabel("time (ms)", fontsize=16)
-        ax.set_title(title, fontsize=16)
+        ax.set_ylabel(ylabel, fontsize=18)
+        ax.set_xlabel("time (ms)", fontsize=18)
+        ax.set_title(title, fontsize=20, fontweight="bold")
 
         legend_lines = [
             Line2D(
@@ -1490,7 +1490,7 @@ def plot_weight_trajectories_with_sleep_epoch(
             frameon=True,
             facecolor="white",
             edgecolor="black",
-            fontsize=12,
+            fontsize=14,
         )
         legend.get_frame().set_alpha(1.0)
 
@@ -1498,7 +1498,7 @@ def plot_weight_trajectories_with_sleep_epoch(
     _apply_labels(latex_enabled=latex_available)
     pdf_path = os.path.join("plots", f"weights_trajectories_epoch_{int(epoch):03d}.pdf")
     plt.tight_layout()
-    plt.savefig(pdf_path, dpi=300, bbox_inches="tight")
+    plt.savefig(pdf_path, dpi=900, bbox_inches="tight")
     plt.rcParams["text.usetex"] = False
     plt.close(fig)
 

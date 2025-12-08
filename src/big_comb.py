@@ -105,7 +105,7 @@ class snn_sleepy:
             # Non-fatal: continue training even if logging fails
             print(f"Warning: failed to persist accuracy record ({e})")
 
-    def plot_accuracy_history(self, save_dir: str = "plots"):
+    def plot_accuracy_history(self, save_dir: str = "plots", filename_suffix: str = ""):
         try:
             import matplotlib.pyplot as plt
         except Exception as exc:
@@ -123,19 +123,24 @@ class snn_sleepy:
                     range(1, len(self.acc_history["train"]) + 1),
                     self.acc_history["train"],
                     label="Train",
+                    color="gray",
+                    linestyle="-",
                 )
             if self.acc_history.get("val"):
                 plt.plot(
                     range(1, len(self.acc_history["val"]) + 1),
                     self.acc_history["val"],
                     label="Val",
+                    color="black",
+                    linestyle="--",
                 )
             plt.xlabel("Epoch")
             plt.ylabel("Accuracy")
             plt.title("Train/Val Accuracy")
             plt.grid(True, alpha=0.3)
             plt.legend()
-            tv_path = os.path.join(save_dir, "acc_train_val.png")
+            suffix_str = f"_{filename_suffix}" if filename_suffix else ""
+            tv_path = os.path.join(save_dir, f"acc_train_val{suffix_str}.png")
             try:
                 plt.savefig(tv_path, bbox_inches="tight")
                 print(f"Saved train/val accuracy plot to {tv_path}")
@@ -158,7 +163,8 @@ class snn_sleepy:
                 plt.title("Test Accuracy")
                 plt.grid(True, alpha=0.3)
                 plt.legend()
-                te_path = os.path.join(save_dir, "acc_test.png")
+                suffix_str = f"_{filename_suffix}" if filename_suffix else ""
+                te_path = os.path.join(save_dir, f"acc_test{suffix_str}.png")
                 try:
                     plt.savefig(te_path, bbox_inches="tight")
                     print(f"Saved test accuracy plot to {te_path}")
@@ -462,7 +468,7 @@ class snn_sleepy:
         max_time=2000,
         plot_heat_map=False,
         retur=False,
-        num_steps=100,
+        num_steps=1000,
         train_=True,
         offset=0,
         first_spike_time=0,
@@ -2540,6 +2546,7 @@ class snn_sleepy:
                 )  # Use test dataset size for validation batching
                 val_acc = 0
                 val_phi = 0
+                val_batches_phi_counted = 0  # Track actual batches for phi averaging
 
                 # Initialize arrays to store accumulated validation results
                 all_spikes_val = []
@@ -2767,6 +2774,7 @@ class snn_sleepy:
                         val_acc += acc_te_batch
                         val_batches_counted += 1
                     val_phi += phi_te
+                    val_batches_phi_counted += 1
 
                 # average over all validation batches
                 if accuracy_method == "top":
@@ -2775,7 +2783,8 @@ class snn_sleepy:
                     )  # Keep acc_te for compatibility
                 else:
                     acc_te = None
-                phi_te = val_phi / total_num_vals
+                # Use actual batch count for phi averaging (fixes issue when val data < expected)
+                phi_te = val_phi / max(1, val_batches_phi_counted)
 
                 # Enhanced validation distribution analysis (every 5 epochs or on first/last epoch)
                 show_distributions = (e % 5 == 0) or (e == 0) or (e == self.epochs - 1)
@@ -3087,16 +3096,24 @@ class snn_sleepy:
                 # Early stopping logic
                 if early_stopping:
                     current_metric = acc_te if acc_te is not None else phi_te
+                    metric_name = "acc" if acc_te is not None else "phi"
+                    print(
+                        f"  [Early stopping] epoch={e+1}, {metric_name}={f'{current_metric:.4f}' if current_metric else 'None'}, "
+                        f"best={best_val_metric:.4f}, no_improve={epochs_without_improvement}/{patience_epochs}"
+                    )
                     if current_metric is not None and current_metric > best_val_metric:
                         best_val_metric = current_metric
                         epochs_without_improvement = 0
                         best_weights = self.weights.copy()
-                        print(f"  ✓ New best validation metric: {best_val_metric:.4f}")
+                        print(
+                            f"  ✓ New best validation {metric_name}: {best_val_metric:.4f}"
+                        )
                     else:
                         epochs_without_improvement += 1
                         if epochs_without_improvement >= patience_epochs:
                             print(
-                                f"\n⚠ Early stopping triggered after {e+1} epochs (no improvement for {patience_epochs} epochs)"
+                                f"\n⚠ Early stopping triggered after {e+1} epochs "
+                                f"(no improvement in {metric_name} for {patience_epochs} epochs, best={best_val_metric:.4f})"
                             )
                             if best_weights is not None:
                                 self.weights = best_weights
@@ -3186,7 +3203,7 @@ class snn_sleepy:
                     # Clean up accumulated arrays (use validation names since we evaluate on validation data)
                     del all_spikes_val, all_labels_val, all_mp_val
                     # Clean up temporary variables (validation accumulation variables)
-                    del val_acc, val_phi
+                    del val_acc, val_phi, val_batches_phi_counted
                     try:
                         del T_test_batch, st, ex, ih
                     except:
@@ -3304,6 +3321,21 @@ class snn_sleepy:
                         print(f"  Warning: failed to save weights plot ({exc})")
                     # Also plot sampled weight trajectories with sleep shading if tracking exists
                     try:
+                        # Debug: check what's in weight_tracking_epoch
+                        if weight_tracking_epoch is None:
+                            print(
+                                f"  [DEBUG] weight_tracking_epoch is None - track_weights may not be enabled"
+                            )
+                        elif not isinstance(weight_tracking_epoch, dict):
+                            print(
+                                f"  [DEBUG] weight_tracking_epoch is not a dict: {type(weight_tracking_epoch)}"
+                            )
+                        else:
+                            times_len = len(weight_tracking_epoch.get("times", []))
+                            print(
+                                f"  [DEBUG] weight_tracking_epoch has {times_len} time snapshots"
+                            )
+
                         if (
                             isinstance(weight_tracking_epoch, dict)
                             and len(weight_tracking_epoch.get("times", [])) > 0

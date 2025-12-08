@@ -1,0 +1,24 @@
+{
+  "timestamp": "2025-12-06T16:37:58.007781",
+  "status": "in_progress",
+  "datasets": [
+    "geomfig"
+  ],
+  "args": {
+    "runs": 1,
+    "sleep_rates": [
+      0.2
+    ],
+    "datasets": [
+      "geomfig"
+    ],
+    "sleep_max_iters": 10000,
+    "on_timeout": "give_up",
+    "early_stopping": true,
+    "no_sleep": false,
+    "normalize_weights": false
+  },
+  "results_by_dataset": {
+    "geomfig": {}
+  }
+}
