@@ -1328,8 +1328,21 @@ def plot_weight_evolution(
         edgecolor="black",
         label="Inh min/max",
     )
+<<<<<<< Updated upstream
     ax.set_xlabel("Epoch", size=26)
     ax.set_ylabel("Weight", size=26)
+=======
+    ax.set_xlabel("Epoch", fontsize=26)
+    ax.set_ylabel("Weight", fontsize=26)
+    legend = ax.legend(
+        facecolor="white",
+        edgecolor="black",
+        fontsize=22,
+        loc="lower left",
+        framealpha=1.0,
+    )
+    legend.get_frame().set_alpha(1.0)
+>>>>>>> Stashed changes
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
@@ -1472,6 +1485,18 @@ def plot_weight_trajectories_with_sleep_epoch(
                 label="Inh samples",
             ),
         ]
+<<<<<<< Updated upstream
+=======
+        legend = ax.legend(
+            handles=legend_lines,
+            loc="lower left",
+            frameon=True,
+            facecolor="white",
+            edgecolor="black",
+            fontsize=22,
+        )
+        legend.get_frame().set_alpha(1.0)
+>>>>>>> Stashed changes
 
     latex_available = shutil.which("latex") is not None
     _apply_labels(latex_enabled=latex_available)
@@ -1594,6 +1619,7 @@ if __name__ == "__main__":
         help="Path to a weight_evolution_data.npz file (created after training)",
     )
     parser.add_argument(
+<<<<<<< Updated upstream
         "--weight-trajectory-data",
         type=str,
         help="Path to a weight_trajectory_epoch_*.npz file (created after training with --plot-weights-per-epoch)",
@@ -1602,6 +1628,11 @@ if __name__ == "__main__":
         "--tsne-data",
         type=str,
         help="Path to a t-SNE cached input file (e.g., data/tsne/test_tsne_inputs_*.npz)",
+=======
+        "--weight-trajectories-data",
+        type=str,
+        help="Path to a weight_tracking_sleep data file (JSON/NPZ with trajectory data)",
+>>>>>>> Stashed changes
     )
     parser.add_argument(
         "--output",
@@ -1612,6 +1643,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--epoch",
         type=int,
+<<<<<<< Updated upstream
         help="Epoch number for trajectory plot (auto-detected from filename if not specified)",
     )
     parser.add_argument(
@@ -1637,6 +1669,10 @@ if __name__ == "__main__":
         type=int,
         default=42,
         help="Random seed for t-SNE (default: 42)",
+=======
+        default=1,
+        help="Epoch number for trajectory plot (default: 1)",
+>>>>>>> Stashed changes
     )
     cli_args = parser.parse_args()
 
@@ -1644,6 +1680,7 @@ if __name__ == "__main__":
         payload = np.load(cli_args.weight_evolution_data)
         weight_evo = {key: payload[key].tolist() for key in payload.files}
         plot_weight_evolution(weight_evo, output_path=cli_args.output)
+<<<<<<< Updated upstream
     elif cli_args.weight_trajectory_data:
         payload = np.load(cli_args.weight_trajectory_data, allow_pickle=True)
 
@@ -1714,5 +1751,28 @@ if __name__ == "__main__":
             show_plot=False,
         )
         print("t-SNE plot regenerated successfully")
+=======
+    elif cli_args.weight_trajectories_data:
+        import json
+        # Try to load as JSON first, then NPZ
+        try:
+            with open(cli_args.weight_trajectories_data, 'r') as f:
+                weight_tracking_data = json.load(f)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            # Try as NPZ
+            payload = np.load(cli_args.weight_trajectories_data, allow_pickle=True)
+            weight_tracking_data = payload.item() if payload.files else {}
+        
+        # Generate trajectory plot
+        output_base = cli_args.output.replace('.png', '').replace('.pdf', '')
+        output_path = f"{output_base}_trajectories_epoch_{cli_args.epoch:03d}.pdf"
+        plot_weight_trajectories_with_sleep_epoch(
+            weight_tracking_data, 
+            epoch=cli_args.epoch,
+            max_lines=8,
+            sleep_enabled=True
+        )
+        print(f"Saved weight trajectories plot: {output_path}")
+>>>>>>> Stashed changes
     else:
         parser.print_help()

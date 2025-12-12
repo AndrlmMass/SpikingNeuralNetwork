@@ -509,8 +509,13 @@ def train_network(
             return False
         # Compute group stats over signed weights (preserve inhibitory sign)
         try:
+<<<<<<< Updated upstream
             W_exc = weights[:ex, st:ih][weights[:ex, st:ih] != 0]
             W_inh = weights[ex:ih, st:ex][weights[ex:ih, st:ex] != 0]
+=======
+            W_exc = weights[:ex, st:ih][weights[:ex, st:ih]!=0]
+            W_inh = weights[ex:ih, st:ex][weights[ex:ih, st:ex]!=0]
+>>>>>>> Stashed changes
             exc_vals = (
                 [float(weights[i, j]) for (i, j) in exc_pairs] if exc_pairs else []
             )
@@ -566,7 +571,13 @@ def train_network(
     if track_weights:
         _record_snapshot()
         plot_time += 1
-    for t in pbar:
+    for t in range(1, T):
+        # Update progress bar only when sample count changes (every 1000 timesteps)
+        current_sample = t // 1000
+        if current_sample > last_sample:
+            pbar.update(current_sample - last_sample)
+            last_sample = current_sample
+
         # Reset sleep flags for this timestep
         sleep_now_inh = False
         sleep_now_exc = False
