@@ -3,6 +3,8 @@ data/
 model/
 plot_files/
 sdata/
+plots/
+results/
 pycache/
 *.pkl
 *.pyc
