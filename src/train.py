@@ -509,13 +509,9 @@ def train_network(
             return False
         # Compute group stats over signed weights (preserve inhibitory sign)
         try:
-<<<<<<< Updated upstream
             W_exc = weights[:ex, st:ih][weights[:ex, st:ih] != 0]
             W_inh = weights[ex:ih, st:ex][weights[ex:ih, st:ex] != 0]
-=======
-            W_exc = weights[:ex, st:ih][weights[:ex, st:ih]!=0]
-            W_inh = weights[ex:ih, st:ex][weights[ex:ih, st:ex]!=0]
->>>>>>> Stashed changes
+
             exc_vals = (
                 [float(weights[i, j]) for (i, j) in exc_pairs] if exc_pairs else []
             )
