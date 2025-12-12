@@ -51,6 +51,7 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         all_images_val=img_va,
         batch_image_val=b_va,
         add_breaks=False,
+        num_steps=1000,
         force_recreate=force_recreate_flag,
         noisy_data=False,
         gain=gain_for_dataset,
@@ -122,7 +123,7 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         tsne_plot_interval=1,
         plot_spectrograms=False,
         use_validation_data=False,
-        var_noise=2,
+        var_noise=float(getattr(args, "noise", 2.0)),
         max_weight_exc=25,
         min_weight_inh=-25,
         sleep=not args.no_sleep,
@@ -334,6 +335,16 @@ def main():
         help="sleep target mode: static uses fixed targets; group uses group-mean magnitudes; post uses per-post mean magnitudes",
     )
     parser.add_argument(
+        "--noise",
+        type=float,
+        nargs="+",
+        default=[2.0],
+        help=(
+            "noise variance(s) for Gaussian noise during training "
+            "(can specify multiple, e.g., --noise 1.0 2.0 3.0)"
+        ),
+    )
+    parser.add_argument(
         "--platform",
         type=str,
         choices=["linux", "windows", "auto"],
@@ -352,11 +363,19 @@ def main():
         args.sleep_rate if isinstance(args.sleep_rate, list) else [args.sleep_rate]
     )
 
+    # Ensure noise is a list
+    noise_levels = args.noise if isinstance(args.noise, list) else [args.noise]
+
     # Ensure dataset is a list
     datasets = args.dataset if isinstance(args.dataset, list) else [args.dataset]
 
-    all_results = []  # Store (dataset, sleep_rate, run_idx, result)
-    disable_plotting = args.runs > 1 or len(sleep_rates) > 1 or len(datasets) > 1
+    all_results = []  # Store (dataset, sleep_rate, noise_level, run_idx, result)
+    disable_plotting = (
+        args.runs > 1
+        or len(sleep_rates) > 1
+        or len(noise_levels) > 1
+        or len(datasets) > 1
+    )
 
     # Initialize results file at the start
     output_dir = "results"
@@ -383,6 +402,7 @@ def main():
         "args": {
             "runs": args.runs,
             "sleep_rates": [float(sr) for sr in sleep_rates],
+            "noise_levels": [float(n) for n in noise_levels],
             "datasets": datasets,
             "sleep_max_iters": args.sleep_max_iters,
             "on_timeout": args.on_timeout,
@@ -403,7 +423,9 @@ def main():
         results_filename = None
 
     # Function to save results incrementally
-    def save_results_incremental(dataset_name, sleep_rate, run_idx, result):
+    def save_results_incremental(
+        dataset_name, sleep_rate, noise_level, run_idx, result
+    ):
         if results_filename is None:
             return
         try:
@@ -413,7 +435,8 @@ def main():
             except (FileNotFoundError, json.JSONDecodeError):
                 results_data = initial_results_data.copy()
 
-            sleep_rate_key = str(sleep_rate)
+            # Use combined key for sleep_rate and noise_level
+            config_key = f"sr{sleep_rate}_n{noise_level}"
             if isinstance(result, tuple) and len(result) >= 2:
                 acc_dict, phi = result[0], result[1]
             elif isinstance(result, tuple) and len(result) == 1:
@@ -424,6 +447,7 @@ def main():
             result_entry = {
                 "run": int(run_idx + 1),
                 "sleep_rate": float(sleep_rate),
+                "noise_level": float(noise_level),
                 "dataset": dataset_name,
                 "test_accuracy": (
                     safe_float(acc_dict.get("test"))
@@ -445,10 +469,10 @@ def main():
 
             if dataset_name not in results_data["results_by_dataset"]:
                 results_data["results_by_dataset"][dataset_name] = {}
-            if sleep_rate_key not in results_data["results_by_dataset"][dataset_name]:
-                results_data["results_by_dataset"][dataset_name][sleep_rate_key] = []
+            if config_key not in results_data["results_by_dataset"][dataset_name]:
+                results_data["results_by_dataset"][dataset_name][config_key] = []
 
-            results_data["results_by_dataset"][dataset_name][sleep_rate_key].append(
+            results_data["results_by_dataset"][dataset_name][config_key].append(
                 result_entry
             )
 
@@ -475,31 +499,46 @@ def main():
             )
             print(f"{'='*70}")
 
-            for run_idx in range(args.runs):
-                args_copy = argparse.Namespace(**vars(args))
-                args_copy.dataset = current_dataset  # Set single dataset for this run
-                args_copy.sleep_rate = float(sleep_rate)
-                preview_this_run = preview_requested and not preview_consumed
-                args_copy.preview_dataset = preview_this_run
-                result = run_once(
-                    run_idx, args.runs, args_copy, disable_plotting=disable_plotting
+            for noise_idx, noise_level in enumerate(noise_levels):
+                print(f"\n{'-'*70}")
+                print(
+                    f"Noise Level: {noise_level} ({noise_idx + 1}/{len(noise_levels)})"
                 )
-                if preview_this_run:
-                    preview_consumed = True
-                all_results.append((current_dataset, sleep_rate, run_idx, result))
-                save_results_incremental(current_dataset, sleep_rate, run_idx, result)
+                print(f"{'-'*70}")
+
+                for run_idx in range(args.runs):
+                    args_copy = argparse.Namespace(**vars(args))
+                    args_copy.dataset = (
+                        current_dataset  # Set single dataset for this run
+                    )
+                    args_copy.sleep_rate = float(sleep_rate)
+                    args_copy.noise = float(noise_level)
+                    preview_this_run = preview_requested and not preview_consumed
+                    args_copy.preview_dataset = preview_this_run
+                    result = run_once(
+                        run_idx, args.runs, args_copy, disable_plotting=disable_plotting
+                    )
+                    if preview_this_run:
+                        preview_consumed = True
+                    all_results.append(
+                        (current_dataset, sleep_rate, noise_level, run_idx, result)
+                    )
+                    save_results_incremental(
+                        current_dataset, sleep_rate, noise_level, run_idx, result
+                    )
 
     if args.runs > 0 and len(all_results) > 0:
         print("\n" + "=" * 70)
         print("RESULTS SUMMARY")
         print("=" * 70)
 
-        # Group results by dataset and sleep rate
+        # Group results by dataset, sleep rate, and noise level
         results_by_dataset = {}
-        for dataset, sleep_rate, run_idx, result in all_results:
+        for dataset, sleep_rate, noise_level, run_idx, result in all_results:
             if dataset not in results_by_dataset:
                 results_by_dataset[dataset] = {}
-            results_by_dataset[dataset].setdefault(sleep_rate, []).append(
+            config_key = (sleep_rate, noise_level)
+            results_by_dataset[dataset].setdefault(config_key, []).append(
                 (run_idx, result)
             )
 
@@ -517,8 +556,11 @@ def main():
 
             dataset_results = results_by_dataset[dataset]
 
-            for sleep_rate in sorted(dataset_results.keys(), key=lambda x: float(x)):
-                results = dataset_results[sleep_rate]
+            for config_key in sorted(
+                dataset_results.keys(), key=lambda x: (float(x[0]), float(x[1]))
+            ):
+                sleep_rate, noise_level = config_key
+                results = dataset_results[config_key]
                 valid_results = [
                     (run_idx, r)
                     for run_idx, r in results
@@ -529,7 +571,9 @@ def main():
                     continue
 
                 print(f"\n{'='*70}")
-                print(f"Dataset: {dataset} | Sleep Rate: {sleep_rate}")
+                print(
+                    f"Dataset: {dataset} | Sleep Rate: {sleep_rate} | Noise: {noise_level}"
+                )
                 print(f"{'='*70}")
                 print(f"\n{'Run':<6} {'Test Accuracy':<15} {'Final Test Phi':<16}")
                 print("-" * 70)
@@ -612,10 +656,12 @@ def main():
                 for dataset in datasets:
                     if dataset not in results_by_dataset:
                         continue
-                    for sleep_rate in sorted(
-                        results_by_dataset[dataset].keys(), key=lambda x: float(x)
+                    for config_key in sorted(
+                        results_by_dataset[dataset].keys(),
+                        key=lambda x: (float(x[0]), float(x[1])),
                     ):
-                        results = results_by_dataset[dataset][sleep_rate]
+                        sleep_rate, noise_level = config_key
+                        results = results_by_dataset[dataset][config_key]
                         valid_results = [
                             (run_idx, r)
                             for run_idx, r in results
@@ -632,7 +678,7 @@ def main():
                             ):
                                 print(
                                     f"Best overall test accuracy: {dataset}, Sleep Rate {sleep_rate}, "
-                                    f"Run {run_idx+1} ({best_overall_acc:.4f})"
+                                    f"Noise {noise_level}, Run {run_idx+1} ({best_overall_acc:.4f})"
                                 )
                                 found = True
                                 break
@@ -715,14 +761,16 @@ def main():
             "per_dataset_summary": {},
         }
 
-        for dataset_key, sleep_rate_dict in results_data.get(
+        for dataset_key, config_dict in results_data.get(
             "results_by_dataset", {}
         ).items():
             results_data["summary"]["per_dataset_summary"][dataset_key] = {}
-            for sleep_rate_key in sorted(
-                sleep_rate_dict.keys(), key=lambda x: float(x)
+            # Sort by extracting sleep_rate and noise from config key (format: "sr{X}_n{Y}")
+            for config_key in sorted(
+                config_dict.keys(),
+                key=lambda x: (float(x.split("_")[0][2:]), float(x.split("_")[1][1:])),
             ):
-                results_list = sleep_rate_dict[sleep_rate_key]
+                results_list = config_dict[config_key]
                 test_accs = [
                     r["test_accuracy"]
                     for r in results_list
@@ -736,7 +784,7 @@ def main():
 
                 if test_accs or test_phis:
                     results_data["summary"]["per_dataset_summary"][dataset_key][
-                        sleep_rate_key
+                        config_key
                     ] = {
                         "mean_test_accuracy": safe_stat_mean(test_accs),
                         "std_test_accuracy": safe_stat_std(test_accs),

@@ -5,6 +5,7 @@ from typing import Dict, Tuple, Optional
 import numpy as np
 import matplotlib
 from platform_utils import configure_matplotlib
+
 configure_matplotlib()
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
@@ -13,6 +14,7 @@ from sklearn.preprocessing import StandardScaler
 import argparse
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
+
 warnings.filterwarnings("error", category=RuntimeWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="matplotlib")
 
@@ -223,26 +225,30 @@ def t_SNE(
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot()
 
-    markers = {0: "o", 1: "s", 2: "^", 3: "D"}
+    # Define markers for up to 10 classes, cycling if needed
+    marker_list = ["o", "s", "^", "D", "v", "<", ">", "p", "*", "X"]
+    unique_labels = np.unique(segment_labels)
+
     # Visualize the results:
-    for label in np.unique(segment_labels):
+    for i, label in enumerate(unique_labels):
         indices = segment_labels == label
+        marker = marker_list[i % len(marker_list)]  # Cycle through markers if needed
         ax.scatter(
             tsne_results[indices, 0],
             tsne_results[indices, 1],
             label=f"Class {label}",
-            marker=markers[label],
+            marker=marker,
             color="black",
-            s=40,
+            s=60,
         )
     if train:
         title = "from training"
     else:
         title = "from testing"
 
-    plt.xlabel("t-SNE dimension 1", fontsize=16)
-    plt.ylabel("t-SNE dimension 2", fontsize=16)
-    plt.legend(fontsize=14)
+    plt.xlabel("t-SNE dimension 1", fontsize=26)
+    plt.ylabel("t-SNE dimension 2", fontsize=26)
+    # plt.legend(fontsize=22, loc="lower right")
     os.makedirs("plots", exist_ok=True)
     suffix = "train" if train else "test"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

@@ -468,7 +468,7 @@ class snn_sleepy:
         max_time=2000,
         plot_heat_map=False,
         retur=False,
-        num_steps=1000,
+        num_steps=100,
         train_=True,
         offset=0,
         first_spike_time=0,
@@ -3340,6 +3340,64 @@ class snn_sleepy:
                             isinstance(weight_tracking_epoch, dict)
                             and len(weight_tracking_epoch.get("times", [])) > 0
                         ):
+                            # Save trajectory data to cache file
+                            cache_path = os.path.join(
+                                "plots", f"weight_trajectory_epoch_{e+1:03d}.npz"
+                            )
+                            try:
+                                # Convert lists to arrays for npz saving
+                                cache_data = {
+                                    "times": np.array(
+                                        weight_tracking_epoch["times"], dtype=float
+                                    ),
+                                    "exc_mean": np.array(
+                                        weight_tracking_epoch["exc_mean"], dtype=float
+                                    ),
+                                    "exc_std": np.array(
+                                        weight_tracking_epoch["exc_std"], dtype=float
+                                    ),
+                                    "exc_min": np.array(
+                                        weight_tracking_epoch["exc_min"], dtype=float
+                                    ),
+                                    "exc_max": np.array(
+                                        weight_tracking_epoch["exc_max"], dtype=float
+                                    ),
+                                    "inh_mean": np.array(
+                                        weight_tracking_epoch["inh_mean"], dtype=float
+                                    ),
+                                    "inh_std": np.array(
+                                        weight_tracking_epoch["inh_std"], dtype=float
+                                    ),
+                                    "inh_min": np.array(
+                                        weight_tracking_epoch["inh_min"], dtype=float
+                                    ),
+                                    "inh_max": np.array(
+                                        weight_tracking_epoch["inh_max"], dtype=float
+                                    ),
+                                    "sleep_enabled": np.array([sleep], dtype=bool),
+                                }
+                                # Handle exc_samples and inh_samples (list of lists)
+                                # Save as object array to preserve ragged structure
+                                cache_data["exc_samples"] = np.array(
+                                    weight_tracking_epoch["exc_samples"], dtype=object
+                                )
+                                cache_data["inh_samples"] = np.array(
+                                    weight_tracking_epoch["inh_samples"], dtype=object
+                                )
+                                # Save sleep_segments as object array
+                                cache_data["sleep_segments"] = np.array(
+                                    weight_tracking_epoch.get("sleep_segments", []),
+                                    dtype=object,
+                                )
+
+                                np.savez_compressed(cache_path, **cache_data)
+                                print(f"  Cached trajectory data: {cache_path}")
+                            except Exception as cache_exc:
+                                print(
+                                    f"  Warning: failed to cache trajectory data ({cache_exc})"
+                                )
+
+                            # Plot trajectories
                             plot_weight_trajectories_with_sleep_epoch(
                                 weight_tracking_epoch,
                                 e + 1,

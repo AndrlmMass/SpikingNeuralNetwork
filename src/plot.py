@@ -5,11 +5,13 @@ import argparse
 import numpy as np
 import matplotlib
 from platform_utils import configure_matplotlib
+
 configure_matplotlib()
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import librosa
 import librosa.display
+from analysis import t_SNE
 
 
 def get_elite_nodes(spikes, labels, num_classes, narrow_top):
@@ -88,7 +90,7 @@ def plot_epoch_training(acc, cluster, val_acc=None, val_phi=None):
         (line2,) = ax0.plot(val_phi, color="tab:green", linestyle=":", label="Val Phi")
         lines.append(line2)
     labels = [line.get_label() for line in lines]
-    ax0.legend(lines, labels, loc="upper center")
+    ax0.legend(lines, labels, loc="upper center", fontsize=14)
 
     plt.show()
 
@@ -511,7 +513,7 @@ def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes, test):
         title = f"Testing accuracy: {accuracy[-1]}"
     else:
         title = f"Training and validation accuracy"
-    plt.title(title, fontsize=20, fontweight="bold")
+    # plt.title(title, fontsize=20, fontweight="bold")
     plt.show()
 
     return accuracy[-1]
@@ -1194,7 +1196,6 @@ def plot_weight_evolution_during_sleep_epoch(weight_tracking_epoch, epoch):
                 linestyle="-",
             )
     ax.set_ylabel("Exc weight")
-    ax.set_title(f"Sleep weight evolution (epoch {epoch})")
 
     # Inhibitory
     ax = axes[1]
@@ -1218,7 +1219,7 @@ def plot_weight_evolution_during_sleep_epoch(weight_tracking_epoch, epoch):
     os.makedirs("figures", exist_ok=True)
     pdf_path = os.path.join("figures", f"weight_sleep_epoch_{epoch:03d}.pdf")
     plt.tight_layout()
-    plt.savefig(pdf_path, bbox_inches="tight")
+    plt.savefig(pdf_path, bbox_inches="tight", dpi=900)
     plt.close(fig)
 
 
@@ -1290,12 +1291,10 @@ def plot_weight_evolution(
         raise ValueError("weight_evolution contains no epochs to plot")
 
     exc_mean = np.array(weight_evolution.get("exc_mean", []), dtype=float)
-    exc_std = np.array(weight_evolution.get("exc_std", []), dtype=float)
     exc_min = np.array(weight_evolution.get("exc_min", []), dtype=float)
     exc_max = np.array(weight_evolution.get("exc_max", []), dtype=float)
 
     inh_mean = np.array(weight_evolution.get("inh_mean", []), dtype=float)
-    inh_std = np.array(weight_evolution.get("inh_std", []), dtype=float)
     inh_min = np.array(weight_evolution.get("inh_min", []), dtype=float)
     inh_max = np.array(weight_evolution.get("inh_max", []), dtype=float)
 
@@ -1329,19 +1328,10 @@ def plot_weight_evolution(
         edgecolor="black",
         label="Inh min/max",
     )
-    ax.set_xlabel("Epoch", size=18)
-    ax.set_ylabel("Average weight", size=18)
-    legend = ax.legend(
-        facecolor="white",
-        edgecolor="black",
-        fontsize=14,
-        loc="upper right",
-        framealpha=1.0,
-    )
-    legend.get_frame().set_alpha(1.0)
+    ax.set_xlabel("Epoch", size=26)
+    ax.set_ylabel("Weight", size=26)
     ax.grid(True, alpha=0.3)
 
-    fig.suptitle("No sleep", fontsize=20, fontweight="bold")
     plt.tight_layout()
     fig.savefig(output_path, bbox_inches="tight", dpi=900)
     plt.close(fig)
@@ -1453,12 +1443,10 @@ def plot_weight_trajectories_with_sleep_epoch(
 
     def _apply_labels(latex_enabled: bool):
         plt.rcParams["text.usetex"] = bool(latex_enabled)
-        ylabel = r"$\Delta w$" if latex_enabled else "Δw"
-        title = "Sleep" if sleep_enabled else "No sleep"
+        ylabel = "Weight"
 
-        ax.set_ylabel(ylabel, fontsize=18)
-        ax.set_xlabel("time (ms)", fontsize=18)
-        ax.set_title(title, fontsize=20, fontweight="bold")
+        ax.set_ylabel(ylabel, fontsize=26)
+        ax.set_xlabel("time (ms)", fontsize=26)
 
         legend_lines = [
             Line2D(
@@ -1484,15 +1472,6 @@ def plot_weight_trajectories_with_sleep_epoch(
                 label="Inh samples",
             ),
         ]
-        legend = ax.legend(
-            handles=legend_lines,
-            loc="upper right",
-            frameon=True,
-            facecolor="white",
-            edgecolor="black",
-            fontsize=14,
-        )
-        legend.get_frame().set_alpha(1.0)
 
     latex_available = shutil.which("latex") is not None
     _apply_labels(latex_enabled=latex_available)
@@ -1615,10 +1594,49 @@ if __name__ == "__main__":
         help="Path to a weight_evolution_data.npz file (created after training)",
     )
     parser.add_argument(
+        "--weight-trajectory-data",
+        type=str,
+        help="Path to a weight_trajectory_epoch_*.npz file (created after training with --plot-weights-per-epoch)",
+    )
+    parser.add_argument(
+        "--tsne-data",
+        type=str,
+        help="Path to a t-SNE cached input file (e.g., data/tsne/test_tsne_inputs_*.npz)",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default="plots/weights_evolution.png",
         help="Destination path for the rendered figure",
+    )
+    parser.add_argument(
+        "--epoch",
+        type=int,
+        help="Epoch number for trajectory plot (auto-detected from filename if not specified)",
+    )
+    parser.add_argument(
+        "--n-components",
+        type=int,
+        default=2,
+        help="Number of t-SNE components (default: 2)",
+    )
+    parser.add_argument(
+        "--perplexity",
+        type=int,
+        default=30,
+        help="t-SNE perplexity parameter (default: 30)",
+    )
+    parser.add_argument(
+        "--max-iter",
+        type=int,
+        default=1000,
+        help="Maximum iterations for t-SNE (default: 1000)",
+    )
+    parser.add_argument(
+        "--random-state",
+        type=int,
+        default=42,
+        help="Random seed for t-SNE (default: 42)",
     )
     cli_args = parser.parse_args()
 
@@ -1626,5 +1644,75 @@ if __name__ == "__main__":
         payload = np.load(cli_args.weight_evolution_data)
         weight_evo = {key: payload[key].tolist() for key in payload.files}
         plot_weight_evolution(weight_evo, output_path=cli_args.output)
+    elif cli_args.weight_trajectory_data:
+        payload = np.load(cli_args.weight_trajectory_data, allow_pickle=True)
+
+        # Reconstruct weight_tracking_epoch dict
+        weight_tracking = {
+            "times": payload["times"].tolist(),
+            "exc_mean": payload["exc_mean"].tolist(),
+            "exc_std": payload["exc_std"].tolist(),
+            "exc_min": payload["exc_min"].tolist(),
+            "exc_max": payload["exc_max"].tolist(),
+            "inh_mean": payload["inh_mean"].tolist(),
+            "inh_std": payload["inh_std"].tolist(),
+            "inh_min": payload["inh_min"].tolist(),
+            "inh_max": payload["inh_max"].tolist(),
+            "exc_samples": [list(x) for x in payload["exc_samples"]],
+            "inh_samples": [list(x) for x in payload["inh_samples"]],
+            "sleep_segments": [tuple(seg) for seg in payload["sleep_segments"]],
+        }
+
+        # Determine epoch number
+        if cli_args.epoch is not None:
+            epoch_num = cli_args.epoch
+        else:
+            # Try to extract from filename
+            import re
+
+            match = re.search(r"epoch_(\d+)", cli_args.weight_trajectory_data)
+            epoch_num = int(match.group(1)) if match else 1
+
+        # Get sleep_enabled flag
+        sleep_enabled = (
+            bool(payload["sleep_enabled"][0])
+            if "sleep_enabled" in payload.files
+            else True
+        )
+
+        # Generate plot
+        plot_weight_trajectories_with_sleep_epoch(
+            weight_tracking, epoch_num, sleep_enabled=sleep_enabled
+        )
+        print(
+            f"Regenerated trajectory plot: plots/weights_trajectories_epoch_{epoch_num:03d}.pdf"
+        )
+    elif cli_args.tsne_data:
+        # Load cached t-SNE inputs
+        payload = np.load(cli_args.tsne_data, allow_pickle=True)
+        spikes = payload["spikes"]
+        labels = payload["labels"]
+
+        # Determine if this is train or test data from filename
+        is_train = "train" in os.path.basename(cli_args.tsne_data)
+
+        # Run t-SNE with specified parameters
+        print(f"Regenerating t-SNE plot from {cli_args.tsne_data}")
+        print(
+            f"  Parameters: n_components={cli_args.n_components}, perplexity={cli_args.perplexity}, "
+            f"max_iter={cli_args.max_iter}, random_state={cli_args.random_state}"
+        )
+
+        t_SNE(
+            spikes=spikes,
+            labels_spike=labels,
+            n_components=cli_args.n_components,
+            perplexity=cli_args.perplexity,
+            max_iter=cli_args.max_iter,
+            random_state=cli_args.random_state,
+            train=is_train,
+            show_plot=False,
+        )
+        print("t-SNE plot regenerated successfully")
     else:
         parser.print_help()
