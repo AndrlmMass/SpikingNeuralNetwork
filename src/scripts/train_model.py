@@ -1,5 +1,5 @@
-from big_comb import snn_sleepy
-from platform_utils import PLATFORM_NAME, IS_WINDOWS, safe_cpu_count
+from src.models.snn import snn_sleepy
+from src.utils.platform import PLATFORM_NAME, IS_WINDOWS, safe_cpu_count
 import argparse
 import numpy as np
 import random
@@ -13,7 +13,7 @@ import pstats
 def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False):
     print(f"\n===== RUN {run_idx + 1}/{total_runs} =====")
     # set seeds for run-to-run variance control
-    seed = 42 + run_idx
+    seed = 1 + run_idx
     np.random.seed(seed)
     random.seed(seed)
 
@@ -38,12 +38,6 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         b_tr, b_va, b_te = 400, 100, 200
         force_recreate_flag = False
     snn_N.prepare_data(
-        all_audio_train=22000,
-        batch_audio_train=100,
-        all_audio_test=7800,
-        batch_audio_test=600,
-        all_audio_val=200,
-        batch_audio_val=200,
         all_images_train=img_tr,
         batch_image_train=b_tr,
         all_images_test=img_te,
@@ -56,10 +50,7 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         noisy_data=False,
         gain=gain_for_dataset,
         noise_level=0.0,
-        audioMNIST=False,
         imageMNIST=(False if use_geomfig else True),
-        create_data=False,
-        plot_spectrograms=False,
         image_dataset=(
             args.dataset if getattr(args, "dataset", None) else args.image_dataset
         ),
@@ -100,11 +91,9 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
     snn_N.train_network(
         train_weights=True,
         noisy_potential=True,
-        compare_decay_rates=False,
         check_sleep_interval=35000,
         weight_decay_rate_exc=[0.99997],
         weight_decay_rate_inh=[0.99997],
-        samples=10,
         force_train=True,
         plot_spikes_train=False,
         plot_weights=False,
@@ -121,7 +110,6 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         plot_top_response_train=False,
         plot_tsne_during_training=False,
         tsne_plot_interval=1,
-        plot_spectrograms=False,
         use_validation_data=False,
         var_noise=float(getattr(args, "noise", 2.0)),
         max_weight_exc=25,
@@ -481,6 +469,11 @@ def main():
         except Exception as e:
             print(f"WARNING: Could not save incremental results: {e}")
 
+    # ... (existing code) ...
+
+    # Collect results for DataFrame
+    df_rows = []
+
     # Run for each dataset, then sleep rate, then runs
     preview_requested = bool(getattr(args, "preview_dataset", False))
     preview_consumed = False
@@ -526,6 +519,52 @@ def main():
                     save_results_incremental(
                         current_dataset, sleep_rate, noise_level, run_idx, result
                     )
+
+                    # Extract accuracy for DataFrame
+                    if isinstance(result, tuple) and len(result) >= 1:
+                        acc_dict = result[0]
+                        test_acc = acc_dict.get("test") if isinstance(acc_dict, dict) else None
+                    else:
+                        test_acc = None
+
+                    # Append to DataFrame rows
+                    df_rows.append({
+                        "Sleep_duration": float(sleep_rate) * 100,
+                        "Model": "SNN_sleepy",
+                        "Run": run_idx + 1,
+                        "Seed": run_idx + 1,
+                        "Dataset": current_dataset,
+                        "Accuracy": test_acc
+                    })
+
+    if args.runs > 0 and len(all_results) > 0:
+        # ... (existing summary print print logic) ...
+
+        # ---- Save to Excel ----
+        try:
+            import pandas as pd
+            df = pd.DataFrame(df_rows)
+            
+            # Ensure proper column order
+            cols = ["Sleep_duration", "Model", "Run", "Seed", "Dataset", "Accuracy"]
+            # Add any extra columns that might be present (none currently, but good practice)
+            for c in df.columns:
+                if c not in cols:
+                    cols.append(c)
+            df = df[cols]
+
+            # Save to src/analysis/Results_.xlsx for consistency
+            analysis_dir = os.path.join("src", "analysis")
+            os.makedirs(analysis_dir, exist_ok=True)
+            excel_path = os.path.join(analysis_dir, "Results_.xlsx")
+            df.to_excel(excel_path, index=False)
+            print(f"\nResults saved to Excel: {excel_path}")
+        except ImportError:
+            print("\nWARNING: pandas/openpyxl not installed. Could not save to Excel.")
+        except Exception as e:
+            print(f"\nWARNING: Failed to save Excel results: {e}")
+
+        # ... (existing JSON summary logic) ...
 
     if args.runs > 0 and len(all_results) > 0:
         print("\n" + "=" * 70)

@@ -1,3 +1,7 @@
+"""
+Classification algorithms for SNN output evaluation.
+"""
+
 import numpy as np
 from typing import Dict, Tuple, Optional
 
@@ -28,7 +32,6 @@ def pca_logistic_regression(
     - PCA is fit on train only, then applied to val/test.
     - Use either n_components (int) or variance_ratio (0-1) to set dimensionality.
     """
-
     if standardize:
         scaler = StandardScaler(with_mean=True, with_std=True)
         X_train_s = scaler.fit_transform(X_train)
@@ -49,9 +52,7 @@ def pca_logistic_regression(
     X_val_p = pca.transform(X_val_s)
     X_test_p = pca.transform(X_test_s)
 
-    clf = LogisticRegression(
-        multi_class="multinomial", solver="lbfgs", max_iter=max_iter
-    )
+    clf = LogisticRegression(multi_class="multinomial", solver="lbfgs", max_iter=max_iter)
     clf.fit(X_train_p, y_train)
 
     accs = {
@@ -110,45 +111,3 @@ def pca_quadratic_discriminant(
     }
 
     return accs, scaler, pca, clf
-
-
-if __name__ == "__main__":
-    # Minimal example using existing combined features if desired.
-    # Replace with your high-dimensional spiking arrays (flattened time×neurons) as needed.
-    try:
-        from multiple_log_reg.get_data import get_data
-
-        (
-            _img_tr,
-            _img_tr_y,
-            _img_v,
-            _img_v_y,
-            _img_te,
-            _img_te_y,
-            _aud_tr,
-            _aud_tr_y,
-            _aud_v,
-            _aud_v_y,
-            _aud_te,
-            _aud_te_y,
-            comb_tr,
-            comb_tr_y,
-            comb_v,
-            comb_v_y,
-            comb_te,
-            comb_te_y,
-        ) = get_data(imageMNIST=True, audioMNIST=True, combined=True)
-
-        if comb_tr is not None:
-            accs, _, _, _ = pca_logistic_regression(
-                comb_tr,
-                comb_tr_y,
-                comb_v,
-                comb_v_y,
-                comb_te,
-                comb_te_y,
-                variance_ratio=0.95,
-            )
-            print("PCA+LogReg on combined ->", accs)
-    except Exception as e:
-        print("Example skipped:", e)

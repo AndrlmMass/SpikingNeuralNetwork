@@ -4,7 +4,7 @@ This directory contains scripts for analyzing the effects of noise in spiking ne
 
 ## Overview
 
-The primary script is `main.py`, which initializes an SNN model using the `snn_sleepy` class from `big_comb.py` and executes a pipeline of data preparation, network setup, training, and analysis. The goal is to study how noise and sleep mechanisms affect learning and representation in the network.
+The primary script is `snn_sleepy_trainer.py` (formerly `main.py`), which initializes an SNN model using the `snn_sleepy` class from `snn_sleepy_core.py` (formerly `big_comb.py`) and executes a pipeline of data preparation, network setup, training, and analysis. The goal is to study how noise and sleep mechanisms affect learning and representation in the network.
 
 The `snn_sleepy` class manages the entire workflow, including data handling, weight initialization, training loops with noise injection, and post-training analyses like t-SNE and phi metrics.
 
@@ -58,9 +58,9 @@ The process in `main.py` follows these main steps, each corresponding to a metho
 
 ## Supporting Files and Their Roles
 
-- **`big_comb.py`**: Defines the `snn_sleepy` class and integrates all components.
-- **`train.py`**: Implements the core training loop (`train_network`) with neuron dynamics, spike generation, and weight updates.
-- **`get_data.py`**: Functions to load MNIST and convert to spike trains (`create_data`), with noise and encoding options.
+- **`snn_sleepy_core.py`** (formerly `big_comb.py`): Defines the `snn_sleepy` class and integrates all components.
+- **`snn_dynamics.py`** (formerly `train.py`): Implements the core training loop (`train_network`) with neuron dynamics, spike generation, and weight updates.
+- **`dataset_loaders.py`** (formerly `get_data.py`): Functions to load MNIST and convert to spike trains (`create_data`), with noise and encoding options.
 - **`create_network.py`**: Helpers to generate weights (`create_weights`) and initialize arrays (`create_arrays`).
 - **`plot.py`**: Plotting utilities for spikes, heatmaps, membrane potentials, weights, thresholds, traces, top responders, phi-accuracy, and epoch training.
 - **`analysis.py`**: Analysis functions like t-SNE, PCA, and phi calculation (`calculate_phi`).
