@@ -1,6 +1,8 @@
 import numpy as np
 import os
 import gc
+import torch
+import random
 from tqdm import tqdm
 import json
 from datetime import datetime
@@ -49,6 +51,7 @@ class snn_sleepy:
         N_exc=200,
         N_inh=50,
         N_x=225,
+        seed=None,
         classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
     ):
         self.N_exc = N_exc
@@ -66,6 +69,13 @@ class snn_sleepy:
         self.acc_history = {"train": [], "val": [], "test": []}
         self._acc_log_dir = os.path.join("results", "acc_history")
         self._acc_log_file = None
+        # Initiate seed
+        try:
+            if seed != None:
+                s = int(seed)
+                self.rng_numpy = np.random.Generator(np.random.PCG64(s))
+                self.rng_torch = torch.Generator()
+                self.rng_torch.manual_seed(seed)
 
     def _ensure_acc_logger(self):
         if self._acc_log_file is None:
@@ -354,10 +364,11 @@ class snn_sleepy:
         all_images_val=1000,
         batch_image_val=100,
         image_dataset="mnist",
-        geom_jitter=False,
-        geom_jitter_amount=0.05,
-        geom_noise_var=0.02,
-        geom_noise_mean=0.0,
+        geom_jitter=False, # remove?
+        geom_jitter_amount=0.05, # remove?
+        geom_noise_var=0.02, # why not used?
+        geom_noise_mean=0.0, # why not used?
+        seed: int | None = None,
         geom_workers=None,
     ):
         # Save current parameters
@@ -459,6 +470,21 @@ class snn_sleepy:
             test_count = int(self.all_images_test)
             noise_var = locals().get("geom_noise_var", 0.02)
             noise_mean = locals().get("geom_noise_mean", 0.0)
+            # Apply provided seed (if any) to global RNGs so network init and
+            # downstream code use a consistent random state. Use a safe default
+            # when `seed` is None.
+            try:
+                if seed is not None:
+                    s = int(seed)
+                    np.random.seed(s)
+                    random.seed(s)
+                    self.seed = s
+                else:
+                    # keep existing default behavior
+                    self.seed = None
+            except Exception:
+                raise ValueError("Missing seed")
+
             data_tr, lab_tr, data_va, lab_va, data_te, lab_te = (
                 load_or_create_geomfig_data(
                     pixel_size=pixel_size,
@@ -471,7 +497,7 @@ class snn_sleepy:
                     noise_mean=noise_mean,
                     jitter=getattr(self, "geom_jitter", False),
                     jitter_amount=getattr(self, "geom_jitter_amount", 0.05),
-                    seed=42,
+                    seed=(int(seed) if seed is not None else 42),
                     force_recreate=bool(force_recreate),
                     num_workers=self.geom_workers,
                 )
@@ -557,61 +583,6 @@ class snn_sleepy:
                             image_data_dir = os.path.join(data_dir, folder)
                             download_images = False
                             break
-
-            if download_images:
-                # Create new folder for image data
-                rand_nums = np.random.randint(low=0, high=9, size=5)
-                while str(rand_nums) in os.listdir(data_dir):
-                    rand_nums = np.random.randint(low=0, high=9, size=5)
-
-                image_data_dir = os.path.join(data_dir, str(rand_nums))
-                os.makedirs(image_data_dir, exist_ok=True)
-
-                # Save image data parameters
-                pixel_size_param = int(np.sqrt(self.N_x))
-                image_params = {
-                    "pixel_size": pixel_size_param,
-                    "num_steps": num_steps,
-                    "gain": gain,
-                    "offset": offset,
-                    "first_spike_time": first_spike_time,
-                    "time_var_input": time_var_input,
-                    "N_x": self.N_x,
-                    "mode": "image_only",
-                    "dataset": self.image_dataset,
-                    "train_count": all_images_train,
-                    "val_count": all_images_val,
-                    "test_count": all_images_test,
-                }
-
-                with open(
-                    os.path.join(image_data_dir, "image_data_parameters.json"), "w"
-                ) as f:
-                    json.dump(image_params, f)
-
-            # Determine pixel size for image-only mode
-            pixel_size_streamer = int(np.sqrt(self.N_x))
-            self.image_streamer = ImageDataStreamer(
-                "data",  # Use the data directory for MNIST download
-                batch_size=batch_image_train,
-                pixel_size=pixel_size_streamer,
-                num_steps=num_steps,
-                gain=gain,
-                offset=offset,
-                first_spike_time=first_spike_time,
-                time_var_input=time_var_input,
-                train_count=all_images_train,
-                val_count=all_images_val,
-                test_count=all_images_test,
-                dataset=self.image_dataset,
-            )
-            print(
-                f"Image streamer initialized with {self.image_streamer.get_total_samples()} total samples"
-            )
-
-        # Legacy create_data path is no longer supported - use ImageDataStreamer or GeomfigDataStreamer instead
-        # Note: Modern streaming loaders (ImageDataStreamer, GeomfigDataStreamer) are used instead
-        pass
 
     def _save_streaming_parameters(self):
         """Save streaming data parameters for future reference."""

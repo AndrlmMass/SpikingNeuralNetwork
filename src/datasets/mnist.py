@@ -1,7 +1,7 @@
 """
 MNIST and related datasets.
 
-This module provides utilities for loading MNIST, KMNIST, FMNIST, and NotMNIST datasets.
+This module provides utilities for loading MNIST, KMNIST, and FMNIST.
 """
 
 import sys
@@ -14,7 +14,7 @@ from .loaders import (
 )
 
 # Dataset identifiers
-SUPPORTED_DATASETS = ['mnist', 'kmnist', 'fmnist', 'notmnist']
+SUPPORTED_DATASETS = ['mnist', 'kmnist', 'fmnist']
 
 __all__ = [
     'load_image_batch',

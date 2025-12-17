@@ -4,7 +4,7 @@ title: "SpikingNeuralNetwork"
 authors:
   - family-names: "Massey"
     given-names: "Andreas"
-abstract: "This repository improves upon existing spiking neural networks (SNNs) to make them more flexible, applicable, and relevant."
+abstract: "This repository improves upon existing spiking neural networks (SNNs) with our sleep-protocol to ensure weights stay within reasonable bounds."
 version: "1.0.0"
 date-released: "2025-01-16"
 url: "https://github.com/AndrImMass/SpikingNeuralNetwork"

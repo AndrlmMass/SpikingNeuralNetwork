@@ -1,11 +1,14 @@
 import numpy as np
+import torch
+import os
 from skimage.draw import circle_perimeter, line
-from numba import njit
+from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 
-def generate_normal_value(mean=0, variance=0.1):
+def generate_normal_value(mean, variance, rng):
     std_dev = np.sqrt(variance)
-    value = np.random.normal(mean, std_dev)
+    value = rng.normal(loc=mean, scale=std_dev)
     return value
 
 
@@ -49,19 +52,19 @@ def draw_circle_with_thickness(
                 high_res_grid[rr[i], cc[i]] = 1
 
 
-def add_noise(input_space, noise_rand, noise_variance):
+def add_noise(input_space, noise_rand, noise_variance, rng):
     if noise_rand:
         for j in range(input_space.shape[0]):
             for l in range(input_space.shape[1]):
                 mean, variance = input_space[j, l], noise_variance
-                fuzzy_val = generate_normal_value(mean=mean, variance=variance)
+                fuzzy_val = rng.normal(loc=mean, scale=variance**2)
                 fuzzy_val = np.clip(fuzzy_val, 0, 1)
                 input_space[j, l] = fuzzy_val
     return input_space
 
 
 def gen_triangle(
-    input_dims, triangle_size, triangle_thickness, noise_rand, noise_variance
+    input_dims, triangle_size, triangle_thickness, noise_rand, noise_variance, rng
 ):
     input_space = np.zeros((input_dims, input_dims))
     center = input_dims / 2
@@ -102,10 +105,12 @@ def gen_triangle(
     input_space_flipped = np.flipud(input_space_normalized)
     input_space_flipped = np.clip(input_space_flipped, a_min=0, a_max=1)
 
-    return add_noise(input_space_flipped, noise_rand, noise_variance)
+    return add_noise(input_space_flipped, noise_rand, noise_variance, rng)
 
 
-def gen_square(input_dims, square_size, square_thickness, noise_rand, noise_variance):
+def gen_square(
+    input_dims, square_size, square_thickness, noise_rand, noise_variance, rng
+):
     input_space = np.zeros((input_dims, input_dims))
     square_length = int(square_size * input_dims)
     thickness = square_thickness
@@ -120,10 +125,10 @@ def gen_square(input_dims, square_size, square_thickness, noise_rand, noise_vari
         input_space[start_idx:end_idx, start_idx + i] = 1
         input_space[start_idx:end_idx, end_idx - 1 - i] = 1
 
-    return add_noise(input_space, noise_rand, noise_variance)
+    return add_noise(input_space, noise_rand, noise_variance, rng)
 
 
-def gen_x(input_dims, x_size, x_thickness, noise_rand, noise_variance):
+def gen_x(input_dims, x_size, x_thickness, noise_rand, noise_variance, rng):
     if not (0 <= x_size <= 1):
         raise ValueError("X size must be between 0 and 1.")
     if x_thickness <= 0:
@@ -164,10 +169,10 @@ def gen_x(input_dims, x_size, x_thickness, noise_rand, noise_variance):
     input_space_normalized = input_space / max_value if max_value > 0 else input_space
     input_space_normalized = np.clip(input_space_normalized, a_min=0, a_max=1)
 
-    return add_noise(input_space_normalized, noise_rand, noise_variance)
+    return add_noise(input_space_normalized, noise_rand, noise_variance, rng)
 
 
-def gen_circle(input_dims, circle_size, circle_thickness, noise_rand, noise_variance):
+def gen_circle(input_dims, circle_size, circle_thickness, noise_rand, noise_variance, rng):
     if not (0 <= circle_size <= 1):
         raise ValueError("Circle size must be between 0 and 1.")
     if circle_thickness <= 0:
@@ -200,4 +205,319 @@ def gen_circle(input_dims, circle_size, circle_thickness, noise_rand, noise_vari
     input_space_normalized = input_space / max_value if max_value > 0 else input_space
     input_space_normalized = np.clip(input_space_normalized, a_min=0, a_max=1)
 
-    return add_noise(input_space_normalized, noise_rand, noise_variance)
+    return add_noise(input_space_normalized, noise_rand, noise_variance, rng)
+
+
+def _geomfig_generate_one(
+    cls_id: int,
+    pixel_size: int,
+    noise_var: float,
+    jitter: bool,
+    jitter_amount: float,
+    tri_size: float,
+    tri_thick: int,
+    cir_size: float,
+    cir_thick: int,
+    sqr_size: float,
+    sqr_thick: int,
+    x_size: float,
+    clamp_min: float,
+    clamp_max: float,
+    x_thick: int,
+    seed: int,
+) -> np.ndarray:
+    """
+    Generate a single geometric figure image in [0,1] of shape (pixel_size, pixel_size).
+    Class mapping: 0=triangle, 1=circle, 2=square, 3=x.
+    """
+    rng = np.random.default_rng(seed)
+
+    def j(val, rel, clamp_min, clamp_max):
+        if not jitter:
+            return val
+        delta = (np.random.rand() * 2 - 1) * jitter_amount
+        out = val * (1.0 + delta) if rel else val + delta
+        if clamp_min is not None:
+            out = max(clamp_min, out)
+        if clamp_max is not None:
+            out = min(clamp_max, out)
+        return out
+
+    if cls_id == 0:  # triangle
+        img = gen_triangle(
+            input_dims=pixel_size,
+            triangle_size=float(
+                j(tri_size, rel=True, clamp_min=clamp_min, clamp_max=clamp_max)
+            ),
+            triangle_thickness=int(max(1, j(tri_thick, rel=True))),
+            noise_rand=True,
+            noise_variance=float(max(0.0, noise_var)),
+            rng=rng,
+        )
+    elif cls_id == 1:  # circle
+        img = gen_circle(
+            input_dims=pixel_size,
+            circle_size=float(
+                j(cir_size, rel=True, clamp_min=clamp_min, clamp_max=clamp_max)
+            ),
+            circle_thickness=int(max(1, j(cir_thick, rel=True))),
+            noise_rand=True,
+            noise_variance=float(max(0.0, noise_var)),
+            rng=rng,
+        )
+    elif cls_id == 2:  # square
+        img = gen_square(
+            input_dims=pixel_size,
+            square_size=float(
+                j(sqr_size, rel=True, clamp_min=clamp_min, clamp_max=clamp_max)
+            ),
+            square_thickness=int(max(1, j(sqr_thick, rel=True))),
+            noise_rand=True,
+            noise_variance=float(max(0.0, noise_var)),
+            rng=rng,
+        )
+    else:  # 3: x
+        img = gen_x(
+            input_dims=pixel_size,
+            x_size=float(j(x_size, rel=True, clamp_min=clamp_min, clamp_max=clamp_max)),
+            x_thickness=int(max(1, j(x_thick, rel=True))),
+            noise_rand=True,
+            noise_variance=float(max(0.0, noise_var)),
+            rng=rng,
+        )
+    # Ensure numeric array in [0,1]
+    img = np.asarray(img, dtype=np.float32)
+    img = np.clip(img, 0.0, 1.0)
+    return img
+
+
+def create_geomfig_data(
+    pixel_size: int,
+    train_ratio: float,
+    val_ratio: float,
+    test_ratio: float,
+    noise_var: float,
+    jitter: bool,
+    jitter_amount: float,
+    n_classes: int,
+    num_samples: int,
+    rng: np.random.Generator,
+    which_classes: np.array,
+    num_workers: int,
+    tri_size: float,
+    tri_thick: int,
+    cir_size: float,
+    cir_thick: int,
+    sqr_size: float,
+    sqr_thick: int,
+    x_size: float,
+    x_thick: int,
+    clamp_min: float,
+    clamp_max: float,
+):
+    """
+    Generate geometric figures dataset as images.
+    Returns torch tensors of shape (N, 1, H, W) and labels.
+    """
+
+    def make_split(total_samples: int, split_name: str):
+        if which_classes.shape[0] != n_classes:
+            raise ValueError(f"Number of classes in which_classes ({which_classes.shape[0]}) does not match n_classes ({n_classes})")
+        # Round down to optimal total samples for even split
+        total = max(0, (int(total_samples) // n_classes) * n_classes)
+        if total == 0:
+            raise ValueError(
+                f"Number of classes are too low, or number of samples for {split_name}"
+            )
+        imgs = np.zeros((total, pixel_size, pixel_size), dtype=np.float32)
+        labels = np.array([which_classes[i % len(which_classes)] for i in range(total)], dtype=np.int32)
+
+        # Enable progress bars for generation
+        os.environ["TQDM_DISABLE"] = "False"
+
+        # set num workers
+        use_workers = 1
+        if num_workers is not None:
+            use_workers = max(1, int(num_workers))
+
+        # Predefine balanced class sequence (even repeats of 0..n_classes-1)
+        # `total` was already rounded to be divisible by `n_classes` above.
+        cls_seq = np.tile(which_classes, total // len(which_classes))
+        # Deterministically shuffle class order using provided RNG
+        cls_seq = rng.permutation(cls_seq)
+
+        if use_workers == 1:
+            for i in tqdm(
+                range(total),
+                total=total,
+                desc=f"Generating geomfig {split_name}",
+                leave=False,
+            ):
+                cls_id = int(cls_seq[i])
+                imgs[i] = _geomfig_generate_one(
+                    cls_id=cls_id,
+                    pixel_size=pixel_size,
+                    noise_var=noise_var,
+                    jitter=jitter,
+                    jitter_amount=jitter_amount,
+                    tri_size=tri_size,
+                    tri_thick=tri_thick,
+                    cir_size=cir_size,
+                    cir_thick=cir_thick,
+                    sqr_size=sqr_size,
+                    sqr_thick=sqr_thick,
+                    x_size=x_size,
+                    clamp_min=clamp_min,
+                    clamp_max=clamp_max,
+                    x_thick=x_thick,
+                    seed=rng.integers(0, 2**31 - 1),
+                )
+        else:
+            # Pre-draw independent seeds for each sample to avoid identical substreams across forks
+            seeds = rng.integers(0, 2**31 - 1, size=total, dtype=np.int64)
+            with ProcessPoolExecutor(max_workers=use_workers) as ex:
+                futures = {}
+                for i in range(total):
+                    cls_id = int(cls_seq[i])
+                    futures[
+                        ex.submit(
+                            _geomfig_generate_one,
+                                cls_id=cls_id,
+                                pixel_size=pixel_size,
+                                noise_var=noise_var,
+                                jitter=jitter,
+                                jitter_amount=jitter_amount,
+                                tri_size=tri_size,
+                                tri_thick=tri_thick,
+                                cir_size=cir_size,
+                                cir_thick=cir_thick,
+                                sqr_size=sqr_size,
+                                sqr_thick=sqr_thick,
+                                x_size=x_size,
+                                clamp_min=clamp_min,
+                                clamp_max=clamp_max,
+                                x_thick=x_thick,
+                                seed=seeds[i],
+                        )
+                    ] = i
+                for fut in tqdm(
+                    as_completed(futures),
+                    total=total,
+                    desc=f"Generating geomfig {split_name} (x{use_workers})",
+                    leave=False,
+                ):
+                    i = futures[fut]
+                    try:
+                        imgs[i] = fut.result()
+                    except Exception:
+                        # In case of worker failure, fallback to inline generation for this sample
+                        cls_id = int(cls_seq[i])
+                        imgs[i] = _geomfig_generate_one(
+                            cls_id=cls_id,
+                            pixel_size=pixel_size,
+                            noise_var=noise_var,
+                            jitter=jitter,
+                            jitter_amount=jitter_amount,
+                            tri_size=tri_size,
+                            tri_thick=tri_thick,
+                            cir_size=cir_size,
+                            cir_thick=cir_thick,
+                            sqr_size=sqr_size,
+                            sqr_thick=sqr_thick,
+                            x_size=x_size,
+                            clamp_min=clamp_min,
+                            clamp_max=clamp_max,
+                            x_thick=x_thick,
+                            seed=seeds[i],
+                        ) 
+
+        # Return images (not spikes) - spike conversion handled by ImageDataStreamer
+        # Convert to torch tensors with channel dimension: (N, H, W) -> (N, 1, H, W)
+        imgs_torch = torch.from_numpy(imgs).unsqueeze(1)  # Add channel dimension
+        
+        return imgs_torch, labels
+    total_samples = num_samples
+    data_train, labels_train = make_split(int(train_ratio*total_samples), "train")
+    data_val, labels_val = make_split(int(val_ratio*total_samples), "val")
+    data_test, labels_test = make_split(int(test_ratio*total_samples), "test")
+
+    return (
+        data_train,
+        labels_train,
+        data_val,
+        labels_val,
+        data_test,
+        labels_test,
+    )
+
+
+def load_or_create_geomfig_data(
+    pixel_size: int,
+    seed: int,
+    num_classes: int,
+    which_classes: np.array,
+    rng: np.random.Generator,
+    train_count: int,
+    val_count: int,
+    test_count: int,
+    noise_var: float,
+    jitter: bool,
+    jitter_amount: float,
+    num_workers: int,
+    tri_size: float,
+    tri_thick: int,
+    cir_size: float,
+    cir_thick: int,
+    sqr_size: float,
+    sqr_thick: int,
+    x_size: float,
+    x_thick: int,
+    clamp_min: float,
+    clamp_max: float,
+):
+    """
+    Generate geomfig images. Caching is handled by ImageDataStreamer's general caching system.
+    Returns images (not spikes) - spike conversion handled by ImageDataStreamer.
+    """
+    # Generate images (caching handled by ImageDataStreamer)
+    print(f"Generating geomfig images (seed={seed})")
+    (
+        data_train,
+        labels_train,
+        data_val,
+        labels_val,
+        data_test,
+        labels_test,
+    ) = create_geomfig_data(
+        pixel_size=pixel_size,
+        train_ratio=train_count / (train_count + val_count + test_count) if (train_count + val_count + test_count) > 0 else 0.7,
+        val_ratio=val_count / (train_count + val_count + test_count) if (train_count + val_count + test_count) > 0 else 0.15,
+        test_ratio=test_count / (train_count + val_count + test_count) if (train_count + val_count + test_count) > 0 else 0.15,
+        noise_var=noise_var,
+        jitter=jitter,
+        jitter_amount=jitter_amount,
+        n_classes=num_classes,
+        num_samples=train_count + val_count + test_count,
+        rng=rng,
+        which_classes=which_classes,
+        num_workers=num_workers,
+        tri_size=tri_size,
+        tri_thick=tri_thick,
+        cir_size=cir_size,
+        cir_thick=cir_thick,
+        sqr_size=sqr_size,
+        sqr_thick=sqr_thick,
+        x_size=x_size,
+        x_thick=x_thick,
+        clamp_min=clamp_min,
+        clamp_max=clamp_max,
+    )
+
+    return (
+        data_train,
+        labels_train,
+        data_val,
+        labels_val,
+        data_test,
+        labels_test,
+    )

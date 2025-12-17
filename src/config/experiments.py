@@ -37,6 +37,37 @@ PAPER_GEOMFIG_EXPERIMENT = {
 }
 
 
+# Geomfig sleep comparison experiment
+GEOMFIG_SLEEP_COMPARISON = {
+    "name": "geomfig_sleep_comparison",
+    "description": "Compare geomfig classification with and without sleep",
+    "sleep_configs": [
+        {
+            "name": "no_sleep",
+            "sleep": False,
+            "sleep_ratio": 0.0,
+        },
+        {
+            "name": "with_sleep",
+            "sleep": True,
+            "sleep_ratio": 0.1,
+        }
+    ],
+    "network": {
+        **DEFAULT_NETWORK_PARAMS,
+        "classes": GEOMFIG_PARAMS["classes"],
+    },
+    "data": {
+        **DEFAULT_DATA_PARAMS,
+        "gain": GEOMFIG_PARAMS["gain"],
+        "noise_var": GEOMFIG_PARAMS["noise_var"],
+        "noise_mean": GEOMFIG_PARAMS["noise_mean"],
+        "jitter": GEOMFIG_PARAMS["jitter"],
+        "jitter_amount": GEOMFIG_PARAMS["jitter_amount"],
+    },
+}
+
+
 # MNIST baseline experiment
 MNIST_BASELINE_EXPERIMENT = {
     "name": "mnist_baseline",
@@ -113,6 +144,7 @@ MNIST_FAMILY_EXPERIMENT = {
 # All experiments for easy access
 ALL_EXPERIMENTS = {
     "paper_geomfig": PAPER_GEOMFIG_EXPERIMENT,
+    "geomfig_sleep_comparison": GEOMFIG_SLEEP_COMPARISON,
     "mnist_baseline": MNIST_BASELINE_EXPERIMENT,
     "mnist_family": MNIST_FAMILY_EXPERIMENT,
     "no_sleep": NO_SLEEP_EXPERIMENT,
