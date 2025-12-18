@@ -35,11 +35,11 @@ class DataStreamer:
         test_ratio: float,
         rng: np.random.Generator,
         noise_var: float,
+        geom_noise_var: float,
         jitter: bool,
         jitter_amount: float,
         force_recreate: bool,
         num_workers: int,
-        seed: int,
         dataset: str,
         tri_size: float,
         tri_thick: int,
@@ -100,7 +100,7 @@ class DataStreamer:
                 train_ratio=train_ratio,
                 val_ratio=val_ratio,
                 test_ratio=test_ratio,
-                noise_var=noise_var,
+                noise_var=geom_noise_var,
                 jitter=jitter,
                 jitter_amount=jitter_amount,
                 n_classes=self.num_classes,
@@ -312,7 +312,7 @@ class DataStreamer:
         os.makedirs(cache_dir, exist_ok=True)
         params = self._get_image_params(partition)
         cache_hash = self.params_hash(params)
-        return os.path.join(cache_dir, f"{self.dataset}_{partition}_{cache_hash}.npz")
+        return os.path.join(cache_dir, f"{partition}_{cache_hash}.npz")
 
     def _get_spike_cache_path(self, partition):
         """Generate cache file path for spike data based on dataset parameters."""
@@ -320,7 +320,7 @@ class DataStreamer:
         os.makedirs(cache_dir, exist_ok=True)
         params = self._get_spike_params(partition)
         cache_hash = self.params_hash(params)
-        return os.path.join(cache_dir, f"{self.dataset}_{partition}_{cache_hash}.npz")
+        return os.path.join(cache_dir, f"{partition}_{cache_hash}.npz")
 
     def _save_images_cache(self, partition, images, labels):
         """Save images and labels to cache."""

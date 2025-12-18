@@ -300,18 +300,18 @@ def train_network(
     # Pre-transpose weights for faster matrix multiply in membrane potential update
     weights_T_cache = weights[:, st:ih].T.copy()
 
-    # Precompute scheduled sleep window per interval
-    # e.g., sleep_ratio=0.1 means 10% of each interval is sleep
+    # Precompute scheduled sleep window per batch
+    # e.g., sleep_ratio=0.1 means 10% of each batch is sleep
     if sleep and sleep_ratio is not None and sleep_ratio > 0.0:
-        sleep_window = max(1, int(round(check_sleep_interval * sleep_ratio)))
+        sleep_window = max(1, int(round(T * sleep_ratio)))
     else:
         sleep_window = 0
 
     # Print sleep configuration
     if sleep and sleep_window > 0:
-        expected_sleep_pct = (sleep_window / check_sleep_interval) * 100
+        expected_sleep_pct = (sleep_window / T) * 100
         print(
-            f"Sleep scheduled: {sleep_window}/{check_sleep_interval} timesteps per interval ({expected_sleep_pct:.1f}%)"
+            f"Sleep scheduled: {sleep_window}/{T} timesteps per batch ({expected_sleep_pct:.1f}%)"
         )
 
     # Suppose weights is your initial 2D numpy array of weights.
@@ -506,9 +506,9 @@ def train_network(
         sleep_now_inh = False
         sleep_now_exc = False
 
-        # Trigger hard-pause only at the start of a window
+        # Trigger hard-pause only at the start of a batch (sleep window at batch start)
         is_window_start = (
-            sleep and sleep_window > 0 and ((t % check_sleep_interval) == 0)
+            sleep and sleep_window > 0 and ((t % T) == 0)
         )
 
         # Hard-pause sleep: run inner loop without advancing real time t
@@ -911,8 +911,10 @@ def train_network(
             # snapshots disabled
 
         # Apply scheduled sleep flags (non-hard-pause mode only). For hard-pause we only mark at window start.
+        # Sleep is applied at the start of each batch (first sleep_window timesteps of each batch)
         if sleep and sleep_window > 0 and not sleep_hard_pause:
-            if (t % check_sleep_interval) < sleep_window:
+            batch_timestep = t % T  # Position within current batch
+            if batch_timestep < sleep_window:
                 sleep_now_exc = True
                 sleep_now_inh = True
                 slept_this_step = True

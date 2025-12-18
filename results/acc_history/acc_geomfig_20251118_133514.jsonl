@@ -1,8 +1,0 @@
-{"timestamp": "2025-11-18T13:35:14.962832", "split": "train", "epoch": 1, "accuracy": 0.4222222222222222}
-{"timestamp": "2025-11-18T13:35:24.762345", "split": "val", "epoch": 1, "accuracy": 0.5466666666666666}
-{"timestamp": "2025-11-18T13:37:28.156464", "split": "train", "epoch": 2, "accuracy": 0.24444444444444444}
-{"timestamp": "2025-11-18T13:37:37.905724", "split": "val", "epoch": 2, "accuracy": 0.4266666666666667}
-{"timestamp": "2025-11-18T13:39:40.271881", "split": "train", "epoch": 3, "accuracy": 0.24444444444444444}
-{"timestamp": "2025-11-18T13:39:50.205870", "split": "val", "epoch": 3, "accuracy": 0.41333333333333333}
-{"timestamp": "2025-11-18T13:42:03.781269", "split": "train", "epoch": 4, "accuracy": 0.24444444444444444}
-{"timestamp": "2025-11-18T13:42:13.420147", "split": "val", "epoch": 4, "accuracy": 0.4266666666666667}

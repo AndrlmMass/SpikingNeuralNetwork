@@ -7,16 +7,12 @@ This module provides:
 - paper_figures: Publication-quality figure generation
 """
 
-from .metrics import (
-    t_SNE,
-    PCA_analysis,
-    calculate_phi,
-    bin_spikes_by_label_no_breaks,
-)
-
 from .classifiers import (
     pca_logistic_regression,
     pca_quadratic_discriminant,
+    t_SNE,
+    PHI,
+    bin_spikes_by_label_no_breaks,
 )
 
 from .paper_figures import (
@@ -27,11 +23,35 @@ from .paper_figures import (
     generate_all_paper_figures,
 )
 
+from pathlib import Path
+
+# Module directory
+EVALUATION_DIR = Path(__file__).parent
+
+# Standard file names
+RESULTS_FILE = "Results_.xlsx"
+PREDICTIONS_FILE = "pred.xlsx"
+R_SCRIPT = "mixed_model2.r"
+
+
+def get_results_path() -> Path:
+    """Get path to Results_.xlsx."""
+    return EVALUATION_DIR / RESULTS_FILE
+
+
+def get_predictions_path() -> Path:
+    """Get path to pred.xlsx."""
+    return EVALUATION_DIR / PREDICTIONS_FILE
+
+
+def get_r_script_path() -> Path:
+    """Get path to mixed_model2.r."""
+    return EVALUATION_DIR / R_SCRIPT
+
 __all__ = [
     # Metrics
     "t_SNE",
-    "PCA_analysis",
-    "calculate_phi",
+    "PHI",
     "bin_spikes_by_label_no_breaks",
     # Classifiers
     "pca_logistic_regression",

@@ -47,7 +47,6 @@ class GEOMFIG_DATASET:
         self.x_thick = x_thick
         self.clamp_min = clamp_min
         self.clamp_max = clamp_max
-        self.rng = np.random.default_rng(seed) # fix this
 
     def generate_normal_value(self, mean, variance):
         std_dev = np.sqrt(variance)

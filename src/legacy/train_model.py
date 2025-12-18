@@ -45,17 +45,16 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         all_images_val=img_va,
         batch_image_val=b_va,
         add_breaks=False,
-        num_steps=1000,
+        num_steps=100,
         force_recreate=force_recreate_flag,
         noisy_data=False,
         gain=gain_for_dataset,
         noise_level=0.0,
         imageMNIST=(False if use_geomfig else True),
-        image_dataset=(
+        dataset=(
             args.dataset if getattr(args, "dataset", None) else args.image_dataset
         ),
         geom_noise_var=getattr(args, "geom_noise_var", 0.02),
-        geom_noise_mean=getattr(args, "geom_noise_mean", 0.0),
         geom_jitter=getattr(args, "geom_jitter", False),
         geom_jitter_amount=getattr(args, "geom_jitter_amount", 0.05),
         geom_workers=int(
@@ -72,18 +71,7 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         snn_N.preview_loaded_data(num_image_samples=1)
 
     # set up network for training
-    snn_N.prepare_network(
-        plot_weights=False,
-        w_dense_ee=0.15,
-        w_dense_se=0.1,
-        w_dense_ei=0.2,
-        w_dense_ie=0.25,
-        se_weights=0.15,
-        ee_weights=0.3,
-        ei_weights=0.3,
-        ie_weights=-0.3,
-        create_network=False,
-    )
+    snn_N.prepare_network()
 
     if getattr(args, "profile", False):
         pr = cProfile.Profile()

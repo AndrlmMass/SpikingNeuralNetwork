@@ -2,22 +2,21 @@ import numpy as np
 import os
 import gc
 import torch
-import random
 from tqdm import tqdm
 import json
 from datetime import datetime
-import matplotlib.pyplot as plt
 import traceback
+import hashlib
 
 
 from .dynamics import train_network
-from src.datasets.loaders import (
+from .layers import create_weights, create_arrays
+from src.datasets.load import (
     DataStreamer,
 )
-from src.evaluation.plots import (
+from src.plot.plot import (
     spike_plot,
     mp_plot,
-    weights_plot,
     top_responders_plotted,
     plot_epoch_training,
     get_elite_nodes,
@@ -26,18 +25,12 @@ from src.evaluation.plots import (
     plot_weight_trajectories_with_sleep_epoch,
     save_weight_distribution_gif,
 )
-from src.evaluation.metrics import (
-    t_SNE,
-    PCA_MLR,
-    Phi,
-    bin_spikes_by_label_no_breaks,
-)
 from src.evaluation.classifiers import (
+    t_SNE, # might be missing plotting function
+    bin_spikes_by_label_no_breaks,
     pca_logistic_regression,
     pca_quadratic_discriminant,
 )
-from src.models.layers import create_weights, create_arrays
-
 
 class snn_sleepy:
     def __init__(
@@ -52,7 +45,7 @@ class snn_sleepy:
         self.N_inh = N_inh
         self.N_x = N_x
         self.N_classes = len(which_classes)
-        self._which_classes = which_classes
+        self.which_classes = which_classes
         self.st = N_x  # stimulation
         self.ex = self.st + N_exc  # excitatory
         self.ih = self.ex + N_inh  # inhibitory
@@ -60,49 +53,75 @@ class snn_sleepy:
         # One-time plotting guard
         self._image_preview_done = False
         # Accuracy tracking
+        self.model_loaded = False
         self.acc_history = {"train": [], "val": [], "test": []}
-        self._acc_log_dir = os.path.join("results", "acc_history")
-        self._acc_log_file = None
+        self._acc_log_dir = os.path.join("results", "accuracy")
+        self._training_run_id = None  # Will be set when training starts
+        self._acc_log_file_cache = {}  # Cache log file paths per epoch
         # Initiate seed
         self.rng_numpy = np.random.Generator(np.random.PCG64(seed))
         self.rng_torch = torch.Generator()
         self.rng_torch.manual_seed(seed)
 
-    def _ensure_acc_logger(self):
-        if self._acc_log_file is None:
-            try:
-                os.makedirs(self._acc_log_dir, exist_ok=True)
-            except Exception:
-                raise UserWarning("Failed to create accuracy logger directory")
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            ds = getattr(self, "image_dataset", "unknown")
-            self._acc_log_file = os.path.join(self._acc_log_dir, f"acc_{ds}_{ts}.jsonl")
+    def _ensure_acc_logger(self, epoch: int | None = None):
+        # Initialize training run ID on first call if not set
+        if self._training_run_id is None:
+            self._training_run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Use cache key for this epoch
+        epoch_key = f"epoch_{epoch}" if epoch is not None else "epoch_unknown"
+        
+        # Return cached file path if it exists
+        if epoch_key in self._acc_log_file_cache:
+            self._acc_log_file = self._acc_log_file_cache[epoch_key]
+            return
+        
+        # Fetch dataset name
+        ds = getattr(self, "image_dataset", "unknown")
+        
+        # Create directory structure: {dataset}/{run_id}/epoch_{epoch}/
+        dataset_dir = os.path.join(self._acc_log_dir, ds)
+        run_dir = os.path.join(dataset_dir, self._training_run_id)
+        epoch_dir = os.path.join(run_dir, epoch_key)
+        
+        # Create directories if they don't exist
+        os.makedirs(epoch_dir, exist_ok=True)
+        
+        # Create one log file per epoch (batches will append to this file)
+        batch_ts = datetime.now().strftime("%Y%m%d_%H%M%S")  # Timestamp for this batch/epoch
+        log_file = os.path.join(epoch_dir, f"{batch_ts}_acc.jsonl")
+        
+        # Cache the file path for this epoch
+        self._acc_log_file_cache[epoch_key] = log_file
+        self._acc_log_file = log_file
 
-    def _record_accuracy(self, split: str, value, epoch: int | None = None):
+    def _record_accuracy(self, split: str, value: float, epoch: int | None = None):
         try:
-            acc_val = float(value) if value is not None else None
-        except Exception:
-            acc_val = None
-        # Append to in-memory history if numeric
-        try:
-            if acc_val is not None:
-                self.acc_history.setdefault(split, []).append(acc_val)
+            if value is not None:
+                self.acc_history.setdefault(split, []).append(value)
         except Exception:
             pass
         # Persist incrementally
         try:
-            self._ensure_acc_logger()
+            self._ensure_acc_logger(epoch=epoch)
             rec = {
                 "timestamp": datetime.now().isoformat(),
                 "split": str(split),
                 "epoch": int(epoch) if epoch is not None else None,
-                "accuracy": acc_val,
+                "accuracy": value,
             }
             with open(self._acc_log_file, "a") as f:
                 f.write(json.dumps(rec) + "\n")
         except Exception as e:
-            # Non-fatal: continue training even if logging fails
-            print(f"Warning: failed to persist accuracy record ({e})")
+            raise ValueError(f"Failed to persist accuracy record ({e})")
+        finally:
+            gc.collect()
+
+    def _hash_parameters(self, params: dict) -> str:
+        """Generate a hash from model parameters dictionary."""
+        # Sort keys and convert to JSON string for consistent hashing
+        params_str = json.dumps(params, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(params_str.encode("utf-8")).hexdigest()[:12]  # Use first 12 chars
 
     def process(
         self,
@@ -110,419 +129,254 @@ class snn_sleepy:
         save_model: bool = False,
         model_parameters: dict = None,
     ):
-        def _make_unique_subdir(base: str, k: int = 5) -> str:
-            os.makedirs(base, exist_ok=True)
-            while True:
-                name = "".join(map(str, np.random.randint(0, 10, size=k)))
-                path = os.path.join(base, name)
-                if not os.path.exists(path):
-                    os.makedirs(path, exist_ok=True)
-                    return path
-
-        # Initialize model loaded flags
-        self.model_loaded = False
-        self.loaded_phi_model = False
-
         ########## load or save model ##########
         if save_model and load_model:
             raise ValueError("load and save model cannot both be True")
 
+        # get dataset
+        dataset = getattr(self, "image_dataset", "unknown")
+
+        # create model base directory
+        model_base_dir = f"models/SNN_sleepy/{dataset}"
+        os.makedirs(model_base_dir, exist_ok=True)
+
         if save_model:
-            if not os.path.exists("model"):
-                os.makedirs("model", exist_ok=True)
-
-            # Create unique subdirectory for model
-            model_dir = _make_unique_subdir(base="model")
-
-            # Save training data and labels
-            self._save_model_dir(model_dir)
+            if model_parameters is None:
+                raise ValueError("model_parameters must be provided when save_model=True")
+            
+            # Generate hash from parameters
+            param_hash = self._hash_parameters(model_parameters)
+            
+            # Create timestamp-based folder name: YYYYMMDD_HHMMSS_hash
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            folder_name = f"{timestamp}_{param_hash}"
+            model_dir = os.path.join(model_base_dir, folder_name)
+            
+            # Create model directory
+            os.makedirs(model_dir, exist_ok=True)
 
             # Save model parameters
             with open(os.path.join(model_dir, "model_parameters.json"), "w") as outfile:
-                json.dump(model_parameters, outfile)
+                json.dump(model_parameters, outfile, indent=2)
+
+            # Save weights
+            self._save_model_dir(model_dir)
+            
+            return model_dir
 
         if load_model:
-            # Define folder to load data
-            if not os.path.exists("model"):
+            if not os.path.exists(model_base_dir):
                 return
-            folders = os.listdir("model")
+            folders = os.listdir(model_base_dir)
 
-            # Search for exact parameter match first
-            matched_folder = None
-            if len(folders) > 0:
+            if model_parameters is not None:
+                # Search for exact parameter match using hash
+                param_hash = self._hash_parameters(model_parameters)
+                matched_folder = None
+                
                 for folder in folders:
-                    json_file_path = os.path.join(
-                        "model", folder, "model_parameters.json"
-                    )
-                    if not os.path.exists(json_file_path):
-                        continue
-                    with open(json_file_path, "r") as j:
-                        ex_params = json.loads(j.read())
-                    if ex_params == model_parameters:
-                        matched_folder = folder
-                        break
-
-            # If no exact match, fall back to most recent model folder
-            if matched_folder is None and len(folders) > 0:
-                try:
-                    folders_sorted = sorted(
-                        folders,
-                        key=lambda f: os.path.getmtime(os.path.join("model", f)),
-                        reverse=True,
-                    )
-                    matched_folder = folders_sorted[0]
-                    self._log("No exact model match; loading latest available.")
-                except Exception:
-                    matched_folder = None
-
-            if matched_folder is not None:
-                folder = matched_folder
-                self._load_model_dir(folder)
-                print("\rmodel loaded", end="")
-                self.model_loaded = True
-                return os.path.join("model", folder)
+                    # Check if folder name contains the hash
+                    if param_hash in folder:
+                        json_file_path = os.path.join(
+                            model_base_dir, folder, "model_parameters.json"
+                        )
+                        if os.path.exists(json_file_path):
+                            # Verify exact match
+                            with open(json_file_path, "r") as j:
+                                ex_params = json.load(j)
+                            if ex_params == model_parameters:
+                                matched_folder = folder
+                                break
+                
+                if matched_folder is not None:
+                    model_dir = os.path.join(model_base_dir, matched_folder)
+                    self._load_model_dir(model_dir)
+                    print("\rmodel loaded", end="")
+                    self.model_loaded = True
+                    return model_dir
+                else:
+                    self._log("No model found with matching parameters. Will train new model from scratch.")
+                    return None
             else:
-                self._log("No model found to load. Will train new model from scratch.")
+                # No parameters provided - cannot safely load without knowing which model to use
+                self._log("No model parameters provided. Cannot load model without parameters.")
+                return None
 
-    # acquire data
+    def _save_model_dir(self, model_dir):
+        """Save essentials only: weights as compressed .npz file."""
+        try:
+            weights = getattr(self, "weights", None)
+            if weights is not None:
+                np.savez_compressed(
+                    os.path.join(model_dir, "weights.npz"),
+                    weights=weights
+                )
+        except Exception as e:
+            print(f"Warning: model save failed ({e})")
+
+    def _load_model_dir(self, model_dir):
+        """Load essentials only from model directory."""
+        weights_path = os.path.join(model_dir, "weights.npz")
+        if not os.path.exists(weights_path):
+            raise FileNotFoundError(f"Weights file not found: {weights_path}")
+        data = np.load(weights_path)
+        self.weights = data["weights"]
+
+    # prepare data
     def prepare_data(
         self,
         force_recreate=False,
         noisy_data=False,
         noise_level=0.005,
         add_breaks=False,
+        total_data=10000,
         break_lengths=[500, 1500, 1000],
         gain=1.0,
-        test_data_ratio=0.5,
         num_steps=100,
         offset=0,
         first_spike_time=0,
         time_var_input=False,
-        gain_labels=0.5,
-        val_split=0.2,
-        train_split=0.6,
+        val_split=0.1,
+        train_split=0.7,
         test_split=0.2,
-        imageMNIST=False,
-        all_images_train=6000,
-        batch_image_train=500,
-        all_images_test=1000,
-        batch_image_test=200,
-        all_images_val=1000,
-        batch_image_val=100,
-        image_dataset="mnist",
-        geom_jitter=False, # remove?
-        geom_jitter_amount=0.05, # remove?
-        geom_noise_var=0.02, # why not used?
-        geom_noise_mean=0.0, # why not used?
-        seed: int | None = None,
+        batch_size=100,
+        dataset="mnist",
+        geom_jitter=False, 
+        geom_jitter_amount=0.05, 
+        geom_noise_var=0.02, 
         geom_workers=None,
+        tri_size=0.5,
+        tri_thick=2,
+        cir_size=0.5,
+        cir_thick=2,
+        sqr_size=0.5,
+        sqr_thick=2,
+        x_size=0.5,
+        x_thick=2,
+        clamp_min=0.0,
+        clamp_max=1.0,
     ):
-        # Save current parameters
-        self.data_parameters = {**locals()}
+        # Save important data generation parameters for reproducibility
+        self.data_parameters = {
+            # Dataset configuration
+            "image_dataset": dataset,
+            "total_data": total_data,
+            "train_split": train_split,
+            "val_split": val_split,
+            "test_split": test_split,
+            "batch_size": batch_size,
+            # Spike conversion parameters
+            "num_steps": num_steps,
+            "gain": gain,
+            "offset": offset,
+            "first_spike_time": first_spike_time,
+            "time_var_input": time_var_input,
+            # Data augmentation/noise
+            "noisy_data": noisy_data,
+            "noise_level": noise_level,
+            "add_breaks": add_breaks,
+            "break_lengths": break_lengths,
+            # Geomfig-specific parameters
+            "geom_jitter": geom_jitter,
+            "geom_jitter_amount": geom_jitter_amount,
+            "geom_noise_var": geom_noise_var,
+            "geom_workers": geom_workers,
+            # Geometric shape parameters (for geomfig)
+            "tri_size": tri_size,
+            "tri_thick": tri_thick,
+            "cir_size": cir_size,
+            "cir_thick": cir_thick,
+            "sqr_size": sqr_size,
+            "sqr_thick": sqr_thick,
+            "x_size": x_size,
+            "x_thick": x_thick,
+            "clamp_min": clamp_min,
+            "clamp_max": clamp_max,
+        }
 
-        # Copy and remove class element to dict
-        list = [
-            "force_recreate",
-            "self",
-        ]
-
-        # Remove elements from data_parameters
-        for element in list:
-            del self.data_parameters[element]
-
-        # Update model
-        self.data_parameters.update()
-
-        # set parameters
+        # image parameters
+        self.image_dataset = (dataset or "mnist").lower()
+        self.pixel_size = int(np.sqrt(self.N_x))
+        self.num_steps = num_steps
+        self.train_split = train_split
+        self.val_split = val_split
+        self.test_split = test_split
+        self.total_data = total_data
+        self.batch_size = batch_size
+        self.num_train = int(total_data * train_split)
+        self.num_val = int(total_data * val_split)
+        self.num_test = int(total_data * test_split)
+        self.epochs = self.num_train // self.batch_size if self.batch_size > 0 else 0
+        # spike parameters
         self.num_steps = num_steps
         self.gain = gain
-        self.gain_labels = gain_labels
         self.offset = offset
         self.first_spike_time = first_spike_time
         self.time_var_input = time_var_input
-        self.image_dataset = (image_dataset or "mnist").lower()
-        self.all_images_train = all_images_train
-        self.all_images_test = all_images_test
-        self.all_images_val = all_images_val
-        # Geomfig-specific knobs (optional)
-        self.geom_jitter = locals().get("geom_jitter", False)
-        self.geom_jitter_amount = locals().get("geom_jitter_amount", 0.05)
-        self.geom_noise_var = locals().get("geom_noise_var", 0.02)
-        self.geom_noise_mean = locals().get("geom_noise_mean", 0.0)
-        self.geom_workers = geom_workers
-        self.batch_image_train = batch_image_train
-        self.batch_image_test = batch_image_test
-        self.batch_image_val = batch_image_val
         self.add_breaks = add_breaks
         self.break_lengths = break_lengths
         self.noisy_data = noisy_data
         self.noise_level = noise_level
-        self.test_data_ratio = test_data_ratio
-        self.val_split = val_split
-        self.train_split = train_split
-        self.test_split = test_split
-        self.all_train = self.all_images_train
-        self.all_test = self.all_images_test
-        self.all_val = self.all_images_val
-        self.batch_train = self.batch_image_train
-        self.batch_test = self.batch_image_test
-        self.batch_val = self.batch_image_val
-        self.epochs = self.all_train // self.batch_train
-        self.data_loaded = False
-        self.model_loaded = False
-        self.test_data_loaded = False
-        self.loaded_phi_model = False
-
-        # Initialize streaming data variables
-        self.image_streamer = None
-        self.current_train_idx = 0
-        self.current_test_idx = 0
-
-        # Initialize data attributes
-        self.data_train = None
+        # Geomfig-specific knobs (optional)
+        self.geom_jitter = geom_jitter
+        self.geom_jitter_amount = geom_jitter_amount
+        self.geom_noise_var = geom_noise_var
+        self.geom_workers = geom_workers
+        # Initialize label attributes 
         self.labels_train = None
-        self.data_test = None
         self.labels_test = None
-        self.data_val = None
-        self.labels_val = None
-
-        # Set batch sizes and validate total limits
-        if imageMNIST:
-            # Image only mode
-            total_images = all_images_train + all_images_test + all_images_val
-            if total_images > 30000:
-                raise ValueError(
-                    f"Total image samples ({total_images}) cannot exceed 30000"
-                )
-
-            self.batch_train = batch_image_train
-            self.batch_test = batch_image_test
-            self.all_train = all_images_train
-            self.all_test = all_images_test
-            self.epochs = all_images_train // batch_image_train
-
-            # Update network architecture (image uses original N_x)
-            self.st = self.N_x  # stimulation
-            self.ex = self.st + self.N_exc  # excitatory
-            self.ih = self.ex + self.N_inh  # inhibitory
-            self.N = self.N_exc + self.N_inh + self.N_x  # total neurons
-
-        # Geomfig dataset — load from cache or generate; wrap in streamer for batched access
-        if self.image_dataset == "geomfig":
-            pixel_size = int(np.sqrt(self.N_x))
-            # Use configured counts
-            train_count = int(self.all_images_train)
-            val_count = int(self.all_images_val)
-            test_count = int(self.all_images_test)
-            noise_var = locals().get("geom_noise_var", 0.02)
-            noise_mean = locals().get("geom_noise_mean", 0.0)
-            # Apply provided seed (if any) to global RNGs so network init and
-            # downstream code use a consistent random state. Use a safe default
-            # when `seed` is None.
-            try:
-                if seed is not None:
-                    s = int(seed)
-                    np.random.seed(s)
-                    random.seed(s)
-                    self.seed = s
-                else:
-                    # keep existing default behavior
-                    self.seed = None
-            except Exception:
-                raise ValueError("Missing seed")
-
-            data_tr, lab_tr, data_va, lab_va, data_te, lab_te = (
-                load_or_create_geomfig_data(
-                    pixel_size=pixel_size,
-                    num_steps=num_steps,
-                    gain=gain,
-                    train_count=train_count,
-                    val_count=val_count,
-                    test_count=test_count,
-                    noise_var=noise_var,
-                    noise_mean=noise_mean,
-                    jitter=getattr(self, "geom_jitter", False),
-                    jitter_amount=getattr(self, "geom_jitter_amount", 0.05),
-                    seed=(int(seed) if seed is not None else 42),
-                    force_recreate=bool(force_recreate),
-                    num_workers=self.geom_workers,
-                )
-            )
-            # Wrap in streamer for consistent batched access
-            self.data_streamer = DataStreamer(
-                data_train=data_tr,
-                labels_train=lab_tr,
-                data_val=data_va,
-                labels_val=lab_va,
-                data_test=data_te,
-                labels_test=lab_te,
-                batch_size=batch_image_train,
-                num_steps=num_steps,
-            )
-            # Also keep direct references for backward compatibility (if needed)
-            self.data_train = (
-                data_tr if data_tr is not None and len(data_tr) > 0 else None
-            )
-            self.labels_train = (
-                lab_tr if lab_tr is not None and len(lab_tr) > 0 else None
-            )
-            self.data_val = (
-                data_va if data_va is not None and len(data_va) > 0 else None
-            )
-            self.labels_val = lab_va if lab_va is not None and len(lab_va) > 0 else None
-            self.data_test = (
-                data_te if data_te is not None and len(data_te) > 0 else None
-            )
-            self.labels_test = (
-                lab_te if lab_te is not None and len(lab_te) > 0 else None
-            )
-            self.N_classes = 4
-
-            # Short summary
-            def _s(x):
-                return 0 if x is None else len(x)
-
-            print(
-                f"Geomfig data prepared — train:{_s(self.data_train)} val:{_s(self.data_val)} test:{_s(self.data_test)} timesteps (using batched streamer)"
-            )
-
-        # Initialize image streamer if needed
-        if imageMNIST:
-            # Check for existing image data parameters
-            data_dir = "data/mdata"
-            image_data_dir = None
-            download_images = True
-
-            # Ensure data/mdata directory exists
-            if not os.path.exists(data_dir):
-                os.makedirs(data_dir, exist_ok=True)
-
-            # Search for existing image data
-            folders = os.listdir(data_dir)
-            if len(folders) > 0:
-                for folder in folders:
-                    json_file_path = os.path.join(
-                        data_dir, folder, "image_data_parameters.json"
-                    )
-                    if os.path.exists(json_file_path):
-                        with open(json_file_path, "r") as j:
-                            ex_params = json.loads(j.read())
-
-                        # Check if parameters match
-                        pixel_size_expected = int(np.sqrt(self.N_x))
-                        expected_params = {
-                            "pixel_size": pixel_size_expected,
-                            "num_steps": num_steps,
-                            "gain": gain,
-                            "offset": offset,
-                            "first_spike_time": first_spike_time,
-                            "time_var_input": time_var_input,
-                            "N_x": self.N_x,
-                            "mode": "image_only",
-                            "dataset": self.image_dataset,
-                            "train_count": all_images_train,
-                            "val_count": all_images_val,
-                            "test_count": all_images_test,
-                        }
-
-                        if ex_params == expected_params:
-                            image_data_dir = os.path.join(data_dir, folder)
-                            download_images = False
-                            break
-
-    def _save_streaming_parameters(self):
-        """Save streaming data parameters for future reference."""
-        if not hasattr(self, "data_parameters"):
-            return
-
-        # Create a combined parameters file for streaming data
-        streaming_params = {
-            "streaming_mode": True,
-            "N_x": self.N_x,
-            "N_exc": self.N_exc,
-            "N_inh": self.N_inh,
-            "batch_train": self.batch_train,
-            "batch_test": self.batch_test,
-            "batch_val": self.batch_val,
-            "all_train": self.all_train,
-            "all_test": self.all_test,
-            "all_val": self.all_val,
-            "epochs": self.epochs,
-        }
-
-        # Save to a streaming parameters file
-        streaming_file = "data/mdata/streaming_parameters.json"
-        os.makedirs("data/mdata", exist_ok=True)
-
-        with open(streaming_file, "w") as f:
-            json.dump(streaming_params, f, indent=2)
-
-        print(f"Streaming parameters saved to {streaming_file}")
-
-    # --- Helpers: logging, model IO, and PCA ---
-    def _log(self, message):
-        try:
-            if getattr(self, "verbose", False):
-                print(message)
-        except Exception:
-            pass
-
-    def _save_model_dir(self, model_dir):
-        """Save essentials only: weights and parameters (JSON saved by caller)."""
-        try:
-            np.save(
-                os.path.join(model_dir, "weights.npy"), getattr(self, "weights", None)
-            )
-        except Exception as e:
-            print(f"Warning: model save failed ({e})")
-
-    def _load_model_dir(self, folder):
-        """Load essentials only from model/<folder>."""
-        self.weights = np.load(os.path.join("model", folder, "weights.npy"))
-        # Other large artifacts are not persisted to save disk space.
-
-    def _pca_eval(self, X_train, y_train, X_val, y_val, X_test, y_test):
-        """Run PCA-based classifier with configured options, return (accs, scaler, pca, clf)."""
-        try:
-            if getattr(self, "use_QDA", False):
-                return pca_quadratic_discriminant(
-                    X_train=X_train,
-                    y_train=y_train,
-                    X_val=X_val,
-                    y_val=y_val,
-                    X_test=X_test,
-                    y_test=y_test,
-                    variance_ratio=self.pca_variance,
-                    reg_param=0.1,
-                )
-            else:
-                return pca_logistic_regression(
-                    X_train=X_train,
-                    y_train=y_train,
-                    X_val=X_val,
-                    y_val=y_val,
-                    X_test=X_test,
-                    y_test=y_test,
-                    variance_ratio=self.pca_variance,
-                )
-        except Exception as ex:
-            raise ValueError(f"PCA classification failed ({ex})")
+        self.data_dir = f"data/datasets/{dataset}"
+        
+        # Instantiate DataStreamer to eagerly load and preprocess data
+        self.data_streamer = DataStreamer(
+            data_dir=self.data_dir,
+            batch_size=batch_size,
+            pixel_size=self.pixel_size,
+            num_steps=num_steps,
+            num_classes=self.N_classes,
+            which_classes=self.which_classes,
+            gain=gain,
+            offset=offset,
+            first_spike_time=first_spike_time,
+            time_var_input=time_var_input,
+            train_ratio=train_split,
+            val_ratio=val_split,
+            test_ratio=test_split,
+            rng=self.rng_numpy,
+            noisy_data=noisy_data,
+            noise_var=noise_level,
+            geom_noise_var=geom_noise_var,
+            jitter=geom_jitter,
+            jitter_amount=geom_jitter_amount,
+            force_recreate=force_recreate,
+            num_workers=geom_workers or 1,
+            dataset=dataset,
+            tri_size=tri_size,
+            tri_thick=tri_thick,
+            cir_size=cir_size,
+            cir_thick=cir_thick,
+            sqr_size=sqr_size,
+            sqr_thick=sqr_thick,
+            x_size=x_size,
+            x_thick=x_thick,
+            clamp_min=clamp_min,
+            clamp_max=clamp_max,
+        )
 
     def prepare_network(
         self,
         plot_weights=False,
         plot_network=False,
-        w_dense_ee=0.01,
-        w_dense_se=0.05,
-        w_dense_ei=0.05,
-        w_dense_ie=0.05,
         resting_membrane=-70,
-        max_time=100,
         retur=False,
-        se_weights=0.1,
+        w_dense_ee=0.15,
+        w_dense_se=0.1,
+        w_dense_ei=0.2,
+        w_dense_ie=0.25,
+        se_weights=0.15,
         ee_weights=0.3,
         ei_weights=0.3,
-        ie_weights=-0.2,
+        ie_weights=-0.3,
         create_network=False,
     ):
         # create weights
@@ -535,7 +389,6 @@ class snn_sleepy:
         self.ei_weights = ei_weights
         self.ie_weights = ie_weights
         self.resting_potential = resting_membrane
-        self.max_time = max_time
 
         self.weights = create_weights(
             N_exc=self.N_exc,
@@ -580,12 +433,12 @@ class snn_sleepy:
                     self.spikes_test,
                     self.mp_train,
                     self.mp_test,
-                    self.pre_trace,
-                    self.post_trace,
-                    self.spike_times,
                     self.resting_potential,
-                    self.max_time,
                 )
+        if retur:
+            return (
+                self.weights,
+            )
 
     def train_network(
         self,
@@ -596,19 +449,15 @@ class snn_sleepy:
         plot_weights=True,
         plot_threshold=False,
         plot_traces_=False,
-        train_weights=False,
-        learning_rate_exc=0.0008,
-        learning_rate_inh=0.005,
-        w_target_exc=0.01,
-        w_target_inh=-0.01,
-        var_noise=1,
-        min_weight_inh=-25,
-        max_weight_inh=-0.01,
-        max_weight_exc=25,
-        min_weight_exc=0.01,
+        train_weights=True,
+        learning_rate_exc=0.0005,
+        learning_rate_inh=0.0005,
+        w_target_exc=0.2,
+        w_target_inh=-0.2,
+        var_noise=2.0,
         spike_threshold_default=-55,
-        check_sleep_interval=50000,  # Reduced frequency for better performance
-        interval=5000,  # Reduced frequency for better performance
+        check_sleep_interval=35000,  
+        interval=5000,  
         min_mp=-100,
         sleep=False,
         sleep_ratio=0.0,  # Sleep percentage per interval (e.g., 0.1 = 10%)
@@ -616,8 +465,8 @@ class snn_sleepy:
         force_train=False,
         save_model=True,
         weight_decay=False,
-        weight_decay_rate_exc=[0.9999],
-        weight_decay_rate_inh=[0.9999],
+        weight_decay_rate_exc=0.9999,
+        weight_decay_rate_inh=0.9999,
         noisy_potential=True,
         noisy_threshold=False,
         noisy_weights=False,
@@ -730,7 +579,7 @@ class snn_sleepy:
         self.model_parameters["ee_weights"] = self.ee_weights
         self.model_parameters["ei_weights"] = self.ei_weights
         self.model_parameters["se_weights"] = self.se_weights
-        self.model_parameters["classes"] = self.classes
+        self.model_parameters["classes"] = self.which_classes
 
         # Always attempt to load a matching model if not forcing a fresh run,
         # regardless of data_loaded (streaming modes don't set data_loaded).
@@ -2725,6 +2574,7 @@ class snn_sleepy:
                 n_components=n_components,
                 random_state=random_state,
             )
+
         test_phi = None
         if calculate_phi_:
             if hasattr(self, "spikes_train") and self.spikes_train is not None:
@@ -2786,3 +2636,30 @@ class snn_sleepy:
             except Exception as ex:
                 print(f"PCA+LR analysis skipped: {ex}")
         return test_acc_dict, test_phi
+
+    def _pca_eval(self, X_train, y_train, X_val, y_val, X_test, y_test, reg_param):
+        """Run PCA-based classifier with configured options, return (accs, scaler, pca, clf)."""
+        try:
+            if getattr(self, "use_QDA", False):
+                return pca_quadratic_discriminant(
+                    X_train=X_train,
+                    y_train=y_train,
+                    X_val=X_val,
+                    y_val=y_val,
+                    X_test=X_test,
+                    y_test=y_test,
+                    variance_ratio=self.pca_variance,
+                    reg_param=reg_param, 
+                )
+            else:
+                return pca_logistic_regression(
+                    X_train=X_train,
+                    y_train=y_train,
+                    X_val=X_val,
+                    y_val=y_val,
+                    X_test=X_test,
+                    y_test=y_test,
+                    variance_ratio=self.pca_variance,
+                )
+        except Exception as ex:
+            raise ValueError(f"PCA classification failed ({ex})")

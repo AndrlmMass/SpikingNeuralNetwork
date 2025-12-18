@@ -308,7 +308,7 @@ def _compute_wcss(scores, labels, centroids, num_classes):
     return float(np.sum(wcss_arr))
 
 
-def Phi(
+def PHI(
     spikes_train,
     spikes_test,
     labels_test,

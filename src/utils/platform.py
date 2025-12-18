@@ -1,4 +1,4 @@
-"""Cross-platform utilities for Windows/Linux compatibility."""
+"""Cross-platform utilities for Windows/Linux/macOS compatibility."""
 
 import sys
 import os
@@ -21,7 +21,11 @@ def get_matplotlib_backend():
             return "TkAgg"
         return "Agg"
     elif IS_MAC:
-        return "MacOSX"
+        # macOS: Use TkAgg if display available (MacOSX backend deprecated in matplotlib 3.6+)
+        # Check for interactive terminal or display
+        if os.environ.get("DISPLAY") or os.environ.get("TERM_PROGRAM") == "Apple_Terminal":
+            return "TkAgg"
+        return "Agg"
     else:
         # Linux - TkAgg if display available, else Agg
         if os.environ.get("DISPLAY"):
@@ -46,8 +50,16 @@ def get_multiprocessing_context():
     if IS_WINDOWS:
         # Windows requires 'spawn' for ProcessPoolExecutor
         return multiprocessing.get_context("spawn")
+    elif IS_MAC:
+        # macOS: 'spawn' is safer and more reliable (especially on macOS 12+)
+        # 'fork' can cause issues with some libraries (e.g., PyTorch, NumPy)
+        try:
+            return multiprocessing.get_context("spawn")
+        except ValueError:
+            # Fallback to fork if spawn not available
+            return multiprocessing.get_context("fork")
     else:
-        # Linux/Mac can use 'fork' (faster) or 'spawn'
+        # Linux - can use 'fork' (faster) or 'spawn'
         return multiprocessing.get_context("fork")
 
 

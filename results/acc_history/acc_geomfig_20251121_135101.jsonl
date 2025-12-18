@@ -1,4 +1,0 @@
-{"timestamp": "2025-11-21T13:51:01.835720", "split": "train", "epoch": 1, "accuracy": 1.0}
-{"timestamp": "2025-11-21T13:51:13.009955", "split": "val", "epoch": 1, "accuracy": 1.0}
-{"timestamp": "2025-11-21T13:57:38.655675", "split": "train", "epoch": 2, "accuracy": 1.0}
-{"timestamp": "2025-11-21T13:57:49.342324", "split": "val", "epoch": 2, "accuracy": 1.0}

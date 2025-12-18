@@ -8,7 +8,7 @@ This module provides functions for creating the SNN architecture:
 
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap, BoundaryNorm
-from evaluation.plots import _plot_weight_matrix, _plot_network_graph
+from plot.plot import _plot_weight_matrix, _plot_network_graph
 import networkx as nx
 import numpy as np
 
