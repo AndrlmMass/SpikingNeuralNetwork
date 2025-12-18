@@ -1,16 +1,300 @@
 import os
-import random
-import argparse
 import numpy as np
-import matplotlib
 from src.utils.platform import configure_matplotlib
-
+from matplotlib.colors import ListedColormap, BoundaryNorm
+from datasets.datasets import GEOMFIG_DATASET
+import networkx as nx
+import datetime
 configure_matplotlib()
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-import librosa
-import librosa.display
-from src.evaluation.metrics import t_SNE
+
+def preview_loaded_data(
+    self, num_image_samples: int = 9, save_path: str | None = None
+):
+    """
+    Plot a small grid of images from the loaded dataset once so the user can
+    verify that the expected dataset is being used.
+    """
+    if getattr(self, "_image_preview_done", False):
+        return
+    # Special handling for geomfig: show N examples per class (0..3)
+    if getattr(self, "image_dataset", "").lower() == "geomfig":
+        try:
+            pixel_size = int(np.sqrt(N_x))
+            classes = [0, 1, 2, 3]
+            per_class = max(1, int(num_image_samples))
+            # Special case: if 1 per class and 4 classes, arrange as 2x2 instead of 4x1
+            if per_class == 1 and len(classes) == 4:
+                rows, cols = 2, 2
+                fig, axes = plt.subplots(rows, cols, figsize=(4.0, 4.0))
+                axes = axes.flatten()
+                titles = ["Triangle (0)", "Circle (1)", "Square (2)", "X (3)"]
+                for idx, cls in enumerate(classes):
+                    img = GEOMFIG_DATASET._geomfig_generate_one(
+                        cls_id=cls,
+                        pixel_size=pixel_size,
+                        noise_var=getattr(self, "geom_noise_var", 0.02),
+                        jitter=getattr(self, "geom_jitter", False),
+                        jitter_amount=getattr(self, "geom_jitter_amount", 0.05),
+                    )
+                    ax = axes[idx]
+                    ax.imshow(img, cmap="gray")
+                    ax.set_title(titles[idx], fontsize=10)
+                    ax.axis("off")
+            else:
+                fig, axes = plt.subplots(
+                    len(classes),
+                    per_class,
+                    figsize=(2.0 * per_class, 2.0 * len(classes)),
+                )
+                if per_class == 1:
+                    axes = np.atleast_2d(axes).reshape(len(classes), 1)
+                titles = ["Triangle (0)", "Circle (1)", "Square (2)", "X (3)"]
+                for r, cls in enumerate(classes):
+                    for c in range(per_class):
+                        img = GEOMFIG_DATASET._geomfig_generate_one(
+                            cls_id=cls,
+                            pixel_size=pixel_size,
+                            noise_var=getattr(self, "geom_noise_var", 0.02),
+                            jitter=getattr(self, "geom_jitter", False),
+                            jitter_amount=getattr(self, "geom_jitter_amount", 0.05),
+                        )
+                        ax = axes[r, c]
+                        ax.imshow(img, cmap="gray")
+                        if c == 0:
+                            ax.set_title(titles[r], fontsize=10)
+                        ax.axis("off")
+            plt.tight_layout()
+            try:
+                if save_path is None:
+                    os.makedirs("plots", exist_ok=True)
+                    save_path = os.path.join("plots", "geomfig_preview.png")
+                fig.savefig(save_path)
+                print(f"Dataset preview saved to {save_path}")
+            except Exception as exc:
+                print(f"Failed to save dataset preview ({exc})")
+            plt.show()
+            plt.close(fig)
+        except Exception as exc:
+            print(f"Dataset preview skipped ({exc})")
+        return
+    # Default: use image streamer preview if available
+    return
+
+def plot_tsne(tsne_results, segment_labels, train, show_plot, save_path):
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot()
+
+    marker_list = ["o", "s", "^", "D", "v", "<", ">", "p", "*", "X"]
+    unique_labels = np.unique(segment_labels)
+
+    for i, label in enumerate(unique_labels):
+        indices = segment_labels == label
+        marker = marker_list[i % len(marker_list)]
+        ax.scatter(
+            tsne_results[indices, 0],
+            tsne_results[indices, 1],
+            label=f"Class {label}",
+            marker=marker,
+            color="black",
+            s=60,
+        )
+
+    plt.xlabel("t-SNE dimension 1", fontsize=26)
+    plt.ylabel("t-SNE dimension 2", fontsize=26)
+    os.makedirs("plots", exist_ok=True)
+    suffix = "train" if train else "test"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    tsne_path = os.path.join("plots\\tsne", f"tsne_{suffix}_{timestamp}.pdf")
+    plt.tight_layout()
+    plt.savefig(tsne_path, bbox_inches="tight")
+    print(f"t-SNE plot saved to {tsne_path}")
+    if show_plot:
+        plt.show()
+    plt.close(fig)
+
+
+def plot_weight_distribution(N_x, st, ih, weights, N_exc, N_inh, e, weight_evolution, epochs):
+    _st, _ex, _ih = N_x, st + 0 - 0, ih + 0 - 0
+    _ex = _st + N_exc
+    _ih = _ex + N_inh
+    W_exc = weights[:_ex, _st:_ih]
+    W_inh = weights[_ex:_ih, _st:_ex]
+
+    weight_evolution["epochs"].append(e + 1)
+
+    # Compute stats on non-zero weights only to avoid zero-bias
+    W_exc_nz = W_exc[W_exc != 0]
+    if W_exc_nz.size > 0:
+        weight_evolution["exc_mean"].append(
+            float(np.mean(W_exc_nz))
+        )
+        weight_evolution["exc_std"].append(float(np.std(W_exc_nz)))
+        weight_evolution["exc_min"].append(float(np.min(W_exc_nz)))
+        weight_evolution["exc_max"].append(float(np.max(W_exc_nz)))
+    else:
+        weight_evolution["exc_mean"].append(0.0)
+        weight_evolution["exc_std"].append(0.0)
+        weight_evolution["exc_min"].append(0.0)
+        weight_evolution["exc_max"].append(0.0)
+
+    W_inh_nz = W_inh[W_inh != 0]
+    if W_inh_nz.size > 0:
+        weight_evolution["inh_mean"].append(
+            float(np.mean(W_inh_nz))
+        )
+        weight_evolution["inh_std"].append(float(np.std(W_inh_nz)))
+        weight_evolution["inh_min"].append(float(np.min(W_inh_nz)))
+        weight_evolution["inh_max"].append(float(np.max(W_inh_nz)))
+    else:
+        weight_evolution["inh_mean"].append(0.0)
+        weight_evolution["inh_std"].append(0.0)
+        weight_evolution["inh_min"].append(0.0)
+        weight_evolution["inh_max"].append(0.0)
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+    # Plot only non-zero weights for informative histograms
+    exc_vals = W_exc.flatten()
+    exc_vals = exc_vals[exc_vals != 0]
+    if exc_vals.size > 0:
+        axes[0].hist(exc_vals, bins=50, color="tomato", alpha=0.8)
+    else:
+        axes[0].text(
+            0.5,
+            0.5,
+            "No non-zero weights",
+            ha="center",
+            va="center",
+            transform=axes[0].transAxes,
+        )
+    axes[0].set_title("Excitatory weights")
+    axes[0].set_xlabel("Weight")
+    axes[0].set_ylabel("Count")
+    inh_vals = W_inh.flatten()
+    inh_vals = inh_vals[inh_vals != 0]
+    if inh_vals.size > 0:
+        axes[1].hist(
+            inh_vals, bins=50, color="steelblue", alpha=0.8
+        )
+    else:
+        axes[1].text(
+            0.5,
+            0.5,
+            "No non-zero weights",
+            ha="center",
+            va="center",
+            transform=axes[1].transAxes,
+        )
+    axes[1].set_title("Inhibitory weights")
+    axes[1].set_xlabel("Weight")
+    fig.suptitle(
+        f"Epoch {e+1}/{epochs} - Weight Distributions",
+        fontsize=12,
+        fontweight="bold",
+    )
+    plt.tight_layout()
+    plt.savefig(
+        f"plots/weights/weights_epoch_{e+1:03d}.png", bbox_inches="tight"
+    )
+    plt.close(fig)
+    print(
+        f"  Saved weights snapshot: plots/weights_epoch_{e+1:03d}.png"
+    )
+
+
+def _plot_weight_matrix(weights,):
+    """Visualize the weight matrix."""
+    boundaries = [np.min(weights), -0.001, 0.001, np.max(weights)]
+    cmap = ListedColormap(["red", "white", "green"])
+    norm = BoundaryNorm(boundaries, ncolors=cmap.N)
+
+    plt.imshow(weights, cmap=cmap, norm=norm)
+    plt.gca().invert_yaxis()
+    plt.title("Weights")
+    plt.show()
+
+def plot_accuracy_history(save_dir: str = "plots", filename_suffix: str = "", acc_history: dict = None):
+    os.makedirs(save_dir, exist_ok=True)
+
+    plt.figure(figsize=(7, 4.5))
+    if acc_history.get("train"):
+        plt.plot(
+            range(1, len(acc_history["train"]) + 1),
+            acc_history["train"],
+            label="Train",
+            color="gray",   
+            linestyle="-",
+        )
+    if acc_history.get("val"):
+        plt.plot(
+            range(1, len(acc_history["val"]) + 1),
+            acc_history["val"],
+            label="Val",
+            color="black",
+            linestyle="--",
+        )
+    plt.xlabel("Epoch")
+    plt.ylabel("Accuracy")
+    plt.title("Train/Val Accuracy")
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    suffix_str = f"_{filename_suffix}" if filename_suffix else ""
+    tv_path = os.path.join(save_dir, f"acc_train_val{suffix_str}.png")
+    try:
+        plt.savefig(tv_path, bbox_inches="tight")
+        print(f"Saved train/val accuracy plot to {tv_path}")
+    except Exception as exc:
+        print(f"Failed to save train/val plot ({exc})")
+    plt.close()
+
+
+def plot_network_graph(weights, N_x, N_exc, N_inh):
+    """Visualize the network as a graph."""
+    total_nodes = N_x + N_exc + N_inh
+
+    G = nx.from_numpy_array(weights)
+
+    # Partition nodes
+    input_nodes = list(range(N_x))
+    exc_nodes = list(range(N_x, N_x + N_exc))
+    inh_nodes = list(range(N_x + N_exc, total_nodes))
+
+    # Assign positions (vertical columns)
+    pos = {}
+    for i, node in enumerate(input_nodes):
+        y = 1 - (i / (len(input_nodes) - 1)) if len(input_nodes) > 1 else 0.5
+        pos[node] = (0, y)
+
+    for i, node in enumerate(exc_nodes):
+        y = 1 - (i / (len(exc_nodes) - 1)) if len(exc_nodes) > 1 else 0.5
+        pos[node] = (1, y)
+
+    for i, node in enumerate(inh_nodes):
+        y = 1 - (i / (len(inh_nodes) - 1)) if len(inh_nodes) > 1 else 0.5
+        pos[node] = (2, y)
+
+    # Node colors
+    node_colors = {}
+    for node in input_nodes:
+        node_colors[node] = "skyblue"
+    for node in exc_nodes:
+        node_colors[node] = "lightgreen"
+    for node in inh_nodes:
+        node_colors[node] = "salmon"
+
+    colors = [node_colors[node] for node in G.nodes()]
+
+    # Draw
+    plt.figure(figsize=(8, 4))
+    nx.draw_networkx_nodes(G, pos, node_color=colors, node_size=100)
+    edges = G.edges(data=True)
+    edge_weights = [data["weight"] for (u, v, data) in edges]
+    nx.draw_networkx_edges(G, pos, width=[5 * w for w in edge_weights], alpha=0.1)
+    nx.draw_networkx_labels(G, pos, font_size=5, font_color="black")
+    plt.title("Partitioned Graph: Input, Excitatory, Inhibitory")
+    plt.axis("off")
+    plt.show()
 
 
 def get_elite_nodes(spikes, labels, num_classes, narrow_top):
@@ -598,45 +882,23 @@ def plot_floats_and_spikes(images, spikes, spike_labels, img_labels, num_steps):
     plt.savefig("plots/comparison_spike_img.png")
     plt.show()
 
-
-def weights_plot():
-    # Placeholder for weights_plot if it was missing from original
-    pass
-
-def heat_map():
-    pass
-
-def mp_plot():
-    pass
-
-def plot_weight_evolution():
-    pass
-
-def plot_weight_evolution_during_sleep():
-    pass
-
-def plot_weight_evolution_during_sleep_epoch():
-    pass
-
-def plot_weight_trajectories_with_sleep_epoch():
-    pass
-
-def save_weight_distribution_gif():
-    pass
-
 # Ensure we export what snn.py uses
 __all__ = [
+    'plot_tsne',
+    'plot_weight_distribution',
+    'plot_accuracy_history',
+    'plot_network_graph',
+    'plot_epoch_training',
+    'top_responders_plotted',
     'spike_plot',
-    'weights_plot',
-    'heat_map',
-    'mp_plot',
+    'plot_floats_and_spikes',
     'plot_accuracy',
+    'get_contiguous_segment',
+    'preview_loaded_data',
+    'plot_weight_matrix',
     'plot_weight_evolution',
     'plot_weight_evolution_during_sleep',
     'plot_weight_evolution_during_sleep_epoch',
     'plot_weight_trajectories_with_sleep_epoch',
-    'plot_epoch_training',
-    'top_responders_plotted',
-    'get_elite_nodes',
     'save_weight_distribution_gif',
 ]

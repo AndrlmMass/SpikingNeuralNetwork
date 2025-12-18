@@ -1,22 +1,17 @@
-from torchvision import datasets, transforms
+from torchvision import transforms
 from snntorch import spikegen
-from tqdm import tqdm
-from annotated_types import Gt
-import tempfile
-import shutil
 import warnings
 import numpy as np
 import torch
 import os
 import json
-from PIL import Image
-from .geomfig import gen_triangle, gen_circle, gen_square, gen_x, load_or_create_geomfig_data
+from datasets.datasets import GEOMFIG_DATASET, MNIST_DATASET
 import hashlib
 
 os.environ["TQDM_DISABLE"] = "True"
 warnings.filterwarnings("ignore")
 
-class ImageDataStreamer:
+class DataStreamer:
     """
     Eagerly loads and preprocesses the configured dataset into RAM so the
     training loop can request batches without incurring per-iteration
@@ -79,11 +74,6 @@ class ImageDataStreamer:
             ]
         )
 
-        ds_map = {
-            "mnist": datasets.MNIST,
-            "kmnist": datasets.KMNIST,
-            "fmnist": datasets.FashionMNIST,
-        }
         if self.dataset == "notmnist":
             (
                 self.train_images,
@@ -92,7 +82,7 @@ class ImageDataStreamer:
                 self.val_labels,
                 self.test_images,
                 self.test_labels,
-            ) = _load_notmnist_deeplake(transform, self.rng, train_ratio, val_ratio, test_ratio)
+            ) = MNIST_DATASET.load_notmnist_deeplake(transform, train_ratio, val_ratio, test_ratio, self.rng, self.which_classes)
             self.len_train = len(self.train_images)
             self.len_val = len(self.val_images)
             self.len_test = len(self.test_images)
@@ -105,22 +95,19 @@ class ImageDataStreamer:
                 self.val_labels,
                 self.test_images,
                 self.test_labels,
-            ) = load_or_create_geomfig_data(
-                cache_root=self.data_dir,
-                batch_size=self.batch_size,
+            ) = GEOMFIG_DATASET.create_geomfig_data(
                 pixel_size=self.pixel_size,
-                num_steps=self.num_steps,
-                gain=self.gain,
-                offset=self.offset,
-                first_spike_time=self.first_spike_time,
-                time_var_input=self.time_var_input,
                 train_ratio=train_ratio,
                 val_ratio=val_ratio,
                 test_ratio=test_ratio,
-                rng=self.rng,
-                num_classes=self.num_classes,
-                which_classes=self.which_classes,
                 noise_var=noise_var,
+                jitter=jitter,
+                jitter_amount=jitter_amount,
+                n_classes=self.num_classes,
+                num_samples=10000,  # Default total samples (will be split by ratios)
+                rng=self.rng,
+                which_classes=self.which_classes,
+                num_workers=num_workers,
                 tri_size=self.tri_size,
                 tri_thick=self.tri_thick,
                 cir_size=self.cir_size,
@@ -131,11 +118,6 @@ class ImageDataStreamer:
                 x_thick=self.x_thick,
                 clamp_min=self.clamp_min,
                 clamp_max=self.clamp_max,
-                jitter=jitter,
-                jitter_amount=jitter_amount,
-                force_recreate=force_recreate,
-                num_workers=num_workers,
-                seed=seed,
             )
             # Get lengths of each partition (will be combined in unified partitioning)
             self.len_train = len(self.train_images)
@@ -143,58 +125,32 @@ class ImageDataStreamer:
             self.len_test = len(self.test_images)
 
         else:
-            if self.dataset not in ds_map:
-                raise ValueError(f"Unsupported image dataset: {self.dataset}")
-            ds_cls = ds_map[self.dataset]
-
-            # Use a stable on-disk cache for torchvision datasets to avoid re-downloads
-            torch_root = os.path.join("data", "torchvision")
-            os.makedirs(torch_root, exist_ok=True)
-
-            mnist_train = ds_cls(
-                root=torch_root, train=True, transform=transform, download=True
+            (
+                self.train_images,
+                self.train_labels,
+                self.val_images,
+                self.val_labels,
+                self.test_images,
+                self.test_labels,
+            ) = MNIST_DATASET.load_mnist_family(
+                dataset=self.dataset,
+                transform=transform,
+                train_ratio=self.train_ratio,
+                val_ratio=self.val_ratio,
+                rng=self.rng,
+                which_classes=self.which_classes,
+                load_cache_fn=self._load_images_cache,
+                save_cache_fn=self._save_images_cache,
             )
-            mnist_test = ds_cls(
-                root=torch_root, train=False, transform=transform, download=True
-            )
-
-            # subset validation data from train set by percentage
-            mnist_train, mnist_val = torch.utils.data.random_split(mnist_train, [train_ratio, val_ratio], generator=rng)
-
-            # Try to load from image cache first
-            train_images, train_labels = self._load_images_cache("train")
-            val_images, val_labels = self._load_images_cache("val")
-            test_images, test_labels = self._load_images_cache("test")
-            
-            if train_images is not None and val_images is not None and test_images is not None:
-                print(f"Using cached {self.dataset.upper()} images")
-                self.train_images, self.train_labels = train_images, train_labels
-                self.val_images, self.val_labels = val_images, val_labels
-                self.test_images, self.test_labels = test_images, test_labels
-            else:
-                # Load all splits into RAM
-                self.len_train = len(mnist_train)
-                self.len_val = len(mnist_val)
-                self.len_test = len(mnist_test)
-
-                def _load_split(dataset):
-                    """Helper to load a dataset split into RAM."""
-                    images, labels = zip(*[dataset[i] for i in range(len(dataset))])
-                    return torch.stack(images), np.array([int(lbl) for lbl in labels], dtype=np.int64)
-
-                self.train_images, self.train_labels = _load_split(mnist_train)
-                self.val_images, self.val_labels = _load_split(mnist_val)
-                self.test_images, self.test_labels = _load_split(mnist_test)
-                
-                # Save images to cache
-                self._save_images_cache("train", self.train_images, self.train_labels)
-                self._save_images_cache("val", self.val_images, self.val_labels)
-                self._save_images_cache("test", self.test_images, self.test_labels)
-            
             # Set lengths
             self.len_train = len(self.train_images)
             self.len_val = len(self.val_images)
             self.len_test = len(self.test_images)
+
+        # Save images to cache
+        self._save_images_cache("train", self.train_images, self.train_labels)
+        self._save_images_cache("val", self.val_images, self.val_labels)
+        self._save_images_cache("test", self.test_images, self.test_labels)
 
         # Convert images to spikes (with disk caching)
         self.train_spikes, self.train_labels = self._load_or_convert_spikes(
@@ -211,6 +167,7 @@ class ImageDataStreamer:
         self.train_indices = np.arange(self.len_train)
         self.val_indices = np.arange(self.len_val)
         self.test_indices = np.arange(self.len_test)
+
         self.rng.shuffle(self.train_indices)
         self.rng.shuffle(self.val_indices)
         self.rng.shuffle(self.test_indices)
@@ -260,7 +217,7 @@ class ImageDataStreamer:
         spike_data = np.vstack(spike_rows)
         
         # Extend labels to match spike data (repeat each label for num_steps)
-        extended_labels = np.repeat(batch_labels, self.num_steps)
+        labels = np.repeat(batch_labels, self.num_steps)
 
         # advance pointer
         if partition == "train":
@@ -270,20 +227,21 @@ class ImageDataStreamer:
         else:
             self.ptr_test = end_ptr
 
-        return spike_data, extended_labels
+        return spike_data, labels
 
     def _convert_images_to_spikes(self, images):
         """Convert image batch to spikes."""
         # Normalize images
         target_sum = (self.pixel_size**2) * 0.1 # very dubious stuff
         norm_images = torch.stack(
-            [normalize_image(img=img, target_sum=target_sum) for img in images]
+            [self.normalize_image(img=img, target_sum=target_sum) for img in images]
         )
 
-        # Convert to spikes
+        # create spike data
         S_data = torch.zeros(size=norm_images.shape)
         S_data = S_data.repeat(self.num_steps, 1, 1, 1)
 
+        # Convert to spikes
         for i in range(norm_images.shape[0]):
             S_data[i * self.num_steps : (i + 1) * self.num_steps] = spikegen.rate(
                 norm_images[i],
@@ -312,12 +270,12 @@ class ImageDataStreamer:
             "dataset": self.dataset,
             "pixel_size": self.pixel_size,
             "partition": partition,
+            "which_classes": sorted(self.which_classes) if self.which_classes else None,
         }
         # Add dataset-specific parameters
         if self.dataset == "geomfig":
             params.update({
                 "num_classes": self.num_classes,
-                "which_classes": sorted(self.which_classes) if self.which_classes else None,
                 "noise_var": getattr(self, "noise_var", None),
                 "tri_size": getattr(self, "tri_size", None),
                 "tri_thick": getattr(self, "tri_thick", None),
@@ -353,7 +311,7 @@ class ImageDataStreamer:
         cache_dir = os.path.join(self.data_dir, "image_cache")
         os.makedirs(cache_dir, exist_ok=True)
         params = self._get_image_params(partition)
-        cache_hash = params_hash(params)
+        cache_hash = self.params_hash(params)
         return os.path.join(cache_dir, f"{self.dataset}_{partition}_{cache_hash}.npz")
 
     def _get_spike_cache_path(self, partition):
@@ -361,7 +319,7 @@ class ImageDataStreamer:
         cache_dir = os.path.join(self.data_dir, "spike_cache")
         os.makedirs(cache_dir, exist_ok=True)
         params = self._get_spike_params(partition)
-        cache_hash = params_hash(params)
+        cache_hash = self.params_hash(params)
         return os.path.join(cache_dir, f"{self.dataset}_{partition}_{cache_hash}.npz")
 
     def _save_images_cache(self, partition, images, labels):
@@ -448,69 +406,31 @@ class ImageDataStreamer:
         return spikes, labels
 
     def reset_partition(self, partition="all"):
+        """
+        Reset partition pointers and reshuffle indices for a new epoch.
+        This ensures each epoch sees data in a different order.
+        """
         if partition in ("all", "train"):
             self.ptr_train = 0
+            self.rng.shuffle(self.train_indices)
         if partition in ("all", "val"):
             self.ptr_val = 0
+            self.rng.shuffle(self.val_indices)
         if partition in ("all", "test"):
             self.ptr_test = 0
+            self.rng.shuffle(self.test_indices)
+
+    @staticmethod
+    def params_hash(params: dict) -> str:
+        """Generate a hash from a parameters dictionary."""
+        j = json.dumps(params, sort_keys=True, separators=(",", ":"), default=str)
+        return hashlib.sha1(j.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def normalize_image(img, target_sum=1.0):
+        """Normalize image to have a target sum."""
+        current_sum = img.sum()
+        return img * (target_sum / current_sum) if current_sum > 0 else img
 
 
-def load_image_batch(
-    streamer,
-    batch_size,
-    partition="train",
-):
-    """
-    Wrapper to load a batch from the streamer.
-    start_idx and n_x are provided for compatibility but handled by the streamer.
-    """
-    return streamer.get_batch(batch_size, partition=partition)
 
-def params_hash(params: dict) -> str:
-    j = json.dumps(params, sort_keys=True, separators=(",", ":"), default=str)
-    return hashlib.sha1(j.encode("utf-8")).hexdigest()
-
-
-def normalize_image(img, target_sum=1.0): # maybe remove this function
-    current_sum = img.sum()
-    return img * (target_sum / current_sum) if current_sum > 0 else img
-
-
-def _load_notmnist_deeplake(transform, train_ratio, val_ratio, test_ratio, rng):
-    """
-    Load NotMNIST from Deeplake and return torch tensors for train/test splits.
-    """
-    import deeplake
-    ds = deeplake.load("hub://activeloop/not-mnist-small", read_only=True)
-
-    dataset = []
-
-    for sample in ds:
-        try:
-            img_np = sample["images"].numpy()
-            lbl = sample["labels"].numpy()
-        except KeyError as exc:  # pragma: no cover - dataset schema check
-            raise KeyError(
-                "NotMNIST sample missing expected 'images' or 'labels' tensors."
-            ) from exc
-        label_int = int(np.asarray(lbl).flatten()[0])
-
-        img_np = np.asarray(img_np)
-        if img_np.ndim == 3 and img_np.shape[0] == 1:
-            img_np = img_np[0]
-
-        img_pil = Image.fromarray(img_np.astype(np.uint8), mode="L")
-        img_tensor = transform(img_pil)
-        dataset.append((img_tensor, label_int))
-    n = len(dataset)
-    n_train = int(train_ratio * n)
-    n_val   = int(val_ratio * n)
-    n_test  = n - n_train - n_val 
-    # split train set into train and val by ratio
-    train_ds, val_ds, test_ds = torch.utils.data.random_split(
-        torch.utils.data.TensorDataset(*zip(*dataset)),
-        [n_train, n_val, n_test],
-        generator=rng
-    )
-    return train_ds.dataset["images"], train_ds.dataset["labels"], val_ds.dataset["images"], val_ds.dataset["labels"], test_ds.dataset["images"], test_ds.dataset["labels"]

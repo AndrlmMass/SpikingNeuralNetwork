@@ -8,17 +8,11 @@ import json
 from datetime import datetime
 import matplotlib.pyplot as plt
 import traceback
-from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
-from sklearn.model_selection import train_test_split
+
 
 from .dynamics import train_network
 from src.datasets.loaders import (
-    GeomfigDataStreamer,
-    ImageDataStreamer,
-    load_image_batch,
-    load_or_create_geomfig_data,
-    _geomfig_generate_one,
+    DataStreamer,
 )
 from src.evaluation.plots import (
     spike_plot,
@@ -34,8 +28,8 @@ from src.evaluation.plots import (
 )
 from src.evaluation.metrics import (
     t_SNE,
-    PCA_analysis,
-    calculate_phi,
+    PCA_MLR,
+    Phi,
     bin_spikes_by_label_no_breaks,
 )
 from src.evaluation.classifiers import (
@@ -51,14 +45,14 @@ class snn_sleepy:
         N_exc=200,
         N_inh=50,
         N_x=225,
-        seed=None,
-        classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        seed=1,
+        which_classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
     ):
         self.N_exc = N_exc
         self.N_inh = N_inh
         self.N_x = N_x
-        self.N_classes = len(classes)
-        self.classes = classes
+        self.N_classes = len(which_classes)
+        self._which_classes = which_classes
         self.st = N_x  # stimulation
         self.ex = self.st + N_exc  # excitatory
         self.ih = self.ex + N_inh  # inhibitory
@@ -70,12 +64,9 @@ class snn_sleepy:
         self._acc_log_dir = os.path.join("results", "acc_history")
         self._acc_log_file = None
         # Initiate seed
-        try:
-            if seed != None:
-                s = int(seed)
-                self.rng_numpy = np.random.Generator(np.random.PCG64(s))
-                self.rng_torch = torch.Generator()
-                self.rng_torch.manual_seed(seed)
+        self.rng_numpy = np.random.Generator(np.random.PCG64(seed))
+        self.rng_torch = torch.Generator()
+        self.rng_torch.manual_seed(seed)
 
     def _ensure_acc_logger(self):
         if self._acc_log_file is None:
@@ -112,151 +103,6 @@ class snn_sleepy:
         except Exception as e:
             # Non-fatal: continue training even if logging fails
             print(f"Warning: failed to persist accuracy record ({e})")
-
-    def plot_accuracy_history(self, save_dir: str = "plots", filename_suffix: str = ""):
-        os.makedirs(save_dir, exist_ok=True)
-        # Train + Val
-        try:
-            plt.figure(figsize=(7, 4.5))
-            if self.acc_history.get("train"):
-                plt.plot(
-                    range(1, len(self.acc_history["train"]) + 1),
-                    self.acc_history["train"],
-                    label="Train",
-                    color="gray",
-                    linestyle="-",
-                )
-            if self.acc_history.get("val"):
-                plt.plot(
-                    range(1, len(self.acc_history["val"]) + 1),
-                    self.acc_history["val"],
-                    label="Val",
-                    color="black",
-                    linestyle="--",
-                )
-            plt.xlabel("Epoch")
-            plt.ylabel("Accuracy")
-            plt.title("Train/Val Accuracy")
-            plt.grid(True, alpha=0.3)
-            plt.legend()
-            suffix_str = f"_{filename_suffix}" if filename_suffix else ""
-            tv_path = os.path.join(save_dir, f"acc_train_val{suffix_str}.png")
-            try:
-                plt.savefig(tv_path, bbox_inches="tight")
-                print(f"Saved train/val accuracy plot to {tv_path}")
-            except Exception as exc:
-                print(f"Failed to save train/val plot ({exc})")
-            plt.close()
-        except Exception as exc:
-            print(f"Failed to plot train/val accuracy ({exc})")
-        # Test
-        try:
-            if self.acc_history.get("test"):
-                plt.figure(figsize=(7, 4.5))
-                plt.plot(
-                    range(1, len(self.acc_history["test"]) + 1),
-                    self.acc_history["test"],
-                    label="Test",
-                )
-                plt.xlabel("Eval #")
-                plt.ylabel("Accuracy")
-                plt.title("Test Accuracy")
-                plt.grid(True, alpha=0.3)
-                plt.legend()
-                suffix_str = f"_{filename_suffix}" if filename_suffix else ""
-                te_path = os.path.join(save_dir, f"acc_test{suffix_str}.png")
-                try:
-                    plt.savefig(te_path, bbox_inches="tight")
-                    print(f"Saved test accuracy plot to {te_path}")
-                except Exception as exc:
-                    print(f"Failed to save test plot ({exc})")
-                plt.close()
-        except Exception as exc:
-            print(f"Failed to plot test accuracy ({exc})")
-
-    def preview_loaded_data(
-        self, num_image_samples: int = 9, save_path: str | None = None
-    ):
-        """
-        Plot a small grid of images from the loaded dataset once so the user can
-        verify that the expected dataset is being used.
-        """
-        if getattr(self, "_image_preview_done", False):
-            return
-        # Special handling for geomfig: show N examples per class (0..3)
-        if getattr(self, "image_dataset", "").lower() == "geomfig":
-            try:
-                pixel_size = int(np.sqrt(self.N_x))
-                classes = [0, 1, 2, 3]
-                per_class = max(1, int(num_image_samples))
-                # Special case: if 1 per class and 4 classes, arrange as 2x2 instead of 4x1
-                if per_class == 1 and len(classes) == 4:
-                    rows, cols = 2, 2
-                    fig, axes = plt.subplots(rows, cols, figsize=(4.0, 4.0))
-                    axes = axes.flatten()
-                    titles = ["Triangle (0)", "Circle (1)", "Square (2)", "X (3)"]
-                    for idx, cls in enumerate(classes):
-                        img = _geomfig_generate_one(
-                            cls_id=cls,
-                            pixel_size=pixel_size,
-                            noise_var=getattr(self, "geom_noise_var", 0.02),
-                            jitter=getattr(self, "geom_jitter", False),
-                            jitter_amount=getattr(self, "geom_jitter_amount", 0.05),
-                        )
-                        ax = axes[idx]
-                        ax.imshow(img, cmap="gray")
-                        ax.set_title(titles[idx], fontsize=10)
-                        ax.axis("off")
-                else:
-                    fig, axes = plt.subplots(
-                        len(classes),
-                        per_class,
-                        figsize=(2.0 * per_class, 2.0 * len(classes)),
-                    )
-                    if per_class == 1:
-                        axes = np.atleast_2d(axes).reshape(len(classes), 1)
-                    titles = ["Triangle (0)", "Circle (1)", "Square (2)", "X (3)"]
-                    for r, cls in enumerate(classes):
-                        for c in range(per_class):
-                            img = _geomfig_generate_one(
-                                cls_id=cls,
-                                pixel_size=pixel_size,
-                                noise_var=getattr(self, "geom_noise_var", 0.02),
-                                jitter=getattr(self, "geom_jitter", False),
-                                jitter_amount=getattr(self, "geom_jitter_amount", 0.05),
-                            )
-                            ax = axes[r, c]
-                            ax.imshow(img, cmap="gray")
-                            if c == 0:
-                                ax.set_title(titles[r], fontsize=10)
-                            ax.axis("off")
-                plt.tight_layout()
-                try:
-                    if save_path is None:
-                        os.makedirs("plots", exist_ok=True)
-                        save_path = os.path.join("plots", "geomfig_preview.png")
-                    fig.savefig(save_path)
-                    print(f"Dataset preview saved to {save_path}")
-                except Exception as exc:
-                    print(f"Failed to save dataset preview ({exc})")
-                plt.show()
-                plt.close(fig)
-            except Exception as exc:
-                print(f"Dataset preview skipped ({exc})")
-            finally:
-                self._image_preview_done = True
-            return
-        # Default: use image streamer preview if available
-        if not hasattr(self, "image_streamer") or self.image_streamer is None:
-            return
-        try:
-            self.image_streamer.show_preview(
-                num_samples=num_image_samples, save_path=save_path
-            )
-        except Exception as exc:  # pragma: no cover - visualization fallback
-            print(f"Dataset preview skipped ({exc})")
-        finally:
-            self._image_preview_done = True
 
     def process(
         self,
@@ -503,7 +349,7 @@ class snn_sleepy:
                 )
             )
             # Wrap in streamer for consistent batched access
-            self.image_streamer = GeomfigDataStreamer(
+            self.data_streamer = DataStreamer(
                 data_train=data_tr,
                 labels_train=lab_tr,
                 data_val=data_va,
@@ -660,8 +506,7 @@ class snn_sleepy:
                     variance_ratio=self.pca_variance,
                 )
         except Exception as ex:
-            print(f"Warning: PCA classification failed ({ex}); using zeros")
-            return ({"train": 0.0, "val": 0.0, "test": 0.0}, StandardScaler(), PCA(), None)
+            raise ValueError(f"PCA classification failed ({ex})")
 
     def prepare_network(
         self,
@@ -890,7 +735,7 @@ class snn_sleepy:
         # Always attempt to load a matching model if not forcing a fresh run,
         # regardless of data_loaded (streaming modes don't set data_loaded).
         # In test-only inference with frozen weights, skip loading any saved model
-        if not force_train and not (test_only and not train_weights):
+        if not force_train and not test_only:
             try:
                 self.process(
                     load_model=True,
@@ -921,10 +766,6 @@ class snn_sleepy:
             max_sum_exc = sum_weights_exc * alpha
             max_sum_inh = sum_weights_inh * alpha
             max_sum = sum_weights * alpha
-
-            # Auto-adjust check_sleep_interval based on batch size
-            # To prevent sleep from fragmenting data into too few segments
-            timesteps_per_epoch = self.batch_train * self.num_steps
 
             # Configure weight tracking granularity
             try:
@@ -1111,12 +952,8 @@ class snn_sleepy:
 
                     for test_batch_idx in range(total_num_tests):
                         # Load test data for test-only evaluation
-                        data_test, labels_test = load_image_batch(
-                            self.image_streamer,
-                            self.current_test_idx,
+                        data_test, labels_test = self.image_streamer.get_batch(
                             effective_batch,
-                            self.num_steps,
-                            int(np.sqrt(self.N_x)) ** 2,
                             partition="test",
                         )
                         if data_test is None:
@@ -1350,12 +1187,9 @@ class snn_sleepy:
 
                 # Load data for this epoch
                 train_start_idx = self.current_train_idx
-                data_train, labels_train = load_image_batch(
-                    self.image_streamer,
-                    train_start_idx,
+                data_train, labels_train = self.data_streamer.get_batch(
                     self.batch_train,
-                    self.num_steps,
-                    int(np.sqrt(self.N_x)) ** 2,
+                    partition="train",
                 )
                 if data_train is None:
                     raise ValueError(f"No more image data available at epoch {e}")
@@ -1576,41 +1410,22 @@ class snn_sleepy:
                                         f"ℹ️  NOTE: {len(X_tr)} samples available - consider using more for better PCA+LR estimation"
                                     )
 
-                                # Calculate training accuracy using PCA+LR with proper train/test split
-                                # Use 80% for training, 20% for testing to avoid data leakage
-                                if len(X_tr) >= 10:  # Need minimum samples for split
-                                    X_tr_split, X_te_split, y_tr_split, y_te_split = (
-                                        train_test_split(
-                                            X_tr,
-                                            y_tr,
-                                            test_size=0.2,
-                                            random_state=42,
-                                            stratify=y_tr,
-                                        )
-                                    )
-                                    print(
-                                        f"PCA+LR split: {len(X_tr_split)} train, {len(X_te_split)} test samples"
-                                    )
-                                else:
-                                    # Not enough samples for proper split, use original approach but note the limitation
-                                    print(
-                                        f"⚠️  Only {len(X_tr)} samples - using same data for train/test (limited reliability)"
-                                    )
-                                    X_tr_split, X_te_split = X_tr, X_tr
-                                    y_tr_split, y_te_split = y_tr, y_tr
-
+                                # Train PCA+LR on all training data
+                                # Will test on validation data after validation loop completes
                                 accs, scaler, pca, clf = self._pca_eval(
-                                    X_train=X_tr_split,
-                                    y_train=y_tr_split,
-                                    X_val=X_tr_split,  # Use training split for validation
-                                    y_val=y_tr_split,
-                                    X_test=X_te_split,  # Use test split for final evaluation
-                                    y_test=y_te_split,
+                                    X_train=X_tr,
+                                    y_train=y_tr,
+                                    X_val=X_tr,
+                                    y_val=y_tr,
+                                    X_test=X_tr,
+                                    y_test=y_tr,
                                 )
                                 train_acc_pca = float(accs.get("test", 0.0))
                                 print(
-                                    f"Training Accuracy (PCA+LR): {train_acc_pca:.4f}"
+                                    f"Training Accuracy (PCA+LR, on training data): {train_acc_pca:.4f}"
                                 )
+                                # Store classifier and training data for later use on validation data
+                                self._pca_lr_classifier = (scaler, pca, clf)
                                 self._record_accuracy("train", train_acc_pca, epoch=e + 1)
 
                                 # Show training data distribution
@@ -1676,12 +1491,8 @@ class snn_sleepy:
                 for val_batch_idx in range(total_num_vals):
                     # Load validation data for training monitoring
                     val_start_idx = val_batch_idx * self.batch_test
-                    data_test, labels_test = load_image_batch(
-                        self.image_streamer,
-                        val_start_idx,
+                    data_test, labels_test = self.data_streamer.get_batch(
                         self.batch_test,
-                        self.num_steps,
-                        int(np.sqrt(self.N_x)) ** 2,
                         partition="val",
                     )
                     if data_test is None:
@@ -1819,6 +1630,31 @@ class snn_sleepy:
                     acc_te = val_acc / max(
                         1, val_batches_counted
                     )  # Keep acc_te for compatibility
+                elif accuracy_method == "pca_lr":
+                    # Evaluate PCA+LR on validation data using classifier trained on training data
+                    if hasattr(self, "_pca_lr_classifier") and val_sample_count > 0:
+                        val_spikes = all_spikes_val[:val_sample_count, self.st : self.ih]
+                        val_labels = all_labels_val[:val_sample_count]
+                        X_val, y_val = bin_spikes_by_label_no_breaks(
+                            spikes=val_spikes,
+                            labels=val_labels,
+                        )
+                        if X_val.size > 0 and len(X_val) >= self.N_classes:
+                            scaler, pca, clf = self._pca_lr_classifier
+                            # Transform validation data using the same scaler and PCA
+                            X_val_scaled = scaler.transform(X_val)
+                            X_val_pca = pca.transform(X_val_scaled)
+                            # Evaluate on validation data
+                            val_acc_pca = clf.score(X_val_pca, y_val)
+                            print(
+                                f"\nValidation Accuracy (PCA+LR, on validation data): {val_acc_pca:.4f}"
+                            )
+                            acc_te = val_acc_pca
+                        else:
+                            print("⚠️  Not enough validation samples for PCA+LR evaluation")
+                            acc_te = None
+                    else:
+                        acc_te = None
                 else:
                     acc_te = None
                 # Use actual batch count for phi averaging (fixes issue when val data < expected)
@@ -2259,97 +2095,8 @@ class snn_sleepy:
                 # Per-epoch plotting for debugging (especially useful for geomfig)
                 if plot_weights_per_epoch:
                     try:
-                        # Compute current weight stats directly from the network weights
-                        _st, _ex, _ih = self.N_x, self.st + 0 - 0, self.ih + 0 - 0
-                        _ex = _st + self.N_exc
-                        _ih = _ex + self.N_inh
-                        W_exc = self.weights[:_ex, _st:_ih]
-                        W_inh = self.weights[_ex:_ih, _st:_ex]
 
-                        weight_evolution["epochs"].append(e + 1)
 
-                        # Compute stats on non-zero weights only to avoid zero-bias
-                        W_exc_nz = W_exc[W_exc != 0]
-                        if W_exc_nz.size > 0:
-                            weight_evolution["exc_mean"].append(
-                                float(np.mean(W_exc_nz))
-                            )
-                            weight_evolution["exc_std"].append(float(np.std(W_exc_nz)))
-                            weight_evolution["exc_min"].append(float(np.min(W_exc_nz)))
-                            weight_evolution["exc_max"].append(float(np.max(W_exc_nz)))
-                        else:
-                            weight_evolution["exc_mean"].append(0.0)
-                            weight_evolution["exc_std"].append(0.0)
-                            weight_evolution["exc_min"].append(0.0)
-                            weight_evolution["exc_max"].append(0.0)
-
-                        W_inh_nz = W_inh[W_inh != 0]
-                        if W_inh_nz.size > 0:
-                            weight_evolution["inh_mean"].append(
-                                float(np.mean(W_inh_nz))
-                            )
-                            weight_evolution["inh_std"].append(float(np.std(W_inh_nz)))
-                            weight_evolution["inh_min"].append(float(np.min(W_inh_nz)))
-                            weight_evolution["inh_max"].append(float(np.max(W_inh_nz)))
-                        else:
-                            weight_evolution["inh_mean"].append(0.0)
-                            weight_evolution["inh_std"].append(0.0)
-                            weight_evolution["inh_min"].append(0.0)
-                            weight_evolution["inh_max"].append(0.0)
-
-                        # Save a lightweight snapshot: histograms of current weight distributions
-                        os.makedirs("plots", exist_ok=True)
-
-                        fig, axes = plt.subplots(1, 2, figsize=(12, 4))
-                        # Plot only non-zero weights for informative histograms
-                        exc_vals = W_exc.flatten()
-                        exc_vals = exc_vals[exc_vals != 0]
-                        if exc_vals.size > 0:
-                            axes[0].hist(exc_vals, bins=50, color="tomato", alpha=0.8)
-                        else:
-                            axes[0].text(
-                                0.5,
-                                0.5,
-                                "No non-zero weights",
-                                ha="center",
-                                va="center",
-                                transform=axes[0].transAxes,
-                            )
-                        axes[0].set_title("Excitatory weights")
-                        axes[0].set_xlabel("Weight")
-                        axes[0].set_ylabel("Count")
-                        inh_vals = W_inh.flatten()
-                        inh_vals = inh_vals[inh_vals != 0]
-                        if inh_vals.size > 0:
-                            axes[1].hist(
-                                inh_vals, bins=50, color="steelblue", alpha=0.8
-                            )
-                        else:
-                            axes[1].text(
-                                0.5,
-                                0.5,
-                                "No non-zero weights",
-                                ha="center",
-                                va="center",
-                                transform=axes[1].transAxes,
-                            )
-                        axes[1].set_title("Inhibitory weights")
-                        axes[1].set_xlabel("Weight")
-                        fig.suptitle(
-                            f"Epoch {e+1}/{self.epochs} - Weight Distributions",
-                            fontsize=12,
-                            fontweight="bold",
-                        )
-                        plt.tight_layout()
-                        plt.savefig(
-                            f"plots/weights_epoch_{e+1:03d}.png", bbox_inches="tight"
-                        )
-                        plt.close(fig)
-                        print(
-                            f"  Saved weights snapshot: plots/weights_epoch_{e+1:03d}.png"
-                        )
-                    except Exception as exc:
-                        print(f"  Warning: failed to save weights plot ({exc})")
                     # Also plot sampled weight trajectories with sleep shading if tracking exists
                     try:
                         # Debug: check what's in weight_tracking_epoch
@@ -2442,76 +2189,6 @@ class snn_sleepy:
                             f"  Warning: failed to save weight trajectories plot ({exc})"
                         )
                         traceback.print_exc()
-
-                if plot_spikes_per_epoch:
-                    # Safely fetch local variables to avoid UnboundLocalError
-                    _sp_tr = locals().get("spikes_tr_out", None)
-                    _lb_tr = locals().get("labels_tr_out", None)
-                    if _sp_tr is not None and _lb_tr is not None and len(_sp_tr) > 0:
-                        try:
-                            os.makedirs("plots", exist_ok=True)
-
-                            # Plot last portion of training spikes
-                            plot_start = max(0, int(len(_sp_tr) * 0.9))
-                            # Avoid duplicate interactive windows: disable interactivity during save
-                            was_interactive = plt.isinteractive()
-                            try:
-                                plt.ioff()
-                                spike_plot(_sp_tr[plot_start:], _lb_tr[plot_start:])
-                                fig = plt.gcf()
-                                fig.suptitle(
-                                    f"Epoch {e+1}/{self.epochs} - Training Spikes",
-                                    fontsize=12,
-                                    fontweight="bold",
-                                )
-                                fig.tight_layout()
-                                fig.savefig(
-                                    f"plots/spikes_train_epoch_{e+1:03d}.png",
-                                    bbox_inches="tight",
-                                )
-                                plt.close(fig)
-                            finally:
-                                if was_interactive:
-                                    plt.ion()
-                            print(
-                                f"  Saved and displayed training spikes plot: plots/spikes_train_epoch_{e+1:03d}.png"
-                            )
-                        except Exception as exc:
-                            print(f"  Warning: failed to save spikes plot ({exc})")
-                    _sp_te = locals().get("spikes_te_out", None)
-                    _lb_te = locals().get("labels_te_out", None)
-                    if _sp_te is not None and _lb_te is not None and len(_sp_te) > 0:
-                        try:
-                            os.makedirs("plots", exist_ok=True)
-
-                            # Plot validation/test spikes
-                            plot_start = max(0, int(len(_sp_te) * 0.9))
-                            was_interactive = plt.isinteractive()
-                            try:
-                                plt.ioff()
-                                spike_plot(_sp_te[plot_start:], _lb_te[plot_start:])
-                                fig = plt.gcf()
-                                fig.suptitle(
-                                    f"Epoch {e+1}/{self.epochs} - Validation Spikes",
-                                    fontsize=12,
-                                    fontweight="bold",
-                                )
-                                fig.tight_layout()
-                                fig.savefig(
-                                    f"plots/spikes_val_epoch_{e+1:03d}.png",
-                                    bbox_inches="tight",
-                                )
-                                plt.close(fig)
-                            finally:
-                                if was_interactive:
-                                    plt.ion()
-                            print(
-                                f"  Saved and displayed validation spikes plot: plots/spikes_val_epoch_{e+1:03d}.png"
-                            )
-                        except Exception as exc:
-                            print(
-                                f"  Warning: failed to save validation spikes plot ({exc})"
-                            )
 
                 pbar.set_description(f"Epoch {e+1}/{self.epochs}")
                 # Handle None valuTruees safely
@@ -2618,12 +2295,8 @@ class snn_sleepy:
                 acc_top_sum = 0.0
 
                 for test_batch_idx in range(total_num_tests):
-                    data_test, labels_test = load_image_batch(
-                        self.image_streamer,
-                        0,
+                    data_test, labels_test = self.data_streamer.get_batch(
                         effective_batch,
-                        self.num_steps,
-                        int(np.sqrt(self.N_x)) ** 2,
                         partition="test",
                     )
                     if data_test is None:

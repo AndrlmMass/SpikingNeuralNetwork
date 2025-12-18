@@ -8,6 +8,7 @@ This module provides functions for creating the SNN architecture:
 
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap, BoundaryNorm
+from evaluation.plots import _plot_weight_matrix, _plot_network_graph
 import networkx as nx
 import numpy as np
 
@@ -91,66 +92,6 @@ def create_weights(
         _plot_network_graph(weights, N_x, N_exc, N_inh)
 
     return weights
-
-
-def _plot_weight_matrix(weights):
-    """Visualize the weight matrix."""
-    boundaries = [np.min(weights), -0.001, 0.001, np.max(weights)]
-    cmap = ListedColormap(["red", "white", "green"])
-    norm = BoundaryNorm(boundaries, ncolors=cmap.N)
-
-    plt.imshow(weights, cmap=cmap, norm=norm)
-    plt.gca().invert_yaxis()
-    plt.title("Weights")
-    plt.show()
-
-
-def _plot_network_graph(weights, N_x, N_exc, N_inh):
-    """Visualize the network as a graph."""
-    total_nodes = N_x + N_exc + N_inh
-
-    G = nx.from_numpy_array(weights)
-
-    # Partition nodes
-    input_nodes = list(range(N_x))
-    exc_nodes = list(range(N_x, N_x + N_exc))
-    inh_nodes = list(range(N_x + N_exc, total_nodes))
-
-    # Assign positions (vertical columns)
-    pos = {}
-    for i, node in enumerate(input_nodes):
-        y = 1 - (i / (len(input_nodes) - 1)) if len(input_nodes) > 1 else 0.5
-        pos[node] = (0, y)
-
-    for i, node in enumerate(exc_nodes):
-        y = 1 - (i / (len(exc_nodes) - 1)) if len(exc_nodes) > 1 else 0.5
-        pos[node] = (1, y)
-
-    for i, node in enumerate(inh_nodes):
-        y = 1 - (i / (len(inh_nodes) - 1)) if len(inh_nodes) > 1 else 0.5
-        pos[node] = (2, y)
-
-    # Node colors
-    node_colors = {}
-    for node in input_nodes:
-        node_colors[node] = "skyblue"
-    for node in exc_nodes:
-        node_colors[node] = "lightgreen"
-    for node in inh_nodes:
-        node_colors[node] = "salmon"
-
-    colors = [node_colors[node] for node in G.nodes()]
-
-    # Draw
-    plt.figure(figsize=(8, 4))
-    nx.draw_networkx_nodes(G, pos, node_color=colors, node_size=100)
-    edges = G.edges(data=True)
-    edge_weights = [data["weight"] for (u, v, data) in edges]
-    nx.draw_networkx_edges(G, pos, width=[5 * w for w in edge_weights], alpha=0.1)
-    nx.draw_networkx_labels(G, pos, font_size=5, font_color="black")
-    plt.title("Partitioned Graph: Input, Excitatory, Inhibitory")
-    plt.axis("off")
-    plt.show()
 
 
 def create_arrays(

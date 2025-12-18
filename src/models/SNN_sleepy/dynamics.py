@@ -47,10 +47,6 @@ def clip_weights(
 def update_weights(
     weights,
     spike_times,
-    min_weight_exc,
-    max_weight_exc,
-    min_weight_inh,
-    max_weight_inh,
     nonzero_pre_idx,
     noisy_weights,
     weight_mean_noise,
@@ -200,7 +196,7 @@ def update_spikes(
         np.clip(spike_threshold, -90, 0, out=spike_threshold)
 
     # Reset spiked neurons
-    mp[spikes[st:ih] == 1] = reset_potential
+    mp[spikes[st:ih] == 1] = reset_potential # where does ih go? max or to ex?
 
     # Update spike times - use in-place where possible
     spike_times[spikes == 1] = 0
@@ -217,10 +213,6 @@ def train_network(
     resting_potential,
     membrane_resistance,
     spike_times,
-    min_weight_exc,
-    max_weight_exc,
-    min_weight_inh,
-    max_weight_inh,
     train_weights,
     weight_decay_rate_exc,
     weight_decay_rate_inh,
@@ -266,8 +258,6 @@ def train_network(
     beta,
     mean_noise,
     var_noise,
-    num_exc,
-    num_inh,
     I_syn,
     a,
     spike_threshold,
