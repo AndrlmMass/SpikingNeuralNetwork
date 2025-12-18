@@ -90,9 +90,6 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         plot_spikes_per_epoch=bool(getattr(args, "plot_spikes_per_epoch", False)),
         weight_track_samples=int(getattr(args, "weight_track_samples", 32)),
         weight_track_interval=int(getattr(args, "weight_track_interval", 0)),
-        weight_track_sleep_interval=int(
-            getattr(args, "weight_track_sleep_interval", 0)
-        ),
         sleep_synchronized=False,
         plot_top_response_test=False,
         plot_top_response_train=False,

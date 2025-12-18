@@ -21,7 +21,6 @@ class DataStreamer:
     def __init__(
         self,
         data_dir: str,
-        batch_size: int,
         pixel_size: int,
         num_steps: int,
         num_classes: int,
@@ -54,7 +53,6 @@ class DataStreamer:
     ):
         # make arguments global
         self.data_dir = data_dir
-        self.batch_size = batch_size
         self.pixel_size = pixel_size
         self.num_steps = num_steps
         self.num_classes = num_classes

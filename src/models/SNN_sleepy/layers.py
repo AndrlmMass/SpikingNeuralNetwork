@@ -6,10 +6,6 @@ This module provides functions for creating the SNN architecture:
 - Array allocation for membrane potentials and spikes
 """
 
-import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap, BoundaryNorm
-from plot.plot import _plot_weight_matrix, _plot_network_graph
-import networkx as nx
 import numpy as np
 
 
@@ -26,8 +22,7 @@ def create_weights(
     ee_weights,
     ei_weights,
     ie_weights,
-    plot_weights=False,
-    plot_network=False,
+    rng,
 ):
     """
     Create weight matrix for the SNN with excitatory and inhibitory connections.
@@ -46,10 +41,8 @@ def create_weights(
         Connection density (probability) for each connection type
     *_weights : float
         Weight values for each connection type
-    plot_weights : bool
-        Whether to visualize the weight matrix
-    plot_network : bool
-        Whether to visualize the network graph
+    rng : numpy.random.Generator
+        Random number generator
         
     Returns
     -------
@@ -63,10 +56,10 @@ def create_weights(
     ih = ex + N_inh  # inhibitory
 
     # Create weights based on affinity rates
-    mask_ee = np.random.random((N_exc, N_exc)) < w_dense_ee
-    mask_ei = np.random.random((N_exc, N_inh)) < w_dense_ei
-    mask_ie = np.random.random((N_inh, N_exc)) < w_dense_ie
-    mask_se = np.random.random((N_x, N_exc)) < w_dense_se
+    mask_ee = rng.random((N_exc, N_exc)) < w_dense_ee
+    mask_ei = rng.random((N_exc, N_inh)) < w_dense_ei
+    mask_ie = rng.random((N_inh, N_exc)) < w_dense_ie
+    mask_se = rng.random((N_x, N_exc)) < w_dense_se
 
     # input poisson weights
     weights[:st, st:ex][mask_se] = se_weights
@@ -85,25 +78,19 @@ def create_weights(
     inh_mask = weights[st:ex, ex:ih].T != 0
     weights[ex:ih, st:ex][inh_mask] = 0
 
-    if plot_weights:
-        _plot_weight_matrix(weights)
-
-    if plot_network:
-        _plot_network_graph(weights, N_x, N_exc, N_inh)
-
     return weights
 
 
 def create_arrays(
     N,
+    st,
+    ih,
+    spike_threshold_default,
     resting_membrane,
     total_time_train,
     total_time_test,
     data_train,
     data_test,
-    N_x,
-    N_exc,
-    N_inh,
 ):
     """
     Create arrays for membrane potentials and spikes.
@@ -122,18 +109,14 @@ def create_arrays(
         Input spike data for training
     data_test : ndarray or None
         Input spike data for testing
-    N_x, N_exc, N_inh : int
-        Neuron counts by type
         
     Returns
     -------
     tuple
         (mp_train, mp_test, spikes_train, spikes_test)
     """
-    st = N_x  # stimulation
-    ex = st + N_exc  # excitatory
-    ih = ex + N_inh  # inhibitory
 
+    # create membrane potential arrays
     membrane_potential_train = np.zeros((total_time_train, ih - st))
     if total_time_train > 0:
         membrane_potential_train[0] = resting_membrane
@@ -142,22 +125,37 @@ def create_arrays(
     if total_time_test > 0:
         membrane_potential_test[0] = resting_membrane
 
-    spikes_train = np.zeros((total_time_train, N), dtype=np.int8)
+    spikes_train = None
     if data_train is not None and total_time_train > 0:
+        spikes_train = np.zeros((total_time_train, N), dtype=np.int8)
         spikes_train[:, :st] = data_train
 
-    spikes_test = np.zeros((total_time_test, N), dtype=np.int8)
+    spikes_test = None
     if data_test is not None and total_time_test > 0:
+        spikes_test = np.zeros((total_time_test, N), dtype=np.int8)
         spikes_test[:, :st] = data_test
+
+    # create missing arrays
+    I_syn = np.zeros(N - st)
+    spike_times = np.zeros(N)
+    a = np.zeros(N - st)
+
+    # create spike threshold array
+    spike_threshold = np.full(
+        shape=(ih - st),
+        fill_value=spike_threshold_default,
+        dtype=float,
+    )
 
     return (
         membrane_potential_train,
         membrane_potential_test,
         spikes_train,
         spikes_test,
-    )
-
-
-
+        I_syn, 
+        spike_times, 
+        a,
+        spike_threshold,
+        )
 
 
