@@ -413,8 +413,6 @@ def train_network(
                 custom_train_interval = max(1, int(train_snapshot_interval))
         except Exception:
             custom_train_interval = None
-        default_train_interval = max(1, check_sleep_interval // 20)
-        train_record_every = custom_train_interval or default_train_interval
         custom_sleep_interval = None
         try:
             if (
@@ -971,8 +969,6 @@ def train_network(
         weights_4_plotting_exc,
         weights_4_plotting_inh,
         spike_threshold,
-        max_sum_inh,
-        max_sum_exc,
         spike_labels,
         sleep_percent,
         I_syn,

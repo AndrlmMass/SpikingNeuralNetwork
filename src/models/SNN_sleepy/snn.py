@@ -18,7 +18,7 @@ from src.datasets.load import (
 from src.plot.plot import (
     spike_plot,
     mp_plot,
-    top_responders_plotted,
+    phi,
     plot_epoch_training,
     get_elite_nodes,
     plot_weight_evolution_during_sleep,
@@ -607,67 +607,37 @@ class snn_sleepy:
         self.sleep_tol_frac=sleep_tol_frac
         self.sleep_mode=sleep_mode
 
-
-        # Always attempt to load a matching model if not forcing a fresh run,
-        # regardless of data_loaded (streaming modes don't set data_loaded).
-        # In test-only inference with frozen weights, skip loading any saved model
-        if not force_train and not test_only:
-            try:
-                self.save_model_parameters()
-                self.process(
-                    load_model=True
-                )
-            except Exception as e:
-                raise ValueError(f"Model load skipped ({e})")
-
-        if not self.model_loaded:
-            # Calculate initial weight sums for normalization (used in train_network)
-            self.baseline_sum_exc, self.baseline_sum_inh, self.baseline_sum = create_learning_bounds(self.weights, self.ex, self.st, self.ih, self.beta)
-
-            # prepare early stopping
-            self.prepare_early_stopping()
+        def initiate_trackers(self, mode, epochs, T):
+            if mode == "train":
+                # create learning bounds
+                self.baseline_sum_exc, self.baseline_sum_inh, self.baseline_sum = create_learning_bounds(self.weights, self.ex, self.st, self.ih, self.beta)
+                # prepare early stopping
+                self.prepare_early_stopping()
 
             # prepare common arguments
             self.prepare_common_args()
 
-            # define progress bar - track timesteps, update every 1000 (like train_network)
-            if test_only and not train_weights:
-                pbar_total = 1
-                pbar_desc = "Test-only"
-            else:
-                # Total timesteps across all epochs
-                total_timesteps = self.epochs * self.T_train
-                # Progress bar updates every 1000 timesteps
-                pbar_total = total_timesteps // 1000
-                pbar_desc = f"Epoch 0/{self.epochs}:"
-            
-            pbar = tqdm(
+            # Total timesteps across all epochs
+            self.total_timesteps = epochs * T
+            # Progress bar updates every 1000 timesteps
+            pbar_total = self.total_timesteps // 1000
+            pbar_desc = f"{mode} Epoch 0/{epochs}:"
+
+            # prepare progress bar
+            self.pbar = tqdm(
                 total=pbar_total,
                 desc=pbar_desc,
                 unit="1k steps",
                 ncols=80,
                 bar_format="{desc} [{bar}] ETA: {remaining} |{postfix}",
             )
-            # Predefine outputs to avoid UnboundLocalError if loop exits early
-            spikes_tr_out = None
-            labels_tr_out = None
-            sleep_tr_out = None
-            mp_tr = None
-            w4p_exc_tr = None
-            w4p_inh_tr = None
-            thresh_tr = None
-            mx_w_inh_tr = None
-            mx_w_exc_tr = None
-            spikes_te_out = None
-            labels_te_out = None
-            mp_te = None
 
             # Track sleep percentages across epochs
-            sleep_percent_sum = 0.0
-            sleep_percent_count = 0
+            self.sleep_percent_sum = 0.0
+            self.sleep_percent_count = 0
 
             # Track weight changes during sleep across epochs
-            all_weight_tracking_sleep = {
+            self.all_weight_tracking_sleep = {
                 "exc_mean": [],
                 "exc_min": [],
                 "exc_max": [],
@@ -679,10 +649,10 @@ class snn_sleepy:
                 "times": [],
                 "sleep_segments": [],
             }
-            _tracking_time_offset = 0.0
+            self._tracking_time_offset = 0.0 # what does this actually do?
 
             # Track weight evolution over epochs for plotting
-            weight_evolution = {
+            self.weight_evolution = {
                 "epochs": [],
                 "exc_mean": [],
                 "exc_min": [],
@@ -691,131 +661,192 @@ class snn_sleepy:
                 "inh_min": [],
                 "inh_max": [],
             }
+
+        def reset_arrays(self, T_batch, data):
+            mp = np.zeros((T_batch, self.N - self.N_x))
+            mp[0] = self.resting_potential
+            spikes = np.zeros((T_batch, self.N), dtype=np.int8)
+            spikes[:, : self.N_x] = data
+            
+            # Use instance variables for persistent state arrays (created in prepare_network)
+            I_syn = self.I_syn.copy()
+            spike_times = self.spike_times.copy()
+            a = self.a.copy()
+            spike_threshold = self.spike_threshold.copy()
+            return mp, spikes, I_syn, spike_times, a, spike_threshold
+
+
+        def update_trackers(self, weight_tracking_epoch, all_weight_tracking_sleep, _tracking_time_offset):
+            # Accumulate weight tracking data (sleep only)
+            if weight_tracking_epoch is not None:
+                for key in [
+                    "exc_mean",
+                    "exc_min",
+                    "exc_max",
+                    "exc_samples",
+                    "inh_mean",
+                    "inh_min",
+                    "inh_max",
+                    "inh_samples",
+                ]:
+                    all_weight_tracking_sleep[key].extend(
+                        weight_tracking_epoch[key]
+                    )
+                _wt_times = weight_tracking_epoch.get("times", [])
+                all_weight_tracking_sleep["times"].extend(
+                    [float(t) + _tracking_time_offset for t in _wt_times]
+                )
+                for seg in weight_tracking_epoch.get("sleep_segments", []):
+                    try:
+                        s, te = (
+                            float(seg[0]) + _tracking_time_offset,
+                            float(seg[1]) + _tracking_time_offset,
+                        )
+                        all_weight_tracking_sleep["sleep_segments"].append((s, te))
+                    except Exception:
+                        pass
+                if len(_wt_times) > 0:
+                    _tracking_time_offset += float(max(_wt_times)) + 1.0
+
+                return all_weight_tracking_sleep
+
+        def evaluate_performance(self, accuracy_method, spikes_train, labels_train, spikes_test, labels_test, num_steps_train, num_steps_test):
+            if accuracy_method == "top":
+                # Use top-responders method for training accuracy
+                train_acc_batch = phi(
+                    spikes_train=spikes_train,
+                    labels_train=labels_train,
+                    spikes_test=spikes_test,
+                    labels_test=labels_test,
+                    num_steps_train=num_steps_train,
+                    num_steps_test=num_steps_test,
+                    pca_variance=self.pca_variance,
+                    random_state=self.seed,
+                    num_classes=self.N_classes,
+                )
+                return train_acc_batch
+
+            elif accuracy_method == "pca_lr":
+                # Use PCA+LR method for training accuracy
+                pca_logistic_regression(
+                    X_train=spikes_train,
+                    labels_train=labels_train,
+                    spikes_test=spikes_test,
+                    labels_test=labels_test,
+                    num_steps_train=num_steps_train,
+                    num_steps_test=num_steps_test,
+                    pca_variance=self.pca_variance,
+                    random_state=self.seed,
+                    num_classes=self.N_classes,
+                )
+                    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_val: np.ndarray,
+    y_val: np.ndarray,
+    X_test: np.ndarray,
+    y_test: np.ndarray,
+    n_components: Optional[int] = None,
+    variance_ratio: Optional[float] = 0.95,
+    whiten: bool = True,
+    standardize: bool = True,
+    max_iter: int = 1000,
+
+        def forward_pass(self, mode, epochs, batch_size):
             # loop over self.epochs_train
-            for e in range(self.epochs_train):
+            for epoch in range(epochs):
                 # Reset test/val indices at the beginning of each epoch
-                self.current_val_idx = 0
-                self.current_train_idx = 0
+                current_idx = 0
 
                 # Reset streamer validation/train pointers
-                self.data_streamer.reset_partition("val")
-                self.data_streamer.reset_partition("train")
+                self.data_streamer.reset_partition(mode)
 
                 # Load data for this epoch
-                data_train, labels_train = self.data_streamer.get_batch(
-                    self.batch_train,
-                    partition="train",
+                data, labels = self.data_streamer.get_batch(
+                    batch_size,
+                    partition=mode,
                 )
                 # check if data is None
-                if data_train is None:
-                    raise ValueError(f"No more image data available at epoch {e}")
-
-                # Advance training index for streaming
-                self.current_train_idx += self.batch_train
+                if data is None:
+                    raise ValueError(f"No more image data available at epoch {epoch}")
 
                 # Get actual batch size (may be smaller than batch_train * num_steps for last batch)
-                T_batch = data_train.shape[0]
+                T_batch = data.shape[0]
 
-                # Create arrays for this batch (size may vary, so create fresh each time)
-                # Use instance variables for persistent state (I_syn, spike_times, a, spike_threshold)
-                # These are modified by train_network and need to persist across batches
-                mp_train = np.zeros((T_batch, self.N - self.N_x))
-                mp_train[0] = self.resting_potential
-                spikes_train = np.zeros((T_batch, self.N), dtype=np.int8)
-                spikes_train[:, : self.N_x] = data_train
-                
-                # Use instance variables for persistent state arrays (created in prepare_network)
-                I_syn = self.I_syn.copy()
-                spike_times = self.spike_times.copy()
-                a = self.a.copy()
-                spike_threshold = self.spike_threshold.copy()
+                # Advance training index for streaming
+                current_idx += T_batch
 
-                # 3a) Train on the training set
-                # Ensure data width matches expected N_x
-                if data_train is not None and data_train.shape[1] != self.N_x:
-                    actual_nx = data_train.shape[1]
-                    print(
-                        f"Warning: Adjusting training input width from {actual_nx} to {self.N_x}"
-                    )
-                    if actual_nx < self.N_x:
-                        pad_width = self.N_x - actual_nx
-                        pad_block = np.zeros(
-                            (data_train.shape[0], pad_width), dtype=data_train.dtype
-                        )
-                        data_train = np.concatenate([data_train, pad_block], axis=1)
-                    else:
-                        data_train = data_train[:, : self.N_x]
+                # reset snn-dynamic arrays
+                mp_train, spikes, I_syn, spike_times, a, spike_threshold = self.reset_arrays(T_batch, data)
+
+                # train network
                 (
-                    self.weights,
-                    spikes_tr_out,
-                    mp_tr,
-                    w4p_exc_tr,
-                    w4p_inh_tr,
-                    thresh_tr,
-                    mx_w_inh_tr,
-                    mx_w_exc_tr,
-                    labels_tr_out,
-                    sleep_tr_out,
+                    weights,
+                    spikes,
+                    mp,
+                    weights_4_plotting_exc,
+                    weights_4_plotting_inh,
+                    spike_threshold,
+                    spike_labels,
+                    sleep_percent,
                     I_syn,
                     spike_times,
                     a,
-                    weight_tracking_epoch,
+                    weight_tracking_sleep,
                 ) = train_network(
                     weights=(self.weights if train_weights else self.weights.copy()),
-                    spike_labels=labels_train,
+                    spike_labels=labels,
                     mp=mp_train,
-                    sleep=sleep,
-                    train_weights=train_weights,
-                    track_weights=plot_weights_per_epoch,
                     T=T_batch,
-                    mean_noise=mean_noise,
-                    var_noise=var_noise,
-                    spikes=spikes_train,
+                    spikes=spikes,
                     spike_times=spike_times.copy(),
                     spike_threshold=spike_threshold,
                     a=a,
                     I_syn=I_syn,
-                    sleep_ratio=getattr(self, "sleep_ratio", 0.0),
-                    **common_args,
+                    **self.common_args,
                 )
+
+                # Update trackers  
+                self.update_trackers(weight_tracking_sleep, self.all_weight_tracking_sleep, self._tracking_time_offset)
+
+
+
+
+        def save_model_():
+            ...
+
+        def plot():
+            ...
+
+
+        # Always attempt to load a matching model if not forcing a fresh run
+        if not force_train:
+            try:
+                self.save_model_parameters()
+                self.process(
+                    load_model=True
+                )
+            except Exception as e:
+                raise ValueError(f"Model load skipped ({e})")
+
+        if not self.model_loaded:
+            # prepare training
+            self.initiate_trackers("train", self.epochs_train, self.T_train)
+
+            # run forward pass
+            self.forward_pass("train", self.epochs_train, self.T_train)
+
+            # loop over self.epochs_train
+            for e in range(self.epochs_train):
+                # 3a) Train on the training set
+                # Ensure data width matches expected N_x
+
 
                 # accumulate sleep percent if available
                 if sleep and sleep_tr_out is not None:
                     sleep_percent_sum += float(sleep_tr_out)
                     sleep_percent_count += 1
 
-                # Accumulate weight tracking data (sleep only)
-                if weight_tracking_epoch is not None:
-                    for key in [
-                        "exc_mean",
-                        "exc_std",
-                        "exc_min",
-                        "exc_max",
-                        "exc_samples",
-                        "inh_mean",
-                        "inh_std",
-                        "inh_min",
-                        "inh_max",
-                        "inh_samples",
-                    ]:
-                        all_weight_tracking_sleep[key].extend(
-                            weight_tracking_epoch[key]
-                        )
-                    _wt_times = weight_tracking_epoch.get("times", [])
-                    all_weight_tracking_sleep["times"].extend(
-                        [float(t) + _tracking_time_offset for t in _wt_times]
-                    )
-                    for seg in weight_tracking_epoch.get("sleep_segments", []):
-                        try:
-                            s, te = (
-                                float(seg[0]) + _tracking_time_offset,
-                                float(seg[1]) + _tracking_time_offset,
-                            )
-                            all_weight_tracking_sleep["sleep_segments"].append((s, te))
-                        except Exception:
-                            pass
-                    if len(_wt_times) > 0:
-                        _tracking_time_offset += float(max(_wt_times)) + 1.0
+
 
                     # Suppress per-epoch plotting during training (plot only after training)
 
@@ -824,133 +855,6 @@ class snn_sleepy:
                     print(
                         f"\n--- Epoch {e+1} Training Accuracy ({accuracy_method.upper()}) ---"
                     )
-
-                    if accuracy_method == "top":
-                        # Use top-responders method for training accuracy
-                        train_acc_batch = top_responders_plotted(
-                            spikes=spikes_tr_out[:, self.st : self.ih],
-                            labels=labels_tr_out,
-                            num_classes=self.N_classes,
-                            narrow_top=narrow_top,
-                            smoothening=self.num_steps,
-                            train=True,
-                            compute_not_plot=True,
-                            n_last_points=10000,
-                        )
-                        print(f"Training Accuracy (TOP): {train_acc_batch:.4f}")
-                        self._record_accuracy("train", train_acc_batch, epoch=e + 1)
-
-                    elif accuracy_method == "pca_lr":
-                        # Use PCA+LR method for training accuracy
-                        try:
-                            # Debug: Check label distribution
-                            unique_labels, label_counts = np.unique(
-                                labels_tr_out, return_counts=True
-                            )
-                            print(
-                                f"Label distribution: {dict(zip(unique_labels, label_counts))}"
-                            )
-                            sleep_pct = (
-                                (
-                                    label_counts[unique_labels == -2].sum()
-                                    / len(labels_tr_out)
-                                    * 100
-                                )
-                                if -2 in unique_labels
-                                else 0
-                            )
-                            print(f"Sleep labels: {sleep_pct:.1f}% of total timesteps")
-
-                            # Debug: Check network activity
-                            input_spikes = spikes_tr_out[:, : self.st]
-                            exc_spikes = spikes_tr_out[:, self.st : self.ih]
-
-                            total_input_spikes = np.sum(input_spikes)
-                            total_exc_spikes = np.sum(exc_spikes)
-
-                            input_spike_rate = (
-                                total_input_spikes / input_spikes.size
-                                if input_spikes.size > 0
-                                else 0
-                            )
-                            exc_spike_rate = (
-                                total_exc_spikes / exc_spikes.size
-                                if exc_spikes.size > 0
-                                else 0
-                            )
-
-                            print(f"Network Activity Check:")
-                            print(
-                                f"  Input spikes: {total_input_spikes} ({input_spike_rate*100:.4f}% rate)"
-                            )
-                            print(
-                                f"  Excitatory spikes: {total_exc_spikes} ({exc_spike_rate*100:.4f}% rate)"
-                            )
-
-                            X_tr, y_tr = bin_spikes_by_label_no_breaks(
-                                spikes=exc_spikes,
-                                labels=labels_tr_out,
-                            )
-
-                            if X_tr.size > 0:
-                                # Check if we have enough samples for reliable PCA+LR
-                                min_samples_needed = max(
-                                    10, self.N_classes * 5
-                                )  # At least 5 samples per class
-                                recommended_samples = (
-                                    self.N_classes * 20
-                                )  # Recommended: 20 samples per class
-
-                                print(
-                                    f"Training samples: {len(X_tr)} (min needed: {min_samples_needed}, recommended: {recommended_samples})"
-                                )
-
-                                if len(X_tr) < min_samples_needed:
-                                    print(
-                                        f"⚠️  WARNING: Only {len(X_tr)} samples - PCA+LR may be unreliable (need ≥{min_samples_needed})"
-                                    )
-                                elif len(X_tr) < recommended_samples:
-                                    print(
-                                        f"ℹ️  NOTE: {len(X_tr)} samples available - consider using more for better PCA+LR estimation"
-                                    )
-
-                                # Train PCA+LR on all training data
-                                # Will test on validation data after validation loop completes
-                                accs, scaler, pca, clf = self._pca_eval(
-                                    X_train=X_tr,
-                                    y_train=y_tr,
-                                    X_val=X_tr,
-                                    y_val=y_tr,
-                                    X_test=X_tr,
-                                    y_test=y_tr,
-                                )
-                                train_acc_pca = float(accs.get("test", 0.0))
-                                print(
-                                    f"Training Accuracy (PCA+LR, on training data): {train_acc_pca:.4f}"
-                                )
-                                # Store classifier and training data for later use on validation data
-                                self._pca_lr_classifier = (scaler, pca, clf)
-                                self._record_accuracy("train", train_acc_pca, epoch=e + 1)
-
-                                # Show training data distribution
-                                train_dist = np.bincount(y_tr, minlength=self.N_classes)
-                                print(f"\nTraining Data Distribution:")
-                                for i in range(self.N_classes):
-                                    count = train_dist[i]
-                                    percentage = (
-                                        (count / len(y_tr)) * 100
-                                        if len(y_tr) > 0
-                                        else 0
-                                    )
-                                    print(
-                                        f"  Class {i}: {count:3d} samples ({percentage:5.1f}%)"
-                                    )
-                            else:
-                                print("No training features available for PCA+LR")
-                        except Exception as ex:
-                            print(f"Training PCA+LR failed: {ex}")
-
-                    print(f"{'-'*50}")
 
                 total_num_vals = (
                     self.all_test // self.batch_test
@@ -994,9 +898,8 @@ class snn_sleepy:
 
                 for val_batch_idx in range(total_num_vals):
                     # Load validation data for training monitoring
-                    val_start_idx = val_batch_idx * self.batch_test
                     data_test, labels_test = self.data_streamer.get_batch(
-                        self.batch_test,
+                        self.batch_val,
                         partition="val",
                     )
                     if data_test is None:
@@ -2379,105 +2282,105 @@ class snn_sleepy:
             "N_x": self.N_x,
         }
 
-def prepare_early_stopping(self, test_only, train_weights, early_stopping, early_stopping_patience_pct, patience):
-    # pre-define performance tracking array
-    if test_only and not train_weights:
-        # single pass; tracker will be (1,2) later
-        self.performance_tracker = np.zeros((1, 2))
-    else:
-        self.performance_tracker = np.zeros((self.epochs, 2))
+    def prepare_early_stopping(self, test_only, train_weights, early_stopping, early_stopping_patience_pct, patience):
+        # pre-define performance tracking array
+        if test_only and not train_weights:
+            # single pass; tracker will be (1,2) later
+            self.performance_tracker = np.zeros((1, 2))
+        else:
+            self.performance_tracker = np.zeros((self.epochs, 2))
 
-    # early stopping setup
-    if early_stopping:
-        self.patience_epochs = (
-            max(1, int(early_stopping_patience_pct * self.epochs))
-            if patience is None
-            else patience
-        )
-        self.best_val_metric = -np.inf
-        self.epochs_without_improvement = 0
-        self.best_weights = None
-        print(
-            f"Early stopping enabled: patience = {self.patience_epochs} epochs ({early_stopping_patience_pct*100:.0f}% of {self.epochs} total)"
-        )
-    else:
-        self.patience_epochs = None
-
-def prepare_common_args(self):
-    # Bundle common training arguments
-    self.common_args = dict(
-        tau_syn=self.tau_syn,
-        resting_potential=self.resting_potential,
-        membrane_resistance=self.membrane_resistance,
-        N_exc=self.N_exc,
-        N_inh=self.N_inh,
-        baseline_sum=self.baseline_sum,
-        baseline_sum_exc=self.baseline_sum_exc,
-        baseline_sum_inh=self.baseline_sum_inh,
-        beta=self.beta,
-        sleep_synchronized=self.sleep_synchronized,
-        weight_decay_rate_exc=self.weight_decay_rate_exc[0],
-        weight_decay_rate_inh=self.weight_decay_rate_inh[0],
-        learning_rate_exc=self.learning_rate_exc,
-        learning_rate_inh=self.learning_rate_inh,
-        w_target_exc=self.w_target_exc,
-        w_target_inh=self.w_target_inh,
-        tau_LTP=self.tau_LTP,
-        tau_LTD=self.tau_LTD,
-        tau_m=self.tau_m,
-        max_mp=self.max_mp,
-        min_mp=self.min_mp,
-        dt=self.dt,
-        N=self.N,
-        A_plus=self.A_plus,
-        A_minus=self.A_minus,
-        spike_adaption=self.spike_adaption,
-        delta_adaption=self.delta_adaption,
-        tau_adaption=self.tau_adaption,
-        spike_threshold_default=self.spike_threshold_default,
-        spike_intercept=self.spike_intercept,
-        spike_slope=self.spike_slope,
-        noisy_threshold=self.noisy_threshold,
-        reset_potential=self.reset_potential,
-        noisy_potential=self.noisy_potential,
-        noisy_weights=self.noisy_weights,
-        weight_mean_noise=self.weight_mean_noise,
-        weight_var_noise=self.weight_var_noise,
-        N_x=self.N_x,
-        normalize_weights=self.normalize_weights,
-        sleep_max_iters=self.sleep_max_iters,
-        on_timeout=self.on_timeout,
-        sleep_tol_frac=self.sleep_tol_frac,
-        sleep_mode=self.sleep_mode,
-        weight_track_samples_exc=self.weight_track_samples,
-        weight_track_samples_inh=self.weight_track_samples,
-        train_snapshot_interval=self.weight_track_interval,
-        sleep_snapshot_interval=self.weight_track_sleep_interval,
-    )
-
-def _pca_eval(self, X_train, y_train, X_val, y_val, X_test, y_test, reg_param):
-    """Run PCA-based classifier with configured options, return (accs, scaler, pca, clf)."""
-    try:
-        if getattr(self, "use_QDA", False):
-            return pca_quadratic_discriminant(
-                X_train=X_train,
-                y_train=y_train,
-                X_val=X_val,
-                y_val=y_val,
-                X_test=X_test,
-                y_test=y_test,
-                variance_ratio=self.pca_variance,
-                reg_param=reg_param, 
+        # early stopping setup
+        if early_stopping:
+            self.patience_epochs = (
+                max(1, int(early_stopping_patience_pct * self.epochs))
+                if patience is None
+                else patience
+            )
+            self.best_val_metric = -np.inf
+            self.epochs_without_improvement = 0
+            self.best_weights = None
+            print(
+                f"Early stopping enabled: patience = {self.patience_epochs} epochs ({early_stopping_patience_pct*100:.0f}% of {self.epochs} total)"
             )
         else:
-            return pca_logistic_regression(
-                X_train=X_train,
-                y_train=y_train,
-                X_val=X_val,
-                y_val=y_val,
-                X_test=X_test,
-                y_test=y_test,
-                variance_ratio=self.pca_variance,
-            )
-    except Exception as ex:
-        raise ValueError(f"PCA classification failed ({ex})")
+            self.patience_epochs = None
+
+    def prepare_common_args(self):
+        # Bundle common training arguments
+        self.common_args = dict(
+            tau_syn=self.tau_syn,
+            resting_potential=self.resting_potential,
+            membrane_resistance=self.membrane_resistance,
+            N_exc=self.N_exc,
+            N_inh=self.N_inh,
+            baseline_sum=self.baseline_sum,
+            baseline_sum_exc=self.baseline_sum_exc,
+            baseline_sum_inh=self.baseline_sum_inh,
+            beta=self.beta,
+            sleep_synchronized=self.sleep_synchronized,
+            weight_decay_rate_exc=self.weight_decay_rate_exc,
+            weight_decay_rate_inh=self.weight_decay_rate_inh,
+            learning_rate_exc=self.learning_rate_exc,
+            learning_rate_inh=self.learning_rate_inh,
+            w_target_exc=self.w_target_exc,
+            w_target_inh=self.w_target_inh,
+            tau_LTP=self.tau_LTP,
+            tau_LTD=self.tau_LTD,
+            tau_m=self.tau_m,
+            max_mp=self.max_mp,
+            min_mp=self.min_mp,
+            dt=self.dt,
+            N=self.N,
+            A_plus=self.A_plus,
+            A_minus=self.A_minus,
+            spike_adaption=self.spike_adaption,
+            delta_adaption=self.delta_adaption,
+            tau_adaption=self.tau_adaption,
+            spike_threshold_default=self.spike_threshold_default,
+            spike_intercept=self.spike_intercept,
+            spike_slope=self.spike_slope,
+            noisy_threshold=self.noisy_threshold,
+            reset_potential=self.reset_potential,
+            noisy_potential=self.noisy_potential,
+            noisy_weights=self.noisy_weights,
+            weight_mean_noise=self.weight_mean_noise,
+            weight_var_noise=self.weight_var_noise,
+            N_x=self.N_x,
+            normalize_weights=self.normalize_weights,
+            sleep_max_iters=self.sleep_max_iters,
+            on_timeout=self.on_timeout,
+            sleep_tol_frac=self.sleep_tol_frac,
+            sleep_mode=self.sleep_mode,
+            weight_track_samples_exc=self.weight_track_samples,
+            weight_track_samples_inh=self.weight_track_samples,
+            train_snapshot_interval=self.weight_track_interval,
+            sleep_snapshot_interval=self.weight_track_sleep_interval,
+        )
+
+    def _pca_eval(self, X_train, y_train, X_val, y_val, X_test, y_test, reg_param):
+        """Run PCA-based classifier with configured options, return (accs, scaler, pca, clf)."""
+        try:
+            if getattr(self, "use_QDA", False):
+                return pca_quadratic_discriminant(
+                    X_train=X_train,
+                    y_train=y_train,
+                    X_val=X_val,
+                    y_val=y_val,
+                    X_test=X_test,
+                    y_test=y_test,
+                    variance_ratio=self.pca_variance,
+                    reg_param=reg_param, 
+                )
+            else:
+                return pca_logistic_regression(
+                    X_train=X_train,
+                    y_train=y_train,
+                    X_val=X_val,
+                    y_val=y_val,
+                    X_test=X_test,
+                    y_test=y_test,
+                    variance_ratio=self.pca_variance,
+                )
+        except Exception as ex:
+            raise ValueError(f"PCA classification failed ({ex})")

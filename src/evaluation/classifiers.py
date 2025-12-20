@@ -3,6 +3,9 @@ Classification algorithms for SNN output evaluation.
 """
 
 import numpy as np
+from sklearn.pipeline import Pipeline
+import os
+from datetime import datetime
 from typing import Dict, Tuple, Optional
 import warnings
 from sklearn.preprocessing import StandardScaler
@@ -10,58 +13,35 @@ from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+from src.init import _TSNE_CACHE_DIR 
 
 
 def pca_logistic_regression(
-    X_train: np.ndarray,
-    y_train: np.ndarray,
-    X_val: np.ndarray,
-    y_val: np.ndarray,
-    X_test: np.ndarray,
-    y_test: np.ndarray,
-    n_components: Optional[int] = None,
-    variance_ratio: Optional[float] = 0.95,
-    whiten: bool = True,
-    standardize: bool = True,
-    max_iter: int = 1000,
-) -> Tuple[Dict[str, float], StandardScaler, PCA, LogisticRegression]:
-    """
-    Reduce high-dimensional features with PCA, then classify with multinomial Logistic Regression.
-
-    Notes:
-    - PCA is fit on train only, then applied to val/test.
-    - Use either n_components (int) or variance_ratio (0-1) to set dimensionality.
-    """
+    n_components=None,
+    variance_ratio=0.95,
+    whiten=True,
+    standardize=True,
+    max_iter=1000,
+):
+    steps = []
     if standardize:
-        scaler = StandardScaler(with_mean=True, with_std=True)
-        X_train_s = scaler.fit_transform(X_train)
-        X_val_s = scaler.transform(X_val)
-        X_test_s = scaler.transform(X_test)
-    else:
-        scaler = StandardScaler(with_mean=False, with_std=False)
-        X_train_s, X_val_s, X_test_s = X_train, X_val, X_test
-
+        steps.append(("scaler", StandardScaler()))
+    # PCA: choose either fixed components or variance ratio
     if n_components is None and variance_ratio is not None:
         pca = PCA(n_components=variance_ratio, svd_solver="full", whiten=whiten)
-    elif n_components is not None:
-        pca = PCA(n_components=n_components, svd_solver="full", whiten=whiten)
     else:
-        pca = PCA(svd_solver="full", whiten=whiten)
+        pca = PCA(n_components=n_components, svd_solver="full", whiten=whiten)
+    steps.append(("pca", pca))
+    steps.append(("clf", LogisticRegression(
+        multi_class="multinomial", solver="lbfgs", max_iter=max_iter
+    )))
+    return Pipeline(steps)
 
-    X_train_p = pca.fit_transform(X_train_s)
-    X_val_p = pca.transform(X_val_s)
-    X_test_p = pca.transform(X_test_s)
+def fit_model(model, X_fit, y_fit):
+    return model.fit(X_fit, y_fit)
 
-    clf = LogisticRegression(multi_class="multinomial", solver="lbfgs", max_iter=max_iter)
-    clf.fit(X_train_p, y_train)
-
-    accs = {
-        "train": float(accuracy_score(y_train, clf.predict(X_train_p))),
-        "val": float(accuracy_score(y_val, clf.predict(X_val_p))),
-        "test": float(accuracy_score(y_test, clf.predict(X_test_p))),
-    }
-
-    return accs, scaler, pca, clf
+def accuracy(model, X, y):
+    return float(accuracy_score(y, model.predict(X)))
 
 
 def pca_quadratic_discriminant(
@@ -308,15 +288,16 @@ def _compute_wcss(scores, labels, centroids, num_classes):
     return float(np.sum(wcss_arr))
 
 
-def PHI(
-    spikes_train,
-    spikes_test,
-    labels_test,
-    labels_train,
-    num_steps,
+def phi(
+    num_steps_train,
+    num_steps_test,
     pca_variance,
     random_state,
     num_classes,
+    spikes_train=None,
+    spikes_test=None,
+    labels_test=None,
+    labels_train=None,
 ):
     """
     Calculate the clustering coefficient (phi) for train and test data.
@@ -329,15 +310,11 @@ def PHI(
     small_num = 1e-5
 
     # Align and process training arrays
-    try:
-        T_tr = min(spikes_train.shape[0], labels_train.shape[0])
-        spikes_train = spikes_train[:T_tr]
-        labels_train = labels_train[:T_tr]
-    except Exception:
-        raise ValueError("Spikes and labels must have at least one sample")
+    if spikes_train.shape[0] != labels_train.shape[0]:
+        raise ValueError("Spikes and labels must have the same length")
 
     spike_train_rates, labels_train_unique = _compute_spike_rates(
-        spikes_train, labels_train, num_steps, require_all=True
+        spikes_train, labels_train, num_steps_train, require_all=True
     )
 
     if spike_train_rates.shape[0] < 3:
@@ -353,15 +330,13 @@ def PHI(
 
     spike_train_rates_clean = spike_train_rates[:, valid_features]
 
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=RuntimeWarning)
-        scaler = StandardScaler(with_mean=True, with_std=True)
-        spike_train_rates_std = scaler.fit_transform(spike_train_rates_clean)
+    scaler = StandardScaler(with_mean=True, with_std=True)
+    spike_train_rates_std = scaler.fit_transform(spike_train_rates_clean)
 
-        pca = PCA(n_components=pca_variance, random_state=random_state)
-        pca.fit(spike_train_rates_std)
-        n_components = pca.n_components_
-        scores_train_pca = pca.transform(spike_train_rates_std)
+    pca = PCA(n_components=pca_variance, random_state=random_state)
+    pca.fit(spike_train_rates_std)
+    n_components = pca.n_components_
+    scores_train_pca = pca.transform(spike_train_rates_std)
 
     # Calculate centroids and WCSS (train)
     centroids = np.zeros((n_components, num_classes))
@@ -389,50 +364,49 @@ def PHI(
     BCSS_train_scaled = BCSS_train / max(small_num, k_eff_train - 1)
     phi_train = BCSS_train_scaled / WCSS_train_scaled if WCSS_train > small_num else 0.0
 
+
     # Process test data
-    try:
-        T_te = min(spikes_test.shape[0], labels_test.shape[0])
-        spikes_test = spikes_test[:T_te]
-        labels_test = labels_test[:T_te]
-    except Exception:
-        pass
+    if spikes_test is not None and labels_test is not None:
+        if spikes_test.shape[0] != labels_test.shape[0]:
+            raise ValueError("Spikes and labels must have the same length")
 
-    spike_test_rates, labels_test_unique = _compute_spike_rates(
-        spikes_test, labels_test, num_steps, require_all=False
-    )
+        spike_test_rates, labels_test_unique = _compute_spike_rates(
+            spikes_test, labels_test, num_steps_test, require_all=False
+        )
 
-    if spike_test_rates.shape[0] < 5:
-        print(f"Warning: Insufficient test data for phi calculation ({spike_test_rates.shape[0]} samples)")
-        return phi_train, 0.0, WCSS_train_scaled, 0.0, BCSS_train_scaled, 0.0
+        if spike_test_rates.shape[0] < 5:
+            raise ValueError(f"Insufficient test data for phi calculation ({spike_test_rates.shape[0]} < 5)")
 
-    spike_test_rates_clean = spike_test_rates[:, valid_features]
+        feature_var = np.var(spike_test_rates, axis=0)
+        if np.all(feature_var < 1e-10):
+            raise ValueError("All features have zero variance (no network activity)")
 
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=RuntimeWarning)
-        spike_test_rates_std = scaler.transform(spike_test_rates_clean)
-        scores_test_pca = pca.transform(spike_test_rates_std)
+        valid_features = feature_var >= 1e-10
+        if np.sum(valid_features) < 2:
+            raise ValueError(f"Insufficient non-zero variance features ({np.sum(valid_features)} < 2)")
 
-    # Calculate WCSS (test)
-    WCSS_test = _compute_wcss(scores_test_pca, labels_test_unique, centroids, num_classes)
+        spike_test_rates_clean = spike_test_rates[:, valid_features]
+        pca_test_rates = pca.transform(spike_test_rates_clean)
 
-    # Calculate BCSS (test)
-    n_test = scores_test_pca.shape[0]
-    k_eff_test = max(1, np.unique(labels_test_unique).size)
-    BCSS_test = 0.0
-    overall_mean_test = np.mean(scores_test_pca, axis=0)
-    for c in np.unique(labels_test_unique).astype(int):
-        idx = np.where(labels_test_unique == c)[0]
-        n_c = idx.size
-        if n_c > 0:
-            mu_c_test = np.mean(scores_test_pca[idx], axis=0)
-            BCSS_test += n_c * float(np.sum((mu_c_test - overall_mean_test) ** 2))
+        # Calculate WCSS (test)
+        WCSS_test = _compute_wcss(pca_test_rates, labels_test_unique, centroids, num_classes)
 
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        # Calculate BCSS (test)
+        n_test = pca_test_rates.shape[0]
+        k_eff_test = max(1, np.unique(labels_test_unique).size)
+        BCSS_test = 0.0
+        overall_mean_test = np.mean(pca_test_rates, axis=0)
+        for c in np.unique(labels_test_unique).astype(int):
+            idx = np.where(labels_test_unique == c)[0]
+            n_c = idx.size
+            if n_c > 0:
+                mu_c_test = np.mean(pca_test_rates[idx], axis=0)
+                BCSS_test += n_c * float(np.sum((mu_c_test - overall_mean_test) ** 2))
+
         WCSS_test_scaled = WCSS_test / max(small_num, n_test - k_eff_test)
         BCSS_test_scaled = BCSS_test / max(small_num, k_eff_test - 1)
         phi_test = BCSS_test_scaled / WCSS_test_scaled if WCSS_test > small_num else 0.0
-        if not np.isfinite(phi_test):
-            phi_test = 0.0
 
-    return (phi_train, phi_test, WCSS_train_scaled, WCSS_test_scaled, BCSS_train_scaled, BCSS_test_scaled)
+        return phi_train, phi_test
+    else:
+        return phi_train
