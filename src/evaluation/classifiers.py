@@ -45,31 +45,25 @@ def accuracy(model, X, y):
 
 
 def pca_quadratic_discriminant(
-    X_train: np.ndarray,
-    y_train: np.ndarray,
-    X_val: np.ndarray,
-    y_val: np.ndarray,
-    X_test: np.ndarray,
-    y_test: np.ndarray,
     n_components: Optional[int] = None,
     variance_ratio: Optional[float] = 0.95,
     whiten: bool = True,
     standardize: bool = True,
     reg_param: float = 0.1,
-) -> Tuple[Dict[str, float], StandardScaler, PCA, QuadraticDiscriminantAnalysis]:
+):
     """
-    Reduce high-dimensional features with PCA, then classify with QDA (Quadratic Discriminant Analysis).
-    - Regularization via reg_param helps when classes are few or covariance is near-singular.
+    Build a pipeline: (optional standardization) -> PCA -> QDA.
+    You can then fit and score it like a normal sklearn model:
+        model = pca_quadratic_discriminant(...)
+        model.fit(X_train, y_train)
+        acc = model.score(X_test, y_test)
     """
-    if standardize:
-        scaler = StandardScaler(with_mean=True, with_std=True)
-        X_train_s = scaler.fit_transform(X_train)
-        X_val_s = scaler.transform(X_val)
-        X_test_s = scaler.transform(X_test)
-    else:
-        scaler = StandardScaler(with_mean=False, with_std=False)
-        X_train_s, X_val_s, X_test_s = X_train, X_val, X_test
+    steps = []
 
+    if standardize:
+        steps.append(("scaler", StandardScaler()))
+
+    # PCA configuration
     if n_components is None and variance_ratio is not None:
         pca = PCA(n_components=variance_ratio, svd_solver="full", whiten=whiten)
     elif n_components is not None:
@@ -77,20 +71,10 @@ def pca_quadratic_discriminant(
     else:
         pca = PCA(svd_solver="full", whiten=whiten)
 
-    X_train_p = pca.fit_transform(X_train_s)
-    X_val_p = pca.transform(X_val_s)
-    X_test_p = pca.transform(X_test_s)
+    steps.append(("pca", pca))
+    steps.append(("qda", QuadraticDiscriminantAnalysis(reg_param=reg_param)))
 
-    clf = QuadraticDiscriminantAnalysis(reg_param=reg_param)
-    clf.fit(X_train_p, y_train)
-
-    accs = {
-        "train": float(accuracy_score(y_train, clf.predict(X_train_p))),
-        "val": float(accuracy_score(y_val, clf.predict(X_val_p))),
-        "test": float(accuracy_score(y_test, clf.predict(X_test_p))),
-    }
-
-    return accs, scaler, pca, clf
+    return Pipeline(steps)
 
 def _save_tsne_inputs(
     spikes: np.ndarray, labels: np.ndarray, split: str
@@ -245,13 +229,11 @@ def t_SNE(
         plt.show()
     plt.close(fig)
 
-
 def _compute_spike_rates(spikes, labels, num_steps, require_all=False):
     """Helper to compute mean spike rates per stimulus presentation."""
     spike_rates = []
     unique_labels = []
     sleep_mask = labels != -2
-
     for i in range(0, labels.shape[0], num_steps):
         current_mask = sleep_mask[i : i + num_steps]
         chunk_spikes = spikes[i : i + num_steps]
@@ -273,140 +255,122 @@ def _compute_spike_rates(spikes, labels, num_steps, require_all=False):
 
     return np.array(spike_rates), np.array(unique_labels)
 
+class Phi:
+    def __init__(self):
+        pass
+    @staticmethod
+    def compute_centroids(scores: np.ndarray, labels: np.ndarray, num_classes: int):
+        n_components = scores.shape[1]
+        centroids = np.zeros((n_components, num_classes), dtype=float)
+        present = np.unique(labels).astype(int)
+        for c in present:
+            idx = np.where(labels == c)[0]
+            centroids[:, c] = np.mean(scores[idx], axis=0)
+        return centroids, present
 
-def _compute_wcss(scores, labels, centroids, num_classes):
-    """Helper to compute Within-Cluster Sum of Squares."""
-    n_components = centroids.shape[0]
-    wcss_arr = np.zeros(num_classes)
-    present_classes = np.unique(labels).astype(int)
-    for c in present_classes:
-        indices = np.where(labels == c)[0]
-        values = scores[indices]
-        for dim in range(n_components):
-            delta_wcss = np.sum((values[:, dim] - centroids[dim, c]) ** 2)
-            wcss_arr[c] += delta_wcss
-    return float(np.sum(wcss_arr))
+    @staticmethod
+    def compute_wcss(scores: np.ndarray, labels: np.ndarray, centroids: np.ndarray):
+        # scores: (n_samples, n_components)
+        # centroids: (n_components, num_classes)
+        wcss = 0.0
+        for c in np.unique(labels).astype(int):
+            idx = np.where(labels == c)[0]
+            diffs = scores[idx] - centroids[:, c].T
+            wcss += float(np.sum(diffs * diffs))
+        return wcss
 
-
-def phi(
-    num_steps_train,
-    num_steps_test,
-    pca_variance,
-    random_state,
-    num_classes,
-    spikes_train=None,
-    spikes_test=None,
-    labels_test=None,
-    labels_train=None,
-):
-    """
-    Calculate the clustering coefficient (phi) for train and test data.
-    
-    Phi = (BCSS / (k-1)) / (WCSS / (n-k))
-    
-    Where BCSS = Between-Cluster Sum of Squares, WCSS = Within-Cluster Sum of Squares,
-    k = number of classes, n = number of samples.
-    """
-    small_num = 1e-5
-
-    # Align and process training arrays
-    if spikes_train.shape[0] != labels_train.shape[0]:
-        raise ValueError("Spikes and labels must have the same length")
-
-    spike_train_rates, labels_train_unique = _compute_spike_rates(
-        spikes_train, labels_train, num_steps_train, require_all=True
-    )
-
-    if spike_train_rates.shape[0] < 3:
-        raise ValueError(f"Insufficient samples for phi calculation ({spike_train_rates.shape[0]} < 3)")
-
-    feature_var = np.var(spike_train_rates, axis=0)
-    if np.all(feature_var < 1e-10):
-        raise ValueError("All features have zero variance (no network activity)")
-
-    valid_features = feature_var >= 1e-10
-    if np.sum(valid_features) < 2:
-        raise ValueError(f"Insufficient non-zero variance features ({np.sum(valid_features)} < 2)")
-
-    spike_train_rates_clean = spike_train_rates[:, valid_features]
-
-    scaler = StandardScaler(with_mean=True, with_std=True)
-    spike_train_rates_std = scaler.fit_transform(spike_train_rates_clean)
-
-    pca = PCA(n_components=pca_variance, random_state=random_state)
-    pca.fit(spike_train_rates_std)
-    n_components = pca.n_components_
-    scores_train_pca = pca.transform(spike_train_rates_std)
-
-    # Calculate centroids and WCSS (train)
-    centroids = np.zeros((n_components, num_classes))
-    present_train_classes = np.unique(labels_train_unique).astype(int)
-    
-    for c in present_train_classes:
-        indices = np.where(labels_train_unique == c)[0]
-        centroids[:, c] = np.mean(scores_train_pca[indices], axis=0)
-    
-    WCSS_train = _compute_wcss(scores_train_pca, labels_train_unique, centroids, num_classes)
-
-    # Calculate BCSS (train)
-    overall_mean = np.mean(scores_train_pca, axis=0)
-    n_train = scores_train_pca.shape[0]
-    k_eff_train = max(1, present_train_classes.size)
-    BCSS_train = 0.0
-    for c in present_train_classes:
-        idx = np.where(labels_train_unique == c)[0]
-        n_c = idx.size
-        if n_c > 0:
+    @staticmethod
+    def compute_bcss(scores: np.ndarray, labels: np.ndarray, centroids: np.ndarray):
+        overall = np.mean(scores, axis=0)
+        bcss = 0.0
+        for c in np.unique(labels).astype(int):
+            idx = np.where(labels == c)[0]
+            n_c = idx.size
             mu_c = centroids[:, c]
-            BCSS_train += n_c * float(np.sum((mu_c - overall_mean) ** 2))
+            bcss += n_c * float(np.sum((mu_c - overall) ** 2))
+        return bcss
 
-    WCSS_train_scaled = WCSS_train / max(small_num, n_train - k_eff_train)
-    BCSS_train_scaled = BCSS_train / max(small_num, k_eff_train - 1)
-    phi_train = BCSS_train_scaled / WCSS_train_scaled if WCSS_train > small_num else 0.0
-
-
-    # Process test data
-    if spikes_test is not None and labels_test is not None:
-        if spikes_test.shape[0] != labels_test.shape[0]:
-            raise ValueError("Spikes and labels must have the same length")
-
-        spike_test_rates, labels_test_unique = _compute_spike_rates(
-            spikes_test, labels_test, num_steps_test, require_all=False
+    def fit(
+        self,
+        spikes: np.ndarray,
+        labels: np.ndarray,
+        num_steps: int,
+        num_classes: int,
+        pca_variance: float = 0.95,
+        random_state: int = 0,
+        var_eps: float = 1e-10,
+    ) -> 'Phi':
+        rates, item_labels = _compute_spike_rates(
+            spikes, labels, num_steps,
+            require_any=True
         )
 
-        if spike_test_rates.shape[0] < 5:
-            raise ValueError(f"Insufficient test data for phi calculation ({spike_test_rates.shape[0]} < 5)")
+        if rates.shape[0] < 3:
+            raise ValueError(f"Insufficient samples for phi fit ({rates.shape[0]} < 3)")
 
-        feature_var = np.var(spike_test_rates, axis=0)
-        if np.all(feature_var < 1e-10):
-            raise ValueError("All features have zero variance (no network activity)")
+        feature_var = np.var(rates, axis=0)
+        valid = feature_var >= var_eps
+        if np.sum(valid) < 2:
+            raise ValueError(f"Insufficient non-zero variance features ({np.sum(valid)} < 2)")
 
-        valid_features = feature_var >= 1e-10
-        if np.sum(valid_features) < 2:
-            raise ValueError(f"Insufficient non-zero variance features ({np.sum(valid_features)} < 2)")
+        rates_clean = rates[:, valid]
 
-        spike_test_rates_clean = spike_test_rates[:, valid_features]
-        pca_test_rates = pca.transform(spike_test_rates_clean)
+        scaler = StandardScaler(with_mean=True, with_std=True)
+        rates_std = scaler.fit_transform(rates_clean)
 
-        # Calculate WCSS (test)
-        WCSS_test = _compute_wcss(pca_test_rates, labels_test_unique, centroids, num_classes)
+        pca = PCA(n_components=pca_variance, random_state=random_state)
+        scores = pca.fit_transform(rates_std)   # (n_samples, n_components)
 
-        # Calculate BCSS (test)
-        n_test = pca_test_rates.shape[0]
-        k_eff_test = max(1, np.unique(labels_test_unique).size)
-        BCSS_test = 0.0
-        overall_mean_test = np.mean(pca_test_rates, axis=0)
-        for c in np.unique(labels_test_unique).astype(int):
-            idx = np.where(labels_test_unique == c)[0]
-            n_c = idx.size
-            if n_c > 0:
-                mu_c_test = np.mean(pca_test_rates[idx], axis=0)
-                BCSS_test += n_c * float(np.sum((mu_c_test - overall_mean_test) ** 2))
+        centroids, _present = self.compute_centroids(scores, item_labels, num_classes)
 
-        WCSS_test_scaled = WCSS_test / max(small_num, n_test - k_eff_test)
-        BCSS_test_scaled = BCSS_test / max(small_num, k_eff_test - 1)
-        phi_test = BCSS_test_scaled / WCSS_test_scaled if WCSS_test > small_num else 0.0
+        # store fitted state
+        self.valid_features = valid
+        self.scaler = scaler
+        self.pca = pca
+        self.centroids = centroids
+        self.num_classes = int(num_classes)
 
-        return phi_train, phi_test
-    else:
-        return phi_train
+        return self
+
+    def score(
+        self,
+        spikes: np.ndarray,
+        labels: np.ndarray,
+        *,
+        num_steps: int,
+        small_num: float = 1e-5,
+        require_any: bool = False,
+    ):
+        # crumb: guard against calling score() before fit()
+        if self.valid_features is None or self.scaler is None or self.pca is None or self.centroids is None:
+            raise RuntimeError("Phi.score() called before fit(). Call fit() first.")
+
+        rates, item_labels = _compute_spike_rates(
+            spikes, labels, num_steps,
+            require_any=require_any
+        )
+
+        n = rates.shape[0]
+        if n < 2:
+            return 0.0
+
+        rates_clean = rates[:, self.valid_features]
+        rates_std = self.scaler.transform(rates_clean)
+        scores = self.pca.transform(rates_std)
+
+        # effective k = number of classes actually present in THIS split
+        present = np.unique(item_labels).astype(int)
+        k_eff = int(present.size)
+
+        if k_eff < 2:
+            return 0.0
+
+        wcss = self.compute_wcss(scores, item_labels, self.centroids)
+        bcss = self.compute_bcss(scores, item_labels, self.centroids)
+
+        wcss_scaled = wcss / max(small_num, n - k_eff)
+        bcss_scaled = bcss / max(small_num, k_eff - 1)
+
+        return float(bcss_scaled / wcss_scaled) if wcss > small_num else 0.0
+
+
