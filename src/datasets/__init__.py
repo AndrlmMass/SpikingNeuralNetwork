@@ -8,7 +8,7 @@ Contains:
 - loaders: ImageDataStreamer and GeomfigDataStreamer classes
 """
 
-from .loaders import GeomfigDataStreamer, ImageDataStreamer
+# from .loaders import GeomfigDataStreamer, ImageDataStreamer  # Commented out - module doesn't exist
 
 __all__ = ['GeomfigDataStreamer', 'ImageDataStreamer']
 

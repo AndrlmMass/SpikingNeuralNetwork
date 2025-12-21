@@ -11,16 +11,21 @@ from .classifiers import (
     pca_logistic_regression,
     pca_quadratic_discriminant,
     t_SNE,
-    PHI,
+    Phi,
     bin_spikes_by_label_no_breaks,
+    fit_model,
+    accuracy,
 )
 
 from .paper_figures import (
+    generate_all_paper_figures,
+)
+
+from plot.plot import (
     plot_model_accuracy_sleep,
     plot_glmm_predictions,
     plot_glmm_with_raw_accuracy,
     plot_geomfig_comparison,
-    generate_all_paper_figures,
 )
 
 from pathlib import Path
@@ -51,11 +56,13 @@ def get_r_script_path() -> Path:
 __all__ = [
     # Metrics
     "t_SNE",
-    "PHI",
+    "Phi",
     "bin_spikes_by_label_no_breaks",
     # Classifiers
     "pca_logistic_regression",
     "pca_quadratic_discriminant",
+    "fit_model",
+    "accuracy",
     # Paper figures
     "plot_model_accuracy_sleep",
     "plot_glmm_predictions",

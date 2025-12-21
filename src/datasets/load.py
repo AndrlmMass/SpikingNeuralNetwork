@@ -25,6 +25,7 @@ class DataStreamer:
         num_steps: int,
         num_classes: int,
         which_classes: list,
+        num_samples: int,
         gain: float,
         offset: int,
         first_spike_time: int,
@@ -55,6 +56,7 @@ class DataStreamer:
         self.data_dir = data_dir
         self.pixel_size = pixel_size
         self.num_steps = num_steps
+        self.num_samples = num_samples
         self.num_classes = num_classes
         self.which_classes = which_classes
         self.rng = rng
@@ -62,6 +64,28 @@ class DataStreamer:
         self.first_spike_time = first_spike_time
         self.time_var_input = time_var_input
         self.dataset = (dataset or "mnist").lower()
+        
+        # Store geometric shape parameters (for geomfig)
+        self.tri_size = tri_size
+        self.tri_thick = tri_thick
+        self.cir_size = cir_size
+        self.cir_thick = cir_thick
+        self.sqr_size = sqr_size
+        self.sqr_thick = sqr_thick
+        self.x_size = x_size
+        self.x_thick = x_thick
+        self.clamp_min = clamp_min
+        self.clamp_max = clamp_max
+
+        # initalize spike parameters
+        self.gain = gain
+        self.offset = offset
+        self.first_spike_time = first_spike_time
+        self.time_var_input = time_var_input
+
+        self.train_ratio = train_ratio
+        self.val_ratio = val_ratio
+        self.test_ratio = test_ratio
 
         # Load image dataset
         transform = transforms.Compose(
@@ -73,6 +97,7 @@ class DataStreamer:
         )
 
         if self.dataset == "notmnist":
+            
             (
                 self.train_images,
                 self.train_labels,
@@ -80,47 +105,60 @@ class DataStreamer:
                 self.val_labels,
                 self.test_images,
                 self.test_labels,
-            ) = MNIST_DATASET.load_notmnist_deeplake(transform, train_ratio, val_ratio, test_ratio, self.rng, self.which_classes)
+            ) = MNIST_DATASET.load_notmnist_deeplake(
+                transform, 
+                train_ratio, 
+                val_ratio, 
+                test_ratio, 
+                self.rng, 
+                self.which_classes,
+                num_samples=num_samples,
+                load_cache_fn=self._load_images_cache,
+                save_cache_fn=self._save_images_cache,
+            )
             self.len_train = len(self.train_images)
             self.len_val = len(self.val_images)
             self.len_test = len(self.test_images)
 
         elif self.dataset == "geomfig":
-            (
-                self.train_images,
-                self.train_labels,
-                self.val_images,
-                self.val_labels,
-                self.test_images,
-                self.test_labels,
-            ) = GEOMFIG_DATASET.create_geomfig_data(
-                pixel_size=self.pixel_size,
-                train_ratio=train_ratio,
-                val_ratio=val_ratio,
-                test_ratio=test_ratio,
-                noise_var=geom_noise_var,
-                jitter=jitter,
-                jitter_amount=jitter_amount,
-                n_classes=self.num_classes,
-                num_samples=10000,  # Default total samples (will be split by ratios)
-                rng=self.rng,
-                which_classes=self.which_classes,
-                num_workers=num_workers,
-                tri_size=self.tri_size,
-                tri_thick=self.tri_thick,
-                cir_size=self.cir_size,
-                cir_thick=self.cir_thick,
-                sqr_size=self.sqr_size,
-                sqr_thick=self.sqr_thick,
-                x_size=self.x_size,
-                x_thick=self.x_thick,
-                clamp_min=self.clamp_min,
-                clamp_max=self.clamp_max,
-            )
-            # Get lengths of each partition (will be combined in unified partitioning)
-            self.len_train = len(self.train_images)
-            self.len_val = len(self.val_images)
-            self.len_test = len(self.test_images)
+            # Store geomfig-specific attributes for cache hash
+            self.geom_jitter = jitter
+            self.geom_jitter_amount = jitter_amount
+            self.geom_noise_var = geom_noise_var
+            
+            # Try to load from cache first (unless force_recreate is True)
+            if not force_recreate:
+                train_images, train_labels = self._load_images_cache("train")
+                val_images, val_labels = self._load_images_cache("val")
+                test_images, test_labels = self._load_images_cache("test")
+                
+                if (train_images is not None and val_images is not None and test_images is not None):
+                    print(f"Using cached geomfig images")
+                    self.train_images = train_images
+                    self.train_labels = train_labels
+                    self.val_images = val_images
+                    self.val_labels = val_labels
+                    self.test_images = test_images
+                    self.test_labels = test_labels
+                    self.len_train = len(self.train_images)
+                    self.len_val = len(self.val_images)
+                    self.len_test = len(self.test_images)
+                else:
+                    # Cache miss or incomplete - generate new data
+                    print(f"Generating new geomfig data (cache miss or incomplete)")
+                    self._generate_geomfig_data(
+                        train_ratio, val_ratio, test_ratio,
+                        geom_noise_var, jitter, jitter_amount,
+                        num_samples, num_workers
+                    )
+            else:
+                # Force recreate - generate new data
+                print(f"Force recreating geomfig data")
+                self._generate_geomfig_data(
+                    train_ratio, val_ratio, test_ratio,
+                    geom_noise_var, jitter, jitter_amount,
+                    num_samples, num_workers
+                )
 
         else:
             (
@@ -135,8 +173,10 @@ class DataStreamer:
                 transform=transform,
                 train_ratio=self.train_ratio,
                 val_ratio=self.val_ratio,
+                test_ratio=self.test_ratio,
                 rng=self.rng,
                 which_classes=self.which_classes,
+                num_samples=self.num_samples,
                 load_cache_fn=self._load_images_cache,
                 save_cache_fn=self._save_images_cache,
             )
@@ -262,6 +302,77 @@ class DataStreamer:
 
         return S_data_reshaped.numpy()
 
+    def _generate_geomfig_data(self, train_ratio, val_ratio, test_ratio,
+                                geom_noise_var, jitter, jitter_amount,
+                                num_samples, num_workers):
+        """Helper method to generate geomfig data and save to cache."""
+        # Create GEOMFIG_DATASET instance
+        geomfig_dataset = GEOMFIG_DATASET(
+            pixel_size=self.pixel_size,
+            train_ratio=train_ratio,
+            val_ratio=val_ratio,
+            test_ratio=test_ratio,
+            noise_var=geom_noise_var,
+            jitter=jitter,
+            jitter_amount=jitter_amount,
+            n_classes=self.num_classes,
+            num_samples=num_samples,
+            rng=self.rng,
+            which_classes=self.which_classes,
+            num_workers=num_workers,
+            tri_size=self.tri_size,
+            tri_thick=self.tri_thick,
+            cir_size=self.cir_size,
+            cir_thick=self.cir_thick,
+            sqr_size=self.sqr_size,
+            sqr_thick=self.sqr_thick,
+            x_size=self.x_size,
+            x_thick=self.x_thick,
+            clamp_min=self.clamp_min,
+            clamp_max=self.clamp_max,
+        )
+        # Call create_geomfig_data on the instance
+        (
+            self.train_images,
+            self.train_labels,
+            self.val_images,
+            self.val_labels,
+            self.test_images,
+            self.test_labels,
+        ) = geomfig_dataset.create_geomfig_data(
+            pixel_size=self.pixel_size,
+            train_ratio=train_ratio,
+            val_ratio=val_ratio,
+            test_ratio=test_ratio,
+            noise_var=geom_noise_var,
+            jitter=jitter,
+            jitter_amount=jitter_amount,
+            n_classes=self.num_classes,
+            num_samples=num_samples,
+            rng=self.rng,
+            which_classes=self.which_classes,
+            num_workers=num_workers,
+            tri_size=self.tri_size,
+            tri_thick=self.tri_thick,
+            cir_size=self.cir_size,
+            cir_thick=self.cir_thick,
+            sqr_size=self.sqr_size,
+            sqr_thick=self.sqr_thick,
+            x_size=self.x_size,
+            x_thick=self.x_thick,
+            clamp_min=self.clamp_min,
+            clamp_max=self.clamp_max,
+        )
+        # Get lengths of each partition
+        self.len_train = len(self.train_images)
+        self.len_val = len(self.val_images)
+        self.len_test = len(self.test_images)
+        
+        # Save to cache after generation
+        self._save_images_cache("train", self.train_images, self.train_labels)
+        self._save_images_cache("val", self.val_images, self.val_labels)
+        self._save_images_cache("test", self.test_images, self.test_labels)
+
     def _get_image_params(self, partition):
         """Get parameters that affect image generation (dataset-specific)."""
         params = {
@@ -274,20 +385,32 @@ class DataStreamer:
         if self.dataset == "geomfig":
             params.update({
                 "num_classes": self.num_classes,
-                "noise_var": getattr(self, "noise_var", None),
-                "tri_size": getattr(self, "tri_size", None),
-                "tri_thick": getattr(self, "tri_thick", None),
-                "cir_size": getattr(self, "cir_size", None),
-                "cir_thick": getattr(self, "cir_thick", None),
-                "sqr_size": getattr(self, "sqr_size", None),
-                "sqr_thick": getattr(self, "sqr_thick", None),
-                "x_size": getattr(self, "x_size", None),
-                "x_thick": getattr(self, "x_thick", None),
-                "clamp_min": getattr(self, "clamp_min", None),
-                "clamp_max": getattr(self, "clamp_max", None),
-                "jitter": getattr(self, "jitter", None),
-                "jitter_amount": getattr(self, "jitter_amount", None),
+                "train_ratio": self.train_ratio,
+                "val_ratio": self.val_ratio,
+                "test_ratio": self.test_ratio,
+                "num_samples": self.num_samples,
+                "noise_var": self.geom_noise_var,
+                "tri_size": self.tri_size,
+                "tri_thick": self.tri_thick,
+                "cir_size": self.cir_size,
+                "cir_thick": self.cir_thick,
+                "sqr_size": self.sqr_size,
+                "sqr_thick": self.sqr_thick,
+                "x_size": self.x_size,
+                "x_thick": self.x_thick,
+                "clamp_min": self.clamp_min,
+                "clamp_max": self.clamp_max,
+                "jitter": self.geom_jitter,
+                "jitter_amount": self.geom_jitter_amount,
             })
+        else:
+            params.update({
+                "train_ratio": self.train_ratio,
+                "val_ratio": self.val_ratio,
+                "test_ratio": self.test_ratio,
+                "num_samples": self.num_samples,
+            })
+
         return params
 
     def _get_spike_params(self, partition):

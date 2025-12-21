@@ -274,7 +274,6 @@ def train_network(
     track_weights: bool = False,  # Enable weight tracking (adds overhead)
     weight_track_samples_exc=8,
     weight_track_samples_inh=8,
-    train_snapshot_interval=None,
     sleep_snapshot_interval=None,
 ):
 
@@ -403,16 +402,6 @@ def train_network(
             else:
                 inh_pairs = []
 
-        # Snapshot cadence
-        custom_train_interval = None
-        try:
-            if (
-                train_snapshot_interval is not None
-                and float(train_snapshot_interval) > 0
-            ):
-                custom_train_interval = max(1, int(train_snapshot_interval))
-        except Exception:
-            custom_train_interval = None
         custom_sleep_interval = None
         try:
             if (

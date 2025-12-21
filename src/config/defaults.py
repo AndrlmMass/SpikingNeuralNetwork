@@ -34,12 +34,6 @@ DEFAULT_TRAINING_PARAMS = {
     "tau_LTP": 10,
     "tau_LTD": 10,
     
-    # Weight bounds
-    "min_weight_exc": 0.01,
-    "max_weight_exc": 25,
-    "min_weight_inh": -25,
-    "max_weight_inh": -0.01,
-    
     # Membrane dynamics
     "tau_m": 30,
     "tau_syn": 30,

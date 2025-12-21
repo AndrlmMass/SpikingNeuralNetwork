@@ -53,7 +53,7 @@ class GEOMFIG_DATASET:
         value = self.rng.normal(loc=mean, scale=std_dev)
         return value
 
-    def draw_line_high_res(high_res_grid, v0, v1, thickness, subgrid_resolution):
+    def draw_line_high_res(self, high_res_grid, v0, v1, thickness, subgrid_resolution):
         dx = v1[0] - v0[0]
         dy = v1[1] - v0[1]
         length = np.sqrt(dx**2 + dy**2)
@@ -75,7 +75,7 @@ class GEOMFIG_DATASET:
 
 
     def draw_circle_with_thickness(
-        high_res_grid, center, radius, thickness, subgrid_resolution
+        self, high_res_grid, center, radius, thickness, subgrid_resolution
     ):
         min_radius = int(radius - thickness // 2)
         max_radius = int(radius + thickness // 2)
@@ -271,7 +271,7 @@ class GEOMFIG_DATASET:
         Generate a single geometric figure image in [0,1] of shape (pixel_size, pixel_size).
         Class mapping: 0=triangle, 1=circle, 2=square, 3=x.
         """
-        def j(val, rel, clamp_min, clamp_max):
+        def j(val, rel, clamp_min=None, clamp_max=None):
             if not jitter:
                 return val
             delta = (np.random.rand() * 2 - 1) * jitter_amount
@@ -357,8 +357,8 @@ class GEOMFIG_DATASET:
         """
 
         def make_split(total_samples: int, split_name: str):
-            if which_classes.shape[0] != n_classes:
-                raise ValueError(f"Number of classes in which_classes ({which_classes.shape[0]}) does not match n_classes ({n_classes})")
+            if len(which_classes) != n_classes:
+                raise ValueError(f"Number of classes in which_classes ({len(which_classes)}) does not match n_classes ({n_classes})")
             # Round down to optimal total samples for even split
             total = max(0, (int(total_samples) // n_classes) * n_classes)
             if total == 0:
@@ -371,18 +371,68 @@ class GEOMFIG_DATASET:
             # Enable progress bars for generation
             os.environ["TQDM_DISABLE"] = "False"
 
-            # set num workers
-            use_workers = 1
-            if num_workers is not None:
-                use_workers = max(1, int(num_workers))
-
-            # Predefine balanced class sequence (even repeats of 0..n_classes-1)
-            # `total` was already rounded to be divisible by `n_classes` above.
-            cls_seq = np.tile(which_classes, total // len(which_classes))
-            # Deterministically shuffle class order using provided RNG
+            # Optimized generation: if jitter is disabled, generate one base image per class
+            # and copy it with different noise. If jitter is enabled, each image must be unique.
+            samples_per_class = total // n_classes
+            cls_seq = np.tile(which_classes, samples_per_class)
             cls_seq = rng.permutation(cls_seq)
-
-            if use_workers == 1:
+            
+            if not jitter:
+                # Fast path: generate one base image per class, copy and add noise
+                base_imgs = {}
+                for cls_id in which_classes:
+                    # Generate base shape without noise
+                    if cls_id == 0:  # triangle
+                        base_img = self.gen_triangle(
+                            input_dims=pixel_size,
+                            triangle_size=tri_size,
+                            triangle_thickness=tri_thick,
+                            noise_rand=False,  # Skip noise for base
+                            noise_variance=0.0,
+                        )
+                    elif cls_id == 1:  # circle
+                        base_img = self.gen_circle(
+                            input_dims=pixel_size,
+                            circle_size=cir_size,
+                            circle_thickness=cir_thick,
+                            noise_rand=False,  # Skip noise for base
+                            noise_variance=0.0,
+                        )
+                    elif cls_id == 2:  # square
+                        base_img = self.gen_square(
+                            input_dims=pixel_size,
+                            square_size=sqr_size,
+                            square_thickness=sqr_thick,
+                            noise_rand=False,  # Skip noise for base
+                            noise_variance=0.0,
+                        )
+                    else:  # 3: x
+                        base_img = self.gen_x(
+                            input_dims=pixel_size,
+                            x_size=x_size,
+                            x_thickness=x_thick,
+                            noise_rand=False,  # Skip noise for base
+                            noise_variance=0.0,
+                        )
+                    # Ensure numeric array in [0,1]
+                    base_img = np.asarray(base_img, dtype=np.float32)
+                    base_img = np.clip(base_img, 0.0, 1.0)
+                    base_imgs[cls_id] = base_img
+                
+                # Copy base images and apply noise to each copy
+                for i in tqdm(
+                    range(total),
+                    total=total,
+                    desc=f"Generating geomfig {split_name}",
+                    leave=False,
+                ):
+                    cls_id = int(cls_seq[i])
+                    # Copy base image
+                    imgs[i] = base_imgs[cls_id].copy()
+                    # Apply noise to this copy
+                    imgs[i] = self.add_noise(imgs[i], noise_rand=True, noise_variance=float(max(0.0, noise_var)))
+            else:
+                # Slow path: jitter enabled, each image must be unique - generate individually
                 for i in tqdm(
                     range(total),
                     total=total,
@@ -406,63 +456,7 @@ class GEOMFIG_DATASET:
                         clamp_min=clamp_min,
                         clamp_max=clamp_max,
                         x_thick=x_thick,
-                    )
-            else:
-                # Pre-draw independent seeds for each sample to avoid identical substreams across forks
-                seeds = rng.integers(0, 2**31 - 1, size=total, dtype=np.int64)
-                with ProcessPoolExecutor(max_workers=use_workers) as ex:
-                    futures = {}
-                    for i in range(total):
-                        cls_id = int(cls_seq[i])
-                        futures[
-                            ex.submit(
-                                self._geomfig_generate_one,
-                                    cls_id=cls_id,
-                                    pixel_size=pixel_size,
-                                    noise_var=noise_var,
-                                    jitter=jitter,
-                                    jitter_amount=jitter_amount,
-                                    tri_size=tri_size,
-                                    tri_thick=tri_thick,
-                                    cir_size=cir_size,
-                                    cir_thick=cir_thick,
-                                    sqr_size=sqr_size,
-                                    sqr_thick=sqr_thick,
-                                    x_size=x_size,
-                                    clamp_min=clamp_min,
-                                    clamp_max=clamp_max,
-                                    x_thick=x_thick,
-                            )
-                        ] = i
-                    for fut in tqdm(
-                        as_completed(futures),
-                        total=total,
-                        desc=f"Generating geomfig {split_name} (x{use_workers})",
-                        leave=False,
-                    ):
-                        i = futures[fut]
-                        try:
-                            imgs[i] = fut.result()
-                        except Exception:
-                            # In case of worker failure, fallback to inline generation for this sample
-                            cls_id = int(cls_seq[i])
-                            imgs[i] = self._geomfig_generate_one(
-                                cls_id=cls_id,
-                                pixel_size=pixel_size,
-                                noise_var=noise_var,
-                                jitter=jitter,
-                                jitter_amount=jitter_amount,
-                                tri_size=tri_size,
-                                tri_thick=tri_thick,
-                                cir_size=cir_size,
-                                cir_thick=cir_thick,
-                                sqr_size=sqr_size,
-                                sqr_thick=sqr_thick,
-                                x_size=x_size,
-                                clamp_min=clamp_min,
-                                clamp_max=clamp_max,
-                                x_thick=x_thick,
-                            ) 
+                    ) 
 
             # Return images (not spikes) - spike conversion handled by ImageDataStreamer
             # Convert to torch tensors with channel dimension: (N, H, W) -> (N, 1, H, W)
@@ -495,14 +489,16 @@ class MNIST_DATASET:
 
     def load_mnist_family(
         self,
-        dataset: str,
+        dataset,
         transform,
-        train_ratio: float,
-        val_ratio: float,
+        train_ratio,
+        val_ratio,
+        test_ratio,
         rng,
-        which_classes=None,
-        load_cache_fn=None,
-        save_cache_fn=None,
+        which_classes,
+        num_samples,
+        load_cache_fn,
+        save_cache_fn,
     ):
         """
         Load MNIST-family datasets (MNIST, KMNIST, FMNIST) with caching support.
@@ -512,8 +508,10 @@ class MNIST_DATASET:
             transform: Image transform to apply
             train_ratio: Ratio for training split
             val_ratio: Ratio for validation split
+            test_ratio: Optional ratio for test split (if None, uses entire test set)
             rng: Random number generator
             which_classes: Optional list of class indices to filter
+            num_samples: Optional maximum number of samples to use (before splitting, across all partitions)
             load_cache_fn: Optional function to load from cache (partition) -> (images, labels) or (None, None)
             save_cache_fn: Optional function to save to cache (partition, images, labels)
         
@@ -531,7 +529,7 @@ class MNIST_DATASET:
         ds_cls = ds_map[dataset]
 
         # Use a stable on-disk cache for torchvision datasets to avoid re-downloads
-        torch_root = os.path.join("data", "torchvision")
+        torch_root = os.path.join(f"data\\datasets\\{dataset}\\image_cache")
         os.makedirs(torch_root, exist_ok=True)
 
         mnist_train = ds_cls(
@@ -542,24 +540,75 @@ class MNIST_DATASET:
         )
 
         # Respect which_classes by filtering datasets if provided
-        if which_classes:
-            target_classes = set(which_classes)
+        target_classes = set(which_classes)
 
-            def _filter_dataset(ds):
-                indices = [i for i in range(len(ds)) if int(ds[i][1]) in target_classes]
-                return torch.utils.data.Subset(ds, indices)
+        def _filter_dataset(ds):
+            indices = [i for i in range(len(ds)) if int(ds[i][1]) in target_classes]
+            return torch.utils.data.Subset(ds, indices)
 
-            mnist_train = _filter_dataset(mnist_train)
-            mnist_test = _filter_dataset(mnist_test)
+        mnist_train = _filter_dataset(mnist_train)
+        mnist_test = _filter_dataset(mnist_test)
 
-        # subset validation data from train set by percentage
+        # Get actual available sizes (after filtering by which_classes)
+        n_train_available = len(mnist_train)
+        n_test_available = len(mnist_test)
+        total_available = n_train_available + n_test_available
+        
+        # Calculate desired counts based on ratios (relative to total dataset)
+        desired_train_count = int(total_available * train_ratio)
+        desired_val_count = int(total_available * val_ratio)
+        desired_test_count = int(total_available * test_ratio)
+        
+        # Apply num_samples limit if specified
+        if num_samples > 0:
+            total_desired = desired_train_count + desired_val_count + desired_test_count
+            if total_desired > num_samples:
+                # Scale down proportionally
+                scale = num_samples / total_desired
+                desired_train_count = int(desired_train_count * scale)
+                desired_val_count = int(desired_val_count * scale)
+                desired_test_count = num_samples - desired_train_count - desired_val_count  # Use remainder
+        
+        # Ensure we don't exceed available data
+        # Test set: use desired amount or all available, whichever is smaller
+        n_test_use = min(desired_test_count, n_test_available)
+        
+        # Training set: we'll split into train/val, so ensure total doesn't exceed available
+        train_val_total = desired_train_count + desired_val_count
+        n_train_val_use = min(train_val_total, n_train_available)
+        
+        # Subset test set if needed (using indices, not count)
+        if n_test_use < n_test_available:
+            test_indices = list(range(n_test_available))
+            rng.shuffle(test_indices)
+            mnist_test = torch.utils.data.Subset(mnist_test, test_indices[:n_test_use])
+        
+        # Subset training set if needed (before splitting into train/val)
+        if n_train_val_use < n_train_available:
+            train_indices = list(range(n_train_available))
+            rng.shuffle(train_indices)
+            mnist_train = torch.utils.data.Subset(mnist_train, train_indices[:n_train_val_use])
+        
+        # Now split the (possibly subsetted) training set into train/val
+        # Maintain the train:val ratio within the available training set
+        n_train_total = len(mnist_train)
+        train_val_sum = train_ratio + val_ratio
+        if train_val_sum > 0:
+            train_fraction = train_ratio / train_val_sum
+            train_size = int(n_train_total * train_fraction)
+            val_size = n_train_total - train_size  # Use remainder to avoid rounding issues
+        else:
+            # Fallback: equal split
+            train_size = n_train_total // 2
+            val_size = n_train_total - train_size
+        
         mnist_train, mnist_val = torch.utils.data.random_split(
-            mnist_train, [train_ratio, val_ratio], generator=rng
+            mnist_train, [train_size, val_size], generator=rng
         )
 
         # Try to load from image cache first
         if load_cache_fn:
-            train_images, train_labels = load_cache_fn("train")
+            train_images, train_labels = load_cache_fn("train")   
             val_images, val_labels = load_cache_fn("val")
             test_images, test_labels = load_cache_fn("test")
             
@@ -586,7 +635,7 @@ class MNIST_DATASET:
         return train_images, train_labels, val_images, val_labels, test_images, test_labels
 
 
-    def load_notmnist_deeplake(transform, train_ratio, val_ratio, test_ratio, rng, which_classes=None):
+    def load_notmnist_deeplake(transform, train_ratio, val_ratio, test_ratio, rng, which_classes=None, num_samples=None, load_cache_fn=None, save_cache_fn=None):
         """
         Load NotMNIST from Deeplake and return torch tensors for train/val/test splits.
         
@@ -597,10 +646,23 @@ class MNIST_DATASET:
             test_ratio: Ratio for test split
             rng: Random number generator
             which_classes: Optional list of class indices to filter
+            num_samples: Optional maximum number of samples to use (before splitting)
+            load_cache_fn: Optional function to load from cache (partition) -> (images, labels) or (None, None)
+            save_cache_fn: Optional function to save to cache (partition, images, labels)
         
         Returns:
             (train_images, train_labels, val_images, val_labels, test_images, test_labels)
         """
+        # Try to load from image cache first
+        if load_cache_fn:
+            train_images, train_labels = load_cache_fn("train")
+            val_images, val_labels = load_cache_fn("val")
+            test_images, test_labels = load_cache_fn("test")
+            
+            if train_images is not None and val_images is not None and test_images is not None:
+                print(f"Using cached NotMNIST images")
+                return train_images, train_labels, val_images, val_labels, test_images, test_labels
+
         import deeplake
         ds = deeplake.load("hub://activeloop/not-mnist-small", read_only=True)
 
@@ -628,6 +690,14 @@ class MNIST_DATASET:
             img_pil = Image.fromarray(img_np.astype(np.uint8), mode="L")
             img_tensor = transform(img_pil)
             dataset.append((img_tensor, label_int))
+        
+        # Limit dataset to num_samples if specified (before splitting)
+        if num_samples is not None and num_samples > 0:
+            if len(dataset) > num_samples:
+                # Shuffle and take first num_samples
+                indices = np.arange(len(dataset))
+                rng.shuffle(indices)
+                dataset = [dataset[i] for i in indices[:num_samples]]
         
         n = len(dataset)
         n_train = int(train_ratio * n)
@@ -657,6 +727,12 @@ class MNIST_DATASET:
         val_labels = labels[val_indices]
         test_images = images[test_indices]
         test_labels = labels[test_indices]
+        
+        # Save to cache if function provided
+        if save_cache_fn:
+            save_cache_fn("train", train_images, train_labels)
+            save_cache_fn("val", val_images, val_labels)
+            save_cache_fn("test", test_images, test_labels)
         
         return train_images, train_labels, val_images, val_labels, test_images, test_labels
 

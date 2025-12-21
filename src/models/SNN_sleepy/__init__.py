@@ -8,7 +8,7 @@ Contains:
 """
 
 from .snn import snn_sleepy
-from .dynamics import train_network
+from .train import train_network
 
 __all__ = ['snn_sleepy', 'train_network']
 

@@ -9,9 +9,9 @@ This module provides the complete reproducible pipeline for the paper:
 4. Generate paper figures
 
 Usage:
-    python -m src.experiments.mnist_family --full-pipeline
-    python -m src.experiments.mnist_family --snn-sleepy-only
-    python -m src.experiments.mnist_family --figures-only
+    python -m experiments.mnist_family --full-pipeline
+    python -m experiments.mnist_family --snn-sleepy-only
+    python -m experiments.mnist_family --figures-only
 """
 
 import os
@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Optional, Any
-from src.config.experiments import MNIST_FAMILY_EXPERIMENT
+from config.experiments import MNIST_FAMILY_EXPERIMENT
 
 # =============================================================================
 # EXPERIMENT CONFIGURATION
@@ -34,7 +34,7 @@ MNIST_FAMILY_CONFIG = {
     "predictions_file": "pred.xlsx",
     "r_script": "mixed_model2.r",
     "snntorch_dir": "src/snntorch_comparison",
-    "snntorch_module": "src.snntorch_comparison.orchestrate_to_excel",
+    "snntorch_module": "snntorch_comparison.orchestrate_to_excel",
 }
 
 
@@ -54,7 +54,7 @@ def run_snn_sleepy_experiment(
     extra_args: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
-    Run the full SNN-sleepy experiment by invoking src.scripts.train_model.
+    Run the full SNN-sleepy experiment by invoking scripts.train_model.
     Delegates iteration to the script.
     """
     datasets = datasets or MNIST_FAMILY_CONFIG["datasets"]
@@ -69,10 +69,10 @@ def run_snn_sleepy_experiment(
     project_root = get_project_root()
     
     # Construct the single batch command
-    # python -m src.scripts.train_model --dataset ... --sleep-rate ... --runs ...
+    # python -m scripts.train_model --dataset ... --sleep-rate ... --runs ...
     cmd = [
         sys.executable,
-        "-m", "src.scripts.train_model",
+        "-m", "scripts.train_model",
         "--dataset", *datasets,
         "--sleep-rate", *[str(r) for r in sleep_rates],
         "--runs", str(n_runs),
@@ -250,7 +250,7 @@ def run_full_pipeline(
     # 5. Figures
     if not skip_plots:
         try:
-            from src.evaluation.paper_figures import generate_all_paper_figures
+            from evaluation.paper_figures import generate_all_paper_figures
             figs = generate_all_paper_figures(
                 output_dir=str(output_dir / "plots"),
                 analysis_dir=str(output_dir)
@@ -288,7 +288,7 @@ if __name__ == "__main__":
         print("Running in QUICK TEST mode")
 
     if args.figures_only:
-        from src.evaluation.paper_figures import generate_all_paper_figures
+        from evaluation.paper_figures import generate_all_paper_figures
         root = get_project_root()
         out = root / MNIST_FAMILY_CONFIG["output_dir"]
         generate_all_paper_figures(str(out / "plots"), str(out))

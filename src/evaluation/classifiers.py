@@ -6,14 +6,20 @@ import numpy as np
 from sklearn.pipeline import Pipeline
 import os
 from datetime import datetime
-from typing import Dict, Tuple, Optional
+from typing import Optional
 import warnings
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
-from src.init import _TSNE_CACHE_DIR 
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
+from pathlib import Path
+
+# Define t-SNE cache directory (project root / cache / tsne)
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+_TSNE_CACHE_DIR = PROJECT_ROOT / "cache" / "tsne" 
 
 
 def pca_logistic_regression(

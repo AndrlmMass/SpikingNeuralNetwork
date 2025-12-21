@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from src.utils.platform import configure_matplotlib
+from utils.platform import configure_matplotlib
 from matplotlib.colors import ListedColormap, BoundaryNorm
 from datasets.datasets import GEOMFIG_DATASET
 import pandas as pd
