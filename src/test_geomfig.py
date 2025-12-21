@@ -90,6 +90,7 @@ def run_geomfig_test(quick=False):
     print("=" * 60)
     
     snn.prepare_network(
+        create_network=True,
         w_dense_ee=network_params.get("w_dense_ee", 0.15),
         w_dense_se=network_params.get("w_dense_se", 0.1),
         w_dense_ei=network_params.get("w_dense_ei", 0.2),
@@ -98,6 +99,8 @@ def run_geomfig_test(quick=False):
         ee_weights=network_params.get("ee_weights", 0.3),
         ei_weights=network_params.get("ei_weights", 0.3),
         ie_weights=network_params.get("ie_weights", -0.3),
+        spike_threshold_default=network_params.get("spike_threshold_default", -55),
+        resting_membrane=network_params.get("resting_potential", -70),
     )
     
     # Train network
@@ -132,8 +135,8 @@ def run_geomfig_test(quick=False):
         **{k: v for k, v in training_params.items() 
            if k not in ["train_weights", "learning_rate_exc", "learning_rate_inh", 
                        "sleep", "sleep_ratio", "sleep_mode", "accuracy_method", "pca_variance",
-                       "resting_potential", "check_sleep_interval", "timing_update", 
-                       "trace_update", "vectorized_trace"]}
+                       "resting_potential", "spike_threshold_default", "check_sleep_interval", 
+                       "timing_update", "trace_update", "vectorized_trace"]}
     )
     
     # Run training

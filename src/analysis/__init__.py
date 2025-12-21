@@ -9,7 +9,6 @@ The R script fits:
     Accuracy ~ Sleep_duration * Model + (1|Dataset) + (1|Dataset:Seed)
 """
 
-import os
 from pathlib import Path
 
 # Module directory

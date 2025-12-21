@@ -13,30 +13,6 @@ from .defaults import (
 )
 
 
-# Paper reproduction experiment
-PAPER_GEOMFIG_EXPERIMENT = {
-    "name": "paper_geomfig",
-    "description": "Geometric figures classification as described in the paper",
-    "network": {
-        **DEFAULT_NETWORK_PARAMS,
-        "classes": GEOMFIG_PARAMS["classes"],  # Override: 4 classes for geomfig
-    },
-    "training": {
-        **DEFAULT_TRAINING_PARAMS,
-        # Only override what's different (defaults already have sleep=True, sleep_ratio=0.2)
-    },
-    "data": {
-        **DEFAULT_DATA_PARAMS,
-        # Override only geomfig-specific params (defaults handle the rest)
-        "gain": GEOMFIG_PARAMS["gain"],
-        "noise_var": GEOMFIG_PARAMS["noise_var"],
-        "noise_mean": GEOMFIG_PARAMS["noise_mean"],
-        "jitter": GEOMFIG_PARAMS["jitter"],
-        "jitter_amount": GEOMFIG_PARAMS["jitter_amount"],
-    },
-}
-
-
 # Geomfig sleep comparison experiment
 GEOMFIG_SLEEP_COMPARISON = {
     "name": "geomfig_sleep_comparison",
@@ -50,7 +26,7 @@ GEOMFIG_SLEEP_COMPARISON = {
         {
             "name": "with_sleep",
             "sleep": True,
-            "sleep_ratio": 0.1,
+            "sleep_ratio": DEFAULT_TRAINING_PARAMS["sleep_ratio"],
         }
     ],
     "network": {
@@ -65,30 +41,6 @@ GEOMFIG_SLEEP_COMPARISON = {
         "jitter": GEOMFIG_PARAMS["jitter"],
         "jitter_amount": GEOMFIG_PARAMS["jitter_amount"],
     },
-}
-
-
-# MNIST baseline experiment
-MNIST_BASELINE_EXPERIMENT = {
-    "name": "mnist_baseline",
-    "description": "Standard MNIST classification with sleep",
-    "network": DEFAULT_NETWORK_PARAMS.copy(),  # Use all defaults (10 classes)
-    "training": DEFAULT_TRAINING_PARAMS.copy(),  # Use all defaults
-    "data": DEFAULT_DATA_PARAMS.copy(),  # Use all defaults
-}
-
-
-# No-sleep baseline for comparison
-NO_SLEEP_EXPERIMENT = {
-    "name": "no_sleep_baseline",
-    "description": "Baseline without sleep mechanism for comparison",
-    "network": DEFAULT_NETWORK_PARAMS.copy(),
-    "training": {
-        **DEFAULT_TRAINING_PARAMS,
-        "sleep": False,
-        "sleep_ratio": 0.0,
-    },
-    "data": DEFAULT_DATA_PARAMS.copy(),
 }
 
 
@@ -143,11 +95,8 @@ MNIST_FAMILY_EXPERIMENT = {
 
 # All experiments for easy access
 ALL_EXPERIMENTS = {
-    "paper_geomfig": PAPER_GEOMFIG_EXPERIMENT,
     "geomfig_sleep_comparison": GEOMFIG_SLEEP_COMPARISON,
-    "mnist_baseline": MNIST_BASELINE_EXPERIMENT,
     "mnist_family": MNIST_FAMILY_EXPERIMENT,
-    "no_sleep": NO_SLEEP_EXPERIMENT,
     "sleep_comparison": SLEEP_RATE_COMPARISON,
     "quick_test": QUICK_TEST_EXPERIMENT,
 }

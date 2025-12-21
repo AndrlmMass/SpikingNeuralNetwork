@@ -87,10 +87,8 @@ def create_arrays(
     ih,
     spike_threshold_default,
     resting_membrane,
-    total_time_train,
-    total_time_test,
-    data_train,
-    data_test,
+    runtime,
+    data,
 ):
     """
     Create arrays for membrane potentials and spikes.
@@ -101,39 +99,25 @@ def create_arrays(
         Total number of neurons
     resting_membrane : float
         Resting membrane potential (mV)
-    total_time_train : int
-        Total training timesteps
-    total_time_test : int
-        Total testing timesteps
-    data_train : ndarray or None
-        Input spike data for training
-    data_test : ndarray or None
-        Input spike data for testing
+    runtime : int
+        Total runtime timesteps
+    data : ndarray or None
+        Input spike data
         
     Returns
     -------
     tuple
-        (mp_train, mp_test, spikes_train, spikes_test)
+        (mp, spikes)
     """
 
     # create membrane potential arrays
-    membrane_potential_train = np.zeros((total_time_train, ih - st))
-    if total_time_train > 0:
-        membrane_potential_train[0] = resting_membrane
+    membrane_potential = np.zeros((runtime, ih - st))
+    membrane_potential[0] = resting_membrane
 
-    membrane_potential_test = np.zeros((total_time_test, ih - st))
-    if total_time_test > 0:
-        membrane_potential_test[0] = resting_membrane
-
-    spikes_train = None
-    if data_train is not None and total_time_train > 0:
-        spikes_train = np.zeros((total_time_train, N), dtype=np.int8)
-        spikes_train[:, :st] = data_train
-
-    spikes_test = None
-    if data_test is not None and total_time_test > 0:
-        spikes_test = np.zeros((total_time_test, N), dtype=np.int8)
-        spikes_test[:, :st] = data_test
+    spikes = None
+    if data is not None and runtime > 0:
+        spikes = np.zeros((runtime, N), dtype=np.int8)
+        spikes[:, :st] = data
 
     # create missing arrays
     I_syn = np.zeros(N - st)
@@ -148,10 +132,8 @@ def create_arrays(
     )
 
     return (
-        membrane_potential_train,
-        membrane_potential_test,
-        spikes_train,
-        spikes_test,
+        membrane_potential,
+        spikes,
         I_syn, 
         spike_times, 
         a,

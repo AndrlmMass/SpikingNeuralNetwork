@@ -421,8 +421,6 @@ class snn_sleepy:
 
     def prepare_network(
         self,
-        plot_weights=False,
-        plot_network=False,
         resting_membrane=-70,
         retur=False,
         w_dense_ee=0.15,
@@ -433,6 +431,7 @@ class snn_sleepy:
         ee_weights=0.3,
         ei_weights=0.3,
         ie_weights=-0.3,
+        spike_threshold_default=-55,
         create_network=False,
     ):
         # create weights
@@ -445,6 +444,7 @@ class snn_sleepy:
         self.ei_weights = ei_weights
         self.ie_weights = ie_weights
         self.resting_potential = resting_membrane
+        self.spike_threshold_default = spike_threshold_default
 
         self.weights = create_weights(
             N_exc=self.N_exc,
@@ -466,35 +466,26 @@ class snn_sleepy:
             # create other arrays
             (
                 self.mp_train,
-                self.mp_test,
                 self.spikes_train,
-                self.spikes_test,
                 self.I_syn,
                 self.spike_times,
                 self.a,
                 self.spike_threshold,
             ) = create_arrays(
                 N=self.N,
-                N_exc=self.N_exc,
-                N_inh=self.N_inh,
-                resting_membrane=self.resting_potential,
-                total_time_train=self.T_train,
-                total_time_test=self.T_test,
-                data_train=None,  # Streaming mode - data loaded on-demand
-                data_test=None,  # Streaming mode - data loaded on-demand
-                N_x=self.N_x,
                 st=self.st,
                 ih=self.ih,
                 spike_threshold_default=self.spike_threshold_default,
+                resting_membrane=self.resting_potential,
+                runtime=self.T_train,
+                data=None,
             )
             # return results if retur == True
             if retur:
                 return (
                     self.weights,
                     self.spikes_train,
-                    self.spikes_test,
                     self.mp_train,
-                    self.mp_test,
                     self.resting_potential,
                 )
         if retur:
@@ -517,7 +508,6 @@ class snn_sleepy:
         w_target_exc=0.2,
         w_target_inh=-0.2, # default target weight for inhibitory neurons
         var_noise=2.0, # default noise variance
-        spike_threshold_default=-55, 
         min_mp=-100, # default minimum membrane potential
         sleep=False, # default sleep mode is off
         sleep_ratio=0.0,  # Sleep percentage per interval (e.g., 0.1 = 10%)
@@ -598,7 +588,6 @@ class snn_sleepy:
         self.w_target_exc=w_target_exc
         self.w_target_inh=w_target_inh
         self.var_noise=var_noise
-        self.spike_threshold_default=spike_threshold_default
         self.min_mp=min_mp
         self.sleep=sleep
         self.sleep_ratio=sleep_ratio
@@ -664,8 +653,16 @@ class snn_sleepy:
             if mode == "train":
                 # create learning bounds
                 self.baseline_sum_exc, self.baseline_sum_inh, self.baseline_sum = create_learning_bounds(self.weights, self.ex, self.st, self.ih, self.beta)
-                # prepare early stopping
-                self.prepare_early_stopping()
+                # prepare early stopping (initialize performance_tracker)
+                self.epochs = epochs  # Store epochs for prepare_early_stopping
+                # prepare_early_stopping needs these parameters from train_network scope
+                self.prepare_early_stopping(
+                    test_only=test_only,
+                    train_weights=train_weights,
+                    early_stopping=early_stopping,
+                    early_stopping_patience_pct=early_stopping_patience_pct,
+                    patience=patience
+                )
 
             # prepare common arguments
             self.prepare_common_args()
@@ -726,19 +723,34 @@ class snn_sleepy:
                 "test_phi": [],
             }
 
-        def reset_arrays(self, T_batch, data):
-            self.mp = np.zeros((T_batch, self.N - self.N_x))
-            self.mp[0] = self.resting_potential
-            self.spikes = np.zeros((T_batch, self.N), dtype=np.int8)
-            self.spikes[:, : self.N_x] = data
-            
-            # Use instance variables for persistent state arrays 
-            self.I_syn = np.zeros(self.I_syn.shape)
-            self.spike_times = np.zeros(self.spike_times.shape)
-            self.a = np.zeros(self.a.shape)
-            self.spike_threshold = np.zeros(self.spike_threshold.shape)
+        
+        def reset_persistent_arrays(self):
+            """Reset persistent state arrays between epochs using create_arrays."""
+            # Recreate arrays using create_arrays function
+            (
+                mp,
+                spikes,
+                I_syn,
+                spike_times,
+                a,
+                spike_threshold,
+            ) = create_arrays(
+                N=self.N,
+                st=self.st,
+                ih=self.ih,
+                spike_threshold_default=self.spike_threshold_default,
+                resting_membrane=self.resting_potential,
+                runtime=self.T_train,
+                data=None,
+            )
+            # Update persistent state arrays
+            self.mp = mp
+            self.I_syn = I_syn
+            self.spike_times = spike_times
+            self.a = a
+            self.spike_threshold = spike_threshold
 
-        def process_batch(self, data, labels, train_weights, plot_weights_per_epoch):
+        def process_batch(self, data, labels, mode):
             """
             Process a single batch of data through the network.
             
@@ -746,12 +758,6 @@ class snn_sleepy:
                 data: Input data array (T_batch, N_x)
                 labels: Labels array (T_batch,)
                 mode: "train", "val", or "test"
-                mp: Membrane potential array (T_batch, N - N_x)
-                I_syn: Synaptic current array (T_batch, N)
-                spike_times: Spike times array (T_batch, N)
-                a: Adaptation array (T_batch, N)
-                spike_threshold: Spike threshold array (T_batch, N)
-                train_weights: Whether to update weights during processing
             
             Returns:
                 Dictionary with:
@@ -761,87 +767,118 @@ class snn_sleepy:
             """
             # Get batch size
             T_batch = data.shape[0]
-            
-            # Prepare weights (use current weights, copy if not training)
-            weights_input = self.weights if train_weights else self.weights.copy()
-            
+
+            # For validation/test: reset arrays at start of each batch
+            # For training: arrays persist between batches
+            if mode != "train":
+                mp, spikes, I_syn, spike_times, a, spike_threshold = create_arrays(
+                    N=self.N,
+                    st=self.st,
+                    ih=self.ih,
+                    spike_threshold_default=self.spike_threshold_default,
+                    resting_membrane=self.resting_potential,
+                    runtime=T_batch,
+                    data=data,
+                )
+            else:
+                # Training: use persistent arrays, but create spikes array with input data
+                mp = self.mp
+                I_syn = self.I_syn
+                spike_times = self.spike_times
+                a = self.a
+                spike_threshold = self.spike_threshold
+                # Create spikes array and populate with input data (consistent with create_arrays)
+                spikes = np.zeros((T_batch, self.N), dtype=np.int8)
+                spikes[:, :self.st] = data
+
+            # Weights: always use trained weights (persist from training to val/test)
+            weights_input = self.weights
+
+            # track weights if train
+            if mode == "train" and self.plot_weights_per_epoch:
+                plot_weights_per_epoch = True
+            else:
+                plot_weights_per_epoch = False
+
             # Call train_network function (imported from .train)
             (
-                weights_out,
-                spikes_out,
-                mp_out,
-                weights_4_plotting_exc,
-                weights_4_plotting_inh,
-                spike_threshold_out,
-                spike_labels_out,
-                sleep_percent,
-                I_syn_out,
-                spike_times_out,
-                a_out,
-                weight_tracking_sleep,
+            weights_out,
+            spikes_out,
+            mp_out,
+            weights_4_plotting_exc,
+            weights_4_plotting_inh,
+            spike_threshold_out,
+            spike_labels_out,
+            sleep_percent,
+            I_syn_out,
+            spike_times_out,
+            a_out,
+            weight_tracking_sleep,
             ) = train_network(
-                weights=weights_input,
-                spike_labels=labels,
-                mp=self.mp,
-                T=T_batch,
-                spikes=data,
-                spike_times=self.spike_times,
-                spike_threshold=self.spike_threshold,
-                a=self.a,
-                I_syn=self.I_syn,
-                train_weights=train_weights,
-                track_weights=plot_weights_per_epoch,
-                **self.common_args,
+            weights=weights_input,
+            spike_labels=labels,
+            mp=mp,
+            T=T_batch,
+            spikes=spikes,
+            spike_times=spike_times,
+            spike_threshold=spike_threshold,
+            a=a,
+            I_syn=I_syn,
+            train_weights=True if mode == "train" else False,
+            track_weights=plot_weights_per_epoch,
+            **self.common_args,
             )
-            
+
             # Update weights if training
-            if train_weights:
+            if mode == "train":
                 self.weights = weights_out
             
-            # Update persistent state arrays
-            self.mp = mp_out
-            self.I_syn = I_syn_out
-            self.spike_times = spike_times_out
-            self.a = a_out
-            self.spike_threshold = spike_threshold_out
+            # Update persistent state arrays only during training
+            # For val/test, arrays are reset each batch, so no need to persist
+            if mode == "train":
+                self.mp_train = mp_out
+                self.I_syn = I_syn_out
+                self.spike_times = spike_times_out
+                self.a = a_out
+                self.spike_threshold = spike_threshold_out
             
             return {
                 "spikes": spikes_out,
-                "labels": labels,
+                "labels": spike_labels_out,
                 "weight_tracking_sleep": weight_tracking_sleep,
             }
 
-        def update_trackers(self, weight_tracking_epoch, all_weight_tracking_sleep, _tracking_time_offset, accuracy, phi, mode):
-            # Accumulate weight tracking data (sleep only)
-            if weight_tracking_epoch is not None:
-                for key in [
-                    "exc_mean",
-                    "exc_min",
-                    "exc_max",
-                    "exc_samples",
-                    "inh_mean",
-                    "inh_min",
-                    "inh_max",
-                    "inh_samples",
-                ]:
-                    all_weight_tracking_sleep[key].extend(
-                        weight_tracking_epoch[key]
-                    )
-                _wt_times = weight_tracking_epoch.get("times", [])
-                all_weight_tracking_sleep["times"].extend(
-                    [float(t) + _tracking_time_offset for t in _wt_times]
-                )
-                for seg in weight_tracking_epoch.get("sleep_segments", []):
-                    try:
-                        s, te = (
-                            float(seg[0]) + _tracking_time_offset,
-                            float(seg[1]) + _tracking_time_offset,
+        def update_trackers(weight_tracking_epoch, all_weight_tracking_sleep, _tracking_time_offset):
+                # Accumulate weight tracking data (sleep only)
+                if weight_tracking_epoch is not None:
+                    for key in [
+                        "exc_mean",
+                        "exc_min",
+                        "exc_max",
+                        "exc_samples",
+                        "inh_mean",
+                        "inh_min",
+                        "inh_max",
+                        "inh_samples",
+                    ]:
+                        all_weight_tracking_sleep[key].extend(
+                            weight_tracking_epoch[key]
                         )
-                        all_weight_tracking_sleep["sleep_segments"].append((s, te))
-                    except Exception:
-                        pass
-                if len(_wt_times) > 0:
-                    _tracking_time_offset += float(max(_wt_times)) + 1.0
+                    _wt_times = weight_tracking_epoch.get("times", [])
+                    all_weight_tracking_sleep["times"].extend(
+                        [float(t) + _tracking_time_offset for t in _wt_times]
+                    )
+                    for seg in weight_tracking_epoch.get("sleep_segments", []):
+                        try:
+                            s, te = (
+                                float(seg[0]) + _tracking_time_offset,
+                                float(seg[1]) + _tracking_time_offset,
+                            )
+                            all_weight_tracking_sleep["sleep_segments"].append((s, te))
+                        except Exception:
+                            pass
+                    if len(_wt_times) > 0:
+                        _tracking_time_offset += float(max(_wt_times)) + 1.0
 
 
                 return all_weight_tracking_sleep
@@ -870,12 +907,16 @@ class snn_sleepy:
             self,
             mode: str,                 # "train" | "val" | "test"         
             batch_size: int,
-            train_weights: bool,
             collect_for_metric: bool = True,
             max_batches: int | None = None,   # optional for cheap eval
         ):
             # Reset partition pointer to start of data for this epoch
             self.data_streamer.reset_partition(mode)
+            
+            # Reset persistent arrays at the start of each epoch (even for training)
+            # Arrays will persist between batches within the epoch, but reset between epochs
+            if mode == "train":
+                reset_persistent_arrays(self)
 
             all_spikes = []
             all_labels = []
@@ -887,11 +928,11 @@ class snn_sleepy:
                 data, labels = self.data_streamer.get_batch(batch_size, partition=mode)
                 if data is None:
                     # No more data available - we've processed all batches
-                    break
-                out = self.process_batch(data, labels, mode=mode, train_weights=train_weights)
+                        break
+                out = process_batch(self, data, labels, mode=mode)
 
                 # trackers (only meaningful when training, but harmless)
-                self.update_trackers(out["weight_tracking_sleep"], self.all_weight_tracking_sleep, self._tracking_time_offset, )
+                update_trackers(self, out["weight_tracking_sleep"], self.all_weight_tracking_sleep, self._tracking_time_offset, )
 
                 if collect_for_metric:
                     all_spikes.append(out["spikes"])
@@ -904,7 +945,7 @@ class snn_sleepy:
                     self.save_checkpoint(epoch=self._current_epoch+1, batch=n_batches)
                 
                 if max_batches is not None and n_batches >= max_batches:
-                    break
+                            break
 
             if not collect_for_metric or len(all_spikes) == 0:
                 return 0.0, 0.0  # Return default accuracy and clustering when no data
@@ -916,8 +957,8 @@ class snn_sleepy:
             # If each batch is already one stimulus, num_steps = T_batch; otherwise keep your real presentation length.
             num_steps = self.T_train if mode == "train" else (self.T_val if mode == "val" else self.T_test)
 
-            accuracy = self.estimate_accuracy(mode, self.accuracy_method, spikes_cat, labels_cat)
-            clustering = self.estimate_clustering(mode, spikes_cat, labels_cat, num_steps)
+            accuracy = estimate_accuracy(self, mode, self.accuracy_method, spikes_cat, labels_cat)
+            clustering = estimate_clustering(self, mode, spikes_cat, labels_cat, num_steps)
 
             return float(accuracy), float(clustering)
 
@@ -925,29 +966,27 @@ class snn_sleepy:
             if val_batch_size is None:
                 val_batch_size = batch_size
 
-            self.initiate_trackers("train", epochs, self.T_train)
-            
-            # Initialize checkpoint tracking
-            batch_counter = 0
+            # Call nested function directly (both are in train_network scope)
+            initiate_trackers(self, "train", epochs, self.T_train)
 
             for epoch in range(epochs):
                 # Store current epoch for batch-level checkpoint saving
                 self._current_epoch = epoch
                 # ---- TRAIN EPOCH ----
-                train_acc, train_clust = self.run_epoch(
+                train_acc, train_clust = run_epoch(
+                    self,
                     mode="train",
                     batch_size=batch_size,
-                    train_weights=True,
                     collect_for_metric=True,
                 )
 
                 # ---- VALIDATION ----
                 val_acc, val_clust = None, None
                 if self.use_validation_data:
-                    val_acc, val_clust = self.run_epoch(
+                    val_acc, val_clust = run_epoch(
+                        self,
                         mode="val",
                         batch_size=val_batch_size,
-                        train_weights=False,
                         collect_for_metric=True,
                         max_batches=None,   # or a small number if you want cheap/fast mid-training val
                     )
@@ -970,7 +1009,6 @@ class snn_sleepy:
             test_acc, test_clust = self.run_epoch(
                 mode="test",
                 batch_size=self.test_batch, # is this correct?
-                train_weights=False,
                 collect_for_metric=True,
                 max_batches=None,
             )
@@ -981,18 +1019,18 @@ class snn_sleepy:
 
         def plot():
             if plot_top_response_train:
-                pass  # Plotting disabled for now
-                #top_responders_plotted(
-                #    spikes=self.spikes_train,
-                #    labels=self.labels_train,
-                #    ih=self.ih,
-                #    st=self.st,
-                #    num_classes=self.N_classes,
-                #    narrow_top=narrow_top,
-                #    smoothening=smoothening,
-                #    train=True,
-                #    wide_top=wide_top,
-                #)
+                    pass  # Plotting disabled for now
+                    #top_responders_plotted(
+                    #    spikes=self.spikes_train,
+                    #    labels=self.labels_train,
+                    #    ih=self.ih,
+                    #    st=self.st,
+                    #    num_classes=self.N_classes,
+                    #    narrow_top=narrow_top,
+                    #    smoothening=smoothening,
+                    #    train=True,
+                    #    wide_top=wide_top,
+                    #)
 
             if plot_spikes_train:
                 if start_time_spike_plot == None:
@@ -1000,51 +1038,51 @@ class snn_sleepy:
                 if stop_time_spike_plot == None:
                     stop_time_spike_plot = self.spikes_train.shape[0]
 
-                spike_plot(
-                    self.spikes_train[
-                        start_time_spike_plot:stop_time_spike_plot, self.st :
-                    ],
-                    self.labels_train[start_time_spike_plot:stop_time_spike_plot],
-                )
+            spike_plot(
+                self.spikes_train[
+                    start_time_spike_plot:stop_time_spike_plot, self.st :
+                ],
+                self.labels_train[start_time_spike_plot:stop_time_spike_plot],
+            )
 
             if plot_threshold:
                 spike_threshold_plot(self.spike_threshold, self.N_exc)
 
-            if plot_mp_train:
-                if start_index_mp == None:
-                    start_index_mp = self.ex
-                if stop_index_mp == None:
-                    stop_index_mp = self.ih
-                if time_start_mp == None:
-                    time_start_mp = int(self.T_train * 0.95)
-                if time_stop_mp == None:
-                    time_stop_mp = self.T_train
+        if plot_mp_train:
+            if start_index_mp == None:
+                start_index_mp = self.ex
+            if stop_index_mp == None:
+                stop_index_mp = self.ih
+            if time_start_mp == None:
+                time_start_mp = int(self.T_train * 0.95)
+            if time_stop_mp == None:
+                time_stop_mp = self.T_train
 
                 mp_plot(
                     mp=self.mp_train[time_start_mp:time_stop_mp],
                     N_exc=self.N_exc,
                 )
 
-            if plot_traces_:
-                plot_traces(
-                    N_exc=self.N_exc,
-                    N_inh=self.N_inh,
-                    pre_traces=self.pre_trace_plot,
-                    post_traces=self.post_trace_plot,
-                )
+        if plot_traces_:
+            plot_traces(
+                N_exc=self.N_exc,
+                N_inh=self.N_inh,
+                pre_traces=self.pre_trace_plot,
+                post_traces=self.post_trace_plot,
+            )
 
-            if plot_top_response_test:
-                top_responders_plotted(
-                    spikes=self.spikes_test[50 * self.num_steps :],
-                    labels=self.labels_test[50 * self.num_steps :],
-                    ih=self.ih,
-                    st=self.st,
-                    num_classes=self.N_classes,
-                    narrow_top=narrow_top,
-                    smoothening=smoothening,
-                    train=False,
-                    wide_top=wide_top,
-                )
+        if plot_top_response_test:
+            top_responders_plotted(
+                spikes=self.spikes_test[50 * self.num_steps :],
+                labels=self.labels_test[50 * self.num_steps :],
+                ih=self.ih,
+                st=self.st,
+                num_classes=self.N_classes,
+                narrow_top=narrow_top,
+                smoothening=smoothening,
+                train=False,
+                wide_top=wide_top,
+            )
 
             if plot_spikes_test:
                 if start_time_spike_plot == None:
@@ -1052,43 +1090,50 @@ class snn_sleepy:
                 if stop_time_spike_plot == None:
                     stop_time_spike_plot = self.T_test
 
-                spike_plot(
-                    self.spikes_test[start_time_spike_plot:stop_time_spike_plot],
-                    self.labels_test[start_time_spike_plot:stop_time_spike_plot],
-                )
+            spike_plot(
+                self.spikes_test[start_time_spike_plot:stop_time_spike_plot],
+                self.labels_test[start_time_spike_plot:stop_time_spike_plot],
+            )
 
-            if plot_mp_test:
-                if start_index_mp == None:
-                    start_index_mp = self.N_x
-                if stop_index_mp == None:
-                    stop_index_mp = self.N_exc + self.N_inh
-                if time_start_mp == None:
-                    time_start_mp = 0
-                if time_stop_mp == None:
-                    time_stop_mp = self.T_test
+        if plot_mp_test:
+            if start_index_mp == None:
+                start_index_mp = self.N_x
+            if stop_index_mp == None:
+                stop_index_mp = self.N_exc + self.N_inh
+            if time_start_mp == None:
+                time_start_mp = 0
+            if time_stop_mp == None:
+                time_stop_mp = self.T_test
 
-                mp_plot(
-                    mp=self.mp_test[time_start_mp:time_stop_mp],
-                    N_exc=self.N_exc,
-                )
+            mp_plot(
+                mp=self.mp_test[time_start_mp:time_stop_mp],
+                N_exc=self.N_exc,
+            )
 
 
-        if plot_epoch_performance:
-            # performance_tracker columns: [phi_te, acc_te] and optional val: [phi_val, acc_val]
-            if (
-                hasattr(self, "val_performance_tracker")
-                and self.val_performance_tracker is not None
-            ):
-                plot_epoch_training(
-                    self.performance_tracker[:, 1],
-                    self.performance_tracker[:, 0],
-                    val_acc=self.val_performance_tracker[:, 1],
-                    val_phi=self.val_performance_tracker[:, 0],
-                )
+            if plot_epoch_performance:
+                # performance_tracker columns: [phi_te, acc_te] and optional val: [phi_val, acc_val]
+                # Only plot if performance_tracker exists (it's initialized in prepare_early_stopping via initiate_trackers)
+                if hasattr(self, "performance_tracker") and self.performance_tracker is not None:
+                    if (
+                        hasattr(self, "val_performance_tracker")
+                        and self.val_performance_tracker is not None
+                    ):
+                        plot_epoch_training(
+                            self.performance_tracker[:, 1],
+                            self.performance_tracker[:, 0],
+                            val_acc=self.val_performance_tracker[:, 1],
+                            val_phi=self.val_performance_tracker[:, 0],
+                        )
             else:
-                plot_epoch_training(
-                    self.performance_tracker[:, 1], self.performance_tracker[:, 0]
-                )
+                    plot_epoch_training(
+                        self.performance_tracker[:, 1], self.performance_tracker[:, 0]
+                    )
+        
+        # Expose the nested train function so it can be called after train_network()
+        # Bind it to self so it can be called as a method
+        import types
+        self.train = types.MethodType(train, self)
 
     def save_model_parameters(self):
                 # Save model parameters explicitly (only important training parameters, not plotting flags)
@@ -1199,9 +1244,66 @@ class snn_sleepy:
             )
         else:
             self.patience_epochs = None
+            self.best_val_metric = None
+            self.epochs_without_improvement = None
+            self.best_weights = None
+        
+        # Initialize should_stop flag (always initialize, even if early stopping is disabled)
+        self.should_stop = False
+
+    def update_early_stopping(self, val_metric):
+        """
+        Update early stopping state based on validation metric.
+        
+        Args:
+            val_metric: Current validation metric (higher is better, e.g., accuracy)
+        
+        Returns:
+            bool: True if training should stop, False otherwise
+        """
+        if not self.early_stopping or self.patience_epochs is None:
+            self.should_stop = False
+            return False
+        
+        # Check if current metric is better than best
+        if val_metric > self.best_val_metric:
+            # Improvement found
+            self.best_val_metric = val_metric
+            self.epochs_without_improvement = 0
+            # Save current weights as best
+            self.best_weights = self.weights.copy()
+        else:
+            # No improvement
+            self.epochs_without_improvement += 1
+        
+        # Check if we should stop
+        self.should_stop = self.epochs_without_improvement >= self.patience_epochs
+        
+        if self.should_stop:
+            print(f"\nEarly stopping triggered after {self.epochs_without_improvement} epochs without improvement")
+            print(f"Best validation metric: {self.best_val_metric:.4f}")
+            # Restore best weights
+            if self.best_weights is not None:
+                self.weights = self.best_weights
+                print("Restored best weights")
+        
+        return self.should_stop
 
     def prepare_common_args(self):
         # Bundle common training arguments
+        # max_sum, max_sum_exc, max_sum_inh are used as thresholds in sleep_func
+        # They should be the same as baseline_sum, baseline_sum_exc, baseline_sum_inh
+        max_sum = self.baseline_sum 
+        max_sum_exc = self.baseline_sum_exc 
+        max_sum_inh = self.baseline_sum_inh 
+        
+        # initial_sum_exc and initial_sum_inh are used for normalization
+        # They are the initial sums before beta scaling (baseline = initial * beta)
+        initial_sum_exc = None
+        initial_sum_inh = None
+        initial_sum_exc = self.baseline_sum_exc / self.beta
+        initial_sum_inh = self.baseline_sum_inh / self.beta
+        
         self.common_args = dict(
             tau_syn=self.tau_syn,
             resting_potential=self.resting_potential,
@@ -1211,6 +1313,9 @@ class snn_sleepy:
             baseline_sum=self.baseline_sum,
             baseline_sum_exc=self.baseline_sum_exc,
             baseline_sum_inh=self.baseline_sum_inh,
+            max_sum=max_sum,
+            max_sum_exc=max_sum_exc,
+            max_sum_inh=max_sum_inh,
             beta=self.beta,
             sleep_synchronized=self.sleep_synchronized,
             weight_decay_rate_exc=self.weight_decay_rate_exc,
@@ -1222,6 +1327,7 @@ class snn_sleepy:
             tau_LTP=self.tau_LTP,
             tau_LTD=self.tau_LTD,
             tau_m=self.tau_m,
+            sleep=self.sleep,
             max_mp=self.max_mp,
             min_mp=self.min_mp,
             dt=self.dt,
@@ -1248,7 +1354,14 @@ class snn_sleepy:
             sleep_mode=self.sleep_mode,
             weight_track_samples_exc=self.weight_track_samples,
             weight_track_samples_inh=self.weight_track_samples,
-            train_snapshot_interval=self.weight_track_interval,
             sleep_snapshot_interval=self.weight_track_sleep_interval,
+            # Additional required parameters
+            mean_noise=self.mean_noise,
+            var_noise=self.var_noise,
+            sleep_ratio=self.sleep_ratio,
+            initial_sum_exc=initial_sum_exc,
+            initial_sum_inh=initial_sum_inh,
+            sleep_hard_pause=True,  # Default value from train_network signature
+            sleep_epsilon=1e-8,  # Default value from train_network signature
         )
 
