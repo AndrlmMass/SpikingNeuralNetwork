@@ -24,6 +24,9 @@ DEFAULT_NETWORK_PARAMS = {
 
 # Training defaults
 DEFAULT_TRAINING_PARAMS = {
+    # Training control
+    "epochs": 10,  # Number of complete passes through all training data
+    
     # Learning rates
     "learning_rate_exc": 0.0005,
     "learning_rate_inh": 0.0005,
@@ -44,7 +47,7 @@ DEFAULT_TRAINING_PARAMS = {
     
     # Sleep parameters
     "sleep": True,
-    "sleep_ratio": 0.2,
+    "sleep_ratio": 0.02,
     "check_sleep_interval": 35000,
     "sleep_mode": "static",
     

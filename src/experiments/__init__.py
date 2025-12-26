@@ -6,12 +6,17 @@ This module contains:
 - geomfig: Geometric figure classification experiment
 """
 
-from .mnist_family import (
+from .mnist import (
     MNIST_FAMILY_CONFIG,
     run_full_pipeline,
     run_snn_sleepy_experiment,
     run_snntorch_experiment,
     run_glmm_analysis,
+)
+
+from .geomfig import (
+    sleep_comparison_geomfig,
+    simple_geomfig,
 )
 
 __all__ = [
@@ -20,6 +25,8 @@ __all__ = [
     "run_snn_sleepy_experiment",
     "run_snntorch_experiment",
     "run_glmm_analysis",
+    "sleep_comparison_geomfig",
+    "simple_geomfig",
 ]
 
 

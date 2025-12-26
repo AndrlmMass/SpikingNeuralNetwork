@@ -96,7 +96,6 @@ def sleep_func(
 
     # --- Decay inhibitory weights ---
     if sleep_now_inh:
-        # print("decaying inh")
         # Apply decay to columns [N_x, N_post] (excitatory weights)
         for i in range(nz_rows_inh.size):
             current_weight = weights[nz_rows_inh[i], nz_cols_inh[i]]

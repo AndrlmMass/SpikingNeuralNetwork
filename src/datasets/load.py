@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import os
 import json
-from datasets.datasets import GEOMFIG_DATASET, MNIST_DATASET
+from .datasets import GEOMFIG_DATASET, MNIST_DATASET
 import hashlib
 
 os.environ["TQDM_DISABLE"] = "True"

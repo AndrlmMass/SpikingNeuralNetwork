@@ -1,8 +1,8 @@
 import os
 import numpy as np
-from utils.platform import configure_matplotlib
+from ..utils.platform import configure_matplotlib
 from matplotlib.colors import ListedColormap, BoundaryNorm
-from datasets.datasets import GEOMFIG_DATASET
+from ..datasets.datasets import GEOMFIG_DATASET
 import pandas as pd
 from typing import Optional
 import seaborn as sns

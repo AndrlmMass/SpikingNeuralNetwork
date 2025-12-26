@@ -15,13 +15,11 @@ Usage:
 """
 
 import os
-import json
 import subprocess
 import sys
 from pathlib import Path
-from datetime import datetime
 from typing import List, Dict, Optional, Any
-from config.experiments import MNIST_FAMILY_EXPERIMENT
+from ..config.experiment_configs import MNIST_FAMILY_EXPERIMENT
 
 # =============================================================================
 # EXPERIMENT CONFIGURATION

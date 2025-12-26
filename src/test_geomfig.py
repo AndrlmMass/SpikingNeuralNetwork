@@ -11,7 +11,7 @@ from pathlib import Path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-from config import PAPER_GEOMFIG_EXPERIMENT, QUICK_TEST_EXPERIMENT
+from config import GEOMFIG_EXPERIMENT, QUICK_TEST_EXPERIMENT
 from models.SNN_sleepy.snn import snn_sleepy
 
 def run_geomfig_test(quick=False):
@@ -25,9 +25,9 @@ def run_geomfig_test(quick=False):
         exp_config = QUICK_TEST_EXPERIMENT
     else:
         print("=" * 60)
-        print("Running PAPER GEOMFIG experiment")
+        print("Running GEOMFIG experiment")
         print("=" * 60)
-        exp_config = PAPER_GEOMFIG_EXPERIMENT
+        exp_config = GEOMFIG_EXPERIMENT
     
     # Extract config sections
     network_params = exp_config["network"]
@@ -108,11 +108,10 @@ def run_geomfig_test(quick=False):
     print("Training network...")
     print("=" * 60)
     
-    # Calculate batch sizes and epochs from data params
+    # Calculate batch sizes
     batch_size = data_params.get("batch_image_train", 400)
     val_batch_size = data_params.get("batch_image_val", 100)
     test_batch_size = data_params.get("batch_image_test", 200)
-    epochs = max(1, data_params.get("all_images_train", 6000) // batch_size)
     
     # Set training parameters
     snn.train_network(
@@ -145,7 +144,6 @@ def run_geomfig_test(quick=False):
     print("=" * 60)
     
     snn.train(
-        epochs=epochs,
         batch_size=batch_size,
         val_batch_size=val_batch_size,
     )

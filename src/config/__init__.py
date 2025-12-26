@@ -12,12 +12,13 @@ from .defaults import (
     DEFAULT_DATA_PARAMS,
     GEOMFIG_PARAMS,
 )
-from .experiments import (
+from .experiment_configs import (
     ALL_EXPERIMENTS,
     get_experiment,
-    PAPER_GEOMFIG_EXPERIMENT,
+    GEOMFIG_EXPERIMENT,
     GEOMFIG_SLEEP_COMPARISON,
-    MNIST_BASELINE_EXPERIMENT,
+    SLEEP_RATE_COMPARISON,
+    MNIST_FAMILY_EXPERIMENT,
     QUICK_TEST_EXPERIMENT,
 )
 
@@ -30,7 +31,8 @@ __all__ = [
     'get_experiment',
     'PAPER_GEOMFIG_EXPERIMENT',
     'GEOMFIG_SLEEP_COMPARISON',
-    'MNIST_BASELINE_EXPERIMENT',
+    'SLEEP_RATE_COMPARISON',
+    'MNIST_FAMILY_EXPERIMENT',
     'QUICK_TEST_EXPERIMENT',
 ]
 

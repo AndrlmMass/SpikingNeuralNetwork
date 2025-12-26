@@ -5,24 +5,6 @@ import numpy as np
 from .plasticity import sleep_func, spike_timing
 
 
-def report_numba_status():
-    """Print a minimal Numba status summary (no large IR dumps)."""
-    try:
-        funcs = [
-            ("clip_weights", clip_weights),
-            ("sleep_func", sleep_func),
-            ("spike_timing", spike_timing),
-        ]
-        msgs = []
-        for name, func in funcs:
-            sigs = getattr(func, "signatures", []) or []
-            status = "compiled" if len(sigs) > 0 else "pending"
-            msgs.append(f"{name}:{status}")
-        print("Numba status — " + ", ".join(msgs))
-    except Exception:
-        pass
-
-
 @njit(cache=True)
 def clip_weights(
     weights,
@@ -204,7 +186,6 @@ def update_spikes(
 
     return mp, spikes, spike_times, spike_threshold, a
 
-
 def train_network(
     weights,
     mp,
@@ -274,7 +255,17 @@ def train_network(
     track_weights: bool = False,  # Enable weight tracking (adds overhead)
     weight_track_samples_exc=8,
     weight_track_samples_inh=8,
+    weight_tracking_sleep=None,
     sleep_snapshot_interval=None,
+    train_record_every: int = 1000,  # Record weight snapshots every N timesteps during training (default: 1000 to reduce memory)
+    show_progress: bool = True,  # Show progress bar (set False to suppress per-batch progress)
+    # Sleep schedule parameters (for random sleep timesteps)
+    global_timestep_offset: int = 0,  # Global timestep offset for this batch (for sleep schedule lookup)
+    sleep_schedule: set = None,  # Set of global timesteps where sleep should activate
+    sleep_timesteps_total: int = 0,  # Total sleep timesteps quota (number of triggers)
+    sleep_timesteps_used: list = None,  # Mutable reference to sleep timesteps used counter [count]
+    sleep_iterations_budget: int = 0,  # Total sleep iterations budget (computational time budget)
+    sleep_iterations_used: list = None,  # Mutable reference to sleep iterations used counter [count]
 ):
 
     st = N_x  # stimulation
@@ -284,8 +275,6 @@ def train_network(
     # Disable training-time plotting snapshots for performance
     weights_4_plotting_exc = np.empty((0, 0, 0))
     weights_4_plotting_inh = np.empty((0, 0, 0))
-
-    delta_w = np.zeros(shape=weights.shape)
 
     nz_rows_inh, nz_cols_inh = np.nonzero(weights[ex:ih, st:ex])
     nz_rows_exc, nz_cols_exc = np.nonzero(weights[:ex, :ih])
@@ -305,13 +294,6 @@ def train_network(
     else:
         sleep_window = 0
 
-    # Print sleep configuration
-    if sleep and sleep_window > 0:
-        expected_sleep_pct = (sleep_window / T) * 100
-        print(
-            f"Sleep scheduled: {sleep_window}/{T} timesteps per batch ({expected_sleep_pct:.1f}%)"
-        )
-
     # Suppose weights is your initial 2D numpy array of weights.
     # Here, we assume that the columns correspond to post-neurons.
     if train_weights:
@@ -327,6 +309,9 @@ def train_network(
 
     sleep_amount = 0
     virtual_sleep_iters_epoch = 0
+    # Track total sleep iterations per batch to prevent excessive slowdown
+    total_sleep_iters_this_batch = 0
+    max_sleep_iters_per_batch = 10000  # Limit total sleep iterations per batch to prevent 30x slowdown
 
     # Maintain previous-step state explicitly so we can evolve during hard-pause sleep
     mp_prev = mp[0].copy()
@@ -335,28 +320,12 @@ def train_network(
 
     # Lightweight weight tracking focused around sleep periods (plus sparse training samples)
     # Only initialize if track_weights is enabled to avoid overhead
-    weight_tracking_sleep = None
     exc_pairs = []
     inh_pairs = []
     plot_time = 0
-    train_record_every = 1
-    sleep_record_every = 1
+
 
     if track_weights:
-        weight_tracking_sleep = {
-            "times": [],  # monotonically increasing plot-time (snapshot index)
-            "exc_mean": [],
-            "exc_std": [],
-            "exc_min": [],
-            "exc_max": [],
-            "exc_samples": [],  # list of [K_exc] values (tracked weights)
-            "inh_mean": [],
-            "inh_std": [],
-            "inh_min": [],
-            "inh_max": [],
-            "inh_samples": [],  # list of [K_inh] values (tracked weights)
-            "sleep_segments": [],  # list of (t_start, t_end) in the same plot-time reference
-        }
         # Select a small number of active synapses to track (prefer non-zero)
         rng = np.random.default_rng(42)
         try:
@@ -419,8 +388,6 @@ def train_network(
 
     def _record_snapshot():
         nonlocal plot_time
-        if not track_weights or weight_tracking_sleep is None:
-            return False
         # Compute group stats over signed weights (preserve inhibitory sign)
         try:
             W_exc = weights[:ex, st:ih][weights[:ex, st:ih] != 0]
@@ -468,12 +435,23 @@ def train_network(
 
     # Create progress bar wrapping the timestep range
     # Note: range(1, T) gives timesteps 1 to T-1 (T-1 total iterations)
-    pbar = tqdm(
-        range(1, T),
-        desc=desc,
-        leave=False,
-        unit="step",
-    )
+    # Suppress per-batch progress bars to avoid spam (use epoch-level progress instead)
+    # "step" here means timesteps (dt's), not samples
+    if show_progress:
+        pbar = tqdm(
+            range(1, T),
+            desc=desc,
+            leave=False,
+            unit="timestep",  # Clarify that this is timesteps, not samples
+            disable=False,
+        )
+    else:
+        # Create a dummy progress bar that does nothing (completely suppress output)
+        class DummyProgressBar:
+            def update(self, n): pass
+            def set_postfix(self, **kwargs): pass
+            def close(self): pass
+        pbar = DummyProgressBar()
     last_sample = 0
     last_sleep_flag = -1  # unknown
     last_stats_update_t = -1000
@@ -482,24 +460,30 @@ def train_network(
         _record_snapshot()
         plot_time += 1
     for t in range(1, T):
-        # Update progress bar only when sample count changes (every 1000 timesteps)
-        current_sample = t // 1000
-        if current_sample > last_sample:
-            pbar.update(current_sample - last_sample)
-            last_sample = current_sample
+        pbar.update(1)
 
         # Reset sleep flags for this timestep
         sleep_now_inh = False
         sleep_now_exc = False
 
-        # Trigger hard-pause only at the start of a batch (sleep window at batch start)
-        is_window_start = (
-            sleep and sleep_window > 0 and ((t % T) == 0)
-        )
-
         # Hard-pause sleep: run inner loop without advancing real time t
+        # Check if current global timestep is in sleep schedule and budget not exhausted
         slept_this_step = False
-        if train_weights and sleep and sleep_hard_pause and is_window_start:
+        global_t = global_timestep_offset + t
+        # Check both trigger quota and iterations budget
+        remaining_iterations_budget = sleep_iterations_budget - sleep_iterations_used[0] if sleep_iterations_budget > 0 else float('inf')
+        should_sleep = (
+            train_weights 
+            and sleep 
+            and sleep_hard_pause 
+            and global_t in sleep_schedule 
+            and sleep_timesteps_used[0] < sleep_timesteps_total
+            and remaining_iterations_budget > 0  # Only sleep if we have budget remaining
+        )
+        
+        if should_sleep:
+            # Increment sleep quota usage
+            sleep_timesteps_used[0] += 1
             # Mark current real timestep as sleep once
             if spike_labels is not None:
                 spike_labels[t] = -2
@@ -585,6 +569,29 @@ def train_network(
 
             sleep_iter = 0
             sleep_time_counter = 0
+            
+            # Calculate remaining iterations budget for this sleep trigger
+            # Limit each trigger to use at most the remaining budget, or a reasonable max per trigger
+            remaining_budget = sleep_iterations_budget - sleep_iterations_used[0] if sleep_iterations_budget > 0 else float('inf')
+            max_iters_this_trigger = min(sleep_max_iters, int(remaining_budget)) if remaining_budget < float('inf') else sleep_max_iters
+            
+            # If no budget remaining, skip sleep and scale weights as fallback
+            if remaining_budget <= 0:
+                if train_weights:
+                    target_exc = baseline_sum_exc * beta if baseline_sum_exc is not None else None
+                    target_inh = baseline_sum_inh * beta if baseline_sum_inh is not None else None
+                    if target_exc is not None:
+                        current_sum_exc = np.sum(np.abs(weights[:ex, st:ih]))
+                        if current_sum_exc > 1e-12:
+                            scale_exc = target_exc / current_sum_exc
+                            weights[:ex, st:ih] *= scale_exc
+                    if target_inh is not None:
+                        current_sum_inh = np.sum(np.abs(weights[ex:ih, st:ex]))
+                        if current_sum_inh > 1e-12:
+                            scale_inh = target_inh / current_sum_inh
+                            weights[ex:ih, st:ex] *= scale_inh
+                # Continue to next timestep without running sleep loop
+                continue
 
             while True:
                 # Compute current sums
@@ -613,8 +620,9 @@ def train_network(
                 if reached_exc and reached_inh:
                     break
 
-                # Safety cap: handle non-convergence
-                if sleep_iter >= sleep_max_iters or sleep_iter >= sleep_window:
+                # Safety cap: handle non-convergence or budget exhaustion
+                # Check both max iterations and remaining budget
+                if sleep_iter >= max_iters_this_trigger or sleep_iter >= sleep_window:
                     if on_timeout == "scale_to_target":
                         # Scale weights to hit targets exactly (if defined)
                         if target_exc is not None and current_sum_exc > 1e-12:
@@ -774,10 +782,32 @@ def train_network(
                 sleep_iter += 1
                 sleep_time_counter += 1
                 virtual_sleep_iters_epoch += 1
+                sleep_iterations_used[0] += 1  # Track actual computational time spent on sleep
                 t_virtual += 1
+                
+                # Check if we've exhausted the iterations budget
+                if sleep_iterations_used[0] >= sleep_iterations_budget and sleep_iterations_budget > 0:
+                    # Force exit sleep loop if we've hit global budget
+                    if on_timeout == "scale_to_target":
+                        # Scale weights to hit targets exactly (if defined)
+                        if target_exc is not None and current_sum_exc > 1e-12:
+                            scale_exc = target_exc / current_sum_exc
+                            weights[:ex, st:ih] *= scale_exc
+                        if target_inh is not None and current_sum_inh > 1e-12:
+                            scale_inh = target_inh / current_sum_inh
+                            weights[ex:ih, st:ex] *= scale_inh
+                        # Clip to bounds after scaling
+                        weights = clip_weights(
+                            weights=weights,
+                            nz_cols_exc=nz_cols_exc,
+                            nz_cols_inh=nz_cols_inh,
+                            nz_rows_exc=nz_rows_exc,
+                            nz_rows_inh=nz_rows_inh,
+                        )
+                    break
 
             # End of hard-pause sleep loop — record one more snapshot and mark the segment
-            if track_weights and weight_tracking_sleep is not None:
+            if weight_tracking_sleep is not None:
                 try:
                     _record_snapshot()
                     plot_time += 1
@@ -878,11 +908,7 @@ def train_network(
             if t % 100 == 0:
                 weights_T_cache = weights[:, st:ih].T.copy()
 
-            # After first successful compilation, report numba status once
-            if t == 1:
-                report_numba_status()
 
-            # snapshots disabled
 
         # Apply scheduled sleep flags (non-hard-pause mode only). For hard-pause we only mark at window start.
         # Sleep is applied at the start of each batch (first sleep_window timesteps of each batch)
@@ -938,19 +964,30 @@ def train_network(
         if track_weights and (t % train_record_every) == 0:
             _record_snapshot()
             plot_time += 1
+        
+
 
     pbar.close()
-    sleep_percent = (sleep_amount / T) * 100
-
-    # Report virtual sleep duration for this epoch
-    try:
-        virtual_pct = (virtual_sleep_iters_epoch / max(1, T)) * 100
-        print(
-            f"Virtual sleep (epoch): {virtual_sleep_iters_epoch} iters (~{virtual_pct:.2f}% of real steps)"
-        )
-    except Exception:
-        pass
-
+    # Calculate sleep percentage based on actual computational time (iterations) used
+    # This is the true measure of how much time was spent on sleep
+    sleep_iters_used = sleep_iterations_used[0] if sleep_iterations_used else 0
+    sleep_iters_budget = sleep_iterations_budget if sleep_iterations_budget > 0 else 1
+    sleep_percent_computational = (sleep_iters_used / sleep_iters_budget) * 100 if sleep_iters_budget > 0 else 0.0
+    
+    # Also report trigger-based stats
+    sleep_quota_used = sleep_timesteps_used[0] if sleep_timesteps_used else 0
+    sleep_quota_total = sleep_timesteps_total if sleep_timesteps_total > 0 else 1
+    sleep_percent_triggers = (sleep_quota_used / sleep_quota_total) * 100 if sleep_quota_total > 0 else 0.0
+    
+    # Per-batch stats
+    sleep_percent_batch = (sleep_amount / T) * 100 if T > 0 else 0.0
+    
+    print(f"Sleep stats (batch): {sleep_amount}/{T} timesteps ({sleep_percent_batch:.2f}% of batch)")
+    print(f"Sleep triggers (global): {sleep_quota_used}/{sleep_quota_total} ({sleep_percent_triggers:.2f}% of trigger quota)")
+    print(f"Sleep iterations (computational): {sleep_iters_used}/{sleep_iters_budget} ({sleep_percent_computational:.2f}% of computational budget)")
+    
+    # Return computational percentage as the main metric
+    sleep_percent = sleep_percent_computational
     return (
         weights,
         spikes,

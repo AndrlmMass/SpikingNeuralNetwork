@@ -55,6 +55,26 @@ SLEEP_RATE_COMPARISON = {
 }
 
 
+# Paper geomfig experiment (canonical for paper)
+GEOMFIG_EXPERIMENT = {
+    "name": "paper_geomfig",
+    "description": "Geomfig classification experiment for paper",
+    "network": {
+        **DEFAULT_NETWORK_PARAMS,
+        "classes": GEOMFIG_PARAMS["classes"],
+    },
+    "training": DEFAULT_TRAINING_PARAMS.copy(),
+    "data": {
+        **DEFAULT_DATA_PARAMS,
+        "gain": GEOMFIG_PARAMS["gain"],
+        "noise_var": GEOMFIG_PARAMS["noise_var"],
+        "noise_mean": GEOMFIG_PARAMS["noise_mean"],
+        "jitter": GEOMFIG_PARAMS["jitter"],
+        "jitter_amount": GEOMFIG_PARAMS["jitter_amount"],
+    },
+}
+
+
 # Quick test configuration (minimal data for debugging)
 QUICK_TEST_EXPERIMENT = {
     "name": "quick_test",
@@ -95,6 +115,7 @@ MNIST_FAMILY_EXPERIMENT = {
 
 # All experiments for easy access
 ALL_EXPERIMENTS = {
+    "paper_geomfig": GEOMFIG_EXPERIMENT,
     "geomfig_sleep_comparison": GEOMFIG_SLEEP_COMPARISON,
     "mnist_family": MNIST_FAMILY_EXPERIMENT,
     "sleep_comparison": SLEEP_RATE_COMPARISON,

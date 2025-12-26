@@ -235,8 +235,13 @@ def t_SNE(
         plt.show()
     plt.close(fig)
 
-def _compute_spike_rates(spikes, labels, num_steps, require_all=False):
-    """Helper to compute mean spike rates per stimulus presentation."""
+def _compute_spike_rates(spikes, labels, num_steps, require_all=False, require_any=False):
+    """Helper to compute mean spike rates per stimulus presentation.
+    
+    Args:
+        require_all: If True, raise error if any chunk has no valid samples
+        require_any: If True, require at least one valid chunk (opposite of require_all)
+    """
     spike_rates = []
     unique_labels = []
     sleep_mask = labels != -2
@@ -258,6 +263,10 @@ def _compute_spike_rates(spikes, labels, num_steps, require_all=False):
         predom_label = np.argmax(np.bincount(labels[i : i + num_steps][current_mask]))
         spike_rates.append(mean_spikes)
         unique_labels.append(predom_label)
+
+    # If require_any is True, ensure we got at least one sample
+    if require_any and len(spike_rates) == 0:
+        raise ValueError("No valid samples found (require_any=True)")
 
     return np.array(spike_rates), np.array(unique_labels)
 
