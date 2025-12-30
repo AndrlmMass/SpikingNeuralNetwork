@@ -7,16 +7,18 @@ Supports two modes:
 """
 
 import sys
-import os
 from pathlib import Path
+
+from sympy.logic import false
 
 # Add src to path (go up one level from experiments/ to src/)
 src_root = Path(__file__).parent.parent
 if str(src_root) not in sys.path:
     sys.path.insert(0, str(src_root))
 
-from config import GEOMFIG_EXPERIMENT, GEOMFIG_SLEEP_COMPARISON, QUICK_TEST_EXPERIMENT, DEFAULT_TRAINING_PARAMS
-from models.SNN_sleepy.snn import snn_sleepy
+from ..config.experiment_configs import GEOMFIG_EXPERIMENT, GEOMFIG_SLEEP_COMPARISON, QUICK_GEOMFIG
+from ..config.defaults import DEFAULT_TRAINING_PARAMS
+from ..models.SNN_sleepy.snn import snn_sleepy
 
 
 def simple_geomfig(quick=False):
@@ -33,7 +35,7 @@ def simple_geomfig(quick=False):
         print("=" * 60)
         print("Running QUICK TEST experiment (small dataset)")
         print("=" * 60)
-        exp_config = QUICK_TEST_EXPERIMENT
+        exp_config = QUICK_GEOMFIG
     else:
         print("=" * 60)
         print("Running PAPER GEOMFIG experiment")
@@ -176,13 +178,14 @@ def simple_geomfig(quick=False):
     return snn
 
 
-def sleep_comparison_geomfig(quick=False):
+def sleep_comparison_geomfig(quick=False, preview_data=False):
     """Run geomfig sleep comparison experiment.
     
     Compares geomfig classification with and without sleep.
     
     Args:
         quick: If True, use smaller dataset for quick testing
+        preview_data: If True, show preview plots of loaded data
     
     Returns:
         dict: Results dictionary with accuracy for each configuration
@@ -262,6 +265,7 @@ def sleep_comparison_geomfig(quick=False):
             geom_jitter_amount=data_params.get("jitter_amount", 0.05),
             geom_noise_var=data_params.get("noise_var", 0.2),
             force_recreate=False,
+            preview_data=preview_data,
         )
         
         # Prepare network
@@ -380,6 +384,11 @@ Examples:
         action="store_true",
         help="Use quick test configuration (small dataset, faster)"
     )
+    parser.add_argument(
+        "--preview-data",
+        action="store_true",
+        help="Show preview plots of loaded data"
+    )
     
     args = parser.parse_args()
     
@@ -387,5 +396,5 @@ Examples:
         snn = simple_geomfig(quick=args.quick)
         print("\n✅ Simple geomfig experiment completed successfully!")
     elif args.mode == "sleep_comparison_geomfig":
-        results = sleep_comparison_geomfig(quick=args.quick)
+        results = sleep_comparison_geomfig(quick=args.quick, preview_data=args.preview_data)
         print("\n✅ Sleep comparison experiment completed successfully!")

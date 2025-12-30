@@ -21,7 +21,7 @@ from .paper_figures import (
     generate_all_paper_figures,
 )
 
-from ..plot.plot import (
+from ..plot.post import (
     plot_model_accuracy_sleep,
     plot_glmm_predictions,
     plot_glmm_with_raw_accuracy,

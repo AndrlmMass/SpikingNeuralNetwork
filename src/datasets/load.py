@@ -161,15 +161,7 @@ class DataStreamer:
                 )
 
         else:
-            (
-                self.train_images,
-                self.train_labels,
-                self.val_images,
-                self.val_labels,
-                self.test_images,
-                self.test_labels,
-            ) = MNIST_DATASET.load_mnist_family(
-                dataset=self.dataset,
+            mnist_loaders = MNIST_DATASET(
                 transform=transform,
                 train_ratio=self.train_ratio,
                 val_ratio=self.val_ratio,
@@ -180,6 +172,17 @@ class DataStreamer:
                 load_cache_fn=self._load_images_cache,
                 save_cache_fn=self._save_images_cache,
             )
+            (
+                self.train_images,
+                self.train_labels,
+                self.val_images,
+                self.val_labels,
+                self.test_images,
+                self.test_labels,
+            ) = mnist_loaders.load_mnist_family(
+                dataset=self.dataset,
+            )
+
             # Set lengths
             self.len_train = len(self.train_images)
             self.len_val = len(self.val_images)
@@ -202,13 +205,20 @@ class DataStreamer:
         )
 
         # Create and shuffle indices for each partition
-        self.train_indices = np.arange(self.len_train)
-        self.val_indices = np.arange(self.len_val)
-        self.test_indices = np.arange(self.len_test)
-
-        self.rng.shuffle(self.train_indices)
-        self.rng.shuffle(self.val_indices)
-        self.rng.shuffle(self.test_indices)
+        # Use torch for MNIST-family datasets, numpy for others
+        if self.dataset.lower() in ['mnist', 'kmnist', 'fmnist', 'notmnist']:
+            # Torch generator - use torch operations
+            self.train_indices = torch.randperm(self.len_train, generator=self.rng).numpy()
+            self.val_indices = torch.randperm(self.len_val, generator=self.rng).numpy()
+            self.test_indices = torch.randperm(self.len_test, generator=self.rng).numpy()
+        else:
+            # Numpy generator - use numpy operations
+            self.train_indices = np.arange(self.len_train)
+            self.val_indices = np.arange(self.len_val)
+            self.test_indices = np.arange(self.len_test)
+            self.rng.shuffle(self.train_indices)
+            self.rng.shuffle(self.val_indices)
+            self.rng.shuffle(self.test_indices)
 
         self.ptr_train = 0
         self.ptr_val = 0
@@ -531,15 +541,27 @@ class DataStreamer:
         Reset partition pointers and reshuffle indices for a new epoch.
         This ensures each epoch sees data in a different order.
         """
+        # Use torch for MNIST-family datasets, numpy for others
+        is_torch_rng = self.dataset.lower() in ['mnist', 'kmnist', 'fmnist', 'notmnist']
+        
         if partition in ("all", "train"):
             self.ptr_train = 0
-            self.rng.shuffle(self.train_indices)
+            if is_torch_rng:
+                self.train_indices = torch.randperm(self.len_train, generator=self.rng).numpy()
+            else:
+                self.rng.shuffle(self.train_indices)
         if partition in ("all", "val"):
             self.ptr_val = 0
-            self.rng.shuffle(self.val_indices)
+            if is_torch_rng:
+                self.val_indices = torch.randperm(self.len_val, generator=self.rng).numpy()
+            else:
+                self.rng.shuffle(self.val_indices)
         if partition in ("all", "test"):
             self.ptr_test = 0
-            self.rng.shuffle(self.test_indices)
+            if is_torch_rng:
+                self.test_indices = torch.randperm(self.len_test, generator=self.rng).numpy()
+            else:
+                self.rng.shuffle(self.test_indices)
 
     @staticmethod
     def params_hash(params: dict) -> str:

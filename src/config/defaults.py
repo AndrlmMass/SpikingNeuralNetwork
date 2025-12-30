@@ -47,7 +47,7 @@ DEFAULT_TRAINING_PARAMS = {
     
     # Sleep parameters
     "sleep": True,
-    "sleep_ratio": 0.02,
+    "sleep_ratio": 0.2,
     "check_sleep_interval": 35000,
     "sleep_mode": "static",
     
@@ -97,11 +97,14 @@ DEFAULT_DATA_PARAMS = {
 # Geomfig-specific defaults
 GEOMFIG_PARAMS = {
     "classes": [0, 1, 2, 3],  # triangle, circle, square, x
-    "pixel_size": 15,
-    "noise_var": 0.2,
+    "noise_var": 0.5,
     "noise_mean": 0.0,
     "jitter": False,
     "jitter_amount": 0.05,
     "gain": 0.5,
 }
+
+MNIST_DATASETS = ["mnist", "kmnist", "fmnist", "notmnist"]
+SLEEP_RATES = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+SEEDS = [1, 2, 3, 4, 5]
 

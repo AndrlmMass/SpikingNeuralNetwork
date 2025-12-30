@@ -366,8 +366,7 @@ class GEOMFIG_DATASET:
                     f"Number of classes are too low, or number of samples for {split_name}"
                 )
             imgs = np.zeros((total, pixel_size, pixel_size), dtype=np.float32)
-            labels = np.array([which_classes[i % len(which_classes)] for i in range(total)], dtype=np.int32)
-
+            
             # Enable progress bars for generation
             os.environ["TQDM_DISABLE"] = "False"
 
@@ -375,7 +374,10 @@ class GEOMFIG_DATASET:
             # and copy it with different noise. If jitter is enabled, each image must be unique.
             samples_per_class = total // n_classes
             cls_seq = np.tile(which_classes, samples_per_class)
+            # Shuffle the class sequence - this determines the order of image generation
             cls_seq = rng.permutation(cls_seq)
+            # Create labels from the shuffled class sequence to match the images
+            labels = cls_seq.astype(np.int32)
             
             if not jitter:
                 # Fast path: generate one base image per class, copy and add noise
@@ -478,27 +480,19 @@ class GEOMFIG_DATASET:
         )
 
 class MNIST_DATASET:
-    def __init__(self, transform, train_ratio, val_ratio, rng, which_classes=None, load_cache_fn=None, save_cache_fn=None):
+    def __init__(self, transform, train_ratio, val_ratio, test_ratio, num_samples, rng, which_classes=None, load_cache_fn=None, save_cache_fn=None):
         self.transform = transform
+        self.test_ratio = test_ratio
         self.train_ratio = train_ratio
         self.val_ratio = val_ratio
-        self.rng = rng
+        self.rng = rng  # Should be torch.Generator
         self.which_classes = which_classes
         self.load_cache_fn = load_cache_fn
         self.save_cache_fn = save_cache_fn
-
+        self.num_samples = num_samples
     def load_mnist_family(
         self,
         dataset,
-        transform,
-        train_ratio,
-        val_ratio,
-        test_ratio,
-        rng,
-        which_classes,
-        num_samples,
-        load_cache_fn,
-        save_cache_fn,
     ):
         """
         Load MNIST-family datasets (MNIST, KMNIST, FMNIST) with caching support.
@@ -533,14 +527,14 @@ class MNIST_DATASET:
         os.makedirs(torch_root, exist_ok=True)
 
         mnist_train = ds_cls(
-            root=torch_root, train=True, transform=transform, download=True
+            root=torch_root, train=True, transform=self.transform, download=True
         )
         mnist_test = ds_cls(
-            root=torch_root, train=False, transform=transform, download=True
+            root=torch_root, train=False, transform=self.transform, download=True
         )
 
         # Respect which_classes by filtering datasets if provided
-        target_classes = set(which_classes)
+        target_classes = set(self.which_classes)
 
         def _filter_dataset(ds):
             indices = [i for i in range(len(ds)) if int(ds[i][1]) in target_classes]
@@ -555,19 +549,19 @@ class MNIST_DATASET:
         total_available = n_train_available + n_test_available
         
         # Calculate desired counts based on ratios (relative to total dataset)
-        desired_train_count = int(total_available * train_ratio)
-        desired_val_count = int(total_available * val_ratio)
-        desired_test_count = int(total_available * test_ratio)
+        desired_train_count = int(total_available * self.train_ratio)
+        desired_val_count = int(total_available * self.val_ratio)
+        desired_test_count = int(total_available * self.test_ratio)
         
         # Apply num_samples limit if specified
-        if num_samples > 0:
+        if self.num_samples > 0:
             total_desired = desired_train_count + desired_val_count + desired_test_count
-            if total_desired > num_samples:
+            if total_desired > self.num_samples:
                 # Scale down proportionally
-                scale = num_samples / total_desired
+                scale = self.num_samples / total_desired
                 desired_train_count = int(desired_train_count * scale)
                 desired_val_count = int(desired_val_count * scale)
-                desired_test_count = num_samples - desired_train_count - desired_val_count  # Use remainder
+                desired_test_count = self.num_samples - desired_train_count - desired_val_count  # Use remainder
         
         # Ensure we don't exceed available data
         # Test set: use desired amount or all available, whichever is smaller
@@ -579,22 +573,26 @@ class MNIST_DATASET:
         
         # Subset test set if needed (using indices, not count)
         if n_test_use < n_test_available:
-            test_indices = list(range(n_test_available))
-            rng.shuffle(test_indices)
-            mnist_test = torch.utils.data.Subset(mnist_test, test_indices[:n_test_use])
+            test_indices = torch.arange(n_test_available, dtype=torch.long)
+            # Shuffle using torch.randperm with generator
+            perm = torch.randperm(n_test_available, generator=self.rng)
+            test_indices = test_indices[perm]
+            mnist_test = torch.utils.data.Subset(mnist_test, test_indices[:n_test_use].tolist())
         
         # Subset training set if needed (before splitting into train/val)
         if n_train_val_use < n_train_available:
-            train_indices = list(range(n_train_available))
-            rng.shuffle(train_indices)
-            mnist_train = torch.utils.data.Subset(mnist_train, train_indices[:n_train_val_use])
+            train_indices = torch.arange(n_train_available, dtype=torch.long)
+            # Shuffle using torch.randperm with generator
+            perm = torch.randperm(n_train_available, generator=self.rng)
+            train_indices = train_indices[perm]
+            mnist_train = torch.utils.data.Subset(mnist_train, train_indices[:n_train_val_use].tolist())
         
         # Now split the (possibly subsetted) training set into train/val
         # Maintain the train:val ratio within the available training set
         n_train_total = len(mnist_train)
-        train_val_sum = train_ratio + val_ratio
+        train_val_sum = self.train_ratio + self.val_ratio
         if train_val_sum > 0:
-            train_fraction = train_ratio / train_val_sum
+            train_fraction = self.train_ratio / train_val_sum
             train_size = int(n_train_total * train_fraction)
             val_size = n_train_total - train_size  # Use remainder to avoid rounding issues
         else:
@@ -603,14 +601,14 @@ class MNIST_DATASET:
             val_size = n_train_total - train_size
         
         mnist_train, mnist_val = torch.utils.data.random_split(
-            mnist_train, [train_size, val_size], generator=rng
+            mnist_train, [train_size, val_size], generator=self.rng
         )
 
         # Try to load from image cache first
-        if load_cache_fn:
-            train_images, train_labels = load_cache_fn("train")   
-            val_images, val_labels = load_cache_fn("val")
-            test_images, test_labels = load_cache_fn("test")
+        if self.load_cache_fn:
+            train_images, train_labels = self.load_cache_fn("train")   
+            val_images, val_labels = self.load_cache_fn("val")
+            test_images, test_labels = self.load_cache_fn("test")
             
             if train_images is not None and val_images is not None and test_images is not None:
                 print(f"Using cached {dataset.upper()} images")
@@ -627,10 +625,10 @@ class MNIST_DATASET:
         test_images, test_labels = _load_split(mnist_test)
         
         # Save to cache if function provided
-        if save_cache_fn:
-            save_cache_fn("train", train_images, train_labels)
-            save_cache_fn("val", val_images, val_labels)
-            save_cache_fn("test", test_images, test_labels)
+        if self.save_cache_fn:
+            self.save_cache_fn("train", train_images, train_labels)
+            self.save_cache_fn("val", val_images, val_labels)
+            self.save_cache_fn("test", test_images, test_labels)
 
         return train_images, train_labels, val_images, val_labels, test_images, test_labels
 
@@ -694,10 +692,9 @@ class MNIST_DATASET:
         # Limit dataset to num_samples if specified (before splitting)
         if num_samples is not None and num_samples > 0:
             if len(dataset) > num_samples:
-                # Shuffle and take first num_samples
-                indices = np.arange(len(dataset))
-                rng.shuffle(indices)
-                dataset = [dataset[i] for i in indices[:num_samples]]
+                # Shuffle and take first num_samples using torch.randperm
+                indices = torch.randperm(len(dataset), generator=rng)
+                dataset = [dataset[i] for i in indices[:num_samples].tolist()]
         
         n = len(dataset)
         n_train = int(train_ratio * n)

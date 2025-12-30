@@ -10,6 +10,9 @@ from .defaults import (
     DEFAULT_TRAINING_PARAMS,
     DEFAULT_DATA_PARAMS,
     GEOMFIG_PARAMS,
+    MNIST_DATASETS,
+    SLEEP_RATES,
+    SEEDS,
 )
 
 
@@ -31,7 +34,7 @@ GEOMFIG_SLEEP_COMPARISON = {
     ],
     "network": {
         **DEFAULT_NETWORK_PARAMS,
-        "classes": GEOMFIG_PARAMS["classes"],
+        "classes": GEOMFIG_PARAMS["classes"].copy(),  # Copy list to prevent mutation
     },
     "data": {
         **DEFAULT_DATA_PARAMS,
@@ -41,19 +44,11 @@ GEOMFIG_SLEEP_COMPARISON = {
         "jitter": GEOMFIG_PARAMS["jitter"],
         "jitter_amount": GEOMFIG_PARAMS["jitter_amount"],
     },
+    "plot": {
+        "boxplot": True,
+        "preview_data": True,
+    },
 }
-
-
-# Sleep rate comparison experiment
-SLEEP_RATE_COMPARISON = {
-    "name": "sleep_rate_comparison",
-    "description": "Compare different sleep rates",
-    "sleep_rates": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
-    "network": DEFAULT_NETWORK_PARAMS.copy(),
-    "training_base": DEFAULT_TRAINING_PARAMS.copy(),
-    "data": DEFAULT_DATA_PARAMS.copy(),
-}
-
 
 # Paper geomfig experiment (canonical for paper)
 GEOMFIG_EXPERIMENT = {
@@ -61,9 +56,10 @@ GEOMFIG_EXPERIMENT = {
     "description": "Geomfig classification experiment for paper",
     "network": {
         **DEFAULT_NETWORK_PARAMS,
-        "classes": GEOMFIG_PARAMS["classes"],
+        "classes": GEOMFIG_PARAMS["classes"].copy(),  # Copy list to prevent mutation
     },
     "training": DEFAULT_TRAINING_PARAMS.copy(),
+    "datasets": ["geomfig"],
     "data": {
         **DEFAULT_DATA_PARAMS,
         "gain": GEOMFIG_PARAMS["gain"],
@@ -74,28 +70,34 @@ GEOMFIG_EXPERIMENT = {
     },
 }
 
-
+    
 # Quick test configuration (minimal data for debugging)
-QUICK_TEST_EXPERIMENT = {
-    "name": "quick_test",
-    "description": "Minimal configuration for quick testing (geomfig, small dataset)",
+QUICK_GEOMFIG = {
+    "name": "paper_geomfig",
+    "description": "Geomfig classification experiment for paper",
     "network": {
         **DEFAULT_NETWORK_PARAMS,
-        "classes": GEOMFIG_PARAMS["classes"],  # 4 classes for geomfig
+        "classes": GEOMFIG_PARAMS["classes"].copy(),  # Copy list to prevent mutation
     },
-    "training": DEFAULT_TRAINING_PARAMS.copy(),  # Use defaults
+    "training": DEFAULT_TRAINING_PARAMS.copy(),
+    "datasets": ["geomfig"],
     "data": {
         **DEFAULT_DATA_PARAMS,
-        # Override only what's different for quick test
-        "all_images_train": 100,
-        "batch_image_train": 50,
-        "all_images_test": 50,
-        "batch_image_test": 50,
-        "all_images_val": 50,
-        "batch_image_val": 50,
         "gain": GEOMFIG_PARAMS["gain"],
         "noise_var": GEOMFIG_PARAMS["noise_var"],
+        "noise_mean": GEOMFIG_PARAMS["noise_mean"],
+        "jitter": GEOMFIG_PARAMS["jitter"],
+        "jitter_amount": GEOMFIG_PARAMS["jitter_amount"],
     },
+}
+
+QUICK_MNIST = {
+    "name": "quick_mnist",
+    "description": "Minimal configuration for quick testing (mnist, small dataset)",
+    "datasets": MNIST_DATASETS.copy(),  # Copy list to prevent mutation
+    "network": DEFAULT_NETWORK_PARAMS.copy(),
+    "training": DEFAULT_TRAINING_PARAMS.copy(),
+    "data": DEFAULT_DATA_PARAMS.copy(),
 }
 
 
@@ -103,10 +105,10 @@ QUICK_TEST_EXPERIMENT = {
 MNIST_FAMILY_EXPERIMENT = {
     "name": "mnist_family",
     "description": "Compare sleep rates across MNIST-family datasets",
-    "datasets": ["mnist", "kmnist", "fmnist", "notmnist"],
-    "sleep_rates": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+    "datasets": MNIST_DATASETS.copy(),  # Copy list to prevent mutation
+    "sleep_rates": SLEEP_RATES.copy(),  # Copy list to prevent mutation
     "sleep_mode": "static",
-    "seeds": [1, 2, 3, 4, 5],
+    "seeds": SEEDS.copy(),  # Copy list to prevent mutation
     "network": DEFAULT_NETWORK_PARAMS.copy(),
     "training": DEFAULT_TRAINING_PARAMS.copy(),
     "data": DEFAULT_DATA_PARAMS.copy(),
@@ -118,8 +120,7 @@ ALL_EXPERIMENTS = {
     "paper_geomfig": GEOMFIG_EXPERIMENT,
     "geomfig_sleep_comparison": GEOMFIG_SLEEP_COMPARISON,
     "mnist_family": MNIST_FAMILY_EXPERIMENT,
-    "sleep_comparison": SLEEP_RATE_COMPARISON,
-    "quick_test": QUICK_TEST_EXPERIMENT,
+    "quick_geomfig": QUICK_GEOMFIG,
 }
 
 

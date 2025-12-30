@@ -1,38 +1,8 @@
 """
 Configuration module: Default parameters and experiment configs.
 
-Contains:
-- defaults: Default network and training parameters
-- experiments: Pre-defined experiment configurations
+Import directly from submodules to avoid circular imports:
+- from src.config.defaults import ...
+- from src.config.experiment_configs import ...
 """
-
-from .defaults import (
-    DEFAULT_NETWORK_PARAMS,
-    DEFAULT_TRAINING_PARAMS,
-    DEFAULT_DATA_PARAMS,
-    GEOMFIG_PARAMS,
-)
-from .experiment_configs import (
-    ALL_EXPERIMENTS,
-    get_experiment,
-    GEOMFIG_EXPERIMENT,
-    GEOMFIG_SLEEP_COMPARISON,
-    SLEEP_RATE_COMPARISON,
-    MNIST_FAMILY_EXPERIMENT,
-    QUICK_TEST_EXPERIMENT,
-)
-
-__all__ = [
-    'DEFAULT_NETWORK_PARAMS',
-    'DEFAULT_TRAINING_PARAMS',
-    'DEFAULT_DATA_PARAMS',
-    'GEOMFIG_PARAMS',
-    'ALL_EXPERIMENTS',
-    'get_experiment',
-    'PAPER_GEOMFIG_EXPERIMENT',
-    'GEOMFIG_SLEEP_COMPARISON',
-    'SLEEP_RATE_COMPARISON',
-    'MNIST_FAMILY_EXPERIMENT',
-    'QUICK_TEST_EXPERIMENT',
-]
 

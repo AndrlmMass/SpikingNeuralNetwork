@@ -20,6 +20,8 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 from ..config.experiment_configs import MNIST_FAMILY_EXPERIMENT
+from ..config.defaults import DEFAULT_NETWORK_PARAMS, DEFAULT_TRAINING_PARAMS, DEFAULT_DATA_PARAMS
+from ..models.SNN_sleepy.snn import snn_sleepy
 
 # =============================================================================
 # EXPERIMENT CONFIGURATION
@@ -49,65 +51,189 @@ def run_snn_sleepy_experiment(
     datasets: Optional[List[str]] = None,
     sleep_rates: Optional[List[float]] = None,
     seeds: Optional[List[int]] = None,
+    preview_data: bool = False,
     extra_args: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
-    Run the full SNN-sleepy experiment by invoking scripts.train_model.
-    Delegates iteration to the script.
+    Run the full SNN-sleepy experiment by building and training models directly.
+    
+    Iterates over all combinations of datasets, sleep rates, and seeds,
+    trains models, and collects results.
     """
     datasets = datasets or MNIST_FAMILY_CONFIG["datasets"]
     sleep_rates = sleep_rates or MNIST_FAMILY_CONFIG["sleep_rates"]
     seeds = seeds or MNIST_FAMILY_CONFIG["seeds"]
     
-    # Calculate runs from seeds length (assuming seeds are 1..N)
-    n_runs = len(seeds)
-    if seeds != list(range(1, n_runs + 1)):
-        print(f"Warning: train_model.py generates seeds 1..{n_runs}. Your specific seeds {seeds} might not match exact indices, but we will run {n_runs} times per config.")
-
-    project_root = get_project_root()
+    # Get network and training params from config
+    network_params = MNIST_FAMILY_CONFIG.get("network", DEFAULT_NETWORK_PARAMS.copy())
+    training_params = MNIST_FAMILY_CONFIG.get("training", DEFAULT_TRAINING_PARAMS.copy())
+    data_params = MNIST_FAMILY_CONFIG.get("data", DEFAULT_DATA_PARAMS.copy())
     
-    # Construct the single batch command
-    # python -m scripts.train_model --dataset ... --sleep-rate ... --runs ...
-    cmd = [
-        sys.executable,
-        "-m", "scripts.train_model",
-        "--dataset", *datasets,
-        "--sleep-rate", *[str(r) for r in sleep_rates],
-        "--runs", str(n_runs),
-        "--force-train" # ensure we retrain for experiment
-    ]
-    if extra_args:
-        cmd.extend(extra_args)
-        
     print(f"\n{'='*60}")
     print(f"SNN-SLEEPY EXPERIMENT")
     print(f"{'='*60}")
-    print(f"Command: {' '.join(cmd)}")
+    print(f"Datasets: {datasets}")
+    print(f"Sleep rates: {sleep_rates}")
+    print(f"Seeds: {seeds}")
+    print(f"Total runs: {len(datasets) * len(sleep_rates) * len(seeds)}")
+    print(f"{'='*60}\n")
+    
+    results = []
+    total_runs = len(datasets) * len(sleep_rates) * len(seeds)
+    current_run = 0
     
     try:
-        env = os.environ.copy()
-        env["PYTHONUNBUFFERED"] = "1"
+        # Iterate over all combinations
+        for dataset in datasets:
+            for sleep_rate in sleep_rates:
+                for seed in seeds:
+                    current_run += 1
+                    run_name = f"{dataset}_sleep{sleep_rate:.1f}_seed{seed}"
+                    
+                    print(f"\n{'='*60}")
+                    print(f"Run {current_run}/{total_runs}: {run_name}")
+                    print(f"{'='*60}")
+                    
+                    try:
+                        # Create SNN instance
+                        snn = snn_sleepy(
+                            N_exc=network_params.get("N_exc", 200),
+                            N_inh=network_params.get("N_inh", 50),
+                            N_x=network_params.get("N_x", 225),
+                            seed=seed,
+                            which_classes=network_params.get("classes", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+                        )
+                        
+                        # Prepare data
+                        all_train = data_params.get("all_images_train", 6000)
+                        all_val = data_params.get("all_images_val", 100)
+                        all_test = data_params.get("all_images_test", 1000)
+                        total_data = all_train + all_val + all_test
+                        
+                        train_split = all_train / total_data
+                        val_split = all_val / total_data
+                        test_split = all_test / total_data
+                            
+                        snn.prepare_data(
+                            dataset=dataset,
+                            total_data=total_data,
+                            num_steps=data_params.get("num_steps", 100),
+                            train_split=train_split,
+                            val_split=val_split,
+                            test_split=test_split,
+                            batch_size=data_params.get("batch_image_train", 400),
+                            gain=data_params.get("gain", 1.0),
+                            force_recreate=False,
+                            preview_data=preview_data, 
+                        )
+                        
+                        # Prepare network
+                        snn.prepare_network(
+                            create_network=True,
+                            w_dense_ee=network_params.get("w_dense_ee", 0.15),
+                            w_dense_se=network_params.get("w_dense_se", 0.1),
+                            w_dense_ei=network_params.get("w_dense_ei", 0.2),
+                            w_dense_ie=network_params.get("w_dense_ie", 0.25),
+                            se_weights=network_params.get("se_weights", 0.15),
+                            ee_weights=network_params.get("ee_weights", 0.3),
+                            ei_weights=network_params.get("ei_weights", 0.3),
+                            ie_weights=network_params.get("ie_weights", -0.3),
+                            spike_threshold_default=network_params.get("spike_threshold_default", -55),
+                            resting_membrane=network_params.get("resting_potential", -70),
+                        )
+                        
+                        # Configure training parameters
+                        batch_size = data_params.get("batch_image_train", 400)
+                        val_batch_size = data_params.get("batch_image_val", 100)
+                        test_batch_size = data_params.get("batch_image_test", 200)
+                        
+                        # Override sleep settings for this run
+                        run_training_params = training_params.copy()
+                        run_training_params["sleep_ratio"] = sleep_rate
+                        run_training_params["sleep"] = sleep_rate > 0.0
+                        
+                        snn.train_network(
+                            train_weights=run_training_params.get("train_weights", True),
+                            learning_rate_exc=run_training_params.get("learning_rate_exc", 0.0005),
+                            learning_rate_inh=run_training_params.get("learning_rate_inh", 0.0005),
+                            sleep=run_training_params.get("sleep", True),
+                            sleep_ratio=run_training_params.get("sleep_ratio", 0.02),
+                            sleep_mode=run_training_params.get("sleep_mode", "static"),
+                            accuracy_method=run_training_params.get("accuracy_method", "pca_lr"),
+                            pca_variance=run_training_params.get("pca_variance", 0.95),
+                            use_validation_data=True,
+                            test_batch_size=test_batch_size,
+                            epochs=run_training_params.get("epochs", 10),
+                            force_train=True,
+                            save_model=False,  # Don't save individual models, just results
+                            **{k: v for k, v in run_training_params.items() 
+                               if k not in ["train_weights", "learning_rate_exc", "learning_rate_inh", 
+                                           "sleep", "sleep_ratio", "sleep_mode", "accuracy_method", "pca_variance",
+                                           "resting_potential", "spike_threshold_default", "check_sleep_interval", 
+                                           "timing_update", "trace_update", "vectorized_trace", "epochs"]}
+                        )
+                        
+                        # Run training
+                        snn.train(
+                            batch_size=batch_size,
+                            val_batch_size=val_batch_size,
+                        )
+                        
+                        # Collect results
+                        result = {
+                            "dataset": dataset,
+                            "sleep_rate": sleep_rate,
+                            "seed": seed,
+                            "run_name": run_name,
+                        }
+                        
+                        if hasattr(snn, 'performance_tracker'):
+                            if snn.performance_tracker.get("train_accuracy"):
+                                result["train_accuracy"] = snn.performance_tracker['train_accuracy'][-1]
+                            if snn.performance_tracker.get("val_accuracy"):
+                                result["val_accuracy"] = snn.performance_tracker['val_accuracy'][-1]
+                            if snn.performance_tracker.get("test_accuracy"):
+                                result["test_accuracy"] = snn.performance_tracker['test_accuracy'][-1]
+                        
+                        results.append(result)
+                        
+                        # Print run summary
+                        print(f"\n{run_name} complete!")
+                        if "test_accuracy" in result:
+                            print(f"  Test Accuracy: {result['test_accuracy']:.4f}")
+                        
+                    except Exception as e:
+                        print(f"\n❌ Error in {run_name}: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        results.append({
+                            "dataset": dataset,
+                            "sleep_rate": sleep_rate,
+                            "seed": seed,
+                            "run_name": run_name,
+                            "error": str(e),
+                        })
         
-        # Run with real-time output
-        result = subprocess.run(
-            cmd,
-            cwd=str(project_root),
-            env=env,
-        )
+        print(f"\n{'='*60}")
+        print(f"EXPERIMENT COMPLETE")
+        print(f"{'='*60}")
+        print(f"Total runs: {len(results)}")
+        successful = sum(1 for r in results if "error" not in r)
+        print(f"Successful: {successful}")
+        print(f"Failed: {len(results) - successful}")
         
-        status = "success" if result.returncode == 0 else "failed"
-        if status == "failed":
-            print("SNN-Sleepy training failed.")
-            
         return {
             "model": "SNN_sleepy",
             "datasets": datasets,
-            "status": status,
+            "status": "success" if successful > 0 else "failed",
+            "results": results,
         }
             
     except Exception as e:
-        print(f"Experiment execution error: {e}")
-        return {"status": "error", "error": str(e)}
+        print(f"\n❌ Experiment execution error: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"status": "error", "error": str(e), "results": results}
 
 
 # =============================================================================
@@ -248,7 +374,7 @@ def run_full_pipeline(
     # 5. Figures
     if not skip_plots:
         try:
-            from evaluation.paper_figures import generate_all_paper_figures
+            from ..evaluation.paper_figures import generate_all_paper_figures
             figs = generate_all_paper_figures(
                 output_dir=str(output_dir / "plots"),
                 analysis_dir=str(output_dir)
@@ -262,39 +388,152 @@ def run_full_pipeline(
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="MNIST Family Experiment")
+    
+    parser = argparse.ArgumentParser(
+        description="MNIST Family Experiment: Canonical test for sleep-rate comparison",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Run SNN-sleepy only
+  python -m src.experiments.mnist --snn-sleepy-only
+  
+  # Run full pipeline
+  python -m src.experiments.mnist --full-pipeline
+  
+  # Quick test mode (smaller dataset, fewer runs)
+  python -m src.experiments.mnist --snn-sleepy-only --quick
+  
+  # Custom datasets and sleep rates
+  python -m src.experiments.mnist --snn-sleepy-only --datasets mnist fmnist --sleep-rates 0.0 0.2 0.5
+  
+  # Generate figures only
+  python -m src.experiments.mnist --figures-only
+        """
+    )
     
     # Mode flags
-    parser.add_argument("--full-pipeline", action="store_true", help="Run full pipeline")
-    parser.add_argument("--snn-sleepy-only", action="store_true")
-    parser.add_argument("--snntorch-only", action="store_true")
-    parser.add_argument("--figures-only", action="store_true")
-    parser.add_argument("--glmm-only", action="store_true")
+    parser.add_argument(
+        "--full-pipeline",
+        action="store_true",
+        help="Run full pipeline: SNN-sleepy → snntorch → GLMM → figures"
+    )
+    parser.add_argument(
+        "--snn-sleepy-only",
+        action="store_true",
+        help="Run only SNN-sleepy training experiments"
+    )
+    parser.add_argument(
+        "--snntorch-only",
+        action="store_true",
+        help="Run only snntorch comparison experiments"
+    )
+    parser.add_argument(
+        "--figures-only",
+        action="store_true",
+        help="Generate paper figures only (requires Results_.xlsx)"
+    )
+    parser.add_argument(
+        "--glmm-only",
+        action="store_true",
+        help="Run GLMM analysis only (requires Results_.xlsx)"
+    )
     
     # Config overrides
-    parser.add_argument("--datasets", nargs="+")
-    parser.add_argument("--sleep-rates", nargs="+", type=float)
-    parser.add_argument("--seeds", nargs="+", type=int)
-    parser.add_argument("--quick", action="store_true")
+    parser.add_argument(
+        "--datasets",
+        nargs="+",
+        choices=["mnist", "kmnist", "fmnist", "notmnist"],
+        help="Datasets to run (default: all from config)"
+    )
+    parser.add_argument(
+        "--sleep-rates",
+        nargs="+",
+        type=float,
+        help="Sleep rates to test (default: all from config)"
+    )
+    parser.add_argument(
+        "--seeds",
+        nargs="+",
+        type=int,
+        help="Random seeds for runs (default: from config)"
+    )
+    parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="Quick test mode: smaller datasets, fewer runs, faster"
+    )
+    parser.add_argument(
+        "--preview-data",
+        action="store_true",
+        help="Show preview plots of loaded MNIST data using plot_floats_and_spikes"
+    )
 
     args = parser.parse_args()
     
+    # Quick mode defaults
     if args.quick:
         args.datasets = args.datasets or ["mnist", "fmnist"]
         args.sleep_rates = args.sleep_rates or [0.0, 0.5, 1.0]
         args.seeds = args.seeds or [1, 2]
+        print("=" * 60)
         print("Running in QUICK TEST mode")
+        print("=" * 60)
 
-    if args.figures_only:
-        from evaluation.paper_figures import generate_all_paper_figures
-        root = get_project_root()
-        out = root / MNIST_FAMILY_CONFIG["output_dir"]
-        generate_all_paper_figures(str(out / "plots"), str(out))
-    elif args.glmm_only:
-        run_glmm_analysis()
-    elif args.snn_sleepy_only:
-        run_snn_sleepy_experiment(args.datasets, args.sleep_rates, args.seeds)
-    elif args.snntorch_only:
-        run_snntorch_experiment(args.datasets, args.sleep_rates, args.seeds)
-    else:
-        run_full_pipeline(args.datasets, args.sleep_rates, args.seeds)
+    # Execute based on mode
+    try:
+        if args.figures_only:
+            from ..evaluation.paper_figures import generate_all_paper_figures
+            root = get_project_root()
+            out = root / MNIST_FAMILY_CONFIG["output_dir"]
+            generate_all_paper_figures(str(out / "plots"), str(out))
+            print("\n✅ Figures generated successfully!")
+            
+        elif args.glmm_only:
+            result = run_glmm_analysis()
+            if result:
+                print("\n✅ GLMM analysis completed successfully!")
+            else:
+                print("\n⚠️  GLMM analysis completed with warnings")
+                
+        elif args.snn_sleepy_only:
+            result = run_snn_sleepy_experiment(
+                args.datasets, 
+                args.sleep_rates, 
+                args.seeds,
+                preview_data=args.preview_data
+            )
+            if result.get("status") == "success":
+                print("\n✅ SNN-sleepy experiment completed successfully!")
+            else:
+                print(f"\n❌ SNN-sleepy experiment failed: {result.get('status', 'unknown')}")
+                sys.exit(1)
+                
+        elif args.snntorch_only:
+            result = run_snntorch_experiment(args.datasets, args.sleep_rates, args.seeds)
+            if result and result.get("status") == "success":
+                print("\n✅ snntorch experiment completed successfully!")
+            else:
+                print("\n⚠️  snntorch experiment completed with warnings")
+                
+        elif args.full_pipeline:
+            result = run_full_pipeline(args.datasets, args.sleep_rates, args.seeds)
+            print("\n✅ Full pipeline completed!")
+            print("\nSummary:")
+            for step, step_result in result.get("steps", {}).items():
+                status = step_result.get("status", "unknown") if isinstance(step_result, dict) else "completed"
+                print(f"  {step}: {status}")
+                
+        else:
+            # Default: run full pipeline
+            print("No mode specified, running full pipeline...")
+            result = run_full_pipeline(args.datasets, args.sleep_rates, args.seeds)
+            print("\n✅ Full pipeline completed!")
+            
+    except KeyboardInterrupt:
+        print("\n\n⚠️  Experiment interrupted by user")
+        sys.exit(130)
+    except Exception as e:
+        print(f"\n❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
