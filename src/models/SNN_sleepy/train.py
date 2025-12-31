@@ -309,9 +309,6 @@ def train_network(
 
     sleep_amount = 0
     virtual_sleep_iters_epoch = 0
-    # Track total sleep iterations per batch to prevent excessive slowdown
-    total_sleep_iters_this_batch = 0
-    max_sleep_iters_per_batch = 10000  # Limit total sleep iterations per batch to prevent 30x slowdown
 
     # Maintain previous-step state explicitly so we can evolve during hard-pause sleep
     mp_prev = mp[0].copy()
@@ -974,20 +971,9 @@ def train_network(
     sleep_iters_budget = sleep_iterations_budget if sleep_iterations_budget > 0 else 1
     sleep_percent_computational = (sleep_iters_used / sleep_iters_budget) * 100 if sleep_iters_budget > 0 else 0.0
     
-    # Also report trigger-based stats
-    sleep_quota_used = sleep_timesteps_used[0] if sleep_timesteps_used else 0
-    sleep_quota_total = sleep_timesteps_total if sleep_timesteps_total > 0 else 1
-    sleep_percent_triggers = (sleep_quota_used / sleep_quota_total) * 100 if sleep_quota_total > 0 else 0.0
-    
-    # Per-batch stats
-    sleep_percent_batch = (sleep_amount / T) * 100 if T > 0 else 0.0
-    
-    print(f"Sleep stats (batch): {sleep_amount}/{T} timesteps ({sleep_percent_batch:.2f}% of batch)")
-    print(f"Sleep triggers (global): {sleep_quota_used}/{sleep_quota_total} ({sleep_percent_triggers:.2f}% of trigger quota)")
-    print(f"Sleep iterations (computational): {sleep_iters_used}/{sleep_iters_budget} ({sleep_percent_computational:.2f}% of computational budget)")
-    
     # Return computational percentage as the main metric
     sleep_percent = sleep_percent_computational
+    print(f"Sleep percentage: {sleep_percent}")
     return (
         weights,
         spikes,

@@ -25,7 +25,7 @@ DEFAULT_NETWORK_PARAMS = {
 # Training defaults
 DEFAULT_TRAINING_PARAMS = {
     # Training control
-    "epochs": 10,  # Number of complete passes through all training data
+    "epochs": 1,  # Number of complete passes through all training data
     
     # Learning rates
     "learning_rate_exc": 0.0005,

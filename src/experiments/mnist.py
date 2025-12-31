@@ -17,6 +17,7 @@ Usage:
 import os
 import subprocess
 import sys
+import numpy as np
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 from ..config.experiment_configs import MNIST_FAMILY_EXPERIMENT
@@ -29,7 +30,7 @@ from ..models.SNN_sleepy.snn import snn_sleepy
 
 MNIST_FAMILY_CONFIG = {
     **MNIST_FAMILY_EXPERIMENT,
-    "output_dir": "src/analysis",
+    "output_dir": "data/comparison/mnist",
     "results_file": "Results_.xlsx",
     "predictions_file": "pred.xlsx",
     "r_script": "mixed_model2.r",
@@ -43,6 +44,74 @@ def get_project_root() -> Path:
     return Path(__file__).parent.parent.parent
 
 
+def save_result_to_file(result: Dict[str, Any], output_dir: Path, results_file: str, model_name: str = "SNN_sleepy"):
+    """
+    Save a single result row to Excel file incrementally.
+    Reads existing file, appends new result, and writes back (removes duplicates).
+    """
+    import pandas as pd
+    
+    # Convert result dict to DataFrame with single row
+    result_df = pd.DataFrame([result])
+    
+    # Map columns to desired format
+    column_mapping = {
+        "sleep_rate": "Sleep_duration",
+        "run_name": "Run",
+        "dataset": "Dataset",
+        "train_accuracy": "Accuracy-train",
+        "val_accuracy": "Accuracy-val",
+        "test_accuracy": "Accuracy-test",
+        "train_clustering": "Clustering-train",
+        "val_clustering": "Clustering-val",
+        "test_clustering": "Clustering-test",
+    }
+    result_df = result_df.rename(columns=column_mapping)
+    
+    # Add Model column
+    result_df["Model"] = model_name
+    
+    # Add Lambda column using sleep_decay_rate (varies between snntorch and snn_sleepy)
+    if "Lambda" not in result_df.columns:
+        if "sleep_decay_rate" in result_df.columns:
+            result_df["Lambda"] = result_df["sleep_decay_rate"]
+        elif "Sleep_duration" in result_df.columns:
+            result_df["Lambda"] = result_df["Sleep_duration"]
+        elif "sleep_rate" in result_df.columns:
+            result_df["Lambda"] = result_df["sleep_rate"]
+    
+    # Define desired column order
+    desired_columns = ["Sleep_duration", "Model", "Run", "Lambda", "Dataset", 
+                      "Accuracy-train", "Accuracy-val", "Accuracy-test",
+                      "Clustering-train", "Clustering-val", "Clustering-test"]
+    
+    # Reorder columns (only include columns that exist)
+    existing_columns = [col for col in desired_columns if col in result_df.columns]
+    for col in result_df.columns:
+        if col not in existing_columns:
+            existing_columns.append(col)
+    result_df = result_df[existing_columns]
+    
+    # Save/update Excel file (read existing, append, write back)
+    excel_file = output_dir / results_file
+    try:
+        if excel_file.exists():
+            # Read existing Excel file
+            existing_df = pd.read_excel(excel_file)
+            # Append new result
+            combined_df = pd.concat([existing_df, result_df], ignore_index=True)
+            # Remove duplicates based on Run column (in case of reruns)
+            combined_df = combined_df.drop_duplicates(subset=["Run"], keep='last')
+            # Write back
+            combined_df.to_excel(excel_file, index=False)
+        else:
+            # Create new Excel file
+            result_df.to_excel(excel_file, index=False)
+    except Exception as e:
+        # If Excel write fails, print warning
+        print(f"Warning: Could not update Excel file {excel_file}: {e}")
+
+
 # =============================================================================
 # SNN-SLEEPY TRAINING
 # =============================================================================
@@ -52,6 +121,9 @@ def run_snn_sleepy_experiment(
     sleep_rates: Optional[List[float]] = None,
     seeds: Optional[List[int]] = None,
     preview_data: bool = False,
+    plot_weights_trajectories: bool = False,
+    plot_weights_evolution: bool = False,
+    track_weights: bool = False,
     extra_args: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
@@ -104,6 +176,10 @@ def run_snn_sleepy_experiment(
                             which_classes=network_params.get("classes", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
                         )
                         
+                        # Verify initial weights (should be different for each run due to seed)
+                        initial_weight_sum = np.sum(snn.weights) if hasattr(snn, 'weights') else None
+                        print(f"  Initial weight sum: {initial_weight_sum:.6f}" if initial_weight_sum is not None else "  Initial weights: not yet created")
+                        
                         # Prepare data
                         all_train = data_params.get("all_images_train", 6000)
                         all_val = data_params.get("all_images_val", 100)
@@ -152,12 +228,17 @@ def run_snn_sleepy_experiment(
                         run_training_params["sleep_ratio"] = sleep_rate
                         run_training_params["sleep"] = sleep_rate > 0.0
                         
+                        # Debug: Verify sleep_ratio is set correctly
+                        actual_sleep_ratio = run_training_params.get("sleep_ratio")
+                        actual_sleep = run_training_params.get("sleep")
+                        print(f"  Setting sleep_ratio={actual_sleep_ratio}, sleep={actual_sleep}")
+                        
                         snn.train_network(
                             train_weights=run_training_params.get("train_weights", True),
                             learning_rate_exc=run_training_params.get("learning_rate_exc", 0.0005),
                             learning_rate_inh=run_training_params.get("learning_rate_inh", 0.0005),
-                            sleep=run_training_params.get("sleep", True),
-                            sleep_ratio=run_training_params.get("sleep_ratio", 0.02),
+                            sleep=actual_sleep,  # Use explicitly set value, not .get() with default
+                            sleep_ratio=actual_sleep_ratio,  # Use explicitly set value, not .get() with default
                             sleep_mode=run_training_params.get("sleep_mode", "static"),
                             accuracy_method=run_training_params.get("accuracy_method", "pca_lr"),
                             pca_variance=run_training_params.get("pca_variance", 0.95),
@@ -165,7 +246,9 @@ def run_snn_sleepy_experiment(
                             test_batch_size=test_batch_size,
                             epochs=run_training_params.get("epochs", 10),
                             force_train=True,
-                            save_model=False,  # Don't save individual models, just results
+                            plot_weight_trajectories=plot_weights_trajectories,
+                            plot_weight_evolution=plot_weights_evolution,
+                            track_weights=track_weights,
                             **{k: v for k, v in run_training_params.items() 
                                if k not in ["train_weights", "learning_rate_exc", "learning_rate_inh", 
                                            "sleep", "sleep_ratio", "sleep_mode", "accuracy_method", "pca_variance",
@@ -173,46 +256,108 @@ def run_snn_sleepy_experiment(
                                            "timing_update", "trace_update", "vectorized_trace", "epochs"]}
                         )
                         
-                        # Run training
+                        # Verify sleep_ratio was set correctly in the model (before training)
+                        print(f"  Before training: snn.sleep_ratio={snn.sleep_ratio}, snn.sleep={snn.sleep}")
+                        
+                        # Run training (this will call initiate_trackers which generates sleep_schedule)
                         snn.train(
                             batch_size=batch_size,
                             val_batch_size=val_batch_size,
                         )
                         
+                        # Verify weights were updated during training
+                        final_weight_sum = np.sum(snn.weights) if hasattr(snn, 'weights') else None
+                        if initial_weight_sum is not None and final_weight_sum is not None:
+                            weight_change = final_weight_sum - initial_weight_sum
+                            print(f"  Weight change during training: {weight_change:.6f}")
+                            if abs(weight_change) < 1e-6:
+                                print(f"  ⚠️  WARNING: Weights appear unchanged after training!")
+                        
+                        # Verify sleep_schedule after training (after initiate_trackers has run)
+                        if hasattr(snn, 'sleep_schedule'):
+                            sleep_schedule_size = len(snn.sleep_schedule) if snn.sleep_schedule else 0
+                            if sleep_rate == 0.0:
+                                if sleep_schedule_size > 0:
+                                    print(f"  ⚠️  ERROR: sleep_ratio=0.0 but sleep_schedule has {sleep_schedule_size} timesteps!")
+                                else:
+                                    print(f"  ✅ Confirmed: sleep_ratio=0.0 → no sleep (sleep_schedule is empty)")
+                            else:
+                                if sleep_schedule_size == 0:
+                                    print(f"  ⚠️  ERROR: sleep_ratio={sleep_rate} but sleep_schedule is empty!")
+                                else:
+                                    print(f"  ✅ Confirmed: sleep_ratio={sleep_rate} → {sleep_schedule_size} sleep timesteps scheduled")
+                        
+                        # Verify final weights after testing (should be same as after training, since test doesn't update weights)
+                        final_weight_sum_after_test = np.sum(snn.weights) if hasattr(snn, 'weights') else None
+                        if initial_weight_sum is not None and final_weight_sum_after_test is not None:
+                            total_weight_change = final_weight_sum_after_test - initial_weight_sum
+                            print(f"  Final weight sum (after test): {final_weight_sum_after_test:.6f}")
+                            print(f"  Total weight change (initial → final): {total_weight_change:.6f}")
+                            if abs(total_weight_change) < 1e-6:
+                                print(f"  ⚠️  CRITICAL WARNING: Weights appear unchanged from initial to final!")
+                        
                         # Collect results
                         result = {
                             "dataset": dataset,
                             "sleep_rate": sleep_rate,
+                            "sleep_decay_rate": sleep_rate,  # For SNN_sleepy, this equals sleep_rate
                             "seed": seed,
                             "run_name": run_name,
                         }
                         
                         if hasattr(snn, 'performance_tracker'):
+                            # Collect accuracy metrics
                             if snn.performance_tracker.get("train_accuracy"):
                                 result["train_accuracy"] = snn.performance_tracker['train_accuracy'][-1]
                             if snn.performance_tracker.get("val_accuracy"):
                                 result["val_accuracy"] = snn.performance_tracker['val_accuracy'][-1]
                             if snn.performance_tracker.get("test_accuracy"):
                                 result["test_accuracy"] = snn.performance_tracker['test_accuracy'][-1]
+                            
+                            # Collect clustering metrics
+                            if snn.performance_tracker.get("train_clustering"):
+                                result["train_clustering"] = snn.performance_tracker['train_clustering'][-1]
+                            if snn.performance_tracker.get("val_clustering"):
+                                result["val_clustering"] = snn.performance_tracker['val_clustering'][-1]
+                            if snn.performance_tracker.get("test_clustering"):
+                                result["test_clustering"] = snn.performance_tracker['test_clustering'][-1]
                         
                         results.append(result)
+                        
+                        # Save result incrementally to file (after each run)
+                        project_root = get_project_root()
+                        output_dir = project_root / MNIST_FAMILY_CONFIG["output_dir"]
+                        os.makedirs(output_dir, exist_ok=True)
+                        results_file = MNIST_FAMILY_CONFIG["results_file"]
+                        save_result_to_file(result, output_dir, results_file, model_name="SNN_sleepy")
                         
                         # Print run summary
                         print(f"\n{run_name} complete!")
                         if "test_accuracy" in result:
                             print(f"  Test Accuracy: {result['test_accuracy']:.4f}")
+                            if "test_clustering" in result:
+                                print(f"  Test Clustering: {result['test_clustering']:.4f}")
+                        print(f"  ✅ Results saved to {output_dir / results_file}")
                         
                     except Exception as e:
                         print(f"\n❌ Error in {run_name}: {e}")
                         import traceback
                         traceback.print_exc()
-                        results.append({
+                        error_result = {
                             "dataset": dataset,
                             "sleep_rate": sleep_rate,
                             "seed": seed,
                             "run_name": run_name,
                             "error": str(e),
-                        })
+                        }
+                        results.append(error_result)
+                        
+                        # Save error result to file as well
+                        project_root = get_project_root()
+                        output_dir = project_root / MNIST_FAMILY_CONFIG["output_dir"]
+                        os.makedirs(output_dir, exist_ok=True)
+                        results_file = MNIST_FAMILY_CONFIG["results_file"]
+                        save_result_to_file(error_result, output_dir, results_file, model_name="SNN_sleepy")
         
         print(f"\n{'='*60}")
         print(f"EXPERIMENT COMPLETE")
@@ -345,20 +490,77 @@ def run_full_pipeline(
     skip_snntorch: bool = False,
     skip_glmm: bool = False,
     skip_plots: bool = False,
+    plot_weights_trajectories: bool = False,
+    plot_weights_evolution: bool = False,
+    track_weights: bool = False,
     extra_args: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     
     project_root = get_project_root()
     output_dir = project_root / MNIST_FAMILY_CONFIG["output_dir"]
     os.makedirs(output_dir, exist_ok=True)
-    
+    import pandas as pd
+    results_df = pd.DataFrame()
     results_summary = {"steps": {}}
 
     # 1. SNN-sleepy
     if not skip_snn_sleepy:
-        res = run_snn_sleepy_experiment(datasets, sleep_rates, seeds, extra_args)
+        res = run_snn_sleepy_experiment(
+            datasets, 
+            sleep_rates, 
+            seeds, 
+            plot_weights_trajectories=plot_weights_trajectories,
+            plot_weights_evolution=plot_weights_evolution,
+            track_weights=track_weights,
+            extra_args=extra_args
+        )
+        
+        # Convert list of result dictionaries directly to DataFrame
+        if res.get("results"):
+            snn_df = pd.DataFrame(res["results"])
+            
+            # Rename columns to match desired format
+            column_mapping = {
+                "sleep_rate": "Sleep_duration",
+                "run_name": "Run",
+                "dataset": "Dataset",
+                "train_accuracy": "Accuracy-train",
+                "val_accuracy": "Accuracy-val",
+                "test_accuracy": "Accuracy-test",
+                "train_clustering": "Clustering-train",
+                "val_clustering": "Clustering-val",
+                "test_clustering": "Clustering-test",
+            }
+            snn_df = snn_df.rename(columns=column_mapping)
+            
+            # Add Model column
+            snn_df["Model"] = "SNN_sleepy"
+            
+            # Add Lambda column using sleep_decay_rate (varies between snntorch and snn_sleepy)
+            if "Lambda" not in snn_df.columns:
+                if "sleep_decay_rate" in snn_df.columns:
+                    snn_df["Lambda"] = snn_df["sleep_decay_rate"]
+                elif "Sleep_duration" in snn_df.columns:
+                    snn_df["Lambda"] = snn_df["Sleep_duration"]
+            
+            # Reorder columns
+            desired_columns = ["Sleep_duration", "Model", "Run", "Lambda", "Dataset", 
+                             "Accuracy-train", "Accuracy-val", "Accuracy-test",
+                             "Clustering-train", "Clustering-val", "Clustering-test"]
+            
+            # Select and reorder columns (only include columns that exist)
+            existing_columns = [col for col in desired_columns if col in snn_df.columns]
+            # Add any additional columns that weren't in desired_columns (e.g., "seed", "error")
+            for col in snn_df.columns:
+                if col not in existing_columns:
+                    existing_columns.append(col)
+            snn_df = snn_df[existing_columns]
+            
+            # Append to results_df
+            results_df = pd.concat([results_df, snn_df], ignore_index=True)
+            
         results_summary["steps"]["snn_sleepy"] = res
-
+    
     # 2. snntorch
     if not skip_snntorch:
         res = run_snntorch_experiment(datasets, sleep_rates, seeds)
@@ -382,7 +584,14 @@ def run_full_pipeline(
             results_summary["steps"]["figures"] = figs
         except ImportError:
             print("Warning: Could not import paper_figures")
+    
+    # Save results DataFrame to Excel if we have data
+    if not results_df.empty:
+        results_file = output_dir / MNIST_FAMILY_CONFIG["results_file"]
+        results_df.to_excel(results_file, index=False)
+        print(f"\n✅ Results saved to {results_file}")
 
+    results_summary["results_dataframe"] = results_df
     return results_summary
 
 
@@ -468,6 +677,23 @@ Examples:
         help="Show preview plots of loaded MNIST data using plot_floats_and_spikes"
     )
 
+    parser.add_argument(
+        "--plot-weights-trajectories",
+        action="store_true",
+        help="Plot weights trajectories for all runs"
+    )
+
+    parser.add_argument(
+        "--plot-weights-evolution",
+        action="store_true",
+        help="Plot weights evolution for all runs"
+    )
+    parser.add_argument(
+        "--track-weights",
+        action="store_true",
+        help="Enable weight tracking (automatically enabled if plotting weights)"
+    )
+
     args = parser.parse_args()
     
     # Quick mode defaults
@@ -500,7 +726,10 @@ Examples:
                 args.datasets, 
                 args.sleep_rates, 
                 args.seeds,
-                preview_data=args.preview_data
+                preview_data=args.preview_data,
+                plot_weights_trajectories=args.plot_weights_trajectories,
+                plot_weights_evolution=args.plot_weights_evolution,
+                track_weights=args.track_weights
             )
             if result.get("status") == "success":
                 print("\n✅ SNN-sleepy experiment completed successfully!")
@@ -516,7 +745,14 @@ Examples:
                 print("\n⚠️  snntorch experiment completed with warnings")
                 
         elif args.full_pipeline:
-            result = run_full_pipeline(args.datasets, args.sleep_rates, args.seeds)
+            result = run_full_pipeline(
+                args.datasets, 
+                args.sleep_rates, 
+                args.seeds,
+                plot_weights_trajectories=args.plot_weights_trajectories,
+                plot_weights_evolution=args.plot_weights_evolution,
+                track_weights=args.track_weights
+            )
             print("\n✅ Full pipeline completed!")
             print("\nSummary:")
             for step, step_result in result.get("steps", {}).items():
@@ -526,7 +762,14 @@ Examples:
         else:
             # Default: run full pipeline
             print("No mode specified, running full pipeline...")
-            result = run_full_pipeline(args.datasets, args.sleep_rates, args.seeds)
+            result = run_full_pipeline(
+                args.datasets, 
+                args.sleep_rates, 
+                args.seeds,
+                plot_weights_trajectories=args.plot_weights_trajectories,
+                plot_weights_evolution=args.plot_weights_evolution,
+                track_weights=args.track_weights
+            )
             print("\n✅ Full pipeline completed!")
             
     except KeyboardInterrupt:

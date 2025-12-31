@@ -111,7 +111,7 @@ def tsne(tsne_results, segment_labels, train, show_plot, save_path):
     plt.close(fig)
 
 def weight_trajectories(
-    weight_tracking_epoch, epoch, max_lines=8, sleep_enabled=True
+    weight_tracking_epoch, epoch, dataset, max_lines=32, sleep_enabled=True, 
 ):
     """
     Plot sampled weight trajectories across snapshot time with sleeps shaded (combined on one axis, BW).
@@ -119,7 +119,6 @@ def weight_trajectories(
     - Inh mean: dashed black; Inh samples: dash-dot black
     Sleep segments are provided as (start,end) in the same snapshot-time reference.
     """
-    import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
 
     times = np.array(weight_tracking_epoch.get("times", []), dtype=float)
@@ -128,8 +127,24 @@ def weight_trajectories(
 
     exc_samples = weight_tracking_epoch.get("exc_samples", [])
     inh_samples = weight_tracking_epoch.get("inh_samples", [])
-    exc_mean = np.array(weight_tracking_epoch.get("exc_mean", []), dtype=float)
-    inh_mean = np.array(weight_tracking_epoch.get("inh_mean", []), dtype=float)
+    
+    # Ensure exc_mean and inh_mean are flat arrays (not nested lists)
+    exc_mean_raw = weight_tracking_epoch.get("exc_mean", [])
+    inh_mean_raw = weight_tracking_epoch.get("inh_mean", [])
+    
+    # Convert to numpy arrays, handling both flat lists and nested structures
+    if exc_mean_raw and isinstance(exc_mean_raw[0], (list, np.ndarray)):
+        # If it's a list of lists, flatten it (shouldn't happen, but handle it)
+        exc_mean = np.array([item for sublist in exc_mean_raw for item in (sublist if isinstance(sublist, (list, np.ndarray)) else [sublist])], dtype=float)
+    else:
+        exc_mean = np.array(exc_mean_raw, dtype=float)
+    
+    if inh_mean_raw and isinstance(inh_mean_raw[0], (list, np.ndarray)):
+        # If it's a list of lists, flatten it (shouldn't happen, but handle it)
+        inh_mean = np.array([item for sublist in inh_mean_raw for item in (sublist if isinstance(sublist, (list, np.ndarray)) else [sublist])], dtype=float)
+    else:
+        inh_mean = np.array(inh_mean_raw, dtype=float)
+    
     sleep_segments = weight_tracking_epoch.get("sleep_segments", [])
 
     # Convert list-of-lists to arrays (n_snapshots x K)
@@ -182,15 +197,19 @@ def weight_trajectories(
                 linewidth=0.9,
                 linestyle="-",
             )
-    if exc_mean.size == times.size:
-        ax.plot(
-            times,
-            exc_mean,
-            color="black",
-            linestyle="-",
-            linewidth=2.0,
-            label="Exc mean",
-        )
+    
+    # Plot excitatory mean (only once, handle length mismatches)
+    if exc_mean.size > 0:
+        min_len = min(exc_mean.size, times.size)
+        if min_len > 0:
+            ax.plot(
+                times[:min_len],
+                exc_mean[:min_len],
+                color="black",
+                linestyle="-",
+                linewidth=2.0,
+                label="Exc mean",
+            )
 
     # Inhibitory trajectories (samples: dash-dot; mean: dashed)
     if inh_arr.size > 0 and inh_arr.shape[0] == times.size:
@@ -204,15 +223,19 @@ def weight_trajectories(
                 linewidth=0.9,
                 linestyle="--",
             )
-    if inh_mean.size == times.size:
-        ax.plot(
-            times,
-            inh_mean,
-            color="black",
-            linestyle="--",
-            linewidth=2.0,
-            label="Inh mean",
-        )
+    
+    # Plot inhibitory mean (handle length mismatches)
+    if inh_mean.size > 0:
+        min_len = min(inh_mean.size, times.size)
+        if min_len > 0:
+            ax.plot(
+                times[:min_len],
+                inh_mean[:min_len],
+                color="black",
+                linestyle="--",
+                linewidth=2.0,
+                label="Inh mean",
+            )
 
     def _apply_labels(latex_enabled: bool):
         plt.rcParams["text.usetex"] = bool(latex_enabled)
@@ -259,7 +282,9 @@ def weight_trajectories(
 
     latex_available = shutil.which("latex") is not None
     _apply_labels(latex_enabled=latex_available)
-    pdf_path = os.path.join("plots", f"weights_trajectories_epoch_{int(epoch):03d}.pdf")
+    pdf_dir = os.path.join("plots", "weights", "Trajectory", dataset)
+    os.makedirs(pdf_dir, exist_ok=True)
+    pdf_path = os.path.join(pdf_dir, f"weights_trajectories_epoch_{int(epoch):03d}.pdf")
     plt.tight_layout()
     plt.savefig(pdf_path, dpi=300, bbox_inches="tight")
     plt.rcParams["text.usetex"] = False
@@ -326,7 +351,8 @@ def weight_evolution(
 
     legend.get_frame().set_alpha(1.0)
     ax.grid(True, alpha=0.3)
-
+    ax.set_xticklabels(size=14)
+    ax.set_yticklabels(size=14)
     fig.suptitle("No sleep", fontsize=20, fontweight="bold")
     plt.tight_layout()
     fig.savefig(output_path, bbox_inches="tight", dpi=900)

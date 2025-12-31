@@ -23,7 +23,7 @@ __version__ = "1.0.0"
 __author__ = "Andreas"
 
 # Core imports (only the most essential)
-from .models.SNN_sleepy.snn import snn_sleepy
+from src.models.SNN_sleepy.snn import snn_sleepy
 
 __all__ = [
     'snn_sleepy',

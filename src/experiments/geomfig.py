@@ -142,7 +142,6 @@ def simple_geomfig(quick=False):
         checkpoint_frequency="epoch",
         keep_checkpoints=3,
         force_train=True,  # Force training even if model exists
-        save_model=True,
         # Add other training params from config (exclude invalid parameters)
         **{k: v for k, v in training_params.items() 
            if k not in ["train_weights", "learning_rate_exc", "learning_rate_inh", 
@@ -311,7 +310,6 @@ def sleep_comparison_geomfig(quick=False, preview_data=False):
             keep_checkpoints=3,
             force_train=True,
             epochs=1,
-            save_model=True,
             **{k: v for k, v in training_params.items() 
                if k not in ["train_weights", "learning_rate_exc", "learning_rate_inh", 
                            "sleep", "sleep_ratio", "sleep_mode", "accuracy_method", "pca_variance",
