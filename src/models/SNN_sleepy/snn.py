@@ -9,7 +9,6 @@ import hashlib
 
 
 from .train import train_network
-from .dynamics import create_learning_bounds
 from .layers import create_weights, create_arrays
 # Use absolute imports from src when crossing package boundaries
 # (relative imports with ... can fail when src is the top-level package in module execution)
@@ -570,6 +569,14 @@ class snn_sleepy:
                 self.weights,
             )
 
+    def create_learning_bounds(self, weights, ex, st, ih, beta):
+        # Calculate initial weight sums for normalization (used in train_network)
+        sum_weights_exc = np.sum(np.abs(weights[: ex, st : ih])) * beta
+        sum_weights_inh = np.sum(np.abs(weights[ex : ih, st : ex])) * beta
+        sum_weights_total = np.sum(np.abs(weights)) * beta
+
+        return sum_weights_exc, sum_weights_inh, sum_weights_total
+
     def train_network(
         self,
         plot_spikes_train=False,
@@ -623,7 +630,7 @@ class snn_sleepy:
         time_stop_mp=None, # default stop time for membrane potential plot
         mean_noise=0, # default mean noise
         max_mp=40, # default maximum membrane potential
-        sleep_synchronized=True, # default sleep synchronization is on
+        sleep_synchronized=False, # default sleep synchronization is on
         weight_mean_noise=0.05,  # default mean noise for weights
         weight_var_noise=0.005,  # default variance noise for weights
         track_weights=False,  # Enable weight tracking (separate from plotting) - set to True to track weight changes
@@ -736,7 +743,7 @@ class snn_sleepy:
         def initiate_trackers(self, mode, T):
             if mode == "train":
                 # create learning bounds
-                self.baseline_sum_exc, self.baseline_sum_inh, self.baseline_sum = create_learning_bounds(self.weights, self.ex, self.st, self.ih, self.beta)
+                self.baseline_sum_exc, self.baseline_sum_inh, self.baseline_sum = self.create_learning_bounds(self.weights, self.ex, self.st, self.ih, self.beta)
                 # prepare_early_stopping needs these parameters from train_network scope
                 self.prepare_early_stopping(
                     test_only=test_only,
@@ -942,7 +949,7 @@ class snn_sleepy:
             # Pass sleep iterations budget (computational time budget)
             sleep_iterations_budget = getattr(self, 'sleep_iterations_budget', 0) if mode == "train" else 0
             sleep_iterations_used_ref = [getattr(self, 'sleep_iterations_used', 0)] if mode == "train" else [0]  # Use list for mutable reference
-            
+
             # Call train_network function (imported from .train)
             (
             weights_out,
@@ -1118,22 +1125,26 @@ class snn_sleepy:
             
             # Create epoch-level progress bar (only for training to avoid clutter)
             if mode == "train":
+                # Get latest accuracies (or 0.0 if not yet computed)
+                train_acc_display = self.performance_tracker['train_accuracy'][-1] if len(self.performance_tracker['train_accuracy']) > 0 else 0.0
+                val_acc_display = self.performance_tracker['val_accuracy'][-1] if len(self.performance_tracker['val_accuracy']) > 0 else 0.0
                 epoch_pbar = tqdm(
                     total=total_batches,
-                    desc=f"{mode} Epoch {self._current_epoch+1}",
+                    desc=f"{mode} Epoch {self._current_epoch+1}/{self.epochs}",
                     unit="batch",
                     leave=False,  # Don't leave progress bar after completion (cleaner output)
                     ncols=100,  # Fixed width to prevent line wrapping
-                    postfix={"train_acc": f"{self.performance_tracker['train_accuracy'][-1]:.4f}", "val_acc": f"{self.performance_tracker['val_accuracy'][-1]:.4f}"}
+                    postfix={"train_acc": f"{train_acc_display:.4f}", "val_acc": f"{val_acc_display:.4f}"}
                                 )
             else:
+                test_acc_display = self.performance_tracker['test_accuracy'][-1] if len(self.performance_tracker['test_accuracy']) > 0 else 0.0
                 epoch_pbar = tqdm(
                                 total=total_batches,
-                                desc=f"{mode} Epoch {self._current_epoch+1}",
+                                desc=f"{mode} Epoch {self._current_epoch+1}/{self.epochs}",
                                 unit="batch",
                                 leave=False,  # Don't leave progress bar after completion (cleaner output)
                                 ncols=100,  # Fixed width to prevent line wrapping
-                                postfix={"test_acc": f"{self.performance_tracker['test_accuracy'][-1]:.4f}"}
+                                postfix={"test_acc": f"{test_acc_display:.4f}"}
                                             )
 
             # Loop through all batches in the partition
@@ -1159,6 +1170,24 @@ class snn_sleepy:
                 
                 # Update epoch-level progress bar
                 if epoch_pbar is not None:
+                    # Compute mean weights for monitoring (only during training)
+                    if mode == "train" and hasattr(self, 'weights') and self.weights is not None:
+                        try:
+                            # Compute mean absolute values of excitatory and inhibitory weights
+                            mean_exc = float(np.mean(np.abs(self.weights[:self.ex, self.st:self.ih])))
+                            mean_inh = float(np.mean(np.abs(self.weights[self.ex:self.ih, self.st:self.ex])))
+                            # Update progress bar with mean weights
+                            train_acc_display = self.performance_tracker['train_accuracy'][-1] if len(self.performance_tracker['train_accuracy']) > 0 else 0.0
+                            val_acc_display = self.performance_tracker['val_accuracy'][-1] if len(self.performance_tracker['val_accuracy']) > 0 else 0.0
+                            epoch_pbar.set_postfix({
+                                "train_acc": f"{train_acc_display:.4f}",
+                                "val_acc": f"{val_acc_display:.4f}",
+                                "m_exc": f"{mean_exc:.3f}",
+                                "m_inh": f"{mean_inh:.3f}"
+                            })
+                        except Exception:
+                            # If computation fails, just update without weights
+                            pass
                     epoch_pbar.update(1)
 
 
@@ -1220,16 +1249,21 @@ class snn_sleepy:
             accuracy = estimate_accuracy(self, mode, self.accuracy_method, spikes_cat, labels_cat)
             clustering = estimate_clustering(self, mode, spikes_cat, labels_cat, num_steps)
 
-            # Update progress bar postfix with newly computed accuracy before closing
-            if epoch_pbar is not None and mode == "train":
-                # Update postfix with current epoch's accuracy
-                train_acc_val = accuracy
-                val_acc_val = self.performance_tracker["val_accuracy"][-1] if len(self.performance_tracker["val_accuracy"]) > 0 else 0.0
-                epoch_pbar.set_postfix({"train_acc": f"{train_acc_val:.4f}", "val_acc": f"{val_acc_val:.4f}"})
-                epoch_pbar.refresh()  # Force refresh to show updated postfix
-            
-            # Close epoch-level progress bar
+            # Update progress bar postfix with computed accuracy before closing
             if epoch_pbar is not None:
+                if mode == "train":
+                    # Update with current epoch's training accuracy (validation will be shown in next epoch)
+                    val_acc_display = self.performance_tracker['val_accuracy'][-1] if len(self.performance_tracker['val_accuracy']) > 0 else 0.0
+                    epoch_pbar.set_postfix({"train_acc": f"{accuracy:.4f}", "val_acc": f"{val_acc_display:.4f}"})
+                    # Print accuracy so it's visible even when progress bar closes
+                    print(f"Epoch {epoch+1}/{self.epochs}: train_acc={accuracy:.4f}, val_acc={val_acc_display:.4f}")
+                elif mode == "test":
+                    epoch_pbar.set_postfix({"test_acc": f"{accuracy:.4f}"})
+                    print(f"Epoch {epoch+1}/{self.epochs}: test_acc={accuracy:.4f}")
+                elif mode == "val":
+                    # Validation accuracy is printed from train() method, but print here too for consistency
+                    pass
+                epoch_pbar.refresh()  # Force refresh to show updated postfix
                 epoch_pbar.close()
 
             # Update weight evolution trackers at end of training epoch
@@ -1269,6 +1303,9 @@ class snn_sleepy:
                         collect_for_metric=True,
                         max_batches=None,   # or a small number if you want cheap/fast mid-training val
                     )
+                    
+                    # Print validation accuracy immediately after it's computed
+                    print(f"Epoch {epoch+1}/{self.epochs}: val_acc={val_acc:.4f}, val_clust={val_clust:.4f}")
 
                     # early stopping update
                     if self.early_stopping:
@@ -1276,13 +1313,12 @@ class snn_sleepy:
                         if self.should_stop:
                             break
 
-                # update performance tracker
+                # update performance tracker (validation accuracy is now available for next epoch's progress bar)
                 self.performance_tracker["train_accuracy"].append(train_acc)
                 self.performance_tracker["train_clustering"].append(train_clust)
                 if val_acc is not None:
                     self.performance_tracker["val_accuracy"].append(val_acc)
                     self.performance_tracker["val_clustering"].append(val_clust)
-                
 
             # ----- TESTING ----
             test_acc, test_clust = run_epoch(

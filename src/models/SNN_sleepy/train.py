@@ -161,7 +161,9 @@ def update_spikes(
 
     # Threshold crossing - vectorized
     spiked = mp > spike_threshold
-    spikes[st:ih][spiked] = 1
+    s = spikes[st:ih]
+    s[spiked] = 1
+    spikes[st:ih] = s
 
     if noisy_threshold:
         delta_potential = spike_threshold - mp
@@ -449,7 +451,6 @@ def train_network(
             def set_postfix(self, **kwargs): pass
             def close(self): pass
         pbar = DummyProgressBar()
-    last_sample = 0
     last_sleep_flag = -1  # unknown
     last_stats_update_t = -1000
     # Initial snapshot (only if tracking enabled)
@@ -464,18 +465,19 @@ def train_network(
         sleep_now_exc = False
 
         # Hard-pause sleep: run inner loop without advancing real time t
-        # Check if current global timestep is in sleep schedule and budget not exhausted
+        # Check if current global timestep is in sleep schedule and quota not exhausted
         slept_this_step = False
         global_t = global_timestep_offset + t
-        # Check both trigger quota and iterations budget
-        remaining_iterations_budget = sleep_iterations_budget - sleep_iterations_used[0] if sleep_iterations_budget > 0 else float('inf')
+        # Safely check if sleep_schedule is valid and contains current timestep
+        is_in_schedule = False
+        if sleep_schedule is not None:
+            is_in_schedule = global_t in sleep_schedule
         should_sleep = (
             train_weights 
             and sleep 
             and sleep_hard_pause 
-            and global_t in sleep_schedule 
+            and is_in_schedule
             and sleep_timesteps_used[0] < sleep_timesteps_total
-            and remaining_iterations_budget > 0  # Only sleep if we have budget remaining
         )
         
         if should_sleep:
@@ -484,6 +486,8 @@ def train_network(
             # Mark current real timestep as sleep once
             if spike_labels is not None:
                 spike_labels[t] = -2
+            sleep_amount += 1  # Track sleep timesteps for percentage calculation
+            slept_this_step = True
 
             # Determine current sleep targets based on sleep_mode
             # Defaults: use scalars passed in
@@ -779,7 +783,6 @@ def train_network(
                 sleep_iter += 1
                 sleep_time_counter += 1
                 virtual_sleep_iters_epoch += 1
-                sleep_iterations_used[0] += 1  # Track actual computational time spent on sleep
                 t_virtual += 1
                 
                 # Check if we've exhausted the iterations budget
@@ -965,14 +968,9 @@ def train_network(
 
 
     pbar.close()
-    # Calculate sleep percentage based on actual computational time (iterations) used
-    # This is the true measure of how much time was spent on sleep
-    sleep_iters_used = sleep_iterations_used[0] if sleep_iterations_used else 0
-    sleep_iters_budget = sleep_iterations_budget if sleep_iterations_budget > 0 else 1
-    sleep_percent_computational = (sleep_iters_used / sleep_iters_budget) * 100 if sleep_iters_budget > 0 else 0.0
-    
-    # Return computational percentage as the main metric
-    sleep_percent = sleep_percent_computational
+    # Calculate sleep percentage: percentage of timesteps that were sleep (not budget usage)
+    # This shows how much of the batch time was spent in sleep mode
+    sleep_percent = (sleep_amount / T) * 100 if T > 0 else 0.0
     print(f"Sleep percentage: {sleep_percent}")
     return (
         weights,

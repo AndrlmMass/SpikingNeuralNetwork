@@ -255,7 +255,9 @@ def _compute_spike_rates(spikes, labels, num_steps, require_all=False, require_a
             continue
         chunk_spikes = chunk_spikes[:L]
         current_mask = current_mask[:L]
-        if not current_mask.all():
+        # Filter out sleep timesteps (label=-2) and only use non-sleep timesteps
+        # Skip chunk only if there are NO valid (non-sleep) timesteps
+        if not current_mask.any():
             if require_all:
                 raise ValueError("No samples found")
             continue

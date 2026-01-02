@@ -322,6 +322,9 @@ def run_snn_sleepy_experiment(
                             if snn.performance_tracker.get("test_clustering"):
                                 result["test_clustering"] = snn.performance_tracker['test_clustering'][-1]
                         
+                        print(f"Train Accuracy: {result['train_accuracy']:.4f}")
+                        print(f"Val Accuracy: {result['val_accuracy']:.4f}")
+                        print(f"Test Accuracy: {result['test_accuracy']:.4f}")
                         results.append(result)
                         
                         # Save result incrementally to file (after each run)

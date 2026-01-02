@@ -32,8 +32,8 @@ DEFAULT_TRAINING_PARAMS = {
     "learning_rate_inh": 0.0005,
     
     # STDP parameters
-    "A_plus": 0.5,
-    "A_minus": 0.5,
+    "A_plus": 1.0,
+    "A_minus": 1.0,
     "tau_LTP": 10,
     "tau_LTD": 10,
     
@@ -48,7 +48,6 @@ DEFAULT_TRAINING_PARAMS = {
     # Sleep parameters
     "sleep": True,
     "sleep_ratio": 0.2,
-    "check_sleep_interval": 35000,
     "sleep_mode": "static",
     
     # Noise parameters

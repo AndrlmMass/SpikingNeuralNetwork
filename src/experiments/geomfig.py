@@ -335,6 +335,9 @@ def sleep_comparison_geomfig(quick=False, preview_data=False):
                 results[config_name]["test_accuracy"] = snn.performance_tracker['test_accuracy'][-1]
         
         print(f"\n{config_name} complete!")
+        print(f"Train Accuracy: {results[config_name]['train_accuracy']:.4f}")
+        print(f"Val Accuracy: {results[config_name]['val_accuracy']:.4f}")
+        print(f"Test Accuracy: {results[config_name]['test_accuracy']:.4f}")
     
     # Print comparison results
     print("\n" + "=" * 60)
