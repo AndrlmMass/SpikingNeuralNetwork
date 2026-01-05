@@ -7,6 +7,7 @@ from datetime import datetime
 import os
 import cProfile
 import pstats
+import pandas as pd
 
 
 def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False):
@@ -366,6 +367,12 @@ def main():
         default="static",
         help="sleep target mode: static uses fixed targets; group uses group-mean magnitudes; post uses per-post mean magnitudes",
     )
+    parser.add_argument(
+        "--track-excel",
+        action="store_true",
+        default=False,
+        help="track results in GLM/Results_.xlsx file after each run",
+    )
     args, _ = parser.parse_known_args()
 
     # Ensure sleep_rate is a list
@@ -392,6 +399,108 @@ def main():
             return None
         except (ValueError, TypeError):
             return None
+
+    # Excel tracking functions
+    excel_path = "GLM/Results_.xlsx"
+    model_name = "SNN_sleepy"
+    lambda_value = 0.99997
+
+    def get_next_run_number():
+        """Get the next run number for the model from existing Excel file."""
+        if not os.path.exists(excel_path):
+            return 1
+        try:
+            df = pd.read_excel(excel_path, engine="openpyxl")
+            if "Model" not in df.columns or "Run" not in df.columns:
+                return 1
+            model_runs = df[df["Model"] == model_name]
+            if model_runs.empty:
+                return 1
+            return int(model_runs["Run"].max()) + 1
+        except Exception as e:
+            print(f"WARNING: Could not read Excel file to determine run number: {e}")
+            return 1
+
+    def save_to_excel(sleep_rate, run_idx, result, run_number):
+        """Append a new row to the Excel file after a run completes."""
+        if not getattr(args, "track_excel", False):
+            return
+        try:
+            if isinstance(result, tuple) and len(result) >= 1:
+                acc_dict = result[0]
+            else:
+                acc_dict = result
+
+            test_accuracy = (
+                safe_float(acc_dict.get("test")) if isinstance(acc_dict, dict) else None
+            )
+            if test_accuracy is None:
+                print("WARNING: Test accuracy is None, skipping Excel update")
+                return
+
+            seed = 1 + run_idx
+            sleep_duration = float(sleep_rate)
+            dataset_name_val = (
+                args.dataset if getattr(args, "dataset", None) else args.image_dataset
+            )
+
+            new_row = {
+                "Sleep_duration": sleep_duration,
+                "Model": model_name,
+                "Run": run_number,
+                "Lambda": lambda_value,
+                "Seed": seed,
+                "Dataset": dataset_name_val,
+                "Accuracy": test_accuracy,
+            }
+
+            if os.path.exists(excel_path) and os.path.getsize(excel_path) > 0:
+                try:
+                    df = pd.read_excel(excel_path, engine="openpyxl")
+                    required_columns = [
+                        "Sleep_duration",
+                        "Model",
+                        "Run",
+                        "Lambda",
+                        "Seed",
+                        "Dataset",
+                        "Accuracy",
+                    ]
+                    if df.empty or not all(
+                        col in df.columns for col in required_columns
+                    ):
+                        df = pd.DataFrame(columns=required_columns)
+                except Exception:
+                    df = pd.DataFrame(
+                        columns=[
+                            "Sleep_duration",
+                            "Model",
+                            "Run",
+                            "Lambda",
+                            "Seed",
+                            "Dataset",
+                            "Accuracy",
+                        ]
+                    )
+            else:
+                df = pd.DataFrame(
+                    columns=[
+                        "Sleep_duration",
+                        "Model",
+                        "Run",
+                        "Lambda",
+                        "Seed",
+                        "Dataset",
+                        "Accuracy",
+                    ]
+                )
+
+            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+            os.makedirs(os.path.dirname(excel_path), exist_ok=True)
+            df.to_excel(excel_path, index=False, engine="openpyxl")
+            print(f"Results saved to {excel_path}")
+        except Exception as e:
+            print(f"WARNING: Could not save to Excel file: {e}")
 
     # Initial JSON structure
     dataset_name = (
@@ -479,6 +588,11 @@ def main():
     preview_requested = bool(getattr(args, "preview_dataset", False))
     preview_consumed = False
 
+    # Determine run number for Excel tracking (same for all runs in this execution)
+    excel_run_number = (
+        get_next_run_number() if getattr(args, "track_excel", False) else None
+    )
+
     for sleep_rate_idx, sleep_rate in enumerate(sleep_rates):
         print(f"\n{'='*70}")
         print(f"Sleep Rate: {sleep_rate} ({sleep_rate_idx + 1}/{len(sleep_rates)})")
@@ -496,6 +610,8 @@ def main():
                 preview_consumed = True
             all_results.append((sleep_rate, run_idx, result))
             save_results_incremental(sleep_rate, run_idx, result)
+            if excel_run_number is not None:
+                save_to_excel(sleep_rate, run_idx, result, excel_run_number)
 
     if args.runs > 0 and len(all_results) > 0:
         print("\n" + "=" * 70)
