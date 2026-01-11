@@ -31,6 +31,7 @@ from plot import (
     plot_weight_evolution_during_sleep_epoch,
     plot_weight_evolution_during_sleep,
     plot_weight_trajectories_with_sleep_epoch,
+    plot_weight_evolution,
 )
 from analysis import (
     t_SNE,
@@ -3196,62 +3197,10 @@ class snn_sleepy:
                         weight_evolution["inh_std"].append(float(np.std(W_inh)))
                         weight_evolution["inh_min"].append(float(np.min(W_inh)))
                         weight_evolution["inh_max"].append(float(np.max(W_inh)))
-
-                        # Save a lightweight snapshot: histograms of current weight distributions
-                        os.makedirs("plots", exist_ok=True)
-                        import matplotlib.pyplot as plt
-
-                        fig, axes = plt.subplots(1, 2, figsize=(12, 4))
-                        # Plot only non-zero weights for informative histograms
-                        exc_vals = W_exc.flatten()
-                        exc_vals = exc_vals[exc_vals != 0]
-                        if exc_vals.size > 0:
-                            axes[0].hist(exc_vals, bins=50, color="tomato", alpha=0.8)
-                        else:
-                            axes[0].text(
-                                0.5,
-                                0.5,
-                                "No non-zero weights",
-                                ha="center",
-                                va="center",
-                                transform=axes[0].transAxes,
-                            )
-                        axes[0].set_title("Excitatory weights")
-                        axes[0].set_xlabel("Weight")
-                        axes[0].set_ylabel("Count")
-                        inh_vals = W_inh.flatten()
-                        inh_vals = inh_vals[inh_vals != 0]
-                        if inh_vals.size > 0:
-                            axes[1].hist(
-                                inh_vals, bins=50, color="steelblue", alpha=0.8
-                            )
-                        else:
-                            axes[1].text(
-                                0.5,
-                                0.5,
-                                "No non-zero weights",
-                                ha="center",
-                                va="center",
-                                transform=axes[1].transAxes,
-                            )
-                        axes[1].set_title("Inhibitory weights")
-                        axes[1].set_xlabel("Weight")
-                        fig.suptitle(
-                            f"Epoch {e+1}/{self.epochs} - Weight Distributions",
-                            fontsize=12,
-                            fontweight="bold",
-                        )
-                        plt.tight_layout()
-                        plt.savefig(
-                            f"plots/weights_epoch_{e+1:03d}.png", bbox_inches="tight"
-                        )
-                        plt.close(fig)
-                        print(
-                            f"  Saved weights snapshot: plots/weights_epoch_{e+1:03d}.png"
-                        )
                     except Exception as exc:
-                        print(f"  Warning: failed to save weights plot ({exc})")
-                    # Also plot sampled weight trajectories with sleep shading if tracking exists
+                        print(f"  Warning: failed to collect weight stats ({exc})")
+                    
+                    # Plot sampled weight trajectories with sleep shading if tracking exists
                     try:
                         if (
                             isinstance(weight_tracking_epoch, dict)
@@ -3261,11 +3210,23 @@ class snn_sleepy:
                                 weight_tracking_epoch, e + 1
                             )
                             print(
-                                f"  Saved weight trajectories with sleep: plots/weights_trajectories_epoch_{e+1:03d}.png"
+                                f"  Saved weight trajectories with sleep: plots/weights_trajectories_epoch_{e+1:03d}.pdf"
                             )
                     except Exception as exc:
                         print(
                             f"  Warning: failed to save weight trajectories plot ({exc})"
+                        )
+                    
+                    # Plot weight evolution after each epoch
+                    try:
+                        if len(weight_evolution["epochs"]) > 0:
+                            plot_weight_evolution(weight_evolution)
+                            print(
+                                f"  Saved weight evolution: plots/weights_evolution.pdf"
+                            )
+                    except Exception as exc:
+                        print(
+                            f"  Warning: failed to save weight evolution plot ({exc})"
                         )
 
                 if plot_spikes_per_epoch:
@@ -3347,118 +3308,6 @@ class snn_sleepy:
                 pbar.set_postfix(acc=acc_str, phi=phi_str)
                 pbar.update(1)
             pbar.close()
-
-            # Plot weight evolution over epochs if tracking was enabled
-            if plot_weights_per_epoch and len(weight_evolution["epochs"]) > 0:
-                try:
-                    import matplotlib.pyplot as plt
-
-                    os.makedirs("plots", exist_ok=True)
-
-                    epochs = weight_evolution["epochs"]
-                    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-                    fig.suptitle(
-                        "Weight Evolution During Training",
-                        fontsize=14,
-                        fontweight="bold",
-                    )
-
-                    # Excitatory weights: mean ± std
-                    ax = axes[0, 0]
-                    exc_mean = weight_evolution["exc_mean"]
-                    exc_std = weight_evolution["exc_std"]
-                    ax.plot(epochs, exc_mean, "b-", label="Mean", linewidth=2)
-                    ax.fill_between(
-                        epochs,
-                        np.array(exc_mean) - np.array(exc_std),
-                        np.array(exc_mean) + np.array(exc_std),
-                        alpha=0.3,
-                        color="blue",
-                        label="±1 std",
-                    )
-                    ax.set_xlabel("Epoch")
-                    ax.set_ylabel("Weight Value")
-                    ax.set_title("Excitatory Weights: Mean ± Std")
-                    ax.legend()
-                    ax.grid(True, alpha=0.3)
-
-                    # Excitatory weights: min/max
-                    ax = axes[0, 1]
-                    ax.plot(
-                        epochs,
-                        weight_evolution["exc_min"],
-                        "r--",
-                        label="Min",
-                        linewidth=1.5,
-                    )
-                    ax.plot(
-                        epochs,
-                        weight_evolution["exc_max"],
-                        "g--",
-                        label="Max",
-                        linewidth=1.5,
-                    )
-                    ax.plot(epochs, exc_mean, "b-", label="Mean", linewidth=2)
-                    ax.set_xlabel("Epoch")
-                    ax.set_ylabel("Weight Value")
-                    ax.set_title("Excitatory Weights: Min/Max/Mean")
-                    ax.legend()
-                    ax.grid(True, alpha=0.3)
-
-                    # Inhibitory weights: mean ± std
-                    ax = axes[1, 0]
-                    inh_mean = weight_evolution["inh_mean"]
-                    inh_std = weight_evolution["inh_std"]
-                    ax.plot(epochs, inh_mean, "r-", label="Mean", linewidth=2)
-                    ax.fill_between(
-                        epochs,
-                        np.array(inh_mean) - np.array(inh_std),
-                        np.array(inh_mean) + np.array(inh_std),
-                        alpha=0.3,
-                        color="red",
-                        label="±1 std",
-                    )
-                    ax.set_xlabel("Epoch")
-                    ax.set_ylabel("Weight Value")
-                    ax.set_title("Inhibitory Weights: Mean ± Std")
-                    ax.legend()
-                    ax.grid(True, alpha=0.3)
-
-                    # Inhibitory weights: min/max
-                    ax = axes[1, 1]
-                    ax.plot(
-                        epochs,
-                        weight_evolution["inh_min"],
-                        "r--",
-                        label="Min",
-                        linewidth=1.5,
-                    )
-                    ax.plot(
-                        epochs,
-                        weight_evolution["inh_max"],
-                        "g--",
-                        label="Max",
-                        linewidth=1.5,
-                    )
-                    ax.plot(epochs, inh_mean, "r-", label="Mean", linewidth=2)
-                    ax.set_xlabel("Epoch")
-                    ax.set_ylabel("Weight Value")
-                    ax.set_title("Inhibitory Weights: Min/Max/Mean")
-                    ax.legend()
-                    ax.grid(True, alpha=0.3)
-
-                    plt.tight_layout()
-                    plt.savefig(
-                        "plots/weights_evolution.png", bbox_inches="tight", dpi=150
-                    )
-                    plt.close()
-                    print(
-                        "\n✓ Saved weight evolution plot: plots/weights_evolution.png"
-                    )
-                except Exception as exc:
-                    print(
-                        f"\n⚠ Warning: failed to create weight evolution plot ({exc})"
-                    )
 
             # Clean up main training loop variables
             del (

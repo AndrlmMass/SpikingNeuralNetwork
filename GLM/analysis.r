@@ -4,11 +4,11 @@
 # This script fits a Generalized Linear Mixed Model (GLMM) with beta family
 # to compare accuracy across sleep durations and models for the MNIST family.
 #
-# Usage: Run from the src/analysis/ directory:
-#   Rscript mixed_model2.r
+# Usage: Run from the GLM/ directory:
+#   Rscript analysis.r
 #
-# Input:  Results_.xlsx (in current directory)
-# Output: pred.xlsx (in current directory)
+# Input:  Results_.xlsx (in current directory, GLM/)
+# Output: pred.xlsx (in current directory, GLM/)
 # =============================================================================
 
 # Load libraries
@@ -20,7 +20,7 @@ library(ggeffects)
 library(ggplot2)
 library(writexl)
 
-# Read data from current directory (src/analysis/)
+# Read data from current directory (GLM/)
 cat("Reading Results_.xlsx...\n")
 data <- read_excel("Results_.xlsx")
 
@@ -28,13 +28,9 @@ data <- read_excel("Results_.xlsx")
 data <- data[data$Run == 1, ]
 cat(sprintf("Loaded %d rows after filtering Run==1\n", nrow(data)))
 
-# Convert dataset values from wide to long format
-ldata <- data %>%
-  pivot_longer(
-    cols = ends_with("mnist"),
-    names_to = "Dataset",
-    values_to = "Accuracy",
-  )
+# Data is already in long format (Dataset and Accuracy columns)
+# No need to pivot - use data directly
+ldata <- data
 
 # Convert to factors
 ldata$Sleep_duration <- as.factor(ldata$Sleep_duration)
@@ -73,4 +69,3 @@ cat(sprintf("Generated %d predictions\n", nrow(pred_df)))
 # Export predictions
 write_xlsx(x = pred_df, path = "pred.xlsx")
 cat("\nPredictions saved to pred.xlsx\n")
-
