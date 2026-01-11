@@ -782,9 +782,6 @@ def spike_plot(data, labels):
         np.where(data[:, n] > spike_threshold)[0] for n in range(data.shape[1])
     ]
 
-    # Debug: Print spike information
-    total_spikes = sum(len(pos) for pos in positions)
-
     # Create the figure and axes
     fig, ax = plt.subplots(figsize=(12, 6))
 
@@ -792,10 +789,6 @@ def spike_plot(data, labels):
     ax.eventplot(positions, lineoffsets=np.arange(data.shape[1]), colors="black")
     ax.set_ylabel(f"{data.shape[1]} Units")
     ax.set_xlabel("Time (ms)")
-
-    """
-    To plot the 
-    """
 
     # We'll collect which labels we've drawn (for legend) so we don't add duplicates
     drawn_labels = set()

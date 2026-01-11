@@ -139,7 +139,7 @@ def sleep_func(
 @njit(parallel=True, cache=True)
 def spike_timing(
     spike_times,  # Array of spike times
-    A_plus, 
+    A_plus,
     A_minus,
     tau_LTP,
     tau_LTD,
@@ -152,6 +152,10 @@ def spike_timing(
     nonzero_pre_idx,  # Typed list: for each post neuron, an array of nonzero pre indices
 ):
     n_neurons = spike_times.shape[0]
+    scale_A_plus_exc = learning_rate_exc * A_plus
+    scale_A_minus_exc = learning_rate_exc * A_minus
+    scale_A_plus_inh = learning_rate_inh * A_plus
+    scale_A_minus_inh = learning_rate_inh * A_minus
 
     # Loop over postsynaptic neurons, parallelized.
     for i in prange(N_x, n_neurons):
@@ -173,13 +177,13 @@ def spike_timing(
             # Determine if the connection is excitatory or inhibitory.
             if j < (n_neurons - N_inh):  # excitatory pre–synaptic neuron
                 if dt >= 0:
-                    weights[j, i] += math.exp(-dt / tau_LTP) * learning_rate_exc*A_plus
+                    weights[j, i] += math.exp(-dt / tau_LTP) * scale_A_plus_exc
                 else:
-                    weights[j, i] -= math.exp(dt / tau_LTD) * learning_rate_exc*A_minus
+                    weights[j, i] -= math.exp(dt / tau_LTD) * scale_A_minus_exc
             else:  # inhibitory pre–synaptic neuron
                 if dt >= 0:
-                    weights[j, i] -= math.exp(-dt / tau_LTP) * learning_rate_inh*A_plus
+                    weights[j, i] -= math.exp(-dt / tau_LTP) * scale_A_plus_inh
                 else:
-                    weights[j, i] += math.exp(dt / tau_LTD) * learning_rate_inh*A_minus
+                    weights[j, i] += math.exp(dt / tau_LTD) * scale_A_minus_inh
 
     return weights
