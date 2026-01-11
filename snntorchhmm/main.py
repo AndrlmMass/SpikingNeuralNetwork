@@ -2,12 +2,11 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torchvision.transforms as transforms
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, TensorDataset, random_split
 from torchvision import datasets
 import matplotlib.pyplot as plt
 import numpy as np
 from snntorch import spikeplot as splt
-import pandas as pd
 from snntorch import spikegen
 import snntorch as snn
 import itertools
@@ -16,7 +15,11 @@ import argparse
 import os
 import sys
 import json
+import math
 from datetime import datetime
+from PIL import Image
+import random
+import pandas as pd
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -45,7 +48,118 @@ transform = transforms.Compose(
 # Data loaders and dataset are created after CLI parsing
 train_loader = None
 test_loader = None
-val_loader = None
+
+
+def _load_notmnist_deeplake(transform):
+    import deeplake
+
+    ds = deeplake.load("hub://activeloop/not-mnist-small", read_only=True)
+
+    if "images" in ds.tensors:
+        image_tensor = ds["images"]
+    elif "image" in ds.tensors:
+        image_tensor = ds["image"]
+    else:
+        raise KeyError(
+            "Neither 'images' nor 'image' tensor found in the NOTMNIST DeepLake dataset."
+        )
+
+    if "labels" in ds.tensors:
+        label_tensor_ds = ds["labels"]
+    elif "label" in ds.tensors:
+        label_tensor_ds = ds["label"]
+    else:
+        raise KeyError(
+            "Neither 'labels' nor 'label' tensor found in the NOTMNIST DeepLake dataset."
+        )
+
+    raw_images = image_tensor.numpy()
+    raw_labels = np.array(label_tensor_ds.numpy()).astype(np.int64).reshape(-1)
+
+    processed_images = []
+    for img in raw_images:
+        img_np = np.array(img)
+        if img_np.ndim == 3 and img_np.shape[-1] == 1:
+            img_np = img_np.squeeze(-1)
+        if img_np.ndim == 2:
+            pil_img = Image.fromarray(img_np.astype(np.uint8), mode="L")
+        else:
+            pil_img = Image.fromarray(img_np.astype(np.uint8))
+        if transform is not None:
+            img_tensor = transform(pil_img)
+        else:
+            img_tensor = torch.from_numpy(
+                np.array(pil_img, dtype=np.float32) / 255.0
+            ).unsqueeze(0)
+        processed_images.append(img_tensor)
+
+    data_tensor = torch.stack(processed_images)
+    label_tensor = torch.from_numpy(raw_labels).long()
+
+    dataset = TensorDataset(data_tensor, label_tensor)
+    dataset.classes = list("ABCDEFGHIJ")
+    dataset.dataset_name = "NOTMNIST"
+    return dataset
+
+
+def preview_dataset_samples(dataset, num_samples: int, dataset_name: str) -> None:
+    """Plot a random subset of samples from the provided dataset."""
+    if num_samples <= 0:
+        return
+
+    capped_num_samples = min(num_samples, len(dataset))
+    indices = torch.randperm(len(dataset))[:capped_num_samples]
+
+    images = []
+    labels = []
+    for idx in indices:
+        img, label = dataset[int(idx)]
+        images.append(img)
+        if isinstance(label, torch.Tensor):
+            labels.append(int(label.item()))
+        elif isinstance(label, np.ndarray):
+            labels.append(int(label.item()))
+        else:
+            labels.append(int(label))
+
+    num_cols = min(5, capped_num_samples)
+    num_rows = math.ceil(capped_num_samples / num_cols)
+
+    fig, axes = plt.subplots(
+        num_rows, num_cols, figsize=(num_cols * 2.5, num_rows * 2.5)
+    )
+    axes = np.atleast_2d(axes)
+
+    class_names = getattr(dataset, "classes", None)
+    if class_names is None and hasattr(dataset, "dataset"):
+        class_names = getattr(dataset.dataset, "classes", None)
+
+    for plot_idx, ax in enumerate(axes.flat):
+        if plot_idx < capped_num_samples:
+            current_img = images[plot_idx]
+            if isinstance(current_img, torch.Tensor):
+                img = current_img.squeeze().cpu().numpy()
+            else:
+                img = np.array(current_img)
+            if img.ndim == 2:
+                # Normalize to [0, 1] for display without altering source tensors
+                img_min, img_max = img.min(), img.max()
+                if img_max > img_min:
+                    img = (img - img_min) / (img_max - img_min)
+                ax.imshow(img, cmap="gray")
+            else:
+                ax.imshow(np.transpose(img, (1, 2, 0)))
+
+            if class_names and labels[plot_idx] < len(class_names):
+                ax.set_title(class_names[labels[plot_idx]])
+            else:
+                ax.set_title(f"Label: {int(labels[plot_idx])}")
+        ax.axis("off")
+
+    fig.suptitle(f"{dataset_name} Preview ({capped_num_samples} samples)", fontsize=14)
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    plt.show()
+
 
 # Network architecture (num_inputs inferred after dataset init)
 num_inputs = None
@@ -53,7 +167,7 @@ num_hidden = 1000
 num_outputs = 10
 
 # Temporal dynamics
-num_steps = 25
+num_steps = 100
 beta = 0.95
 
 # ---------------------- Sleep / STDP Regularization Config ----------------------
@@ -70,7 +184,7 @@ sleep_trigger_ratio = 1.1
 sleep_restart_ratio = 1.0
 
 # Noisy membrane potential and random input during sleep
-sleep_mem_noise_std = 0.5
+sleep_mem_noise_std = 3
 sleep_input_rate = 0  # Bernoulli firing rate for random spikes
 
 # Power-law mapping toward target weight magnitude
@@ -304,9 +418,6 @@ def load_checkpoint(model: nn.Module, path: str, map_location=None):
 # ---------------------- Argparse: eval-only / load ----------------------
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument(
-    "---track-excel", action="store_true", help="Store results in excel sheet for GLMM"
-)
-parser.add_argument(
     "--eval-only",
     action="store_true",
     help="Load checkpoint and evaluate on test set, then exit",
@@ -346,10 +457,9 @@ parser.add_argument(
 parser.add_argument(
     "--dataset",
     type=str,
-    nargs="+",
-    default=["MNIST"],
-    choices=["MNIST", "KMNIST", "FMNIST"],
-    help="Dataset(s) to use. Can specify multiple: --dataset MNIST KMNIST FMNIST",
+    default="MNIST",
+    choices=["MNIST", "KMNIST", "FMNIST", "NOTMNIST"],
+    help="Dataset to use",
 )
 parser.add_argument(
     "--early-stopping", action="store_true", help="Enable early stopping"
@@ -379,181 +489,273 @@ parser.add_argument(
     help="Path to JSON file where results are appended per run",
 )
 parser.add_argument(
+    "--preview-samples",
+    type=int,
+    default=0,
+    help="Number of training samples to preview before training starts (0 to disable)",
+)
+parser.add_argument(
+    "--seed",
+    type=int,
+    default=None,
+    help="Random seed for reproducibility (default: None)",
+)
+parser.add_argument(
+    "--track-excel",
+    action="store_true",
+    default=False,
+    help="track results in GLM/Results_.xlsx file after each run",
+)
+parser.add_argument(
+    "--no-plot",
+    action="store_true",
+    help="Disable plotting of training/validation curves",
+)
+parser.add_argument(
+    "--balanced",
+    action="store_true",
+    help="Use balanced per-class subsampling when limiting dataset sizes",
+)
+parser.add_argument(
     "--train-size",
     type=int,
     default=None,
-    help="Number of training samples to use (evenly split across classes). If None, use full dataset.",
+    help="If set, limit the training set to this many samples (used with --balanced)",
 )
 parser.add_argument(
     "--test-size",
     type=int,
     default=None,
-    help="Number of test samples to use (evenly split across classes). If None, use full dataset.",
-)
-parser.add_argument(
-    "--val-size",
-    type=int,
-    default=None,
-    help="Number of validation samples to use (evenly split across classes). If specified, splits from training set. If None, test set is used for validation.",
+    help="If set, limit the test set to this many samples (used with --balanced)",
 )
 parser.add_argument("--help", action="help", help="Show help and exit")
 cli_args, _ = parser.parse_known_args()
 
 
-# ---------------------- Dataset Selection & Loaders ----------------------
-def create_balanced_subset(dataset, target_size, num_classes=10, seed=42):
-    """
-    Create a balanced subset of the dataset with equal samples per class.
+# ---------------------- Seeding ----------------------
+def set_global_seed(seed: int) -> None:
+    if seed is None:
+        return
+    try:
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+        # Favor determinism where possible
+        try:
+            torch.use_deterministic_algorithms(True)
+        except Exception:
+            pass
+        if hasattr(torch.backends, "cudnn"):
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
+    except Exception:
+        pass
 
-    Args:
-        dataset: PyTorch dataset with targets
-        target_size: Total number of samples (will be rounded to nearest multiple of num_classes)
-        num_classes: Number of classes in the dataset
-        seed: Random seed for reproducibility
 
-    Returns:
-        indices: List of indices to use for the balanced subset
-    """
-    if target_size is None:
-        return None  # Use full dataset
+set_global_seed(cli_args.seed)
 
-    # Ensure target_size is a multiple of num_classes for even split
-    samples_per_class = target_size // num_classes
-    actual_size = samples_per_class * num_classes
 
-    if actual_size != target_size:
-        print(
-            f"Warning: target_size {target_size} is not divisible by {num_classes}. Using {actual_size} samples ({samples_per_class} per class)."
-        )
-
-    # Get all indices grouped by class
-    indices_by_class = [[] for _ in range(num_classes)]
-    for idx in range(len(dataset)):
-        _, target = dataset[idx]
-        if isinstance(target, torch.Tensor):
-            target = target.item()
-        indices_by_class[target].append(idx)
-
-    # Randomly sample from each class
-    np.random.seed(seed)
-    selected_indices = []
-    for class_indices in indices_by_class:
-        if len(class_indices) < samples_per_class:
-            print(
-                f"Warning: Class has only {len(class_indices)} samples, but {samples_per_class} requested. Using all available samples."
-            )
-            selected_indices.extend(class_indices)
+# ---------------------- Balanced Subsample Utilities ----------------------
+def _get_labels_array(ds) -> np.ndarray:
+    """Best-effort extraction of labels from a dataset or subset without iterating all samples."""
+    # Subset wrapper
+    if isinstance(ds, torch.utils.data.Subset):
+        base_labels = _get_labels_array(ds.dataset)
+        idx = np.array(ds.indices, dtype=int)
+        return base_labels[idx]
+    # torchvision datasets expose targets/labels
+    for attr in ["targets", "labels"]:
+        if hasattr(ds, attr):
+            arr = getattr(ds, attr)
+            if isinstance(arr, torch.Tensor):
+                return arr.detach().cpu().numpy()
+            return np.array(arr)
+    # TensorDataset: assume (data, labels)
+    if hasattr(ds, "tensors") and len(ds.tensors) >= 2:
+        labels = ds.tensors[1]
+        if isinstance(labels, torch.Tensor):
+            return labels.detach().cpu().numpy()
+        return np.array(labels)
+    # Fallback: iterate (slower)
+    lbls = []
+    for i in range(len(ds)):
+        _, y = ds[i]
+        if isinstance(y, torch.Tensor):
+            y = int(y.item())
         else:
-            selected = np.random.choice(
-                class_indices, size=samples_per_class, replace=False
+            y = int(y)
+        lbls.append(y)
+    return np.array(lbls, dtype=int)
+
+
+def _balanced_indices(labels: np.ndarray, total: int, seed: int) -> np.ndarray:
+    """Return indices for a balanced subset across classes totaling 'total' samples."""
+    rng = np.random.RandomState(seed if seed is not None else 0)
+    labels = np.asarray(labels)
+    classes = np.unique(labels)
+    num_classes = len(classes)
+    if total is None or total <= 0:
+        return np.arange(labels.shape[0], dtype=int)
+    per_class_base = total // num_classes
+    remainder = total % num_classes
+    # Build pool per class
+    class_to_indices = {c: np.where(labels == c)[0] for c in classes}
+    # Shuffle within class
+    for c in classes:
+        rng.shuffle(class_to_indices[c])
+    # First pass: take base count per class (limited by availability)
+    selected = []
+    for c in classes:
+        take = min(per_class_base, len(class_to_indices[c]))
+        selected.append(class_to_indices[c][:take])
+        class_to_indices[c] = class_to_indices[c][take:]
+    selected = [
+        idx
+        for arr in selected
+        for idx in (arr if isinstance(arr, np.ndarray) else np.array([], dtype=int))
+    ]
+    # Distribute remainder from classes with leftover
+    remaining_needed = total - len(selected)
+    if remaining_needed > 0:
+        # flatten remaining pools
+        for c in classes:
+            if remaining_needed <= 0:
+                break
+            pool = class_to_indices[c]
+            if len(pool) == 0:
+                continue
+            add = min(
+                remaining_needed, len(pool), 1 if remainder > 0 else 0
+            )  # one per class until remainder exhausted
+            if add > 0:
+                selected.extend(pool[:add].tolist())
+                class_to_indices[c] = pool[add:]
+                remainder -= add
+                remaining_needed -= add
+    # If still short, fill from any remaining pools
+    if remaining_needed > 0:
+        pools = (
+            np.concatenate(
+                [class_to_indices[c] for c in classes if len(class_to_indices[c]) > 0]
             )
-            selected_indices.extend(selected.tolist())
+            if any(len(class_to_indices[c]) > 0 for c in classes)
+            else np.array([], dtype=int)
+        )
+        if len(pools) > 0:
+            selected.extend(pools[:remaining_needed].tolist())
+    return np.array(selected, dtype=int)
 
-    return selected_indices
+
+def make_balanced_subset(ds, total: int, seed: int):
+    """Create a balanced torch.utils.data.Subset of size up to 'total'."""
+    if total is None:
+        return ds
+    labels = _get_labels_array(ds)
+    if total > len(labels):
+        total = len(labels)
+    idx = _balanced_indices(labels, total, seed)
+    return torch.utils.data.Subset(ds, idx.tolist())
 
 
+def balanced_split_from_full(full_ds, train_total: int, test_total: int, seed: int):
+    """Split a single full dataset into balanced train/test subsets without overlap."""
+    labels = _get_labels_array(full_ds)
+    rng = np.random.RandomState(seed if seed is not None else 0)
+    classes = np.unique(labels)
+    class_to_indices = {c: rng.permutation(np.where(labels == c)[0]) for c in classes}
+    num_classes = len(classes)
+    train_pc = train_total // num_classes if train_total else 0
+    test_pc = test_total // num_classes if test_total else 0
+    train_sel = []
+    test_sel = []
+    for c in classes:
+        pool = class_to_indices[c]
+        t_take = min(train_pc, len(pool))
+        train_sel.append(pool[:t_take])
+        pool = pool[t_take:]
+        v_take = min(test_pc, len(pool))
+        test_sel.append(pool[:v_take])
+        class_to_indices[c] = pool[v_take:]
+    train_sel = np.concatenate(train_sel) if train_sel else np.array([], dtype=int)
+    test_sel = np.concatenate(test_sel) if test_sel else np.array([], dtype=int)
+    return torch.utils.data.Subset(
+        full_ds, train_sel.tolist()
+    ), torch.utils.data.Subset(full_ds, test_sel.tolist())
+
+
+# ---------------------- Dataset Selection & Loaders ----------------------
 dataset_name = cli_args.dataset.upper()
 folder_map = {
     "MNIST": "mnist",
     "KMNIST": "kmnist",
     "FMNIST": "fmnist",
+    "NOTMNIST": "notmnist",
 }
 data_path = f"./data/{folder_map.get(dataset_name, 'mnist')}"
 
-if dataset_name == "MNIST":
-    TrainDS = datasets.MNIST
-elif dataset_name == "KMNIST":
-    TrainDS = datasets.KMNIST
-elif dataset_name == "FMNIST":
-    TrainDS = datasets.FashionMNIST
-else:
-    TrainDS = datasets.MNIST
-
-# Load full datasets first
-full_train_dataset = TrainDS(data_path, train=True, download=True, transform=transform)
-full_test_dataset = TrainDS(data_path, train=False, download=True, transform=transform)
-
-# Create balanced subsets if specified
-num_classes = 10
-
-# Handle validation set - if val_size is specified, we need to split training data
-val_dataset = None
-val_indices = None
-if cli_args.val_size is not None:
-    # Create validation set from training data
-    # First, determine total samples needed from training set
-    train_size_needed = (
-        cli_args.train_size or len(full_train_dataset)
-    ) + cli_args.val_size
-    all_train_indices = create_balanced_subset(
-        full_train_dataset, train_size_needed, num_classes=num_classes
-    )
-
-    # Split into train and val by class
-    samples_per_class_total = train_size_needed // num_classes
-    samples_per_class_val = cli_args.val_size // num_classes
-    samples_per_class_train = samples_per_class_total - samples_per_class_val
-
-    # Group indices by class
-    indices_by_class = [[] for _ in range(num_classes)]
-    for idx in all_train_indices:
-        _, target = full_train_dataset[idx]
-        if isinstance(target, torch.Tensor):
-            target = target.item()
-        indices_by_class[target].append(idx)
-
-    # Split each class: first samples_per_class_val go to val, rest to train
-    train_indices = []
-    val_indices = []
-    for class_indices in indices_by_class:
-        val_indices.extend(class_indices[:samples_per_class_val])
-        train_indices.extend(
-            class_indices[
-                samples_per_class_val : samples_per_class_val + samples_per_class_train
-            ]
+if dataset_name == "NOTMNIST":
+    full_dataset = _load_notmnist_deeplake(transform)
+    if cli_args.balanced and (
+        cli_args.train_size is not None or cli_args.test_size is not None
+    ):
+        train_total = (
+            cli_args.train_size
+            if cli_args.train_size is not None
+            else len(full_dataset)
         )
+        test_total = cli_args.test_size if cli_args.test_size is not None else 0
+        train_dataset, test_dataset = balanced_split_from_full(
+            full_dataset,
+            train_total,
+            test_total,
+            seed=cli_args.seed if cli_args.seed is not None else 0,
+        )
+        print(
+            f"Balanced NOTMNIST split: train={len(train_dataset)}, test={len(test_dataset)}"
+        )
+    else:
+        train_size = int(0.8 * len(full_dataset))
+        test_size = len(full_dataset) - train_size
+        train_dataset, test_dataset = random_split(
+            full_dataset,
+            [train_size, test_size],
+            generator=torch.Generator().manual_seed(
+                cli_args.seed if cli_args.seed is not None else 42
+            ),
+        )
+    dataset_source = "hub://activeloop/not-mnist-small"
 else:
-    # No validation set needed, just create train subset if specified
-    train_indices = create_balanced_subset(
-        full_train_dataset, cli_args.train_size, num_classes=num_classes
-    )
+    if dataset_name == "MNIST":
+        TrainDS = datasets.MNIST
+    elif dataset_name == "KMNIST":
+        TrainDS = datasets.KMNIST
+    elif dataset_name == "FMNIST":
+        TrainDS = datasets.FashionMNIST
+    else:
+        TrainDS = datasets.MNIST
 
-# Create test subset if specified
-test_indices = create_balanced_subset(
-    full_test_dataset, cli_args.test_size, num_classes=num_classes
-)
-
-# Create subsets
-if train_indices is not None:
-    train_dataset = Subset(full_train_dataset, train_indices)
-    print(
-        f"Using {len(train_indices)} training samples ({len(train_indices) // num_classes} per class)"
-    )
-else:
-    train_dataset = full_train_dataset
-    print(f"Using full training dataset: {len(train_dataset)} samples")
-
-if test_indices is not None:
-    test_dataset = Subset(full_test_dataset, test_indices)
-    print(
-        f"Using {len(test_indices)} test samples ({len(test_indices) // num_classes} per class)"
-    )
-else:
-    test_dataset = full_test_dataset
-    print(f"Using full test dataset: {len(test_dataset)} samples")
-
-if val_indices is not None:
-    val_dataset = Subset(full_train_dataset, val_indices)
-    print(
-        f"Using {len(val_indices)} validation samples ({len(val_indices) // num_classes} per class)"
-    )
-    val_loader = DataLoader(
-        val_dataset, batch_size=batch_size, shuffle=False, drop_last=False
-    )
-else:
-    val_dataset = None
-    val_loader = None
-    print("Using test set for validation")
+    train_dataset = TrainDS(data_path, train=True, download=True, transform=transform)
+    test_dataset = TrainDS(data_path, train=False, download=True, transform=transform)
+    if cli_args.balanced and (
+        cli_args.train_size is not None or cli_args.test_size is not None
+    ):
+        if cli_args.train_size is not None:
+            train_dataset = make_balanced_subset(
+                train_dataset,
+                cli_args.train_size,
+                seed=cli_args.seed if cli_args.seed is not None else 0,
+            )
+            print(f"Balanced train subset: {len(train_dataset)} samples")
+        if cli_args.test_size is not None:
+            test_dataset = make_balanced_subset(
+                test_dataset,
+                cli_args.test_size,
+                seed=cli_args.seed if cli_args.seed is not None else 0,
+            )
+            print(f"Balanced test subset: {len(test_dataset)} samples")
+    dataset_source = os.path.abspath(data_path)
 
 train_loader = DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True, drop_last=True
@@ -561,6 +763,23 @@ train_loader = DataLoader(
 test_loader = DataLoader(
     test_dataset, batch_size=batch_size, shuffle=False, drop_last=False
 )
+
+resolved_dataset = (
+    train_dataset.dataset
+    if isinstance(train_dataset, torch.utils.data.Subset)
+    else train_dataset
+)
+print(
+    f"Dataset resolved to {type(resolved_dataset).__name__} (source={dataset_source})"
+)
+
+if cli_args.preview_samples > 0:
+    print(
+        f"Previewing {min(cli_args.preview_samples, len(train_dataset))} samples from the {dataset_name} training set..."
+    )
+    preview_dataset_samples(
+        train_dataset, cli_args.preview_samples, dataset_name=dataset_name
+    )
 
 # Infer input size from transformed sample
 _sample_x, _ = train_dataset[0]
@@ -803,9 +1022,8 @@ def train_once(
             global_iter_counter += 1
 
         # Validation after each epoch
-        val_data_loader = val_loader if val_loader is not None else test_loader
         val_loss, val_acc = evaluate_model(
-            net, val_data_loader, loss, device, num_steps, batch_size
+            net, test_loader, loss, device, num_steps, batch_size
         )
         test_loss_hist.append(val_loss)
         val_acc_hist.append(val_acc)
@@ -893,42 +1111,44 @@ def train_once(
         )
 
     # Append results to JSON as we go
-    try:
-        results_entry = {
-            "timestamp": datetime.utcnow().isoformat(timespec="seconds") + "Z",
-            "run_index": run_index,
-            "optimizer_mode": cli_args.optimizer_mode,
-            "dataset": cli_args.dataset,
-            "sleep_interval_pct": float(sleep_interval_pct),
-            "num_epochs": num_epochs,
-            "batch_size": batch_size,
-            "num_steps": num_steps,
-            "final_test_loss": float(final_test_loss),
-            "final_test_acc": float(final_test_acc),
-            "avg_train_acc_delta_after_sleep": avg_sleep_acc_delta,
-        }
-        results_path = cli_args.results_json
-        # Normalize to absolute path (so message and file align with actual location)
-        results_path = os.path.abspath(results_path)
-        results_dir = os.path.dirname(results_path)
-        if results_dir:
-            os.makedirs(results_dir, exist_ok=True)
-        # Read existing list (if any)
-        existing = []
-        if os.path.exists(results_path):
-            try:
-                with open(results_path, "r", encoding="utf-8") as f:
-                    existing = json.load(f)
-                if not isinstance(existing, list):
-                    existing = []
-            except Exception:
+    results_entry = {
+        "timestamp": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "run_index": run_index,
+        "optimizer_mode": cli_args.optimizer_mode,
+        "dataset": cli_args.dataset,
+        "seed": cli_args.seed,
+        "sleep_interval_pct": float(sleep_interval_pct),
+        "num_epochs": num_epochs,
+        "batch_size": batch_size,
+        "num_steps": num_steps,
+        "final_test_loss": float(final_test_loss),
+        "final_test_acc": float(final_test_acc),
+        "avg_train_acc_delta_after_sleep": avg_sleep_acc_delta,
+    }
+    results_path = cli_args.results_json
+    # Normalize to absolute path (so message and file align with actual location)
+    results_path = os.path.abspath(results_path)
+    results_dir = os.path.dirname(results_path)
+    if results_dir:
+        os.makedirs(results_dir, exist_ok=True)
+    # Read existing list (if any)
+    existing = []
+    if os.path.exists(results_path):
+        try:
+            with open(results_path, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+            if not isinstance(existing, list):
                 existing = []
-        existing.append(results_entry)
-        with open(results_path, "w", encoding="utf-8") as f:
-            json.dump(existing, f, indent=2)
-        print(f"Saved results to {results_path}")
-    except Exception as e:
-        print(f"Warning: failed to save results JSON: {e}")
+        except Exception as e:
+            print(
+                f"Warning: failed to read existing results JSON '{results_path}': {e}"
+            )
+            existing = []
+    existing.append(results_entry)
+    # Write must succeed; propagate any exception to stop training
+    with open(results_path, "w", encoding="utf-8") as f:
+        json.dump(existing, f, indent=2)
+    print(f"Saved results to {results_path}")
 
     # Plot Loss and Accuracy (controlled by orchestrator)
     if enable_plot:
@@ -968,12 +1188,18 @@ def train_once(
     return float(final_test_acc)
 
 
-def get_next_run_number(excel_path, model_name):
+# Excel tracking functions
+excel_path = "../GLM/Results_.xlsx"
+model_name = "snntorch"
+lambda_value = 0.99997
+
+def get_next_run_number():
     """Get the next run number for the model from existing Excel file."""
-    if not os.path.exists(excel_path):
+    excel_abs_path = os.path.abspath(os.path.join(SCRIPT_DIR, excel_path))
+    if not os.path.exists(excel_abs_path):
         return 1
     try:
-        df = pd.read_excel(excel_path, engine="openpyxl")
+        df = pd.read_excel(excel_abs_path, engine="openpyxl")
         if "Model" not in df.columns or "Run" not in df.columns:
             return 1
         model_runs = df[df["Model"] == model_name]
@@ -984,37 +1210,74 @@ def get_next_run_number(excel_path, model_name):
         print(f"WARNING: Could not read Excel file to determine run number: {e}")
         return 1
 
+def save_to_excel(sleep_interval_pct, run_index, test_accuracy, run_number, dataset, seed_val):
+    """Append a new row to the Excel file after a run completes."""
+    if not getattr(cli_args, "track_excel", False):
+        return
+    try:
+        if test_accuracy is None:
+            print("WARNING: Test accuracy is None, skipping Excel update")
+            return
 
-def save_to_excel(
-    Sleep_duration, Model, Run, Lambda, Seed, Dataset, Accuracy, excel_path
-):
-    new_row = {
-        "Sleep_duration": Sleep_duration,
-        "Model": Model,
-        "Run": Run,
-        "Lambda": Lambda,
-        "Seed": Seed,
-        "Dataset": Dataset,
-        "Accuracy": Accuracy,
-    }
+        excel_abs_path = os.path.abspath(os.path.join(SCRIPT_DIR, excel_path))
+        sleep_duration = float(sleep_interval_pct)
+        dataset_name_val = dataset
 
-    df = pd.read_excel(excel_path, engine="openpyxl")
-    required_columns = [
-        "Sleep_duration",
-        "Model",
-        "Run",
-        "Lambda",
-        "Seed",
-        "Dataset",
-        "Accuracy",
-    ]
-    if df.empty or not all(col in df.columns for col in required_columns):
-        df = pd.DataFrame(columns=required_columns)
+        new_row = {
+            "Sleep_duration": sleep_duration,
+            "Model": model_name,
+            "Run": run_number,
+            "Lambda": lambda_value,
+            "Seed": seed_val if seed_val is not None else run_index,
+            "Dataset": dataset_name_val.lower(),
+            "Accuracy": float(test_accuracy),
+        }
 
-    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-    os.makedirs(os.path.dirname(excel_path), exist_ok=True)
-    df.to_excel(excel_path, index=False, engine="openpyxl")
-    print(f"Results saved to {excel_path}")
+        if os.path.exists(excel_abs_path) and os.path.getsize(excel_abs_path) > 0:
+            try:
+                df = pd.read_excel(excel_abs_path, engine="openpyxl")
+                required_columns = [
+                    "Sleep_duration",
+                    "Model",
+                    "Run",
+                    "Lambda",
+                    "Seed",
+                    "Dataset",
+                    "Accuracy",
+                ]
+                if df.empty or not all(col in df.columns for col in required_columns):
+                    df = pd.DataFrame(columns=required_columns)
+            except Exception:
+                df = pd.DataFrame(
+                    columns=[
+                        "Sleep_duration",
+                        "Model",
+                        "Run",
+                        "Lambda",
+                        "Seed",
+                        "Dataset",
+                        "Accuracy",
+                    ]
+                )
+        else:
+            df = pd.DataFrame(
+                columns=[
+                    "Sleep_duration",
+                    "Model",
+                    "Run",
+                    "Lambda",
+                    "Seed",
+                    "Dataset",
+                    "Accuracy",
+                ]
+            )
+
+        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+        os.makedirs(os.path.dirname(excel_abs_path), exist_ok=True)
+        df.to_excel(excel_abs_path, index=False, engine="openpyxl")
+        print(f"Results saved to {excel_abs_path}")
+    except Exception as e:
+        print(f"WARNING: Could not save to Excel file: {e}")
 
 
 # Orchestrate single or multiple sleep rates and runs
@@ -1024,12 +1287,20 @@ rates = (
     else [cli_args.sleep_interval_pct]
 )
 
+# Determine run number for Excel tracking (same for all runs in this execution)
+excel_run_number = get_next_run_number() if getattr(cli_args, "track_excel", False) else None
+
 if len(rates) == 1 and cli_args.runs <= 1:
-    _ = train_once(
-        run_index=1, cli_args=cli_args, sleep_interval_pct=rates[0], enable_plot=True
+    should_plot = not cli_args.no_plot
+    acc = train_once(
+        run_index=1,
+        cli_args=cli_args,
+        sleep_interval_pct=rates[0],
+        enable_plot=should_plot,
     )
+    if excel_run_number is not None:
+        save_to_excel(rates[0], 1, acc, excel_run_number, cli_args.dataset, cli_args.seed)
 else:
-    Run = get_next_run_number(excel_path=cli_args.track_excel, model_name="snntorch")
     for rate in rates:
         accuracies = []
         print(
@@ -1044,16 +1315,8 @@ else:
                 enable_plot=False,
             )
             accuracies.append(acc)
-            save_to_excel(
-                Sleep_duration=rate,
-                Model="snntorch",
-                Run=Run,
-                Lambda=sleep_lambda,
-                Seed=r + 1,
-                Dataset=cli_args.dataset,
-                Accuracy=acc,
-                excel_path=cli_args.track_excel,
-            )
+            if excel_run_number is not None:
+                save_to_excel(rate, r + 1, acc, excel_run_number, cli_args.dataset, cli_args.seed)
         acc_pct = [a * 100.0 for a in accuracies]
         print("\n" + "-" * 60)
         print(f"Sleep rate {rate} — final test accuracies (%):")
