@@ -6,3 +6,4 @@ sdata/
 pycache/
 *.pkl
 *.pyc
+plots/

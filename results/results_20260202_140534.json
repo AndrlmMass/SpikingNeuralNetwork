@@ -1,0 +1,20 @@
+{
+  "timestamp": "2026-02-02T14:05:34.342503",
+  "status": "in_progress",
+  "image_dataset": "fcx1",
+  "args": {
+    "runs": 5,
+    "sleep_rates": [
+      0.2
+    ],
+    "sleep_max_iters": 10000,
+    "on_timeout": "give_up",
+    "early_stopping": false,
+    "no_sleep": false,
+    "normalize_weights": false,
+    "image_dataset": "fcx1"
+  },
+  "results_by_sleep_rate": {
+    "0.2": []
+  }
+}
