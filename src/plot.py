@@ -12,8 +12,10 @@ matplotlib.use("TkAgg")
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import Optional
+from PIL import Image
+import glob
 
+from typing import Optional
 
 
 def plot_glmm_predictions(
@@ -23,72 +25,80 @@ def plot_glmm_predictions(
 ) -> str:
     """
     Plot GLMM predicted values with confidence intervals.
-    
+
     Args:
         pred_path: Path to pred.xlsx (output from mixed_model2.r)
         output_path: Path to save the figure
         show_plot: Whether to display the plot
-        
+
     Returns:
         Path to saved figure
     """
     data = pd.read_excel(pred_path)
-    
+
     sleep_vals = sorted(data["x"].dropna().unique())
     order = [str(int(v)) for v in sleep_vals]
     data["x"] = data["x"].astype(str)
     order_map = {v: i for i, v in enumerate(order)}
-    
+
     dataset_order = ["mnist", "kmnist", "fmnist", "notmnist"]
     hue_order = ["SNN_sleepy", "snntorch"]
     styles = {"SNN_sleepy": "o", "snntorch": "v"}
     cluster_width = 0.8
-    
+
     g = sns.FacetGrid(
         data=data,
         col="Dataset" if "Dataset" in data.columns else "facet",
         col_order=dataset_order,
         sharey=True,
         height=4,
-        aspect=1.1
+        aspect=1.1,
     )
-    
+
     base_index = {s: i for i, s in enumerate(order)}
-    
+
     def draw_errorbars(data, color=None, **kwargs):
         ax = plt.gca()
-        dataset = data["Dataset"].iloc[0] if "Dataset" in data.columns else data["facet"].iloc[0]
+        dataset = (
+            data["Dataset"].iloc[0]
+            if "Dataset" in data.columns
+            else data["facet"].iloc[0]
+        )
         subdf = data.copy()
-        
+
         if subdf.empty:
             return
-        
+
         models_here = [m for m in hue_order if m in subdf["group"].unique()]
         k = len(models_here)
         if k == 0:
             return
-        
-        offset = {m: (j - (k-1)/2) * (cluster_width / k) for j, m in enumerate(models_here)}
-        
+
+        offset = {
+            m: (j - (k - 1) / 2) * (cluster_width / k)
+            for j, m in enumerate(models_here)
+        }
+
         for m in models_here:
             style = styles[m]
             sub_m = subdf[subdf["group"] == m].copy()
             sub_m["__ord__"] = sub_m["x"].map(order_map)
             sub_m = sub_m.sort_values("__ord__")
-            
+
             if sub_m.empty:
                 continue
-            
+
             xs = [order_map[s] + offset[m] for s in sub_m["x"]]
             y_mean = sub_m["predicted"].to_numpy()
             y_max = sub_m["conf.high"].to_numpy()
             y_min = sub_m["conf.low"].to_numpy()
-            
+
             yerr_lower = y_mean - y_min
             yerr_upper = y_max - y_mean
-            
+
             plt.errorbar(
-                xs, y_mean,
+                xs,
+                y_mean,
                 yerr=[yerr_lower, yerr_upper],
                 fmt=style,
                 markersize=5,
@@ -96,44 +106,46 @@ def plot_glmm_predictions(
                 capsize=4,
                 elinewidth=1.2,
                 color="black",
-                label=m if dataset == dataset_order[0] else None
+                label=m if dataset == dataset_order[0] else None,
             )
             plt.plot(xs, y_mean, linestyle="--", color="black", linewidth=1)
-        
+
         ax.set_xticks(list(order_map.values()))
         ax.set_xticklabels(order, fontsize=18)
         ax.set_xlabel("Sleep_duration", fontsize=16)
         ax.set_ylim(top=1.0, bottom=0.2)
-    
+
     g.map_dataframe(draw_errorbars)
-    
+
     new_titles = {
         "mnist": "MNIST",
         "kmnist": "KMNIST",
         "fmnist": "Fashion-MNIST",
-        "notmnist": "NotMNIST"
+        "notmnist": "NotMNIST",
     }
-    
+
     for ax, ds in zip(g.axes.flatten(), dataset_order):
         ax.set_title(new_titles.get(ds, ds), fontsize=18)
-    
+
     g.set_ylabels("Accuracy (%)", fontsize=16)
-    
+
     handles, labels = g.axes.flat[0].get_legend_handles_labels()
     if handles:
-        g.fig.legend(handles, labels, title="Model", bbox_to_anchor=(0.14, 0.4), framealpha=1.0)
-    
+        g.fig.legend(
+            handles, labels, title="Model", bbox_to_anchor=(0.14, 0.4), framealpha=1.0
+        )
+
     sns.despine(offset=10, trim=True)
     plt.tight_layout()
-    
+
     output_path = output_path or "sleep_duration_comparison_glmm.pdf"
     plt.savefig(output_path, dpi=900)
     print(f"Figure saved to {output_path}")
-    
+
     if show_plot:
         plt.show()
     plt.close()
-    
+
     return output_path
 
 
@@ -145,95 +157,103 @@ def plot_glmm_with_raw_accuracy(
 ) -> str:
     """
     Plot GLMM predictions overlaid with raw observed accuracy.
-    
+
     Args:
         pred_path: Path to pred.xlsx
         results_path: Path to Results_.xlsx
         output_path: Path to save figure
         show_plot: Whether to display
-        
+
     Returns:
         Path to saved figure
     """
     # Load GLMM predictions
     data = pd.read_excel(pred_path)
-    data = data.rename(columns={'x': 'Sleep_duration', 'group': 'Model', 'facet': 'Dataset'})
-    
+    data = data.rename(
+        columns={"x": "Sleep_duration", "group": "Model", "facet": "Dataset"}
+    )
+
     # Load raw results
     data2 = pd.read_excel(results_path)
     data2 = data2[data2["Run"] == 1]
     data2 = data2.drop(["Seed", "Run"], axis=1, errors="ignore")
-    
+
     # Data is already in long format (Dataset and Accuracy columns)
     # No need to melt
     ldata = data2
-    
-    stats = ldata.groupby(["Model", "Sleep_duration", "Dataset"])["Accuracy"].agg(
-        mean="mean", min="min", max="max"
-    ).reset_index()
-    
+
+    stats = (
+        ldata.groupby(["Model", "Sleep_duration", "Dataset"])["Accuracy"]
+        .agg(mean="mean", min="min", max="max")
+        .reset_index()
+    )
+
     sleep_vals = sorted(data["Sleep_duration"].dropna().unique())
     order = [str(int(v)) for v in sleep_vals]
     stats["Sleep_duration"] = stats["Sleep_duration"].astype(str)
     data["Sleep_duration"] = data["Sleep_duration"].astype(str)
     order_map = {v: i for i, v in enumerate(order)}
-    
+
     dataset_order = ["mnist", "kmnist", "fmnist", "notmnist"]
     hue_order = ["SNN_sleepy", "snntorch"]
     styles = {"SNN_sleepy": "o", "snntorch": "v"}
     cluster_width = 0.8
-    
+
     g = sns.FacetGrid(
         data=data,
         col="Dataset",
         col_order=dataset_order,
         sharey=True,
         height=4,
-        aspect=1.1
+        aspect=1.1,
     )
-    
+
     def draw_errorbars(data, color=None, **kwargs):
         ax = plt.gca()
         dataset = data["Dataset"].iloc[0]
-        
+
         subdf = data.copy()
         subdf2 = stats[stats["Dataset"] == dataset].copy()
-        
+
         if subdf.empty:
             return
-        
+
         models_here = [m for m in hue_order if m in subdf["Model"].unique()]
         k = len(models_here)
         if k == 0:
             return
-        
-        offset = {m: (j - (k-1)/2) * (cluster_width / k) for j, m in enumerate(models_here)}
-        
+
+        offset = {
+            m: (j - (k - 1) / 2) * (cluster_width / k)
+            for j, m in enumerate(models_here)
+        }
+
         for m in models_here:
             style = styles[m]
             sub_m = subdf[subdf["Model"] == m].copy()
             sub_m2 = subdf2[subdf2["Model"] == m].copy()
-            
+
             sub_m["__ord__"] = sub_m["Sleep_duration"].map(order_map)
             sub_m = sub_m.sort_values("__ord__")
             sub_m2["__ord__"] = sub_m2["Sleep_duration"].map(order_map)
             sub_m2 = sub_m2.sort_values("__ord__")
-            
+
             if sub_m.empty:
                 continue
-            
+
             xs = [order_map[s] + offset[m] for s in sub_m["Sleep_duration"]]
             y_mean2 = sub_m2["mean"].to_numpy() if not sub_m2.empty else []
             y_mean = sub_m["predicted"].to_numpy()
             y_max = sub_m["conf.high"].to_numpy()
             y_min = sub_m["conf.low"].to_numpy()
-            
+
             yerr_lower = y_mean - y_min
             yerr_upper = y_max - y_mean
-            
+
             # Predicted with CI
             plt.errorbar(
-                xs, y_mean,
+                xs,
+                y_mean,
                 yerr=[yerr_lower, yerr_upper],
                 fmt=style,
                 markersize=5,
@@ -241,55 +261,58 @@ def plot_glmm_with_raw_accuracy(
                 capsize=4,
                 elinewidth=1.2,
                 color="black",
-                label=f"{m} predicted mean" if dataset == dataset_order[0] else None
+                label=f"{m} predicted mean" if dataset == dataset_order[0] else None,
             )
-            
+
             # Observed means (hollow markers)
             if len(y_mean2) > 0:
                 plt.scatter(
-                    xs, y_mean2,
+                    xs,
+                    y_mean2,
                     marker=style,
-                    facecolors='none',
+                    facecolors="none",
                     edgecolors="black",
                     s=50,
-                    label=f"{m} observed mean" if dataset == dataset_order[0] else None
+                    label=f"{m} observed mean" if dataset == dataset_order[0] else None,
                 )
-            
+
             plt.plot(xs, y_mean, linestyle="--", color="black", linewidth=1)
-        
+
         ax.set_xticks(list(order_map.values()))
         ax.set_xticklabels(order, fontsize=18)
         ax.set_xlabel("Sleep_duration", fontsize=16)
         ax.set_ylim(top=1.0, bottom=0.0)
-    
+
     g.map_dataframe(draw_errorbars)
-    
+
     new_titles = {
         "mnist": "MNIST",
         "kmnist": "KMNIST",
         "fmnist": "Fashion-MNIST",
-        "notmnist": "NotMNIST"
+        "notmnist": "NotMNIST",
     }
-    
+
     for ax, ds in zip(g.axes.flatten(), dataset_order):
         ax.set_title(new_titles.get(ds, ds), fontsize=18)
-    
+
     g.set_ylabels("Accuracy (%)", fontsize=16)
-    
+
     handles, labels = g.axes.flat[0].get_legend_handles_labels()
     if handles:
-        g.fig.legend(handles, labels, title="Model", bbox_to_anchor=(0.23, 0.55), framealpha=1.0)
-    
+        g.fig.legend(
+            handles, labels, title="Model", bbox_to_anchor=(0.23, 0.55), framealpha=1.0
+        )
+
     sns.despine(offset=10, trim=True)
-    
+
     output_path = output_path or "sleep_duration_comparison_with_accuracy.pdf"
     plt.savefig(output_path, dpi=900)
     print(f"Figure saved to {output_path}")
-    
+
     if show_plot:
         plt.show()
     plt.close()
-    
+
     return output_path
 
 
@@ -796,6 +819,140 @@ def plot_accuracy(spikes, ih, pp, pn, tp, labels, num_steps, num_classes, test):
     plt.show()
 
     return accuracy[-1]
+
+
+def heatmap_spike_response(
+    spikes_exc,
+    spikes_in,
+    spikes_ih,
+    label,
+    run,
+    num,
+    weight_tracking_sleep,
+):
+    # define subplot
+    fig = plt.figure(figsize=(10, 6))
+    gs = fig.add_gridspec(
+        2, 3, height_ratios=[1, 1.2]
+    )  # bottom a bit taller (optional)
+
+    # ✅ create the axes you want
+    axs = [
+        fig.add_subplot(gs[0, 0]),
+        fig.add_subplot(gs[0, 1]),
+        fig.add_subplot(gs[0, 2]),
+    ]
+    ax_bottom = fig.add_subplot(gs[1, :])  # long plot (if you want it)
+
+    def create_plot(spikes, ax, title, rows, cols):
+        # average spike responses
+        if spikes is None or np.sum(spikes) == 0:
+            ax.set_title(title + " (empty)")
+            ax.axis("off")
+            return
+
+        avg_spikes = np.mean(spikes, axis=0)
+
+        # ✅ protect against reshape mismatch
+        expected = rows * cols
+        if avg_spikes.size != expected:
+            raise ValueError(
+                f"{title}: cannot reshape avg_spikes of size {avg_spikes.size} into ({rows}, {cols})"
+            )
+
+        avg_spikes_reshaped = avg_spikes.reshape((rows, cols))
+        im = ax.imshow(avg_spikes_reshaped, cmap="viridis", interpolation="nearest")
+        ax.set_title(title)
+        return im
+
+    # top row heatmaps
+    create_plot(spikes_in, axs[0], "Input activity", 15, 15)
+    create_plot(spikes_exc, axs[1], "Excitatory activity", 25, 40)
+    create_plot(spikes_ih, axs[2], "Inhibitory activity", 20, 10)
+
+    # (Optional) bottom plot: example summary trace
+    # If you don’t want this, delete these lines.
+    # convert data to numpy
+    w_mean_st_ex = np.asarray(weight_tracking_sleep["st_ex_mean"])
+    w_mean_ex_ex = np.asarray(weight_tracking_sleep["ex_ex_mean"])
+    w_mean_ex_ih = np.asarray(weight_tracking_sleep["ex_ih_mean"])
+    w_mean_ih_ex = np.asarray(weight_tracking_sleep["ih_ex_mean"])
+    # w_min_st_ex = np.asarray(weight_tracking_sleep["st_ex_min"])
+    # w_min_ex_ex = np.asarray(weight_tracking_sleep["ex_ex_min"])
+    # w_min_ex_ih = np.asarray(weight_tracking_sleep["ex_ih_min"])
+    # w_min_ih_ex = np.asarray(weight_tracking_sleep["ih_ex_min"])
+    # w_max_st_ex = np.asarray(weight_tracking_sleep["st_ex_max"])
+    # w_max_ex_ex = np.asarray(weight_tracking_sleep["ex_ex_max"])
+    # w_max_ex_ih = np.asarray(weight_tracking_sleep["ex_ih_max"])
+    # w_max_ih_ex = np.asarray(weight_tracking_sleep["ih_ex_max"])
+    n = w_mean_st_ex.shape[0]
+    if n != 0:
+        x = np.arange(n)
+
+        ax_bottom.set_title("Bottom wide plot")
+        ax_bottom.plot(x, w_mean_st_ex, label="st_ex", color="red")
+        ax_bottom.plot(x, w_mean_ex_ex, label="ex_ex", color="blue")
+        ax_bottom.plot(x, w_mean_ex_ih, label="ex_ih", color="green")
+        ax_bottom.plot(x, w_mean_ih_ex, label="ih_ex", color="pink")
+        # ax_bottom.fill_between(
+        #     x, w_min_st_ex, w_max_st_ex, color="lightgray", alpha=0.3
+        # )
+        # ax_bottom.fill_between(
+        #     x, w_min_ex_ex, w_max_ex_ex, color="lightgray", alpha=0.3
+        # )
+        # ax_bottom.fill_between(
+        #     x, w_min_ex_ih, w_max_ex_ih, color="lightgray", alpha=0.3
+        # )
+        # ax_bottom.fill_between(
+        #     x, w_min_ih_ex, w_max_ih_ex, color="lightgray", alpha=0.3
+        # )
+        ax_bottom.legend()
+
+    fig.suptitle(f"Label {label}")
+    fig.tight_layout(rect=[0, 0, 1, 0.95])  # leave room for suptitle
+
+    # Save
+    out_dir = os.path.join("plots", "spikes", str(label), str(run))
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, f"{num}.png")
+    # save based on class
+    fig.savefig(out_path, dpi=300)
+    # save for global plotting
+    out_dir_glob = os.path.join("plots", "spikes", "all", str(run))
+    os.makedirs(out_dir_glob, exist_ok=True)
+    out_path_glob = os.path.join(out_dir_glob, f"{num}.png")
+    fig.savefig(out_path_glob, dpi=300)
+    plt.close(fig)  # ✅ important if called in a loop
+
+
+def gif_spike_rate_by_label(
+    frame_folder,
+    output_filename="my_awesome.gif",
+    duration=100,
+    loop=0,
+):
+    # Find all JPG or PNG files in the specified folder
+    # Adjust the extension if your files have a different format (e.g., '*.png')
+    files = glob.glob(f"{frame_folder}/*.png")
+    files_sorted = sorted(files, key=lambda f: int(f.split("\\")[-1].split(".")[0]))
+    frames = [Image.open(image) for image in files_sorted]
+    print(files_sorted)
+
+    if not frames:
+        print(f"No images found in {frame_folder}")
+        return
+
+    frame_one = frames[0]
+    frame_one.save(
+        output_filename,
+        format="GIF",
+        append_images=frames[1:],
+        save_all=True,
+        duration=duration,
+        loop=loop,
+    )
+
+    print("gif made!")
 
 
 def get_contiguous_segment(indices):
@@ -1503,6 +1660,7 @@ def plot_weight_evolution_during_sleep_epoch(weight_tracking_epoch, epoch):
     plt.savefig(pdf_path, bbox_inches="tight", dpi=900)
     plt.close(fig)
 
+
 def plot_weight_evolution(
     weight_evolution: dict, output_path: str = "plots/weights_evolution.pdf"
 ):
@@ -1746,6 +1904,7 @@ def plot_weight_trajectories_with_sleep_epoch(
             linewidth=2.0,
             label="Inh mean",
         )
+
     def _apply_labels(latex_enabled: bool):
         plt.rcParams["text.usetex"] = bool(latex_enabled)
         ylabel = "Weight"

@@ -5,6 +5,7 @@ from snntorch import spikegen
 import librosa
 from tqdm import tqdm
 import warnings
+import random
 import numpy as np
 import torch
 import os
@@ -198,6 +199,19 @@ def _normalize_split_value(split_value):
     return str(split_value).lower()
 
 
+def load_fcx1():
+    train = np.load("data/fcx1/X_fcx1_train.npz")
+    test = np.load("data/fcx1/X_fcx1_test.npz")
+
+    X_train = train["x"]
+    y_train = train["y"]
+
+    X_test = test["x"]
+    y_test = test["y"]
+
+    return X_train, y_train, X_test, y_test
+
+
 def _load_notmnist_deeplake(transform):
     """
     Load NotMNIST from Deeplake and return torch tensors for train/test splits.
@@ -306,6 +320,7 @@ class ImageDataStreamer:
         train_count=None,
         val_count=None,
         test_count=None,
+        random_seed=0,
         dataset: str = "mnist",
     ):
         self.data_dir = data_dir
@@ -345,6 +360,24 @@ class ImageDataStreamer:
             self.len_test = len(self.test_images)
             train_label_targets = self.train_labels
             test_label_targets = self.test_labels
+        elif self.dataset == "fcx1":
+            # load spike data
+            (
+                self.X_train_spikes,
+                self.y_train_spikes,
+                self.X_test_spikes,
+                self.y_test_spikes,
+            ) = load_fcx1()
+
+            # save data specs
+            self.len_train = self.X_train_spikes.shape[0]
+            self.len_test = self.X_test_spikes.shape[0]
+            train_label_targets = self.y_train_spikes
+            test_label_targets = self.y_test_spikes
+
+            # reshape data to match 10x10 resolution
+            self.X_train_spikes = self.X_train_spikes[:, :100]
+            self.X_test_spikes = self.X_test_spikes[:, :100]
         else:
             if self.dataset not in ds_map:
                 raise ValueError(f"Unsupported image dataset: {self.dataset}")
@@ -403,42 +436,83 @@ class ImageDataStreamer:
             test_label_targets = np.array(getattr(mnist_test, "targets", []))
 
         total = self.len_train + self.len_test
-
-        # Shuffle indices for random access over the combined (train+test) space
         self.indices = np.arange(total)
-        np.random.shuffle(self.indices)
 
-        # Partition indices for train/val/test if counts provided
-        total = len(self.indices)
-        tc = train_count or total
-        vc = val_count or 0
-        tec = test_count or 0
-        tc = min(tc, total)
-        vc = min(vc, max(0, total - tc))
-        tec = min(tec, max(0, total - tc - vc))
+        if self.dataset != "fcx1":
+            # Shuffle indices for random access over the combined (train+test) space
+            np.random.shuffle(self.indices)
 
-        self.train_indices = self.indices[:tc]
-        self.val_indices = self.indices[tc : tc + vc]
-        self.test_indices = self.indices[tc + vc : tc + vc + tec]
-        self.ptr_train = 0
-        self.ptr_val = 0
-        self.ptr_test = 0
+            # Partition indices for train/val/test if counts provided
+            total = len(self.indices)
+            tc = train_count or total
+            vc = val_count or 0
+            tec = test_count or 0
+            tc = min(tc, total)
+            vc = min(vc, max(0, total - tc))
+            tec = min(tec, max(0, total - tc - vc))
 
-        # Lightweight summary (use dataset targets if available)
-        print(f"Found {total} image samples")
-        try:
-            tr_t = np.array(train_label_targets)
-            te_t = np.array(test_label_targets)
-            if tr_t.size or te_t.size:
-                lab_dist = np.bincount(np.concatenate([tr_t, te_t]).astype(int))
-                print(f"Label distribution: {lab_dist}")
-        except Exception:
-            pass
+            self.train_indices = self.indices[:tc]
+            self.val_indices = self.indices[tc : tc + vc]
+            self.test_indices = self.indices[tc + vc : tc + vc + tec]
+            self.ptr_train = 0
+            self.ptr_val = 0
+            self.ptr_test = 0
+
+            # Lightweight summary (use dataset targets if available)
+            print(f"Found {total} image samples")
+            try:
+                tr_t = np.array(train_label_targets)
+                te_t = np.array(test_label_targets)
+                if tr_t.size or te_t.size:
+                    lab_dist = np.bincount(np.concatenate([tr_t, te_t]).astype(int))
+                    print(f"Label distribution: {lab_dist}")
+            except Exception:
+                pass
+        else:
+            # initate random seed
+            rng = np.random.default_rng(random_seed)
+
+            # intiate partition start index and step size
+            self.prt_train = 0
+            self.prt_test = 0
+            self.partition_increment = int(self.num_steps * self.batch_size)
+
+            # create arrays of indices
+            ind_train = np.arange(self.len_train)
+            ind_test = np.arange(self.len_test)
+
+            # define indices
+            train_indices = ind_train // self.partition_increment
+            test_indices = ind_test // self.partition_increment
+
+            # get unique groups
+            train_uniq = np.unique(train_indices)
+            test_uniq = np.unique(test_indices)
+
+            # permutate the unique list
+            perm_train = rng.permutation(train_uniq)
+            perm_test = rng.permutation(test_uniq)
+
+            # extend again based on length per sequence variable
+            self.train_indices = np.concatenate(
+                [np.where(train_indices == g)[0] for g in perm_train]
+            )
+            self.test_indices = np.concatenate(
+                [np.where(test_indices == g)[0] for g in perm_test]
+            )
+
+            # shuffle data based on new indices
+            self.X_train_spikes = self.X_train_spikes[self.train_indices]
+            self.y_train_spikes = self.y_train_spikes[self.train_indices]
+            self.X_test_spikes = self.X_test_spikes[self.test_indices]
+            self.y_test_spikes = self.y_test_spikes[self.test_indices]
 
     def show_preview(self, num_samples: int = 9, save_path: str | None = None):
         """
         Display a small grid of cached images so the user can confirm the dataset.
         """
+        if self.dataset == "fcx1":
+            print("image preview is not available")
         if self.train_images is None or len(self.train_images) == 0:
             print("No cached images available for preview.")
             return
@@ -487,61 +561,84 @@ class ImageDataStreamer:
         Load a batch of image samples from the specified partition.
         Returns (spike_data, labels) or (None, None) if no more data.
         """
-        if partition == "train":
-            pool = self.train_indices
-            ptr = self.ptr_train
-        elif partition == "val":
-            pool = self.val_indices
-            ptr = self.ptr_val
-        else:
-            pool = self.test_indices
-            ptr = self.ptr_test
 
-        if ptr >= len(pool):
-            return None, None
-
-        end_ptr = min(ptr + num_samples, len(pool))
-        batch_indices = pool[ptr:end_ptr]
-
-        # Pull batch data from cached tensors in RAM
-        images_list = []
-        labels_list = []
-        for gi in batch_indices:
-            if gi < self.len_train:
-                images_list.append(self.train_images[int(gi)])
-                labels_list.append(self.train_labels[int(gi)])
+        if self.dataset != "fcx1":
+            if partition == "train":
+                pool = self.train_indices
+                ptr = self.ptr_train
+            elif partition == "val":
+                pool = self.val_indices
+                ptr = self.ptr_val
             else:
-                idx = int(gi - self.len_train)
-                images_list.append(self.test_images[idx])
-                labels_list.append(self.test_labels[idx])
+                pool = self.test_indices
+                ptr = self.ptr_test
 
-        batch_images = torch.stack(images_list)
-        batch_labels = np.asarray(labels_list, dtype=np.int64)
+            if ptr >= len(pool):
+                return None, None
 
-        # Convert to spikes
-        spike_data = self._convert_images_to_spikes(batch_images)
+            end_ptr = min(ptr + num_samples, len(pool))
+            batch_indices = pool[ptr:end_ptr]
 
-        # Extend labels to match spike data (repeat each label for num_steps)
-        extended_labels = np.repeat(batch_labels, self.num_steps)
+            # Pull batch data from cached tensors in RAM
+            images_list = []
+            labels_list = []
+            for gi in batch_indices:
+                if gi < self.len_train:
+                    images_list.append(self.train_images[int(gi)])
+                    labels_list.append(self.train_labels[int(gi)])
+                else:
+                    idx = int(gi - self.len_train)
+                    images_list.append(self.test_images[idx])
+                    labels_list.append(self.test_labels[idx])
 
-        # advance pointer
-        if partition == "train":
-            self.ptr_train = end_ptr
-        elif partition == "val":
-            self.ptr_val = end_ptr
+            batch_images = torch.stack(images_list)
+            batch_labels = np.asarray(labels_list, dtype=np.int64)
+
+            # Convert to spikes
+            spike_data = self._convert_images_to_spikes(batch_images)
+
+            # Extend labels to match spike data (repeat each label for num_steps)
+            extended_labels = np.repeat(batch_labels, self.num_steps)
+
+            # advance pointer
+            if partition == "train":
+                self.ptr_train = end_ptr
+            elif partition == "val":
+                self.ptr_val = end_ptr
+            else:
+                self.ptr_test = end_ptr
+
+            return spike_data, extended_labels
         else:
-            self.ptr_test = end_ptr
+            # identify desired data
+            if partition == "train":
+                spike_data = self.X_train_spikes
+                extended_labels = self.y_train_spikes
+            else:
+                spike_data = self.X_test_spikes
+                extended_labels = self.y_test_spikes
 
-        return spike_data, extended_labels
+            # define start and stop
+            start = self.partition_increment
+            stop = start + self.batch_size * self.num_steps
+
+            # fetch partition
+            spike_data = spike_data[start:stop]
+            extended_labels = extended_labels[start:stop]
+
+            # update partition
+            self.partition_increment = stop
+
+            return spike_data, extended_labels
 
     def _convert_images_to_spikes(self, images):
         """Convert image batch to spikes."""
         # Normalize images
-        target_sum = (self.pixel_size**2) * 0.1
-        norm_images = torch.stack(
-            [normalize_image(img=img, target_sum=target_sum) for img in images]
-        )
-
+        # target_sum = (self.pixel_size**2)
+        # norm_images = torch.stack(
+        #     [normalize_image(img=img, target_sum=target_sum) for img in images]
+        # )
+        norm_images = images
         # Convert to spikes
         S_data = torch.zeros(size=norm_images.shape)
         S_data = S_data.repeat(self.num_steps, 1, 1, 1)

@@ -3,6 +3,7 @@ import os
 import gc
 from tqdm import tqdm
 import json
+import time
 from datetime import datetime
 from train import train_network
 from get_data import (
@@ -32,6 +33,7 @@ from plot import (
     plot_weight_evolution_during_sleep,
     plot_weight_trajectories_with_sleep_epoch,
     plot_weight_evolution,
+    gif_spike_rate_by_label,
 )
 from analysis import (
     t_SNE,
@@ -49,11 +51,13 @@ class snn_sleepy:
         N_exc=200,
         N_inh=50,
         N_x=225,
+        random_state=0,
         classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
     ):
         self.N_exc = N_exc
         self.N_inh = N_inh
         self.N_x = N_x
+        self.random_state = random_state
         self.N_classes = len(classes)
         self.classes = classes
         self.st = N_x  # stimulation
@@ -461,7 +465,7 @@ class snn_sleepy:
         max_time=2000,
         plot_heat_map=False,
         retur=False,
-        num_steps=1000,
+        num_steps=100,
         train_=True,
         offset=0,
         first_spike_time=0,
@@ -1358,7 +1362,7 @@ class snn_sleepy:
                     X_test=X_test,
                     y_test=y_test,
                     variance_ratio=self.pca_variance,
-                    reg_param=0.1,
+                    reg_param=0.5,
                 )
             else:
                 from pca_linear_classifier import pca_logistic_regression
@@ -1525,6 +1529,7 @@ class snn_sleepy:
         time_stop_mp=None,
         mean_noise=0,
         max_mp=40,
+        run=0,
         sleep_synchronized=True,
         tau_pre_trace_exc=1,
         tau_pre_trace_inh=1,
@@ -1945,6 +1950,7 @@ class snn_sleepy:
                         spikes_test = np.zeros((T_te, self.N), dtype=np.int8)
                         spikes_test[:, :st] = data_test
 
+                        run = int(time.time() * 1000)
                         (
                             _weights_te,
                             spikes_te_out,
@@ -1970,6 +1976,8 @@ class snn_sleepy:
                             timing_update=timing_update,
                             spike_times=spike_times.copy(),
                             a=a.copy(),
+                            run=run,
+                            save_plots=True,
                             I_syn=I_syn.copy(),
                             spike_threshold=spike_threshold.copy(),
                             sleep_ratio=0.0,
@@ -1978,6 +1986,23 @@ class snn_sleepy:
                             sleep_tol_frac=sleep_tol_frac,
                             **common_args,
                         )
+
+                        # plot gif
+                        label_for_plotting = input("Which label should we plot? ")
+                        while label_for_plotting != "stop":
+                            if label_for_plotting == "all":
+                                frame_folder=f"plots\\spikes\\all\\{run}"
+                                output_filename=f"plots\\spikes\\all\\{run}\\evolution.gif"
+                            else:
+                                frame_folder=f"plots\\spikes\\{label_for_plotting}\\{run}"
+                                output_filename=f"plots\\spikes\\{label_for_plotting}\\{run}\\evolution.gif"
+                            gif_spike_rate_by_label(
+                                frame_folder=frame_folder,
+                                output_filename=output_filename,
+                                duration=100,
+                                loop=0,
+                            )
+                            label_for_plotting = input("Which label should we plot? ")
 
                         # store
                         bs = spikes_te_out.shape[0]
@@ -2269,6 +2294,7 @@ class snn_sleepy:
                         data_train = np.concatenate([data_train, pad_block], axis=1)
                     else:
                         data_train = data_train[:, : self.N_x]
+                run = int(time.time() * 1000)
                 (
                     self.weights,
                     spikes_tr_out,
@@ -2291,6 +2317,8 @@ class snn_sleepy:
                     sleep=sleep,
                     train_weights=train_weights,
                     T=self.T_train,
+                    run=run,
+                    save_plots=True,
                     mean_noise=mean_noise,
                     var_noise=var_noise,
                     spikes=spikes_train,
@@ -2303,6 +2331,16 @@ class snn_sleepy:
                     sleep_ratio=getattr(self, "sleep_ratio", 0.0),
                     **common_args,
                 )
+                # plot gif
+                label_for_plotting = input("Which label should we plot? ")
+                while label_for_plotting != "stop":
+                    gif_spike_rate_by_label(
+                        frame_folder=f"plots\\spikes\\{label_for_plotting}\\{run}",
+                        output_filename=f"plots\\spikes\\{label_for_plotting}\\{run}\\evolution.gif",
+                        duration=100,
+                        loop=0,
+                    )
+                    label_for_plotting = input("Which label should we plot? ")
 
                 # accumulate sleep percent if available
                 try:
@@ -2313,39 +2351,39 @@ class snn_sleepy:
                     pass
 
                 # Accumulate weight tracking data (sleep only)
-                if weight_tracking_epoch is not None:
-                    for key in [
-                        "exc_mean",
-                        "exc_std",
-                        "exc_min",
-                        "exc_max",
-                        "exc_samples",
-                        "inh_mean",
-                        "inh_std",
-                        "inh_min",
-                        "inh_max",
-                        "inh_samples",
-                    ]:
-                        all_weight_tracking_sleep[key].extend(
-                            weight_tracking_epoch[key]
-                        )
-                    _wt_times = weight_tracking_epoch.get("times", [])
-                    all_weight_tracking_sleep["times"].extend(
-                        [float(t) + _tracking_time_offset for t in _wt_times]
-                    )
-                    for seg in weight_tracking_epoch.get("sleep_segments", []):
-                        try:
-                            s, te = (
-                                float(seg[0]) + _tracking_time_offset,
-                                float(seg[1]) + _tracking_time_offset,
-                            )
-                            all_weight_tracking_sleep["sleep_segments"].append((s, te))
-                        except Exception:
-                            pass
-                    if len(_wt_times) > 0:
-                        _tracking_time_offset += float(max(_wt_times)) + 1.0
+                # if weight_tracking_epoch is not None:
+                #     for key in [
+                #         "exc_mean",
+                #         "exc_std",
+                #         "exc_min",
+                #         "exc_max",
+                #         "exc_samples",
+                #         "inh_mean",
+                #         "inh_std",
+                #         "inh_min",
+                #         "inh_max",
+                #         "inh_samples",
+                #     ]:
+                #         all_weight_tracking_sleep[key].extend(
+                #             weight_tracking_epoch[key]
+                #         )
+                #     _wt_times = weight_tracking_epoch.get("times", [])
+                #     all_weight_tracking_sleep["times"].extend(
+                #         [float(t) + _tracking_time_offset for t in _wt_times]
+                #     )
+                #     for seg in weight_tracking_epoch.get("sleep_segments", []):
+                #         try:
+                #             s, te = (
+                #                 float(seg[0]) + _tracking_time_offset,
+                #                 float(seg[1]) + _tracking_time_offset,
+                #             )
+                #             all_weight_tracking_sleep["sleep_segments"].append((s, te))
+                #         except Exception:
+                #             pass
+                #     if len(_wt_times) > 0:
+                #         _tracking_time_offset += float(max(_wt_times)) + 1.0
 
-                    # Suppress per-epoch plotting during training (plot only after training)
+                # Suppress per-epoch plotting during training (plot only after training)
 
                 # Calculate training accuracy for current epoch
                 if spikes_tr_out is not None and labels_tr_out is not None:
@@ -2660,6 +2698,8 @@ class snn_sleepy:
                             spike_threshold = self.spike_threshold.copy()
                         except Exception:
                             spike_threshold = np.zeros(self.N)
+
+                    run = int(time.time() * 1000)
                     (
                         weights_te,
                         spikes_te_out,
@@ -2679,6 +2719,8 @@ class snn_sleepy:
                         train_weights=False,
                         T=T_test_batch,
                         mean_noise=mean_noise,
+                        run=run,
+                        save_plots=False,
                         var_noise=var_noise,
                         spikes=spikes_test.copy(),
                         check_sleep_interval=check_sleep_interval,
@@ -2690,6 +2732,17 @@ class snn_sleepy:
                         sleep_ratio=getattr(self, "sleep_ratio", 0.0),
                         **common_args,
                     )
+
+                    # plot gif
+                    # label_for_plotting = input("Which label should we plot? ")
+                    # while label_for_plotting != "stop":
+                    #     gif_spike_rate_by_label(
+                    #         frame_folder=f"plots\\spikes\\{label_for_plotting}\\{run}",
+                    #         output_filename=f"plots\\spikes\\{label_for_plotting}\\{run}\\evolution.gif",
+                    #         duration=100,
+                    #         loop=0,
+                    #     )
+                    #     label_for_plotting = input("Which label should we plot? ")
 
                     # Store results for accumulation (use pre-allocated arrays)
                     batch_size = spikes_te_out.shape[0]
@@ -3199,7 +3252,7 @@ class snn_sleepy:
                         weight_evolution["inh_max"].append(float(np.max(W_inh)))
                     except Exception as exc:
                         print(f"  Warning: failed to collect weight stats ({exc})")
-                    
+
                     # Plot sampled weight trajectories with sleep shading if tracking exists
                     try:
                         if (
@@ -3216,7 +3269,7 @@ class snn_sleepy:
                         print(
                             f"  Warning: failed to save weight trajectories plot ({exc})"
                         )
-                    
+
                     # Plot weight evolution after each epoch
                     try:
                         if len(weight_evolution["epochs"]) > 0:
@@ -3508,6 +3561,8 @@ class snn_sleepy:
                             sleep_tol_frac=sleep_tol_frac,
                         )
 
+                    run = int(time.time() * 1000)
+
                     (
                         _wte,
                         spikes_te_out,
@@ -3527,6 +3582,8 @@ class snn_sleepy:
                         train_weights=False,
                         T=T_te,
                         mean_noise=0,
+                        run=run,
+                        save_plots=False,
                         var_noise=0,
                         spikes=spikes_test.copy(),
                         check_sleep_interval=1000000,
@@ -3541,6 +3598,17 @@ class snn_sleepy:
                         sleep_ratio=0.0,
                         **_ca,
                     )
+
+                    # plot gif
+                    # label_for_plotting = input("Which label should we plot? ")
+                    # while label_for_plotting != "stop":
+                    #     gif_spike_rate_by_label(
+                    #         frame_folder=f"plots\\spikes\\{label_for_plotting}\\{run}",
+                    #         output_filename=f"plots\\spikes\\{label_for_plotting}\\{run}\\evolution.gif",
+                    #         duration=100,
+                    #         loop=0,
+                    #     )
+                    #     label_for_plotting = input("Which label should we plot? ")
 
                     # Align to full bins and expand labels to per-timestep once
                     bs = spikes_te_out.shape[0]
@@ -3937,6 +4005,7 @@ class snn_sleepy:
                                 vectorized_trace=vectorized_trace,
                                 N_x=self.N_x,
                             )
+                            run = int(time.time() * 1000)
 
                             # 3a) Train on the training set
                             (
@@ -3958,6 +4027,8 @@ class snn_sleepy:
                                 train_weights=train_weights,
                                 T=self.T_train,
                                 mean_noise=mean_noise,
+                                run=run,
+                                save_plots=True,
                                 var_noise=var_noise,
                                 spikes=spikes_train_init.copy(),
                                 check_sleep_interval=check_sleep_interval,
@@ -3970,10 +4041,24 @@ class snn_sleepy:
                                 **common_args,
                             )
 
+                            # plot gif
+                            label_for_plotting = input("Which label should we plot? ")
+                            while label_for_plotting != "stop":
+                                gif_spike_rate_by_label(
+                                    frame_folder=f"plots\\spikes\\{label_for_plotting}\\{run}",
+                                    output_filename=f"plots\\spikes\\{label_for_plotting}\\{run}\\evolution.gif",
+                                    duration=100,
+                                    loop=0,
+                                )
+                                label_for_plotting = input(
+                                    "Which label should we plot? "
+                                )
+
                             # Clean up unused variables
                             del unused
 
                             # 3b) Test on the test set
+                            run = int(time.time() * 1000)
                             (
                                 weights_te,
                                 spikes_te_out,
@@ -3991,7 +4076,9 @@ class snn_sleepy:
                                 mp=mp_test.copy(),
                                 sleep=False,
                                 train_weights=False,
+                                run=run,
                                 T=self.T_test,
+                                save_plots=False,
                                 mean_noise=mean_noise,
                                 var_noise=var_noise,
                                 spikes=spikes_test_init.copy(),
@@ -4004,6 +4091,19 @@ class snn_sleepy:
                                 sleep_ratio=0.0,
                                 **common_args,
                             )
+
+                            # plot gif
+                            # label_for_plotting = input("Which label should we plot? ")
+                            # while label_for_plotting != "stop":
+                            #     gif_spike_rate_by_label(
+                            #         frame_folder=f"plots\\spikes\\{label_for_plotting}\\{run}",
+                            #         output_filename=f"plots\\spikes\\{label_for_plotting}\\{run}\\evolution.gif",
+                            #         duration=100,
+                            #         loop=0,
+                            #     )
+                            #     label_for_plotting = input(
+                            #         "Which label should we plot? "
+                            #     )
 
                             # Clean up unused variables
                             del unused

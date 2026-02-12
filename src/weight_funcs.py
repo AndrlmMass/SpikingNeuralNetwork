@@ -28,6 +28,8 @@ def sleep_func(
     nz_rows_inh,
     nz_cols_exc,
     nz_cols_inh,
+    st,
+    ex,
 ):
     """
     Optimized, vectorized version:
@@ -69,6 +71,9 @@ def sleep_func(
     if sleep_now_exc:
         # Apply decay to columns [N_x, N_post] (excitatory weights)
         for i in range(nz_rows_exc.size):
+            # Skip frozen input→excitatory connections
+            if nz_rows_exc[i] < st and nz_cols_exc[i] >= st and nz_cols_exc[i] < ex:
+                continue
             current_weight = weights[nz_rows_exc[i], nz_cols_exc[i]]
             # Work with absolute values to avoid complex numberst
             abs_weight = np.abs(current_weight)
@@ -327,6 +332,9 @@ def spike_timing(
 
         # Iterate only over connections that exist.
         for j in pre_indices:
+            # Skip frozen input→excitatory connections
+            if j < N_x and i < (n_neurons - N_inh):
+                continue
             # Skip if the presynaptic neuron did not spike
             if spikes[j] == 0 and spikes[i] == 0:
                 continue
