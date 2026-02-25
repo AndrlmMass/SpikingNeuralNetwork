@@ -120,12 +120,12 @@ def pca_logistic_regression(
     clf = LogisticRegression(
         multi_class="multinomial", solver="lbfgs", max_iter=max_iter
     )
-    clf.fit(X_train_p, y_train)
+    clf.fit(X_train, y_train)
 
     accs = {
-        "train": float(accuracy_score(y_train, clf.predict(X_train_p))),
-        "val": float(accuracy_score(y_val, clf.predict(X_val_p))),
-        "test": float(accuracy_score(y_test, clf.predict(X_test_p))),
+        "train": float(accuracy_score(y_train, clf.predict(X_train))),
+        "val": float(accuracy_score(y_val, clf.predict(X_val))),
+        "test": float(accuracy_score(y_test, clf.predict(X_test))),
     }
 
     return accs, scaler, pca, clf

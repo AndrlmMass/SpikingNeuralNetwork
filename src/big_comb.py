@@ -43,6 +43,7 @@ from analysis import (
     bin_spikes_by_label_no_breaks,
 )
 from create_network import create_weights, create_arrays
+import matplotlib.pyplot as plt
 
 
 class snn_sleepy:
@@ -51,6 +52,7 @@ class snn_sleepy:
         N_exc=200,
         N_inh=50,
         N_x=225,
+        ts_spec=None,
         random_state=0,
         classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
     ):
@@ -69,18 +71,22 @@ class snn_sleepy:
         self._image_preview_done = False
         # Accuracy tracking
         self.acc_history = {"train": [], "val": [], "test": []}
-        self._acc_log_dir = os.path.join("results", "acc_history")
+        self._acc_log_dir = None
         self._acc_log_file = None
+        self.ts_spec = ts_spec
+        self.ts = datetime.now().strftime("%Y.%m.%d")
 
     def _ensure_acc_logger(self):
         if self._acc_log_file is None:
+            self.image_dataset = getattr(self, "image_dataset", "unknown")
             try:
+                self._acc_log_dir = os.path.join(
+                    "results", "acc_history", f"{self.image_dataset}", f"acc_{self.ts_spec}"
+                )
                 os.makedirs(self._acc_log_dir, exist_ok=True)
             except Exception:
                 pass
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            ds = getattr(self, "image_dataset", "unknown")
-            self._acc_log_file = os.path.join(self._acc_log_dir, f"acc_{ds}_{ts}.jsonl")
+            self._acc_log_file = os.path.join(self._acc_log_dir, f"acc_{self.ts_spec}.jsonl")
 
     def _record_accuracy(self, split: str, value, epoch: int | None = None):
         try:
@@ -102,74 +108,64 @@ class snn_sleepy:
                 "epoch": int(epoch) if epoch is not None else None,
                 "accuracy": acc_val,
             }
-            with open(self._acc_log_file, "a") as f:
+            with open(self._acc_log_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(rec) + "\n")
+                f.flush()
         except Exception as e:
             # Non-fatal: continue training even if logging fails
             print(f"Warning: failed to persist accuracy record ({e})")
 
-    def plot_accuracy_history(self, save_dir: str = "plots"):
-        try:
-            import matplotlib.pyplot as plt
-        except Exception as exc:
-            print(f"Matplotlib unavailable; skipping accuracy plots ({exc})")
-            return
-        try:
-            os.makedirs(save_dir, exist_ok=True)
-        except Exception:
-            pass
-        # Train + Val
-        try:
-            plt.figure(figsize=(7, 4.5))
-            if self.acc_history.get("train"):
-                plt.plot(
-                    range(1, len(self.acc_history["train"]) + 1),
-                    self.acc_history["train"],
-                    label="Train",
-                )
-            if self.acc_history.get("val"):
-                plt.plot(
-                    range(1, len(self.acc_history["val"]) + 1),
-                    self.acc_history["val"],
-                    label="Val",
-                )
-            plt.xlabel("Epoch")
-            plt.ylabel("Accuracy")
-            plt.title("Train/Val Accuracy")
-            plt.grid(True, alpha=0.3)
-            plt.legend()
-            tv_path = os.path.join(save_dir, "acc_train_val.png")
-            try:
-                plt.savefig(tv_path, bbox_inches="tight")
-                print(f"Saved train/val accuracy plot to {tv_path}")
-            except Exception as exc:
-                print(f"Failed to save train/val plot ({exc})")
-            plt.close()
-        except Exception as exc:
-            print(f"Failed to plot train/val accuracy ({exc})")
-        # Test
-        try:
-            if self.acc_history.get("test"):
-                plt.figure(figsize=(7, 4.5))
-                plt.plot(
-                    range(1, len(self.acc_history["test"]) + 1),
-                    self.acc_history["test"],
-                    label="Test",
-                )
-                plt.xlabel("Eval #")
-                plt.ylabel("Accuracy")
-                plt.title("Test Accuracy")
-                plt.grid(True, alpha=0.3)
-                plt.legend()
-                te_path = os.path.join(save_dir, "acc_test.png")
-                try:
-                    plt.savefig(te_path, bbox_inches="tight")
-                    print(f"Saved test accuracy plot to {te_path}")
-                except Exception as exc:
-                    print(f"Failed to save test plot ({exc})")
-                plt.close()
-        except Exception as exc:
-            print(f"Failed to plot test accuracy ({exc})")
+    def _read_jsonl(self, path):
+        records = []
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                records.append(json.loads(line))
+        return records
+
+    def pad_to_match(self, a, b, pad_value=0):
+        len_a, len_b = len(a), len(b)
+
+        if len_a < len_b:
+            a = np.pad(a, (0, len_b - len_a), constant_values=pad_value)
+        elif len_b < len_a:
+            b = np.pad(b, (0, len_a - len_b), constant_values=pad_value)
+
+        return a, b
+
+    def _plot_accuracy(self):
+        # fetch json file
+        records = self._read_jsonl(self._acc_log_file)
+        # extract train values
+        acc_train = [
+            r["accuracy"]
+            for r in records
+            if r["split"] == "train" and r["accuracy"] is not None
+        ]
+        acc_val = [
+            r["accuracy"]
+            for r in records
+            if r["split"] == "val" and r["accuracy"] is not None
+        ]
+        # convert accuracy scores from list to numpy
+        acc_train = np.asarray(acc_train)
+        acc_val = np.asarray(acc_val)
+        # Get x values
+        leng = max(acc_train.shape[0], acc_val.shape[0])
+        x = np.arange(leng)
+        # add padding to the shorval acc list if needed
+        acc_train, acc_val = self.pad_to_match(b=acc_val, a=acc_train, pad_value=0)
+        # plot accuracy
+        plt.figure()
+        plt.plot(x, acc_train, color="green", label="train accuracy")
+        plt.plot(x, acc_val, color="blue", label="val accuracy")
+        # save plot
+        out_path = self._acc_log_file.replace(".jsonl", ".png")
+        plt.legend()
+        plt.savefig(out_path, dpi=200)
+        plt.close()
 
     def preview_loaded_data(
         self, num_image_samples: int = 9, save_path: str | None = None
@@ -1156,127 +1152,6 @@ class snn_sleepy:
                 else:
                     return self.data_train, self.labels_train
 
-    def load_audio_batch_streaming(
-        self, batch_size, is_training=True, plot_spectrograms=False, partition=None
-    ):
-        """
-        Load a batch of audio data and convert to spikes on-demand.
-
-        Args:
-            batch_size: Number of samples to load
-            is_training: If True, load training data; if False, load test data
-
-        Returns:
-            (spike_data, labels) or (None, None) if no more data
-        """
-        spike_data, labels, new_train_idx, new_test_idx = load_audio_batch_streaming(
-            audio_streamer=self.audio_streamer,
-            batch_size=batch_size,
-            current_train_idx=self.current_train_idx,
-            current_test_idx=self.current_test_idx,
-            all_train=self.all_train,
-            all_test=self.all_test,
-            num_steps=self.num_steps,
-            N_x=self.N_x,
-            get_training_mode_func=self.get_training_mode,
-            is_training=is_training,
-            plot_spectrograms=plot_spectrograms,
-            partition=partition,
-        )
-
-        # Update indices
-        self.current_train_idx = new_train_idx
-        self.current_test_idx = new_test_idx
-
-        return spike_data, labels
-
-    def load_multimodal_batch(
-        self, batch_size, is_training=True, plot_spectrograms=False, partition=None
-    ):
-        """
-        Load a batch of multimodal data (image + audio) with synchronized labels.
-
-        Args:
-            batch_size: Number of samples to load
-            is_training: If True, load training data; if False, load test data
-
-        Returns:
-            (concatenated_spike_data, labels) or (None, None) if no more data
-        """
-        multimodal_spikes, labels, new_train_idx, new_test_idx = load_multimodal_batch(
-            audio_streamer=self.audio_streamer,
-            image_streamer=self.image_streamer,
-            batch_size=batch_size,
-            current_train_idx=self.current_train_idx,
-            current_test_idx=self.current_test_idx,
-            all_train=self.all_train,
-            all_test=self.all_test,
-            num_steps=self.num_steps,
-            N_x=self.N_x,
-            get_training_mode_func=self.get_training_mode,
-            load_prealigned_func=load_prealigned_multimodal_batch,
-            is_training=is_training,
-            plot_spectrograms=plot_spectrograms,
-            partition=partition,
-        )
-
-        # Update indices
-        self.current_train_idx = new_train_idx
-        self.current_test_idx = new_test_idx
-
-        return multimodal_spikes, labels
-
-    def _load_prealigned_multimodal_batch(
-        self,
-        batch_size,
-        is_training=True,
-        plot_spectrograms=False,
-        partition=None,
-        num_image_neurons=None,
-        num_audio_neurons=None,
-    ):
-        """
-        Load a batch from multimodal datasets with synchronized shuffling.
-        Both datasets are shuffled with the same seed to ensure similar label distributions.
-        """
-        # Ensure datasets are synchronized before loading
-        if not hasattr(self, "multimodal_synced") or not self.multimodal_synced:
-            sync_multimodal_datasets()
-            self.multimodal_synced = True
-
-        # Call the function from get_data.py
-        return load_prealigned_multimodal_batch(
-            audio_streamer=self.audio_streamer,
-            image_streamer=self.image_streamer,
-            batch_size=batch_size,
-            current_train_idx=self.current_train_idx,
-            current_test_idx=self.current_test_idx,
-            all_train=self.all_train,
-            all_test=self.all_test,
-            num_steps=self.num_steps,
-            N_x=self.N_x,
-            get_training_mode_func=self.get_training_mode,
-            is_training=is_training,
-            plot_spectrograms=plot_spectrograms,
-            partition=partition,
-            num_image_neurons=num_image_neurons,
-            num_audio_neurons=num_audio_neurons,
-        )
-
-    def _sync_multimodal_datasets(self):
-        """
-        Synchronize multimodal datasets by ensuring they use the same random seed.
-        This ensures that when both datasets are shuffled, they have similar label distributions.
-        """
-        if not hasattr(self, "multimodal_synced") or not self.multimodal_synced:
-            sync_multimodal_datasets()
-
-            # Reset indices to start fresh with synchronized shuffling
-            self.current_train_idx = 0
-            self.current_test_idx = 0
-
-            self.multimodal_synced = True
-
     def _save_streaming_parameters(self):
         """Save streaming data parameters for future reference."""
         if not hasattr(self, "data_parameters"):
@@ -1386,7 +1261,6 @@ class snn_sleepy:
     def prepare_network(
         self,
         plot_weights=False,
-        plot_network=False,
         w_dense_ee=0.01,
         w_dense_se=0.05,
         w_dense_ei=0.05,
@@ -1398,6 +1272,7 @@ class snn_sleepy:
         ee_weights=0.3,
         ei_weights=0.3,
         ie_weights=-0.2,
+        random_weights=False,
         create_network=False,
     ):
         # create weights
@@ -1426,7 +1301,7 @@ class snn_sleepy:
             ei_weights=ei_weights,
             ie_weights=ie_weights,
             plot_weights=plot_weights,
-            plot_network=plot_network,
+            random_weights=random_weights,
         )
 
         if create_network:
@@ -1436,6 +1311,7 @@ class snn_sleepy:
                 self.mp_test,
                 self.spikes_train,
                 self.spikes_test,
+                self.spike_trace,
             ) = create_arrays(
                 N=self.N,
                 N_exc=self.N_exc,
@@ -1461,6 +1337,26 @@ class snn_sleepy:
                     self.resting_potential,
                     self.max_time,
                 )
+    def plot_spikes(self, run):
+        label_for_plotting = input("Which label should we plot? ")
+        while label_for_plotting != "stop":
+            if label_for_plotting == "all":
+                frame_folder = f"plots\\spikes\\{self.image_dataset}\\all\\{self.ts}\\{self.ts_spec}"
+                output_filename = (
+                    f"plots\\spikes\\{self.image_dataset}\\all\\{self.ts}\\{self.ts_spec}\\evolution.gif"
+                )
+            else:
+                frame_folder = (
+                    f"plots\\spikes\\{self.image_dataset}\\{label_for_plotting}\\{self.ts}\\{self.ts_spec}"
+                )
+                output_filename = f"plots\\spikes\\{self.image_dataset}\\{label_for_plotting}\\{self.ts}\\{self.ts_spec}\\evolution.gif"
+            gif_spike_rate_by_label(
+                frame_folder=frame_folder,
+                output_filename=output_filename,
+                duration=100,
+                loop=0,
+            )
+            label_for_plotting = input("Which label should we plot? ")
 
     def train_network(
         self,
@@ -1472,6 +1368,7 @@ class snn_sleepy:
         plot_threshold=False,
         plot_traces_=False,
         train_weights=False,
+        tau_trace=25,
         learning_rate_exc=0.0008,
         learning_rate_inh=0.005,
         w_target_exc=0.01,
@@ -1488,6 +1385,8 @@ class snn_sleepy:
         sleep=False,
         sleep_ratio=0.0,  # Sleep percentage per interval (e.g., 0.1 = 10%)
         normalize_weights=False,  # Alternative to sleep: maintain initial weight sum
+        normalize_per_column=True,  # Per-post-neuron normalization to initial column sums
+        normalize_per_column_interval=1000,  # Normalize every N timesteps (default: 1000)
         force_train=False,
         save_model=True,
         weight_decay=False,
@@ -1498,7 +1397,7 @@ class snn_sleepy:
         noisy_threshold=False,
         noisy_weights=False,
         spike_adaption=True,
-        delta_adaption=3,
+        delta_adaption=1,
         tau_adaption=100,
         trace_update=False,
         timing_update=True,
@@ -1530,6 +1429,8 @@ class snn_sleepy:
         mean_noise=0,
         max_mp=40,
         run=0,
+        heatmap_plot=False,
+        get_giffed=False,
         sleep_synchronized=True,
         tau_pre_trace_exc=1,
         tau_pre_trace_inh=1,
@@ -1693,6 +1594,12 @@ class snn_sleepy:
             initial_sum_inh = sum_weights_inh
             initial_sum_total = sum_weights
 
+            # Per-column initial sums (one per post-neuron)
+            initial_sum_st_ex = np.sum(np.abs(self.weights[:self.st, self.st:self.ex]), axis=0)  # (N_exc,)
+            initial_sum_ex_ex = np.sum(np.abs(self.weights[self.st:self.ex, self.st:self.ex]), axis=0)  # (N_exc,)
+            initial_sum_ex_ih = np.sum(np.abs(self.weights[self.st:self.ex, self.ex:self.ih]), axis=0)  # (N_inh,)
+            initial_sum_ih_ex = np.sum(np.abs(self.weights[self.ex:self.ih, self.st:self.ex]), axis=0)  # (N_exc,)
+
             baseline_sum_exc = sum_weights_exc * beta
             baseline_sum_inh = sum_weights_inh * beta
             baseline_sum = sum_weights * beta
@@ -1758,9 +1665,15 @@ class snn_sleepy:
                 vectorized_trace=vectorized_trace,
                 N_x=self.N_x,
                 normalize_weights=normalize_weights,
+                normalize_per_column=normalize_per_column,
+                normalize_per_column_interval=normalize_per_column_interval,
                 initial_sum_exc=initial_sum_exc,
                 initial_sum_inh=initial_sum_inh,
                 initial_sum_total=initial_sum_total,
+                initial_sum_st_ex=initial_sum_st_ex,
+                initial_sum_ex_ex=initial_sum_ex_ex,
+                initial_sum_ex_ih=initial_sum_ex_ih,
+                initial_sum_ih_ex=initial_sum_ih_ex,
                 # pass hard-pause knobs
                 sleep_max_iters=sleep_max_iters,
                 on_timeout=on_timeout,
@@ -1950,7 +1863,6 @@ class snn_sleepy:
                         spikes_test = np.zeros((T_te, self.N), dtype=np.int8)
                         spikes_test[:, :st] = data_test
 
-                        run = int(time.time() * 1000)
                         (
                             _weights_te,
                             spikes_te_out,
@@ -1971,13 +1883,16 @@ class snn_sleepy:
                             T=T_te,
                             mean_noise=mean_noise,
                             var_noise=var_noise,
+                            dataset=self.image_dataset,
                             spikes=spikes_test.copy(),
                             check_sleep_interval=check_sleep_interval,
                             timing_update=timing_update,
                             spike_times=spike_times.copy(),
                             a=a.copy(),
-                            run=run,
-                            save_plots=True,
+                            spike_trace=spike_trace_te,
+                            tau_trace=tau_trace,
+                            run=self.ts_spec,
+                            save_plots=False,
                             I_syn=I_syn.copy(),
                             spike_threshold=spike_threshold.copy(),
                             sleep_ratio=0.0,
@@ -1986,23 +1901,6 @@ class snn_sleepy:
                             sleep_tol_frac=sleep_tol_frac,
                             **common_args,
                         )
-
-                        # plot gif
-                        label_for_plotting = input("Which label should we plot? ")
-                        while label_for_plotting != "stop":
-                            if label_for_plotting == "all":
-                                frame_folder=f"plots\\spikes\\all\\{run}"
-                                output_filename=f"plots\\spikes\\all\\{run}\\evolution.gif"
-                            else:
-                                frame_folder=f"plots\\spikes\\{label_for_plotting}\\{run}"
-                                output_filename=f"plots\\spikes\\{label_for_plotting}\\{run}\\evolution.gif"
-                            gif_spike_rate_by_label(
-                                frame_folder=frame_folder,
-                                output_filename=output_filename,
-                                duration=100,
-                                loop=0,
-                            )
-                            label_for_plotting = input("Which label should we plot? ")
 
                         # store
                         bs = spikes_te_out.shape[0]
@@ -2053,7 +1951,7 @@ class snn_sleepy:
                     try:
                         # PCA+LR using only test features (split test into train/val/test internally)
                         X_te, y_te = bin_spikes_by_label_no_breaks(
-                            spikes=spikes_te_out[:, self.st : self.ih],
+                            spikes=spikes_te_out[:, self.st : self.ex],
                             labels=labels_te_out,
                         )
                         if X_te.size == 0:
@@ -2176,7 +2074,6 @@ class snn_sleepy:
                         and self.image_streamer is not None
                     ):
                         self.image_streamer.reset_partition("val")
-                        self.image_streamer.reset_partition("train")
                 except Exception:
                     pass
 
@@ -2230,8 +2127,19 @@ class snn_sleepy:
                         int(np.sqrt(self.N_x)) ** 2,  # Image-only uses full N_x
                     )
                     if data_train is None:
-                        print(f"No more image data available at epoch {e}")
-                        break
+                        # Wrap around: reset pointer and re-fetch
+                        self.image_streamer.reset_partition("train")
+                        self.current_train_idx = 0
+                        data_train, labels_train = load_image_batch(
+                            self.image_streamer,
+                            0,
+                            self.batch_train,
+                            self.num_steps,
+                            int(np.sqrt(self.N_x)) ** 2,
+                        )
+                        if data_train is None:
+                            print(f"No image data available at epoch {e}")
+                            break
                     # Advance training index for streaming
                     self.current_train_idx += self.batch_train
                 else:
@@ -2260,6 +2168,7 @@ class snn_sleepy:
                         _,
                         spikes_train,
                         _,
+                        spike_trace,
                     ) = create_arrays(
                         N=self.N,
                         N_exc=self.N_exc,
@@ -2275,10 +2184,11 @@ class snn_sleepy:
                 else:
                     # Reuse pre-allocated arrays
                     mp_train = np.zeros((self.T_train, self.N - self.N_x))
+                    mp_train[0] = self.resting_potential
                     spikes_train = np.zeros((self.T_train, self.N), dtype=np.int8)
                     # Copy data to spikes array
                     spikes_train[:, : self.N_x] = data_train
-
+                    spike_trace = np.zeros(self.N)
                 # 3a) Train on the training set
                 # Ensure data width matches expected N_x
                 if data_train is not None and data_train.shape[1] != self.N_x:
@@ -2310,16 +2220,20 @@ class snn_sleepy:
                     spike_times,
                     a,
                     weight_tracking_epoch,
+                    spike_trace,
                 ) = train_network(
                     weights=(self.weights if train_weights else self.weights.copy()),
                     spike_labels=labels_train,
                     mp=mp_train,
                     sleep=sleep,
                     train_weights=train_weights,
+                    tau_trace=tau_trace,
                     T=self.T_train,
-                    run=run,
-                    save_plots=True,
+                    run=self.ts_spec,
+                    save_plots=heatmap_plot,
+                    dataset=self.image_dataset,
                     mean_noise=mean_noise,
+                    spike_trace=spike_trace.copy(),
                     var_noise=var_noise,
                     spikes=spikes_train,
                     check_sleep_interval=check_sleep_interval,
@@ -2331,16 +2245,9 @@ class snn_sleepy:
                     sleep_ratio=getattr(self, "sleep_ratio", 0.0),
                     **common_args,
                 )
+                spike_threshold = thresh_tr
                 # plot gif
-                label_for_plotting = input("Which label should we plot? ")
-                while label_for_plotting != "stop":
-                    gif_spike_rate_by_label(
-                        frame_folder=f"plots\\spikes\\{label_for_plotting}\\{run}",
-                        output_filename=f"plots\\spikes\\{label_for_plotting}\\{run}\\evolution.gif",
-                        duration=100,
-                        loop=0,
-                    )
-                    label_for_plotting = input("Which label should we plot? ")
+                self.plot_spikes(run=run)
 
                 # accumulate sleep percent if available
                 try:
@@ -2349,41 +2256,6 @@ class snn_sleepy:
                         sleep_percent_count += 1
                 except Exception:
                     pass
-
-                # Accumulate weight tracking data (sleep only)
-                # if weight_tracking_epoch is not None:
-                #     for key in [
-                #         "exc_mean",
-                #         "exc_std",
-                #         "exc_min",
-                #         "exc_max",
-                #         "exc_samples",
-                #         "inh_mean",
-                #         "inh_std",
-                #         "inh_min",
-                #         "inh_max",
-                #         "inh_samples",
-                #     ]:
-                #         all_weight_tracking_sleep[key].extend(
-                #             weight_tracking_epoch[key]
-                #         )
-                #     _wt_times = weight_tracking_epoch.get("times", [])
-                #     all_weight_tracking_sleep["times"].extend(
-                #         [float(t) + _tracking_time_offset for t in _wt_times]
-                #     )
-                #     for seg in weight_tracking_epoch.get("sleep_segments", []):
-                #         try:
-                #             s, te = (
-                #                 float(seg[0]) + _tracking_time_offset,
-                #                 float(seg[1]) + _tracking_time_offset,
-                #             )
-                #             all_weight_tracking_sleep["sleep_segments"].append((s, te))
-                #         except Exception:
-                #             pass
-                #     if len(_wt_times) > 0:
-                #         _tracking_time_offset += float(max(_wt_times)) + 1.0
-
-                # Suppress per-epoch plotting during training (plot only after training)
 
                 # Calculate training accuracy for current epoch
                 if spikes_tr_out is not None and labels_tr_out is not None:
@@ -2406,6 +2278,7 @@ class snn_sleepy:
                         print(f"Training Accuracy (TOP): {train_acc_batch:.4f}")
                         try:
                             self._record_accuracy("train", train_acc_batch, epoch=e + 1)
+                            self._plot_accuracy()
                         except Exception:
                             pass
 
@@ -2432,10 +2305,11 @@ class snn_sleepy:
 
                             # Debug: Check network activity
                             input_spikes = spikes_tr_out[:, : self.st]
-                            exc_spikes = spikes_tr_out[:, self.st : self.ih]
-
+                            exc_spikes = spikes_tr_out[:, self.st : self.ex]
+                            inh_spikes = spikes_tr_out[:, self.ex : self.ih]
                             total_input_spikes = np.sum(input_spikes)
                             total_exc_spikes = np.sum(exc_spikes)
+                            total_inh_spikes = np.sum(inh_spikes)
 
                             input_spike_rate = (
                                 total_input_spikes / input_spikes.size
@@ -2447,14 +2321,26 @@ class snn_sleepy:
                                 if exc_spikes.size > 0
                                 else 0
                             )
-
+                            inh_spike_rate = (
+                                total_inh_spikes / inh_spikes.size
+                                if inh_spikes.size > 0
+                                else 0
+                            )
                             print(f"Network Activity Check:")
                             print(
                                 f"  Input spikes: {total_input_spikes} ({input_spike_rate*100:.4f}% rate)"
                             )
                             print(
-                                f"  Excitatory spikes: {total_exc_spikes} ({exc_spike_rate*100:.4f}% rate)"
-                            )
+                                f"  Excitatory spikes: {total_exc_spikes} ({exc_spike_rate*100:.4f}% rate)")
+                            print(f"  Inhibitory spikes: {total_inh_spikes} ({inh_spike_rate*100:.4f}% rate)")
+
+                            # get nonzero weights
+                            nz_st_ws = self.weights[:self.st, self.st:self.ex][self.weights[:self.st, self.st:self.ex] != 0]
+                            nz_ex_ws = self.weights[self.st:self.ex, self.st:self.ih][self.weights[self.st:self.ex, self.st:self.ih] != 0]
+                            nz_ih_ws = self.weights[self.ex:self.ih, self.st:self.ex][self.weights[self.ex:self.ih, self.st:self.ex] != 0]
+                            print(f"Mean input weights: {np.mean(nz_st_ws)}")
+                            print(f"Mean excitatory weights: {np.mean(nz_ex_ws)}")
+                            print(f"Mean inhibitory weights: {np.mean(nz_ih_ws)}")
 
                             X_tr, y_tr = bin_spikes_by_label_no_breaks(
                                 spikes=exc_spikes,
@@ -2524,6 +2410,7 @@ class snn_sleepy:
                                     self._record_accuracy(
                                         "train", train_acc_pca, epoch=e + 1
                                     )
+                                    self._plot_accuracy()
                                 except Exception:
                                     pass
 
@@ -2576,6 +2463,7 @@ class snn_sleepy:
                 mp_test = None
                 weights_te = None
                 spikes_te_out = None
+                spike_trace_te = spike_trace.copy()
                 labels_te_out = None
                 sleep_te_out = None
                 I_syn_te = None
@@ -2716,11 +2604,14 @@ class snn_sleepy:
                         spike_labels=labels_test.copy(),
                         mp=mp_test.copy(),
                         sleep=False,
+                        dataset=self.image_dataset,
                         train_weights=False,
                         T=T_test_batch,
                         mean_noise=mean_noise,
-                        run=run,
+                        run=self.ts_spec,
                         save_plots=False,
+                        tau_trace=tau_trace,
+                        spike_trace=spike_trace_te,
                         var_noise=var_noise,
                         spikes=spikes_test.copy(),
                         check_sleep_interval=check_sleep_interval,
@@ -2733,16 +2624,6 @@ class snn_sleepy:
                         **common_args,
                     )
 
-                    # plot gif
-                    # label_for_plotting = input("Which label should we plot? ")
-                    # while label_for_plotting != "stop":
-                    #     gif_spike_rate_by_label(
-                    #         frame_folder=f"plots\\spikes\\{label_for_plotting}\\{run}",
-                    #         output_filename=f"plots\\spikes\\{label_for_plotting}\\{run}\\evolution.gif",
-                    #         duration=100,
-                    #         loop=0,
-                    #     )
-                    #     label_for_plotting = input("Which label should we plot? ")
 
                     # Store results for accumulation (use pre-allocated arrays)
                     batch_size = spikes_te_out.shape[0]
@@ -2903,13 +2784,13 @@ class snn_sleepy:
                         try:
                             # Prepare features from training data for training the classifier
                             X_tr_dist, y_tr_dist = bin_spikes_by_label_no_breaks(
-                                spikes=spikes_tr_out[:, self.st : self.ih],
+                                spikes=spikes_tr_out[:, self.st : self.ex],
                                 labels=labels_tr_out,
                             )
 
                             # Prepare features from validation data for testing
                             X_te_dist, y_te_dist = bin_spikes_by_label_no_breaks(
-                                spikes=spikes_te_out[:, self.st : self.ih],
+                                spikes=spikes_te_out[:, self.st : self.ex],
                                 labels=labels_te_out,
                             )
 
@@ -3030,11 +2911,11 @@ class snn_sleepy:
                     try:
                         # Prepare features by binning contiguous label segments
                         X_tr, y_tr = bin_spikes_by_label_no_breaks(
-                            spikes=spikes_tr_out[:, self.st : self.ih],
+                            spikes=spikes_tr_out[:, self.st : self.ex],
                             labels=labels_tr_out,
                         )
                         X_te, y_te = bin_spikes_by_label_no_breaks(
-                            spikes=spikes_te_out[:, self.st : self.ih],
+                            spikes=spikes_te_out[:, self.st : self.ex],
                             labels=labels_te_out,
                         )
 
@@ -3107,6 +2988,7 @@ class snn_sleepy:
                 self.val_performance_tracker[e] = [phi_te, acc_te]
                 try:
                     self._record_accuracy("val", acc_te, epoch=e + 1)
+                    self._plot_accuracy()
                 except Exception:
                     pass
 
@@ -3582,8 +3464,11 @@ class snn_sleepy:
                         train_weights=False,
                         T=T_te,
                         mean_noise=0,
-                        run=run,
+                        dataset=self.image_dataset,
+                        run=self.ts_spec,
+                        tau_trace=tau_trace,
                         save_plots=False,
+                        spike_trace=spike_trace_te,
                         var_noise=0,
                         spikes=spikes_test.copy(),
                         check_sleep_interval=1000000,
@@ -3599,16 +3484,6 @@ class snn_sleepy:
                         **_ca,
                     )
 
-                    # plot gif
-                    # label_for_plotting = input("Which label should we plot? ")
-                    # while label_for_plotting != "stop":
-                    #     gif_spike_rate_by_label(
-                    #         frame_folder=f"plots\\spikes\\{label_for_plotting}\\{run}",
-                    #         output_filename=f"plots\\spikes\\{label_for_plotting}\\{run}\\evolution.gif",
-                    #         duration=100,
-                    #         loop=0,
-                    #     )
-                    #     label_for_plotting = input("Which label should we plot? ")
 
                     # Align to full bins and expand labels to per-timestep once
                     bs = spikes_te_out.shape[0]
@@ -4026,9 +3901,12 @@ class snn_sleepy:
                                 sleep=sleep,
                                 train_weights=train_weights,
                                 T=self.T_train,
+                                dataset=self.image_dataset,
                                 mean_noise=mean_noise,
-                                run=run,
-                                save_plots=True,
+                                tau_trace=tau_trace,
+                                run=self.ts_spec,
+                                save_plots=heatmap_plot,
+                                spike_trace=spike_trace.copy(),
                                 var_noise=var_noise,
                                 spikes=spikes_train_init.copy(),
                                 check_sleep_interval=check_sleep_interval,
@@ -4042,17 +3920,7 @@ class snn_sleepy:
                             )
 
                             # plot gif
-                            label_for_plotting = input("Which label should we plot? ")
-                            while label_for_plotting != "stop":
-                                gif_spike_rate_by_label(
-                                    frame_folder=f"plots\\spikes\\{label_for_plotting}\\{run}",
-                                    output_filename=f"plots\\spikes\\{label_for_plotting}\\{run}\\evolution.gif",
-                                    duration=100,
-                                    loop=0,
-                                )
-                                label_for_plotting = input(
-                                    "Which label should we plot? "
-                                )
+                            self.plot_spikes(run=run)
 
                             # Clean up unused variables
                             del unused
@@ -4076,8 +3944,11 @@ class snn_sleepy:
                                 mp=mp_test.copy(),
                                 sleep=False,
                                 train_weights=False,
-                                run=run,
+                                run=self.ts_spec,
+                                tau_trace=tau_trace,
+                                dataset=self.image_dataset,
                                 T=self.T_test,
+                                spike_trace=spike_trace_te,
                                 save_plots=False,
                                 mean_noise=mean_noise,
                                 var_noise=var_noise,
@@ -4091,19 +3962,6 @@ class snn_sleepy:
                                 sleep_ratio=0.0,
                                 **common_args,
                             )
-
-                            # plot gif
-                            # label_for_plotting = input("Which label should we plot? ")
-                            # while label_for_plotting != "stop":
-                            #     gif_spike_rate_by_label(
-                            #         frame_folder=f"plots\\spikes\\{label_for_plotting}\\{run}",
-                            #         output_filename=f"plots\\spikes\\{label_for_plotting}\\{run}\\evolution.gif",
-                            #         duration=100,
-                            #         loop=0,
-                            #     )
-                            #     label_for_plotting = input(
-                            #         "Which label should we plot? "
-                            #     )
 
                             # Clean up unused variables
                             del unused
@@ -4260,11 +4118,11 @@ class snn_sleepy:
             try:
                 # Prepare features via binning
                 X_tr, y_tr = bin_spikes_by_label_no_breaks(
-                    spikes=self.spikes_train[:, self.st : self.ih],
+                    spikes=self.spikes_train[:, self.st : self.ex],
                     labels=self.labels_train,
                 )
                 X_te, y_te = bin_spikes_by_label_no_breaks(
-                    spikes=self.spikes_test[:, self.st : self.ih],
+                    spikes=self.spikes_test[:, self.st : self.ex],
                     labels=self.labels_test,
                 )
                 if X_tr.size > 0 and X_te.size > 0:
@@ -4289,6 +4147,7 @@ class snn_sleepy:
                     try:
                         if isinstance(test_acc_dict, dict) and "test" in test_acc_dict:
                             self._record_accuracy("test", test_acc_dict.get("test"))
+                            self._plot_accuracy()
                     except Exception:
                         pass
             except Exception as ex:

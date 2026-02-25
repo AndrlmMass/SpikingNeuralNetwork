@@ -30,6 +30,7 @@ def run_once(
         N_x_weight = 0.1
         tau_m = 30
         tau_syn = 30
+        Rm = 30
     elif args.dataset.lower() == "fcx1":
         classes = [0, 1]
         num_input = 100
@@ -37,17 +38,21 @@ def run_once(
         N_x_weight = 0.5
         tau_m = 1
         tau_syn = 1
+        Rm = 30
     else:
         classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         num_input = 225
         use_validation_data = True
-        N_x_weight = 0.1
+        N_x_weight = 0.2
         tau_m = 30
-        tau_syn = 30
+        tau_syn = 15
+        Rm = 3
+
+    ts_spec = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # init class
     snn_N = snn_sleepy(
-        classes=classes, random_state=seed, N_x=num_input, N_exc=1000, N_inh=200
+        classes=classes, random_state=seed, N_x=num_input, N_exc=1000, N_inh=250, ts_spec=ts_spec
     )
 
     # acquire data
@@ -60,8 +65,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 6000, 100, 1000
-        b_tr, b_va, b_te = 300, 100, 200
+        img_tr, img_va, img_te = 1000, 100, 1000
+        b_tr, b_va, b_te = 100, 100, 100
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -112,13 +117,14 @@ def run_once(
         plot_weights=False,
         w_dense_ee=0.1,
         w_dense_se=N_x_weight,
-        w_dense_ei=0.2,
-        w_dense_ie=0.1,
-        se_weights=0.5,
-        ee_weights=0.5,
-        ei_weights=0.8,
-        ie_weights=-0.6,
+        w_dense_ei=0.3,
+        w_dense_ie=0.2,
+        se_weights=2.0,
+        ee_weights=1.0,
+        ei_weights=1.0,
+        ie_weights=-1.0,
         create_network=False,
+        random_weights=args.random_weights,
     )
 
     if getattr(args, "profile", False):
@@ -134,6 +140,7 @@ def run_once(
             max_weight_exc=25,
             min_weight_inh=-25,
             samples=10,
+            membrane_resistance=Rm,
             force_train=True,
             plot_spikes_train=False,
             plot_weights=False,
@@ -144,6 +151,7 @@ def run_once(
             plot_top_response_test=False,
             plot_top_response_train=False,
             plot_tsne_during_training=False,
+            heatmap_plot=bool(args.heatmap_plot),
             tsne_plot_interval=1,
             plot_spectrograms=False,
             use_validation_data=False,
@@ -154,12 +162,12 @@ def run_once(
             narrow_top=0.2,
             tau_m=tau_m,
             run=run_id,
-            A_minus=0.3,
-            A_plus=0.3,
-            tau_LTD=7.5,
-            tau_LTP=7.5,
-            learning_rate_exc=0.0008,
-            learning_rate_inh=0.0008,
+            A_minus=0.95,
+            A_plus=1.0,
+            tau_LTD=20,
+            tau_LTP=20,
+            learning_rate_exc=0.00005,
+            learning_rate_inh=0.0005,
             accuracy_method="pca_lr",
             test_only=False,
             use_QDA=False,
@@ -172,8 +180,10 @@ def run_once(
         )
         pr.disable()
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        directory = os.path.join("results","comparison_runs",f"{args.image_dataset}")
+        os.makedirs(directory, exist_ok=True)
         profile_path = args.profile_output or os.path.join(
-            "results",
+            directory,
             f"profile_{ts}_sr{args.sleep_rate}__nl{args.noise_level}_run{run_idx+1}.prof",
         )
         try:
@@ -195,6 +205,8 @@ def run_once(
             force_train=True,
             plot_spikes_train=False,
             plot_weights=False,
+            heatmap_plot=bool(args.heatmap_plot),
+            get_giffed=bool(args.get_giffed),
             plot_epoch_performance=False,
             plot_weights_per_epoch=bool(getattr(args, "plot_weights_per_epoch", False)),
             plot_spikes_per_epoch=bool(getattr(args, "plot_spikes_per_epoch", False)),
@@ -207,18 +219,20 @@ def run_once(
             use_validation_data=False,
             var_noise=args.noise_level,
             max_weight_exc=25,
+            membrane_resistance=Rm,
             min_weight_inh=-25,
             sleep=not args.no_sleep,
             sleep_mode=str(args.sleep_mode),
-            tau_syn=30,
+            tau_syn=tau_syn,
+            tau_m=tau_m,
             narrow_top=0.2,
-            A_minus=0.3,
-            A_plus=0.5,
+            A_minus=0.95,
+            A_plus=1.0,
             run=run_id,
-            tau_LTD=7.5,
-            tau_LTP=10,
-            learning_rate_exc=0.0008,
-            learning_rate_inh=0.0008,
+            tau_LTD=28,
+            tau_LTP=25,
+            learning_rate_exc=0.00005,
+            learning_rate_inh=0.0005,
             accuracy_method="pca_lr",
             test_only=False,
             use_QDA=False,
@@ -327,7 +341,7 @@ def main():
             "geomfig",
             "fcx1",
         ],
-        default="fcx1",
+        default="mnist",
         help="dataset to use (image-only or geomfig)",
     )
     parser.add_argument(
@@ -342,9 +356,11 @@ def main():
             "notmnist",
             "fcx1",
         ],
-        default="fcx1",
+        default="mnist",
         help="image dataset to use for image-only or multimodal modes",
     )
+    parser.add_argument("--heatmap_plot", action="store_true", default=True, help="plot the heatmap of the weights")
+    parser.add_argument("--get_giffed", action="store_true", default=False, help="create gif from heatmap plots")
     parser.add_argument(
         "--geom-noise-var",
         type=float,
@@ -424,6 +440,12 @@ def main():
         default=False,
         help="track results in GLM/Results_.xlsx file after each run",
     )
+    parser.add_argument(
+        "--random-weights",
+        action="store_true",
+        default=False,
+        help="use random weights (0.01 for ee, 0.05 for se, 0.05 for ei, 0.05 for ie)",
+    )
     args, _ = parser.parse_known_args()
 
     # Ensure sleep_rate is a list
@@ -437,12 +459,6 @@ def main():
 
     all_results = []  # Store (sleep_rate, run_idx, result)
     disable_plotting = args.runs > 1 or len(sleep_rates) > 1
-
-    # Initialize results file at the start
-    output_dir = "results"
-    os.makedirs(output_dir, exist_ok=True)
-    timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    results_filename = f"{output_dir}/results_{timestamp_str}.json"
 
     # Helper function to safely convert values
     def safe_float(val):

@@ -632,38 +632,42 @@ class ImageDataStreamer:
             return spike_data, extended_labels
 
     def _convert_images_to_spikes(self, images):
-        """Convert image batch to spikes."""
-        # Normalize images
-        # target_sum = (self.pixel_size**2)
-        # norm_images = torch.stack(
-        #     [normalize_image(img=img, target_sum=target_sum) for img in images]
-        # )
-        norm_images = images
-        # Convert to spikes
-        S_data = torch.zeros(size=norm_images.shape)
-        S_data = S_data.repeat(self.num_steps, 1, 1, 1)
+        """
+        Convert image batch to Poisson spike trains.
+        Assumes input intensities in range [0, 255].
+        """
+        # images are already normalized btw
 
-        for i in range(norm_images.shape[0]):
-            S_data[i * self.num_steps : (i + 1) * self.num_steps] = spikegen.rate(
-                norm_images[i],
-                num_steps=self.num_steps,
-                gain=self.gain,
-                offset=self.offset,
-                first_spike_time=self.first_spike_time,
-                time_var_input=self.time_var_input,
-            )
+        # Compute spike probability per timestep
+        # r_max = 67 Hz
+        # dt assumed 1 ms
+        r_max = 67.0
+        dt_ms = 1.0
 
-        # Reshape to match expected format
-        S_data_corrected = S_data.squeeze(2).flatten(start_dim=2)
-        S_data_reshaped = np.reshape(
-            S_data_corrected,
-            (
-                S_data.shape[0] * S_data.shape[1],
-                S_data_corrected.shape[2],
-            ),
+        p = images * r_max * (dt_ms / 1000.0)   # (B, 1, H, W) or (B, H, W)
+        p = p.clamp(0.0, 0.067)  # safety cap
+
+        # Generate Poisson spikes
+        # Output shape: (T, B, C, H, W) or (T, B, H, W)
+        spikes = (
+            torch.rand((self.num_steps,) + p.shape, device=p.device)
+            < p
+        ).float()
+
+        # Remove channel dim if present
+        spikes = spikes.squeeze(2)
+
+        # Flatten spatial dims
+        spikes = spikes.flatten(start_dim=2)  # (T, B, N_pixels)
+
+        # Reshape to match your expected format (T*B, N_pixels)
+        spikes = spikes.reshape(
+            self.num_steps * spikes.shape[1],
+            spikes.shape[2],
         )
 
-        return S_data_reshaped.numpy()
+        return spikes.cpu().numpy()
+
 
     def get_total_samples(self):
         """Return total number of available training samples."""

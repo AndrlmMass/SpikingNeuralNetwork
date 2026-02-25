@@ -827,31 +827,25 @@ def heatmap_spike_response(
     spikes_ih,
     label,
     run,
+    dataset,
     num,
     weight_tracking_sleep,
+    weights_st_ex,
+    weights_ex_ex,
+    weights_ex_ih,
+    weights_ih_ex,
 ):
     # define subplot
-    fig = plt.figure(figsize=(10, 6))
-    gs = fig.add_gridspec(
-        2, 3, height_ratios=[1, 1.2]
-    )  # bottom a bit taller (optional)
+    fig, axs = plt.subplots(figsize=(10, 6), nrows=3, ncols=4)
 
-    # ✅ create the axes you want
-    axs = [
-        fig.add_subplot(gs[0, 0]),
-        fig.add_subplot(gs[0, 1]),
-        fig.add_subplot(gs[0, 2]),
-    ]
-    ax_bottom = fig.add_subplot(gs[1, :])  # long plot (if you want it)
-
-    def create_plot(spikes, ax, title, rows, cols):
+    def create_plot(spikes, ax, title, rows, cols, ax_flip):
         # average spike responses
         if spikes is None or np.sum(spikes) == 0:
             ax.set_title(title + " (empty)")
             ax.axis("off")
             return
 
-        avg_spikes = np.mean(spikes, axis=0)
+        avg_spikes = np.mean(spikes, axis=ax_flip)
 
         # ✅ protect against reshape mismatch
         expected = rows * cols
@@ -862,65 +856,63 @@ def heatmap_spike_response(
 
         avg_spikes_reshaped = avg_spikes.reshape((rows, cols))
         im = ax.imshow(avg_spikes_reshaped, cmap="viridis", interpolation="nearest")
-        ax.set_title(title)
+        fig.colorbar(im, ax=ax, shrink=0.5)
+        ax.set_title(title, fontsize=10)
+        ax.set_xticks([])
+        ax.set_yticks([])
         return im
 
     # top row heatmaps
-    create_plot(spikes_in, axs[0], "Input activity", 15, 15)
-    create_plot(spikes_exc, axs[1], "Excitatory activity", 25, 40)
-    create_plot(spikes_ih, axs[2], "Inhibitory activity", 20, 10)
+    create_plot(spikes_in, axs[0, 0], "Input activity", 15, 15, ax_flip=0)
+    create_plot(spikes_exc, axs[0, 1], "Excitatory activity", 25, 40, ax_flip=0)
+    create_plot(spikes_ih, axs[0, 2], "Inhibitory activity", 10, 25, ax_flip=0)
 
     # (Optional) bottom plot: example summary trace
     # If you don’t want this, delete these lines.
     # convert data to numpy
-    w_mean_st_ex = np.asarray(weight_tracking_sleep["st_ex_mean"])
-    w_mean_ex_ex = np.asarray(weight_tracking_sleep["ex_ex_mean"])
-    w_mean_ex_ih = np.asarray(weight_tracking_sleep["ex_ih_mean"])
-    w_mean_ih_ex = np.asarray(weight_tracking_sleep["ih_ex_mean"])
-    # w_min_st_ex = np.asarray(weight_tracking_sleep["st_ex_min"])
-    # w_min_ex_ex = np.asarray(weight_tracking_sleep["ex_ex_min"])
-    # w_min_ex_ih = np.asarray(weight_tracking_sleep["ex_ih_min"])
-    # w_min_ih_ex = np.asarray(weight_tracking_sleep["ih_ex_min"])
-    # w_max_st_ex = np.asarray(weight_tracking_sleep["st_ex_max"])
-    # w_max_ex_ex = np.asarray(weight_tracking_sleep["ex_ex_max"])
-    # w_max_ex_ih = np.asarray(weight_tracking_sleep["ex_ih_max"])
-    # w_max_ih_ex = np.asarray(weight_tracking_sleep["ih_ex_max"])
-    n = w_mean_st_ex.shape[0]
-    if n != 0:
-        x = np.arange(n)
 
-        ax_bottom.set_title("Bottom wide plot")
-        ax_bottom.plot(x, w_mean_st_ex, label="st_ex", color="red")
-        ax_bottom.plot(x, w_mean_ex_ex, label="ex_ex", color="blue")
-        ax_bottom.plot(x, w_mean_ex_ih, label="ex_ih", color="green")
-        ax_bottom.plot(x, w_mean_ih_ex, label="ih_ex", color="pink")
-        # ax_bottom.fill_between(
-        #     x, w_min_st_ex, w_max_st_ex, color="lightgray", alpha=0.3
-        # )
-        # ax_bottom.fill_between(
-        #     x, w_min_ex_ex, w_max_ex_ex, color="lightgray", alpha=0.3
-        # )
-        # ax_bottom.fill_between(
-        #     x, w_min_ex_ih, w_max_ex_ih, color="lightgray", alpha=0.3
-        # )
-        # ax_bottom.fill_between(
-        #     x, w_min_ih_ex, w_max_ih_ex, color="lightgray", alpha=0.3
-        # )
-        ax_bottom.legend()
+    # create heatmap plots
+    create_plot(weights_st_ex, axs[1,0], "St->Ex Incoming Weights", 15, 15, ax_flip=1)
+    create_plot(weights_ex_ex, axs[1,1], "Ex->Ex Incoming Weights", 25, 40, ax_flip=1)
+    create_plot(weights_ex_ih, axs[1,2], "Ex->Ih Incoming Weights", 25, 40, ax_flip=1)
+    create_plot(np.abs(weights_ih_ex), axs[1,3], "Ih->Ex Incoming Weights", 10, 25, ax_flip=1)
 
-    fig.suptitle(f"Label {label}")
-    fig.tight_layout(rect=[0, 0, 1, 0.95])  # leave room for suptitle
+    create_plot(weights_st_ex, axs[2,0], "St->Ex Outgoing Weights", 25, 40, ax_flip=0)
+    create_plot(weights_ex_ex, axs[2,1], "Ex->Ex Outgoing Weights", 25, 40, ax_flip=0)
+    create_plot(weights_ex_ih, axs[2,2], "Ex->Ih Outgoing Weights", 10, 25, ax_flip=0)
+    create_plot(np.abs(weights_ih_ex), axs[2,3], "Ih->Ex Outgoing Weights", 25, 40, ax_flip=0)
 
-    # Save
-    out_dir = os.path.join("plots", "spikes", str(label), str(run))
-    os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir, f"{num}.png")
+    row_labels = ["Spike activity", "Incoming weights", "Outgoing weights"]
+
+    for i in range(3):
+        # get axis bounding box in figure coords
+        bbox = axs[i, 0].get_position()
+        y_center = bbox.y0 + bbox.height / 2
+
+        fig.text(
+            0.02,                  # x position (left margin)
+            y_center,              # vertical center of row
+            row_labels[i],
+            va="center",
+            ha="left",
+            rotation=90,
+            fontsize=8,
+            fontweight="bold"
+        )
+
+    fig.suptitle(f"Run: {num}, Label {label}")
+    from datetime import datetime
+    ts = datetime.now().strftime("%Y.%m.%d")
+    ts_spec = datetime.now().strftime("%Y%m%d_%H%M%S")
+    directory = os.path.join("plots","spikes",dataset,str(label),ts, str(run))
+    os.makedirs(directory, exist_ok=True)
+    out_path = os.path.join(directory, f"{ts_spec}.png")
     # save based on class
     fig.savefig(out_path, dpi=300)
     # save for global plotting
-    out_dir_glob = os.path.join("plots", "spikes", "all", str(run))
-    os.makedirs(out_dir_glob, exist_ok=True)
-    out_path_glob = os.path.join(out_dir_glob, f"{num}.png")
+    directory = os.path.join("plots","spikes",dataset,"all",ts, str(run))
+    os.makedirs(directory, exist_ok=True)
+    out_path_glob = os.path.join(directory, f"{ts_spec}.png")
     fig.savefig(out_path_glob, dpi=300)
     plt.close(fig)  # ✅ important if called in a loop
 
@@ -936,7 +928,6 @@ def gif_spike_rate_by_label(
     files = glob.glob(f"{frame_folder}/*.png")
     files_sorted = sorted(files, key=lambda f: int(f.split("\\")[-1].split(".")[0]))
     frames = [Image.open(image) for image in files_sorted]
-    print(files_sorted)
 
     if not frames:
         print(f"No images found in {frame_folder}")

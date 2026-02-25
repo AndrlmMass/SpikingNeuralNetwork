@@ -4,6 +4,33 @@ from numba import njit, prange
 
 
 @njit
+def normalize_weights_per_column(weights, initial_sums, row_start, row_end, col_start, col_end):
+    """
+    Normalize weights per column (post-neuron) to not exceed initial sums.
+    
+    Args:
+        weights: Full weight matrix
+        initial_sums: Array of initial column sums (one per post-neuron)
+        row_start, row_end: Row slice for this weight layer
+        col_start, col_end: Column slice for this weight layer
+    """
+    W = weights[row_start:row_end, col_start:col_end]
+    current_sums = np.sum(np.abs(W), axis=0)
+    
+    # Scale factor: min(1.0, initial_sum / current_sum) to cap at initial
+    scale = np.where(
+        current_sums > 1e-12,
+        np.minimum(1.0, initial_sums / current_sums),
+        1.0
+    )
+    
+    # Apply scaling column-wise
+    weights[row_start:row_end, col_start:col_end] *= scale[np.newaxis, :]
+    
+    return weights
+
+
+@njit
 def sleep_func(
     weights,  # shape = (N_pre, N_post)
     max_sum,
@@ -307,51 +334,55 @@ def trace_STDP(
     return post_trace, pre_trace, weights
 
 
-@njit(parallel=True)
+@njit(parallel=False)
 def spike_timing(
-    spike_times,  # Array of spike times
-    tau_LTP,
-    tau_LTD,
     learning_rate_exc,
     learning_rate_inh,
+    spike_trace,
     N_inh,
     weights,  # Weight matrix (pre x post)
     N_x,  # Starting index for postsynaptic neurons
     spikes,  # Binary spike indicator array
     nonzero_pre_idx,  # Typed list: for each post neuron, an array of nonzero pre indices
 ):
-    n_neurons = spike_times.shape[0]
+    n_neurons = spike_trace.shape[0]
+    rho = 0.0005
+    x_tar = 0.71
+    mu = 0.5
+    w_max = 5.0
 
     # Loop over postsynaptic neurons, parallelized.
     for i in prange(N_x, n_neurons):
-        t_post = spike_times[i]
         # Retrieve the pre-synaptic indices that have a nonzero connection to neuron i.
         # Note: We assume the nonzero_pre_idx list is indexed relative to the postsynaptic
         # neurons starting at N_x (i.e., index 0 in the list corresponds to neuron N_x)
-        pre_indices = nonzero_pre_idx[i - N_x]
+        pre_indices = nonzero_pre_idx[i-N_x]
 
         # Iterate only over connections that exist.
         for j in pre_indices:
-            # Skip frozen input→excitatory connections
-            if j < N_x and i < (n_neurons - N_inh):
-                continue
             # Skip if the presynaptic neuron did not spike
             if spikes[j] == 0 and spikes[i] == 0:
                 continue
 
-            t_pre = spike_times[j]
-            dt = t_post - t_pre
-
             # Determine if the connection is excitatory or inhibitory.
-            if j < (n_neurons - N_inh):  # excitatory pre–synaptic neuron
-                if dt >= 0:
-                    weights[j, i] += math.exp(-dt / tau_LTP) * learning_rate_exc
-                else:
-                    weights[j, i] -= math.exp(dt / tau_LTD) * learning_rate_exc
-            else:  # inhibitory pre–synaptic neuron
-                if dt >= 0:
-                    weights[j, i] -= math.exp(-dt / tau_LTP) * learning_rate_inh
-                else:
-                    weights[j, i] += math.exp(dt / tau_LTD) * learning_rate_inh
+            if j < (n_neurons - N_inh):  # excitatory synapse
+                if spikes[i] == 1:
+                    x_pre_exc = spike_trace[j]
+                    # add to average pre activity
+                    delta_w = learning_rate_exc * (x_pre_exc - x_tar) * (w_max - weights[j, i])**mu 
+                    weights[j, i] += delta_w
+
+            else:  # inhibitory synapse (your chosen rule)
+                if spikes[j] == 1:
+                    x_post = spike_trace[i]
+                    # pre spike: correlate with recent post activity, minus target
+                    delta_w = learning_rate_inh * (x_post - rho)
+                    weights[j, i] -= delta_w
+
+                if spikes[i] == 1:
+                    x_pre_inh = spike_trace[j]
+                    # post spike: correlate with recent pre activity
+                    delta_w = learning_rate_inh * x_pre_inh
+                    weights[j, i] -= delta_w
 
     return weights

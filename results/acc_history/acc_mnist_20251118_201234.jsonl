@@ -1,6 +1,0 @@
-{"timestamp": "2025-11-18T20:12:34.164871", "split": "train", "epoch": 1, "accuracy": 0.7777777777777778}
-{"timestamp": "2025-11-18T20:12:45.768263", "split": "val", "epoch": 1, "accuracy": 0.75}
-{"timestamp": "2025-11-18T20:16:49.314248", "split": "train", "epoch": 2, "accuracy": 0.7962962962962963}
-{"timestamp": "2025-11-18T20:17:01.555668", "split": "val", "epoch": 2, "accuracy": 0.7613636363636364}
-{"timestamp": "2025-11-18T20:20:51.915435", "split": "train", "epoch": 3, "accuracy": 0.7222222222222222}
-{"timestamp": "2025-11-18T20:21:02.687850", "split": "val", "epoch": 3, "accuracy": 0.6590909090909091}
