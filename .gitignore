@@ -7,3 +7,4 @@ pycache/
 *.pkl
 *.pyc
 plots/
+results/
