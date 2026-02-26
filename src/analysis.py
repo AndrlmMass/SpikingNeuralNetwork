@@ -1,14 +1,13 @@
 import warnings
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
-import matplotlib
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
-
-matplotlib.use("TkAgg")
 warnings.filterwarnings("error", category=RuntimeWarning)
 
 
@@ -205,7 +204,6 @@ def t_SNE(
     plt.xlabel("t-SNE dimension 1")
     plt.ylabel("t-SNE dimension 2")
     plt.legend()
-    plt.show()
 
 
 def PCA_analysis(
@@ -286,7 +284,6 @@ def PCA_analysis(
     plt.xlabel("Principal Component 1")
     plt.ylabel("Principal Component 2")
     plt.legend()
-    plt.show()
 
 
 def calculate_phi(
@@ -477,10 +474,6 @@ def calculate_phi(
         )
         spike_test_rates.append(mean_spikes)
         labels_test_unique.append(predom_label)
-
-    """'
-    create cutoff point, only for training!
-    """
 
     # convert to numpy array
     spike_test_rates = np.array(spike_test_rates)

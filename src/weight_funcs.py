@@ -347,9 +347,9 @@ def spike_timing(
 ):
     n_neurons = spike_trace.shape[0]
     rho = 0.0005
-    x_tar = 0.71
-    mu = 0.5
-    w_max = 5.0
+    x_tar = 0.25
+    mu = 0.8
+    w_max = 3.0
 
     # Loop over postsynaptic neurons, parallelized.
     for i in prange(N_x, n_neurons):

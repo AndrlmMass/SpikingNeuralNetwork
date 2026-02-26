@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap, BoundaryNorm
 import networkx as nx
 import numpy as np
+import matplotlib
+matplotlib.use("TkAgg")
 
 
 def enforce_per_exc_sparsity(W_se, frac=0.10):
@@ -86,6 +88,9 @@ def gaussian_ei_local(N_exc, N_inh, H_e, W_e, sigma=1.5, peak=1.0, frac=None):
 
     W_ei /= W_ei.max(axis=0, keepdims=True) + 1e-12
     W_ei *= peak
+
+    if frac is not None:
+        W_ei = topk_mask_per_col(W_ei, frac)   # keeps top frac of excitatory inputs per inhibitory neuron
 
     return W_ei, home_idx, centers
 
@@ -266,10 +271,10 @@ def create_weights(
     st = N_x  # stimulation
     ex = st + N_exc  # excitatory
     ih = ex + N_inh  # inhibitory
-    plot_weights_st = False
-    plot_weights_ex = False
-    plot_weights_ei = False
-    plot_weights_ie = False
+    plot_weights_st = True
+    plot_weights_ex = True
+    plot_weights_ei = True
+    plot_weights_ie = True
 
     # input poisson weights
     H = int(np.sqrt(N_x))
@@ -282,7 +287,7 @@ def create_weights(
 
     _fse = 1.0 / ref_x
     _fee = 1.0 / ref_e
-    _fei = 1.5 / ref_e
+    _fei = 1.0 / ref_e
     _fr0 = 3.0 / ref_e
     _fsr = 0.5 / ref_e
     _flr = 0.5 / ref_e

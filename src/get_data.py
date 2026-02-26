@@ -317,6 +317,7 @@ class ImageDataStreamer:
         offset=0,
         first_spike_time=0,
         time_var_input=False,
+        max_rate_hz=67.0,
         train_count=None,
         val_count=None,
         test_count=None,
@@ -332,7 +333,7 @@ class ImageDataStreamer:
         self.first_spike_time = first_spike_time
         self.time_var_input = time_var_input
         self.dataset = (dataset or "mnist").lower()
-
+        self.max_rate_hz = max_rate_hz
         # Load image dataset
         transform = transforms.Compose(
             [
@@ -634,37 +635,31 @@ class ImageDataStreamer:
     def _convert_images_to_spikes(self, images):
         """
         Convert image batch to Poisson spike trains.
-        Assumes input intensities in range [0, 255].
+        Assumes input intensities in range [0, 1].
         """
-        # images are already normalized btw
 
         # Compute spike probability per timestep
         # r_max = 67 Hz
         # dt assumed 1 ms
-        r_max = 67.0
         dt_ms = 1.0
-
-        p = images * r_max * (dt_ms / 1000.0)   # (B, 1, H, W) or (B, H, W)
-        p = p.clamp(0.0, 0.067)  # safety cap
+        p = images * self.max_rate_hz * (dt_ms / 1000.0)   # (B, 1, H, W) or (B, H, W)
+        p = p.clamp(0.0, 1.0)  # safety cap
 
         # Generate Poisson spikes
-        # Output shape: (T, B, C, H, W) or (T, B, H, W)
+        # Output shape: (T, B, C, H, W) -> where C = 1 -> (100,100,1,15,15) 
         spikes = (
             torch.rand((self.num_steps,) + p.shape, device=p.device)
             < p
         ).float()
 
-        # Remove channel dim if present
+        # Remove channel dim if present -> (100,100,15,15)
         spikes = spikes.squeeze(2)
 
         # Flatten spatial dims
-        spikes = spikes.flatten(start_dim=2)  # (T, B, N_pixels)
+        spikes_flat = spikes.flatten(start_dim=2)  # (T, B, N_pixels) -> (100,100,225)
 
-        # Reshape to match your expected format (T*B, N_pixels)
-        spikes = spikes.reshape(
-            self.num_steps * spikes.shape[1],
-            spikes.shape[2],
-        )
+        # Reshape to match your expected format (T*B, N_pixels) -> (10000,225)
+        spikes = spikes_flat.transpose(0, 1).reshape(spikes_flat.shape[1]*spikes_flat.shape[0], spikes_flat.shape[2])
 
         return spikes.cpu().numpy()
 

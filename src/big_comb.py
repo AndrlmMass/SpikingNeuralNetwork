@@ -475,6 +475,7 @@ class snn_sleepy:
         audioMNIST=False,
         imageMNIST=False,
         create_data=False,
+        max_rate_hz=67.0,
         plot_spectrograms=False,
         all_audio_train=30000,
         batch_audio_train=500,
@@ -831,7 +832,7 @@ class snn_sleepy:
             image_data_dir = None
             download_images = True
 
-            # Ensure data/mdata directory exists
+            # Ensure data/mdata directory exists|
             if not os.path.exists(data_dir):
                 os.makedirs(data_dir, exist_ok=True)
 
@@ -941,6 +942,7 @@ class snn_sleepy:
                 num_steps=num_steps,
                 gain=gain,
                 offset=offset,
+                max_rate_hz=max_rate_hz,
                 first_spike_time=first_spike_time,
                 time_var_input=time_var_input,
                 train_count=all_images_train,
@@ -1413,8 +1415,8 @@ class snn_sleepy:
         early_stopping=False,
         early_stopping_patience_pct=0.1,  # Patience as percentage of total epochs (0.1 = 10%)
         dt=1,
-        tau_m=30,
-        membrane_resistance=30,
+        membrane_resistance_exc=30,
+        membrane_resistance_inh=30,
         reset_potential=-80,
         spike_slope=-0.1,
         spike_intercept=-4,
@@ -1445,7 +1447,10 @@ class snn_sleepy:
         plot_spikes_per_epoch=False,  # Plot spikes after each epoch (for debugging)
         narrow_top=0.2,  # Increased from 0.05 to 0.2 (20% of neurons)
         wide_top=0.15,
-        tau_syn=30,
+        tau_syn_exc=30,
+        tau_syn_inh=30,
+        tau_m_exc=30,
+        tau_m_inh=30,
         smoothening=350,
         plot_top_response_train=False,
         plot_top_response_test=False,
@@ -1466,6 +1471,7 @@ class snn_sleepy:
         on_timeout="scale_to_target",
         sleep_tol_frac=1e-3,
         sleep_mode="static",
+        track_stats=False,
     ):
         self.dt = dt
         self.pca_variance = pca_variance
@@ -1613,15 +1619,20 @@ class snn_sleepy:
 
             # Bundle common training arguments
             common_args = dict(
-                tau_syn=tau_syn,
+                tau_syn_exc=tau_syn_exc,
+                tau_syn_inh=tau_syn_inh,
+                tau_m_exc=tau_m_exc,
+                tau_m_inh=tau_m_inh,
                 resting_potential=self.resting_potential,
-                membrane_resistance=membrane_resistance,
+                membrane_resistance_exc=membrane_resistance_exc,
+                membrane_resistance_inh=membrane_resistance_inh,
                 min_weight_exc=min_weight_exc,
                 max_weight_exc=max_weight_exc,
                 min_weight_inh=min_weight_inh,
                 max_weight_inh=max_weight_inh,
                 N_exc=self.N_exc,
                 N_inh=self.N_inh,
+                track_stats=track_stats,
                 max_sum=max_sum,
                 max_sum_exc=max_sum_exc,
                 max_sum_inh=max_sum_inh,
@@ -1641,7 +1652,6 @@ class snn_sleepy:
                 w_target_inh=w_target_inh,
                 tau_LTP=tau_LTP,
                 tau_LTD=tau_LTD,
-                tau_m=tau_m,
                 max_mp=max_mp,
                 min_mp=min_mp,
                 interval=interval,
@@ -1734,7 +1744,8 @@ class snn_sleepy:
             mp_te = None
 
             # create missing arrays
-            I_syn = np.zeros(self.N - self.st)
+            I_syn_exc = np.zeros(self.N_exc)
+            I_syn_inh = np.zeros(self.N_inh)
             spike_times = np.zeros(self.N)
             a = np.zeros(self.N - self.st)
 
@@ -1870,10 +1881,12 @@ class snn_sleepy:
                             *unused,
                             labels_te_out,
                             _sleep_te_out,
-                            _I_syn_te,
+                            _I_syn_exc_te,
+                            _I_syn_inh_te,
                             _spike_times_te,
                             _a_te,
                             _weight_tracking_te,
+                            _spike_trace_te,
                         ) = train_network(
                             weights=self.weights.copy(),
                             spike_labels=labels_test.copy(),
@@ -1893,7 +1906,8 @@ class snn_sleepy:
                             tau_trace=tau_trace,
                             run=self.ts_spec,
                             save_plots=False,
-                            I_syn=I_syn.copy(),
+                            I_syn_exc=I_syn_exc.copy(),
+                            I_syn_inh=I_syn_inh.copy(),
                             spike_threshold=spike_threshold.copy(),
                             sleep_ratio=0.0,
                             sleep_max_iters=sleep_max_iters,
@@ -2013,7 +2027,8 @@ class snn_sleepy:
                 finally:
                     pbar.close()
                     del (
-                        I_syn,
+                        I_syn_exc,
+                        I_syn_inh,
                         spike_times,
                         a,
                         spike_threshold,
@@ -2216,7 +2231,8 @@ class snn_sleepy:
                     mx_w_exc_tr,
                     labels_tr_out,
                     sleep_tr_out,
-                    I_syn,
+                    I_syn_exc,
+                    I_syn_inh,
                     spike_times,
                     a,
                     weight_tracking_epoch,
@@ -2241,7 +2257,8 @@ class snn_sleepy:
                     spike_times=spike_times.copy(),
                     spike_threshold=spike_threshold,
                     a=a,
-                    I_syn=I_syn,
+                    I_syn_exc=I_syn_exc,
+                    I_syn_inh=I_syn_inh,
                     sleep_ratio=getattr(self, "sleep_ratio", 0.0),
                     **common_args,
                 )
@@ -2595,10 +2612,12 @@ class snn_sleepy:
                         *unused,
                         labels_te_out,
                         sleep_te_out,
-                        I_syn_te,
+                        I_syn_exc_te,
+                        I_syn_inh_te,
                         spike_times_te,
                         a_te,
                         weight_tracking_te,
+                        _spike_trace_te,
                     ) = train_network(
                         weights=self.weights.copy(),
                         spike_labels=labels_test.copy(),
@@ -2618,7 +2637,8 @@ class snn_sleepy:
                         timing_update=timing_update,
                         spike_times=spike_times.copy(),
                         a=a.copy(),
-                        I_syn=I_syn.copy(),
+                        I_syn_exc=I_syn_exc.copy(),
+                        I_syn_inh=I_syn_inh.copy(),
                         spike_threshold=spike_threshold.copy(),
                         sleep_ratio=getattr(self, "sleep_ratio", 0.0),
                         **common_args,
@@ -3246,7 +3266,8 @@ class snn_sleepy:
 
             # Clean up main training loop variables
             del (
-                I_syn,
+                I_syn_exc,
+                I_syn_inh,
                 spike_times,
                 a,
                 spike_threshold,
@@ -3452,10 +3473,12 @@ class snn_sleepy:
                         *unused,
                         labels_te_out,
                         _sleep_te,
-                        _Isyn_te,
+                        _I_syn_exc_te,
+                        _I_syn_inh_te,
                         _st_te,
                         _a_te,
                         _weight_tracking_te,
+                        _spike_trace_te,
                     ) = train_network(
                         weights=self.weights.copy(),
                         spike_labels=labels_test.copy(),
@@ -3475,7 +3498,8 @@ class snn_sleepy:
                         timing_update=False,
                         spike_times=np.zeros(self.N),
                         a=np.zeros(ih - st),
-                        I_syn=np.zeros(ih - st),
+                        I_syn_exc=np.zeros(self.N_exc),
+                        I_syn_inh=np.zeros(self.N_inh),
                         # Use a fresh spike_threshold to avoid undefined references in this scope
                         spike_threshold=np.full(
                             (ih - st), spike_threshold_default, dtype=float
@@ -3890,10 +3914,12 @@ class snn_sleepy:
                                 *unused,
                                 labels_tr_out,
                                 sleep_tr_out,
-                                _I_syn_tr,
+                                I_syn_exc,
+                                I_syn_inh,
                                 _spike_times_tr,
                                 _a_tr,
                                 _weight_tracking_tr,
+                                _spike_trace_tr,
                             ) = train_network(
                                 weights=self.weights.copy(),
                                 spike_labels=labels_train.copy(),
@@ -3934,10 +3960,12 @@ class snn_sleepy:
                                 *unused,
                                 labels_te_out,
                                 sleep_te_out,
-                                _I_syn_te,
+                                I_syn_exc_te,
+                                I_syn_inh_te,
                                 _spike_times_te,
                                 _a_te,
                                 _weight_tracking_te,
+                                _spike_trace_te,
                             ) = train_network(
                                 weights=weights_tr.copy(),
                                 spike_labels=labels_test.copy(),

@@ -7,7 +7,7 @@ import matplotlib
 import librosa
 import librosa.display
 
-matplotlib.use("TkAgg")
+matplotlib.use("Agg")
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -863,7 +863,8 @@ def heatmap_spike_response(
         return im
 
     # top row heatmaps
-    create_plot(spikes_in, axs[0, 0], "Input activity", 15, 15, ax_flip=0)
+    input_size = int(np.sqrt(spikes_in.shape[1]))
+    create_plot(spikes_in, axs[0, 0], "Input activity", input_size, input_size, ax_flip=0)
     create_plot(spikes_exc, axs[0, 1], "Excitatory activity", 25, 40, ax_flip=0)
     create_plot(spikes_ih, axs[0, 2], "Inhibitory activity", 10, 25, ax_flip=0)
 
@@ -872,7 +873,7 @@ def heatmap_spike_response(
     # convert data to numpy
 
     # create heatmap plots
-    create_plot(weights_st_ex, axs[1,0], "St->Ex Incoming Weights", 15, 15, ax_flip=1)
+    create_plot(weights_st_ex, axs[1,0], "St->Ex Incoming Weights", input_size, input_size, ax_flip=1)
     create_plot(weights_ex_ex, axs[1,1], "Ex->Ex Incoming Weights", 25, 40, ax_flip=1)
     create_plot(weights_ex_ih, axs[1,2], "Ex->Ih Incoming Weights", 25, 40, ax_flip=1)
     create_plot(np.abs(weights_ih_ex), axs[1,3], "Ih->Ex Incoming Weights", 10, 25, ax_flip=1)

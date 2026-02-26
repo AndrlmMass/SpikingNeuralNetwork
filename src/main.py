@@ -27,26 +27,40 @@ def run_once(
         classes = [0, 1, 2, 3]
         num_input = 225
         use_validation_data = True
-        N_x_weight = 0.1
+        w_dense_se = 0.1
         tau_m = 30
         tau_syn = 30
         Rm = 30
+        max_rate_hz = 67.0
     elif args.dataset.lower() == "fcx1":
         classes = [0, 1]
         num_input = 100
         use_validation_data = False
-        N_x_weight = 0.5
+        w_dense_se = 0.5
         tau_m = 1
         tau_syn = 1
         Rm = 30
+        max_rate_hz = 67.0
     else:
         classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-        num_input = 225
+        num_input = 784
         use_validation_data = True
-        N_x_weight = 0.2
-        tau_m = 30
-        tau_syn = 15
-        Rm = 3
+        w_dense_se = 0.1
+        w_dense_ee = 0.1
+        w_dense_ei = 0.2
+        w_dense_ie = 0.1
+        se_weights = 3.0
+        ee_weights = 1.0
+        ei_weights = 2.0
+        ie_weights = -1.0
+        tau_syn_exc = 15
+        tau_syn_inh = 7.5
+        tau_m_exc = 30
+        tau_m_inh = 20
+        Rm_exc = 10
+        Rm_inh = 15
+        max_rate_hz = 1000.0
+
 
     ts_spec = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -88,6 +102,7 @@ def run_once(
         noisy_data=False,
         gain=gain_for_dataset,
         noise_level=0.0,
+        max_rate_hz=max_rate_hz,
         audioMNIST=False,
         imageMNIST=(False if use_geomfig else True),
         create_data=False,
@@ -115,14 +130,14 @@ def run_once(
     # set up network for training
     snn_N.prepare_network(
         plot_weights=False,
-        w_dense_ee=0.1,
-        w_dense_se=N_x_weight,
-        w_dense_ei=0.3,
-        w_dense_ie=0.2,
-        se_weights=2.0,
-        ee_weights=1.0,
-        ei_weights=1.0,
-        ie_weights=-1.0,
+        w_dense_ee=w_dense_ee,
+        w_dense_se=w_dense_se,
+        w_dense_ei=w_dense_ei,
+        w_dense_ie=w_dense_ie,
+        se_weights=se_weights,
+        ee_weights=ee_weights,
+        ei_weights=ei_weights,
+        ie_weights=ie_weights,
         create_network=False,
         random_weights=args.random_weights,
     )
@@ -140,7 +155,12 @@ def run_once(
             max_weight_exc=25,
             min_weight_inh=-25,
             samples=10,
-            membrane_resistance=Rm,
+            tau_syn_exc=tau_syn_exc,
+            tau_syn_inh=tau_syn_inh,
+            tau_m_exc=tau_m_exc,
+            tau_m_inh=tau_m_inh,
+            membrane_resistance_exc=Rm_exc,
+            membrane_resistance_inh=Rm_inh,
             force_train=True,
             plot_spikes_train=False,
             plot_weights=False,
@@ -158,9 +178,8 @@ def run_once(
             var_noise=args.noise_level,
             sleep=not args.no_sleep,
             sleep_mode=str(args.sleep_mode),
-            tau_syn=tau_syn,
             narrow_top=0.2,
-            tau_m=tau_m,
+            track_stats=bool(args.track_stats),
             run=run_id,
             A_minus=0.95,
             A_plus=1.0,
@@ -219,20 +238,24 @@ def run_once(
             use_validation_data=False,
             var_noise=args.noise_level,
             max_weight_exc=25,
-            membrane_resistance=Rm,
+            tau_syn_exc=tau_syn_exc,
+            tau_syn_inh=tau_syn_inh,
+            tau_m_exc=tau_m_exc,
+            tau_m_inh=tau_m_inh,
+            track_stats=bool(args.track_stats),
+            membrane_resistance_exc=Rm_exc,
+            membrane_resistance_inh=Rm_inh,
             min_weight_inh=-25,
             sleep=not args.no_sleep,
             sleep_mode=str(args.sleep_mode),
-            tau_syn=tau_syn,
-            tau_m=tau_m,
             narrow_top=0.2,
             A_minus=0.95,
             A_plus=1.0,
             run=run_id,
             tau_LTD=28,
             tau_LTP=25,
-            learning_rate_exc=0.00005,
-            learning_rate_inh=0.0005,
+            learning_rate_exc=0.00001,
+            learning_rate_inh=0.00005,
             accuracy_method="pca_lr",
             test_only=False,
             use_QDA=False,
@@ -253,7 +276,7 @@ def run_once(
             calculate_phi=False,
         )
     else:
-        result = snn_N.analyze_results(t_sne_test=True, calculate_phi=False)
+        result = snn_N.analyze_results(t_sne_test=True)
 
     acc_dict = result[0] if isinstance(result, tuple) else result
     final_test_phi = getattr(snn_N, "final_test_phi", None)
@@ -445,6 +468,12 @@ def main():
         action="store_true",
         default=False,
         help="use random weights (0.01 for ee, 0.05 for se, 0.05 for ei, 0.05 for ie)",
+    )
+    parser.add_argument(
+        "--track-stats",
+        action="store_true",
+        default=False,
+        help="track statistics during training",
     )
     args, _ = parser.parse_known_args()
 
