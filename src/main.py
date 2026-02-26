@@ -79,8 +79,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 1000, 100, 1000
-        b_tr, b_va, b_te = 100, 100, 100
+        img_tr, img_va, img_te = 6000, 500, 1000
+        b_tr, b_va, b_te = 500, 500, 500
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,

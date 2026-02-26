@@ -271,10 +271,10 @@ def create_weights(
     st = N_x  # stimulation
     ex = st + N_exc  # excitatory
     ih = ex + N_inh  # inhibitory
-    plot_weights_st = True
-    plot_weights_ex = True
-    plot_weights_ei = True
-    plot_weights_ie = True
+    plot_weights_st = False
+    plot_weights_ex = False
+    plot_weights_ei = False
+    plot_weights_ie = False
 
     # input poisson weights
     H = int(np.sqrt(N_x))

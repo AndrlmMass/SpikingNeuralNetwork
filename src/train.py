@@ -607,7 +607,7 @@ def train_network(
     # Initial snapshot
     _record_snapshot()
     plot_time += 1
-    num_steps = 1000
+    num_steps = int(T/10)
     iterations = 100
     _track_stats = False
     num = 0
@@ -809,6 +809,7 @@ def train_network(
                     dt=dt,
                     N_exc=N_exc,
                     N_inh=N_inh,
+                    track_stats=track_stats,
                     noisy_potential=noisy_potential,
                     mean_noise=mean_noise,
                     var_noise=var_noise,
