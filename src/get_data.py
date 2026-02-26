@@ -637,6 +637,8 @@ class ImageDataStreamer:
         Convert image batch to Poisson spike trains.
         Assumes input intensities in range [0, 1].
         """
+        # apply gabor filters
+        images = self.gabor_pack_quadrants(images)
 
         # Compute spike probability per timestep
         # r_max = 67 Hz
@@ -661,6 +663,13 @@ class ImageDataStreamer:
         # Reshape to match your expected format (T*B, N_pixels) -> (10000,225)
         spikes = spikes_flat.transpose(0, 1).reshape(spikes_flat.shape[1]*spikes_flat.shape[0], spikes_flat.shape[2])
 
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots(figsize=(10, 10))
+        ax.imshow(images[0].cpu().numpy().squeeze(0))
+        plt.show()
+        plt.close(fig)
+
         return spikes.cpu().numpy()
 
 
@@ -676,6 +685,84 @@ class ImageDataStreamer:
         if partition in ("all", "test"):
             self.ptr_test = 0
 
+
+    def gabor_pack_quadrants(self, images):
+        import math
+        """
+        images: (B,1,H,W) in [0,1]
+        returns: (B,1,H,W) with 4 gabor maps packed into quadrants
+        """
+
+        assert images.dim() == 4 and images.shape[1] == 1
+        B, _, H, W = images.shape
+        device, dtype = images.device, images.dtype
+
+        # --- resolution-aware scaling ---
+        S = int(math.sqrt(H * W))      # auto adapts (28 for MNIST)
+        ksize = max(5, S // 4)         # kernel ~ 1/4 of image width
+        if ksize % 2 == 0:
+            ksize += 1                 # force odd
+
+        sigma = ksize / 3
+        lambd = ksize / 2
+        gamma = 0.5
+        psi = 0.0
+
+        # --- build gabor kernels ---
+        r = ksize // 2
+        y, x = torch.meshgrid(
+            torch.arange(-r, r + 1, device=device, dtype=dtype),
+            torch.arange(-r, r + 1, device=device, dtype=dtype),
+            indexing="ij",
+        )
+
+        def gabor(theta):
+            ct, st = math.cos(theta), math.sin(theta)
+            x_theta = x * ct + y * st
+            y_theta = -x * st + y * ct
+
+            gauss = torch.exp(-(x_theta**2 + (gamma**2) * y_theta**2) / (2 * sigma**2))
+            wave = torch.cos(2 * math.pi * x_theta / lambd + psi)
+            k = gauss * wave
+            k = k - k.mean()
+            k = k / (k.norm() + 1e-8)
+            return k
+
+        thetas = [0.0, math.pi/2, math.pi/4, 3*math.pi/4]
+        kernels = torch.stack([gabor(t) for t in thetas], dim=0)
+        kernels = kernels[:, None, :, :]  # (4,1,k,k)
+
+        # --- convolve ---
+        pad = ksize // 2
+        resp = F.conv2d(images, kernels, padding=pad)  # (B,4,H,W)
+
+        # unsigned response
+        resp = resp.abs()
+
+        # normalize per image
+        rmin = resp.amin(dim=(1,2,3), keepdim=True)
+        rmax = resp.amax(dim=(1,2,3), keepdim=True)
+        resp = (resp - rmin) / (rmax - rmin + 1e-8)
+
+        # --- pack into quadrants ---
+        h1 = H // 2
+        h2 = H - h1
+        w1 = W // 2
+        w2 = W - w1
+
+        packed = torch.zeros((B,1,H,W), device=device, dtype=dtype)
+
+        tl = F.interpolate(resp[:,0:1], size=(h1,w1), mode="bilinear", align_corners=False)
+        tr = F.interpolate(resp[:,1:2], size=(h1,w2), mode="bilinear", align_corners=False)
+        bl = F.interpolate(resp[:,2:3], size=(h2,w1), mode="bilinear", align_corners=False)
+        br = F.interpolate(resp[:,3:4], size=(h2,w2), mode="bilinear", align_corners=False)
+
+        packed[:,:, :h1, :w1] = tl
+        packed[:,:, :h1, w1:] = tr
+        packed[:,:, h1:, :w1] = bl
+        packed[:,:, h1:, w1:] = br
+
+        return packed
 
 class GeomfigDataStreamer:
     """
