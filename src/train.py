@@ -607,7 +607,7 @@ def train_network(
     # Initial snapshot
     _record_snapshot()
     plot_time += 1
-    num_steps = int(T/10)
+    num_steps = int(T/5)
     iterations = 100
     _track_stats = False
     num = 0
