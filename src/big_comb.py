@@ -9,11 +9,6 @@ from train import train_network
 from get_data import (
     create_data,
     load_audio_batch_streaming,
-    load_multimodal_batch,
-    load_prealigned_multimodal_batch,
-    sync_multimodal_datasets,
-    load_audio_batch,
-    load_image_batch,
     GeomfigDataStreamer,
 )
 from plot import (
@@ -23,13 +18,9 @@ from plot import (
     weights_plot,
     spike_threshold_plot,
     plot_traces,
-    top_responders_plotted,
+    WTA_accuracy,
     plot_phi_acc,
     plot_epoch_training,
-    plot_audio_spectrograms_and_spikes,
-    plot_audio_spectrograms_and_spikes_simple,
-    get_elite_nodes,
-    plot_weight_evolution_during_sleep_epoch,
     plot_weight_evolution_during_sleep,
     plot_weight_trajectories_with_sleep_epoch,
     plot_weight_evolution,
@@ -39,7 +30,6 @@ from analysis import (
     t_SNE,
     PCA_analysis,
     calculate_phi,
-    pca_logistic_regression,
     bin_spikes_by_label_no_breaks,
 )
 from create_network import create_weights, create_arrays
@@ -70,7 +60,7 @@ class snn_sleepy:
         self._did_plot_spectrograms = False
         self._image_preview_done = False
         # Accuracy tracking
-        self.acc_history = {"train": [], "val": [], "test": []}
+        self.acc_history = {"train": {}, "val": {}, "test": {}}
         self._acc_log_dir = None
         self._acc_log_file = None
         self.ts_spec = ts_spec
@@ -88,7 +78,7 @@ class snn_sleepy:
                 pass
             self._acc_log_file = os.path.join(self._acc_log_dir, f"acc_{self.ts_spec}.jsonl")
 
-    def _record_accuracy(self, split: str, value, epoch: int | None = None):
+    def _record_accuracy(self, split: str, value, epoch: int | None = None, method: str | None = None):
         try:
             acc_val = float(value) if value is not None else None
         except Exception:
@@ -96,7 +86,13 @@ class snn_sleepy:
         # Append to in-memory history if numeric
         try:
             if acc_val is not None:
-                self.acc_history.setdefault(split, []).append(acc_val)
+                # Use method as key, or "default" if no method specified (for backward compatibility)
+                method_key = method if method is not None else "default"
+                if split not in self.acc_history:
+                    self.acc_history[split] = {}
+                if method_key not in self.acc_history[split]:
+                    self.acc_history[split][method_key] = []
+                self.acc_history[split][method_key].append(acc_val)
         except Exception:
             pass
         # Persist incrementally
@@ -108,12 +104,35 @@ class snn_sleepy:
                 "epoch": int(epoch) if epoch is not None else None,
                 "accuracy": acc_val,
             }
+            if method is not None:
+                rec["method"] = method
             with open(self._acc_log_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(rec) + "\n")
                 f.flush()
         except Exception as e:
             # Non-fatal: continue training even if logging fails
             print(f"Warning: failed to persist accuracy record ({e})")
+
+    def _record_phi(self, split: str, phi_value, epoch: int | None = None):
+        try:
+            phi_val = float(phi_value) if phi_value is not None else None
+        except Exception:
+            phi_val = None
+        # Persist to JSONL file
+        try:
+            self._ensure_acc_logger()
+            rec = {
+                "timestamp": datetime.now().isoformat(),
+                "split": str(split),
+                "epoch": int(epoch) if epoch is not None else None,
+                "phi": phi_val,
+            }
+            with open(self._acc_log_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(rec) + "\n")
+                f.flush()
+        except Exception as e:
+            # Non-fatal: continue even if logging fails
+            print(f"Warning: failed to persist phi record ({e})")
 
     def _read_jsonl(self, path):
         records = []
@@ -136,36 +155,118 @@ class snn_sleepy:
         return a, b
 
     def _plot_accuracy(self):
-        # fetch json file
+        """Plot train/val accuracy (left axis) and val phi (right axis) from JSONL log."""
+        if not getattr(self, "_acc_log_file", None) or not os.path.exists(self._acc_log_file):
+            return
+
         records = self._read_jsonl(self._acc_log_file)
-        # extract train values
-        acc_train = [
-            r["accuracy"]
-            for r in records
-            if r["split"] == "train" and r["accuracy"] is not None
-        ]
-        acc_val = [
-            r["accuracy"]
-            for r in records
-            if r["split"] == "val" and r["accuracy"] is not None
-        ]
-        # convert accuracy scores from list to numpy
-        acc_train = np.asarray(acc_train)
-        acc_val = np.asarray(acc_val)
-        # Get x values
-        leng = max(acc_train.shape[0], acc_val.shape[0])
-        x = np.arange(leng)
-        # add padding to the shorval acc list if needed
-        acc_train, acc_val = self.pad_to_match(b=acc_val, a=acc_train, pad_value=0)
-        # plot accuracy
-        plt.figure()
-        plt.plot(x, acc_train, color="green", label="train accuracy")
-        plt.plot(x, acc_val, color="blue", label="val accuracy")
-        # save plot
+
+        # Collect series keyed by epoch and method (JSONL may have multiple lines per epoch)
+        train_acc_pca = {}
+        train_acc_top = {}
+        val_acc_pca = {}
+        val_acc_top = {}
+        val_phi = {}
+        # For backward compatibility: track records without method field
+        train_acc_default = {}
+        val_acc_default = {}
+
+        for r in records:
+            epoch = r.get("epoch")
+            if epoch is None:
+                continue
+
+            split = r.get("split")
+            method = r.get("method")
+            
+            if "accuracy" in r and r["accuracy"] is not None:
+                acc_val = float(r["accuracy"])
+                if split == "train":
+                    if method == "pca_lr":
+                        train_acc_pca[int(epoch)] = acc_val
+                    elif method == "top":
+                        train_acc_top[int(epoch)] = acc_val
+                    elif method is None:
+                        # Backward compatibility: if no method, use default
+                        train_acc_default[int(epoch)] = acc_val
+                elif split == "val":
+                    if method == "pca_lr":
+                        val_acc_pca[int(epoch)] = acc_val
+                    elif method == "top":
+                        val_acc_top[int(epoch)] = acc_val
+                    elif method is None:
+                        # Backward compatibility: if no method, use default
+                        val_acc_default[int(epoch)] = acc_val
+
+            if "phi" in r and r["phi"] is not None:
+                # Based on your log format: phi is recorded under split="val"
+                if split == "val":
+                    val_phi[int(epoch)] = float(r["phi"])
+
+        # Nothing to plot
+        has_any_acc = (train_acc_pca or train_acc_top or train_acc_default or 
+                      val_acc_pca or val_acc_top or val_acc_default or val_phi)
+        if not has_any_acc:
+            return
+
+        fig, (ax, ax2) = plt.subplots(2, 1, sharex=True)
+
+
+        
+        handles = []
+        handles2 = []
+        labels = []
+        labels2 = []
+        
+        if train_acc_pca:
+            xs = sorted(train_acc_pca)
+            line = ax.plot(xs, [train_acc_pca[e] for e in xs], label="train acc (pca_lr)", linestyle="-", marker="o", markersize=3, color="blue")
+            handles.append(line[0])
+            labels.append("Train accuracy")
+        if val_acc_pca:
+            xs = sorted(val_acc_pca)
+            line = ax.plot(xs, [val_acc_pca[e] for e in xs], label="val acc (pca_lr)", linestyle="-", marker="o", markersize=3, color="lightblue")
+            handles.append(line[0])
+            labels.append("Val accuracy")
+        if train_acc_top:
+            xs = sorted(train_acc_top)
+            line = ax2.plot(xs, [train_acc_top[e] for e in xs], label="train acc (top)", linestyle="-", marker="s", markersize=3, color="red")
+            handles2.append(line[0])
+            labels2.append("Train accuracy")
+        if val_acc_top:
+            xs = sorted(val_acc_top)
+            line = ax2.plot(xs, [val_acc_top[e] for e in xs], label="val acc (top)", linestyle="-", marker="s", markersize=3, color="orange")
+            handles2.append(line[0])
+            labels2.append("Val accuracy")
+
+        fig.supylabel("Accuracy")
+        fig.supxlabel("Epoch")
+        ax.set_ylabel("PCA+LR")
+        ax2.set_ylabel("WTA")
+
+        # Phi (right axis)
+        if val_phi:
+            ax_tw = ax.twinx()
+            xs = sorted(val_phi)
+            phi_line = ax_tw.plot(xs, [val_phi[e] for e in xs], linestyle="--", label="val phi", color="green", linewidth=1.5)
+            ax_tw.set_ylabel("Phi")
+            handles.append(phi_line[0])
+            labels.append("Phi")
+
+        # Create legend with white background, box, and smaller font
+        if handles:
+            ax.legend(handles, labels, loc="lower left", framealpha=1.0, fontsize=5)
+        else:
+            ax.legend(loc="lower left", framealpha=1.0, fontsize=5)
+
+        if handles2:
+            ax2.legend(handles2, labels2, loc="lower left", framealpha=1.0, fontsize=5)
+        else:
+            ax2.legend(loc="lower left", framealpha=1.0, fontsize=5)
+
         out_path = self._acc_log_file.replace(".jsonl", ".png")
-        plt.legend()
-        plt.savefig(out_path, dpi=200)
-        plt.close()
+        fig.savefig(out_path, dpi=200, bbox_inches="tight")
+        plt.close(fig)
 
     def preview_loaded_data(
         self, num_image_samples: int = 9, save_path: str | None = None
@@ -632,10 +733,6 @@ class snn_sleepy:
         elif imageMNIST:
             # Image only mode
             total_images = all_images_train + all_images_test + all_images_val
-            if total_images > 30000:
-                raise ValueError(
-                    f"Total image samples ({total_images}) cannot exceed 30000"
-                )
 
             self.batch_train = batch_image_train
             self.batch_test = batch_image_test
@@ -1932,15 +2029,13 @@ class snn_sleepy:
                             isinstance(accuracy_method, str)
                             and accuracy_method.lower() == "top"
                         ):
-                            acc_te_batch = top_responders_plotted(
-                                spikes=spikes_te_out[:, self.st : self.ih],
+                            acc_te_batch, dbg_test, _ = WTA_accuracy(
+                                spikes=spikes_te_out[:, self.st : self.ex],
                                 labels=labels_te_out,
-                                num_classes=self.N_classes,
-                                narrow_top=narrow_top,
+                                num_classes=self.N_classes, 
                                 smoothening=self.num_steps,
-                                train=False,
-                                compute_not_plot=True,
-                                n_last_points=10000,
+                                split="test",
+                                state=state,
                             )
                             test_acc_top += acc_te_batch
 
@@ -2264,7 +2359,8 @@ class snn_sleepy:
                 )
                 spike_threshold = thresh_tr
                 # plot gif
-                self.plot_spikes(run=run)
+                if get_giffed:
+                    self.plot_spikes(run=run)
 
                 # accumulate sleep percent if available
                 try:
@@ -2282,19 +2378,16 @@ class snn_sleepy:
 
                     if accuracy_method == "top":
                         # Use top-responders method for training accuracy
-                        train_acc_batch = top_responders_plotted(
-                            spikes=spikes_tr_out[:, self.st : self.ih],
+                        train_acc_batch, dbg_train, state = WTA_accuracy(
+                            spikes=spikes_tr_out[:, self.st : self.ex],
                             labels=labels_tr_out,
                             num_classes=self.N_classes,
-                            narrow_top=narrow_top,
                             smoothening=self.num_steps,
-                            train=True,
-                            compute_not_plot=True,
-                            n_last_points=10000,
+                            split="train",
                         )
                         print(f"Training Accuracy (TOP): {train_acc_batch:.4f}")
                         try:
-                            self._record_accuracy("train", train_acc_batch, epoch=e + 1)
+                            self._record_accuracy("train", train_acc_batch, epoch=e + 1, method="top")
                             self._plot_accuracy()
                         except Exception:
                             pass
@@ -2423,10 +2516,31 @@ class snn_sleepy:
                                 print(
                                     f"Training Accuracy (PCA+LR): {train_acc_pca:.4f}"
                                 )
+                                
+                                # Also compute top_method accuracy for comparison
+                                try:
+                                    train_acc_top, dbg_train, state = WTA_accuracy(
+                                        spikes=spikes_tr_out[:, self.st : self.ex],
+                                        labels=labels_tr_out,
+                                        num_classes=self.N_classes,
+                                        smoothening=self.num_steps,
+                                        split="train",
+                                    )
+                                    print(
+                                        f"Training Accuracy (TOP): {train_acc_top:.4f}"
+                                    )
+                                except Exception as ex:
+                                    print(f"Warning: Top method accuracy computation failed ({ex})")
+                                    train_acc_top = None
+                                
                                 try:
                                     self._record_accuracy(
-                                        "train", train_acc_pca, epoch=e + 1
+                                        "train", train_acc_pca, epoch=e + 1, method="pca_lr"
                                     )
+                                    if train_acc_top is not None:
+                                        self._record_accuracy(
+                                            "train", train_acc_top, epoch=e + 1, method="top"
+                                        )
                                     self._plot_accuracy()
                                 except Exception:
                                     pass
@@ -2669,27 +2783,15 @@ class snn_sleepy:
                     )
 
                     if accuracy_method == "top":
-                        # calculate accuracy via top-responders heuristic
-                        print(f"Debug - Test data shape: {spikes_te_out.shape}")
-                        print(f"Debug - Labels shape: {labels_te_out.shape}")
-                        print(
-                            f"Debug - Labels range: {np.min(labels_te_out)} to {np.max(labels_te_out)}"
-                        )
-                        print(f"Debug - Unique labels: {np.unique(labels_te_out)}")
-                        print(f"Debug - narrow_top: {narrow_top}")
-                        print(f"Debug - num_classes: {self.N_classes}")
-
-                        acc_te_batch = top_responders_plotted(
-                            spikes=spikes_te_out[:, self.st : self.ih],
+                        acc_te_batch, dbg_test, _ = WTA_accuracy(
+                            spikes=spikes_te_out[:, self.st : self.ex],
                             labels=labels_te_out,
                             num_classes=self.N_classes,
-                            narrow_top=narrow_top,
                             smoothening=self.num_steps,
-                            train=False,
-                            compute_not_plot=True,
-                            n_last_points=10000,
+                            split="test",
+                            state=state,
                         )
-                        print(f"Debug - Raw validation accuracy: {acc_te_batch}")
+                        print(f"Validation Accuracy (WTA): {acc_te_batch:.4f}")
                         # accumulate over all validation batches
                         val_acc += acc_te_batch
                         val_batches_counted += 1
@@ -2758,40 +2860,7 @@ class snn_sleepy:
                             means = []
                             labs = []
 
-                            for i in range(num_blocks):
-                                block = spikes_te_out[
-                                    i * block_size : (i + 1) * block_size
-                                ]
-                                block_mean = np.mean(block, axis=0)
-                                means.append(block_mean)
-
-                                block_lab = labels_te_out[
-                                    i * block_size : (i + 1) * block_size
-                                ]
-                                block_maj = np.argmax(np.bincount(block_lab))
-                                labs.append(block_maj)
-
-                            spikes_agg = np.array(means)
-                            labels_agg = np.array(labs)
-
-                            # Get elite nodes (same as top_responders_plotted)
-                            indices, _, _ = get_elite_nodes(
-                                spikes=spikes_te_out,
-                                labels=labels_te_out,
-                                num_classes=self.N_classes,
-                                narrow_top=narrow_top,
-                            )
-
-                            # Calculate activations
-                            acts = np.zeros((spikes_agg.shape[0], self.N_classes))
-                            for c in range(self.N_classes):
-                                acts[:, c] = np.sum(
-                                    spikes_agg[:, indices[:, c]], axis=1
-                                )
-
-                            # Get predictions
-                            predictions = np.argmax(acts, axis=1)
-                            true_labels = labels_agg
+                            
                         else:
                             print(
                                 "Warning: Not enough blocks for top-responders analysis"
@@ -2995,9 +3064,25 @@ class snn_sleepy:
                                 y_test=y_te,
                             )
                             acc_te = float(accs.get("test", 0.0))
+                            
+                            # Also compute top_method validation accuracy for comparison
+                            try:
+                                val_acc_top, dbg_test, _ = WTA_accuracy(
+                                    spikes=spikes_te_out[:, self.st : self.ex],
+                                    labels=labels_te_out,
+                                    num_classes=self.N_classes,
+                                    smoothening=self.num_steps,
+                                    split="test",
+                                    state=state,
+                                )
+                                print(f"Validation Accuracy (WTA): {val_acc_top:.4f}")
+                            except Exception as ex_top:
+                                print(f"Warning: WTA validation accuracy computation failed ({ex_top})")
+                                val_acc_top = None
                     except Exception as ex:
                         print(f"Warning: PCA+LR accuracy failed ({ex}); using 0.0")
                         acc_te = 0.0
+                        val_acc_top = None
 
                 # Update performance tracking
                 self.performance_tracker[e] = [phi_te, acc_te]
@@ -3007,7 +3092,13 @@ class snn_sleepy:
                     self.val_performance_tracker = np.zeros((self.epochs, 2))
                 self.val_performance_tracker[e] = [phi_te, acc_te]
                 try:
-                    self._record_accuracy("val", acc_te, epoch=e + 1)
+                    if accuracy_method == "pca_lr":
+                        self._record_accuracy("val", acc_te, epoch=e + 1, method="pca_lr")
+                        if val_acc_top is not None:
+                            self._record_accuracy("val", val_acc_top, epoch=e + 1, method="top")
+                    elif accuracy_method == "top" and acc_te is not None:
+                        self._record_accuracy("val", acc_te, epoch=e + 1, method="top")
+                    self._record_phi("val", phi_te, epoch=e + 1)
                     self._plot_accuracy()
                 except Exception:
                     pass
@@ -3403,9 +3494,11 @@ class snn_sleepy:
                         _ca = common_args
                     except Exception:
                         _ca = dict(
-                            tau_syn=tau_syn,
+                            tau_syn_exc=tau_syn_exc,
+                            tau_syn_inh=tau_syn_inh,
                             resting_potential=self.resting_potential,
-                            membrane_resistance=membrane_resistance,
+                            membrane_resistance_exc=membrane_resistance_exc,
+                            membrane_resistance_inh=membrane_resistance_inh,
                             min_weight_exc=min_weight_exc,
                             max_weight_exc=max_weight_exc,
                             min_weight_inh=min_weight_inh,
@@ -3431,7 +3524,8 @@ class snn_sleepy:
                             w_target_inh=w_target_inh,
                             tau_LTP=tau_LTP,
                             tau_LTD=tau_LTD,
-                            tau_m=tau_m,
+                            tau_m_exc=tau_m_exc,
+                            tau_m_inh=tau_m_inh,
                             max_mp=max_mp,
                             min_mp=min_mp,
                             interval=interval,
@@ -3557,17 +3651,15 @@ class snn_sleepy:
                         isinstance(accuracy_method, str)
                         and accuracy_method.lower() == "top"
                     ):
-                        acc_top_sum += top_responders_plotted(
-                            spikes=spikes_te_out[:, self.st : self.ih],
+                        acc_top_sum, dbg_test, _ = WTA_accuracy(
+                            spikes=spikes_te_out[:, self.st : self.ex],
                             labels=labels_te_out,
                             num_classes=self.N_classes,
-                            narrow_top=narrow_top,
                             smoothening=self.num_steps,
-                            train=False,
-                            compute_not_plot=True,
-                            n_last_points=10000,
+                            split="test",
+                            state=state,
                         )
-
+                        acc_top_sum += acc_top_sum
                 # Slice outputs and store
                 self.spikes_test = all_spikes_test[:test_sample_count]
                 self.labels_test = all_labels_test[:test_sample_count]
@@ -3662,16 +3754,12 @@ class snn_sleepy:
                 )
 
         if plot_top_response_train:
-            top_responders_plotted(
+            WTA_accuracy(
                 spikes=self.spikes_train,
                 labels=self.labels_train,
-                ih=self.ih,
-                st=self.st,
                 num_classes=self.N_classes,
-                narrow_top=narrow_top,
                 smoothening=smoothening,
-                train=True,
-                wide_top=wide_top,
+                split="train",
             )
 
         if plot_spikes_train:
@@ -3714,16 +3802,12 @@ class snn_sleepy:
             )
 
         if plot_top_response_test:
-            top_responders_plotted(
+            WTA_accuracy(
                 spikes=self.spikes_test[50 * self.num_steps :],
                 labels=self.labels_test[50 * self.num_steps :],
-                ih=self.ih,
-                st=self.st,
                 num_classes=self.N_classes,
-                narrow_top=narrow_top,
                 smoothening=smoothening,
-                train=False,
-                wide_top=wide_top,
+                split="test",
             )
 
         if plot_spikes_test:
@@ -3946,7 +4030,8 @@ class snn_sleepy:
                             )
 
                             # plot gif
-                            self.plot_spikes(run=run)
+                            if get_giffed:
+                                self.plot_spikes(run=run)
 
                             # Clean up unused variables
                             del unused
@@ -4009,16 +4094,13 @@ class snn_sleepy:
                             )
 
                             # calculate accuracy
-                            acc_te = top_responders_plotted(
+                            acc_te, dbg_test, _ = WTA_accuracy(
                                 spikes=spikes_te_out,
                                 labels=labels_te_out,
-                                ih=self.ih,
-                                st=self.st,
                                 num_classes=self.N_classes,
-                                narrow_top=narrow_top,
                                 smoothening=self.num_steps,
-                                train=False,
-                                compute_not_plot=True,
+                                split="test",
+                                state=state,
                             )
 
                             # Store acc
@@ -4132,7 +4214,17 @@ class snn_sleepy:
                     random_state=random_state,
                     num_classes=self.N_classes,
                 )
-                test_phi = float(phi_tr) if phi_tr is not None else None
+                phi_train = float(phi_tr) if phi_tr is not None else None
+                phi_test = float(phi_te) if phi_te is not None else None
+                test_phi = phi_test
+                # Save phi results to JSONL file
+                try:
+                    if phi_train is not None:
+                        self._record_phi("train", phi_train)
+                    if phi_test is not None:
+                        self._record_phi("test", phi_test)
+                except Exception:
+                    pass
             else:
                 print("Skipping phi calculation: no training data (test-only run).")
         # Optional: PCA+LR end-to-end analysis only if training data exists
@@ -4174,7 +4266,7 @@ class snn_sleepy:
                     test_acc_dict = accs
                     try:
                         if isinstance(test_acc_dict, dict) and "test" in test_acc_dict:
-                            self._record_accuracy("test", test_acc_dict.get("test"))
+                            self._record_accuracy("test", test_acc_dict.get("test"), method="pca_lr")
                             self._plot_accuracy()
                     except Exception:
                         pass

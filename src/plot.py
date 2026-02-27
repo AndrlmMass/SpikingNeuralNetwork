@@ -315,50 +315,288 @@ def plot_glmm_with_raw_accuracy(
 
     return output_path
 
+def block_reduce(spikes, labels, block_size, reduce="sum"):
+    """Convert (T, N) spikes into (B, N) blocks and majority labels per block."""
+    if block_size <= 1:
+        return spikes, labels
 
-def get_elite_nodes(spikes, labels, num_classes, narrow_top):
+    # Drop break / sleep markers (negative labels) before forming blocks
+    valid_mask = labels >= 0
+    spikes = spikes[valid_mask]
+    labels = labels[valid_mask]
 
-    # remove unnecessary data periods
-    mask_break = (labels != -1) & (labels != -2)
-    spikes = spikes[mask_break, :]
-    labels = labels[mask_break]
+    num_blocks = spikes.shape[0] // block_size
+    if num_blocks == 0:
+        return spikes[:0], labels[:0]
 
-    print(f"Debug get_elite_nodes - spikes shape after filtering: {spikes.shape}")
-    print(f"Debug get_elite_nodes - labels shape after filtering: {labels.shape}")
-    print(f"Debug get_elite_nodes - unique labels after filtering: {np.unique(labels)}")
-    print(f"Debug get_elite_nodes - narrow_top: {narrow_top}")
+    spikes = spikes[: num_blocks * block_size]
+    labels = labels[: num_blocks * block_size]
 
-    # collect responses
-    responses = np.zeros(
-        (spikes.shape[1], num_classes), dtype=float
-    )  # make responses float too
+    blocks = spikes.reshape(num_blocks, block_size, spikes.shape[1])
+    if reduce == "mean":
+        spikes_b = blocks.mean(axis=1)
+    elif reduce == "sum":
+        spikes_b = blocks.sum(axis=1)
+    else:
+        raise ValueError("reduce must be 'mean' or 'sum'")
 
-    for cl in range(num_classes):
-        indices = np.where(labels == cl)[0]
-        summed = np.sum(spikes[indices], axis=0)  # still int at this point
-        response = summed.astype(float)  # now convert to float
-        response[response == 0] = np.nan  # safe to assign NaN
-        responses[:, cl] = response
+    labels_b = np.zeros(num_blocks, dtype=int)
+    for i in range(num_blocks):
+        lab_block = labels[i * block_size : (i + 1) * block_size]
+        # lab_block is now guaranteed non-negative
+        labels_b[i] = np.argmax(np.bincount(lab_block))
 
-    # compute discriminatory power
-    total_responses = np.sum(spikes, axis=0, dtype=float)
-    total_responses[total_responses == 0] = np.nan
-    total_responses_reshaped = np.tile(total_responses, (num_classes, 1)).T
-    ratio = responses / total_responses_reshaped
-    responses *= ratio
+    return spikes_b, labels_b
 
-    # Now, assign nodes to their preferred class (highest response)
-    responses_indices = np.argsort(responses, 0)[::-1, :]
-    top_k = int(spikes.shape[1] * narrow_top)
+def get_elite_nodes_wta(spikes, labels, num_classes, min_total_spikes=10):
+    mask = (labels >= 0) & (labels < num_classes)
+    spikes = spikes[mask]
+    labels = labels[mask]
 
-    print(f"Debug get_elite_nodes - total neurons: {spikes.shape[1]}")
-    print(f"Debug get_elite_nodes - top_k (neurons per class): {top_k}")
-    print(f"Debug get_elite_nodes - total elite neurons: {top_k * num_classes}")
+    N = spikes.shape[1]
+    # top_k = int(N * narrow_top)
 
-    # Assign top responders
-    final_indices = responses_indices[:top_k]
+    responses = np.zeros((N, num_classes), dtype=float)
+    for c in range(num_classes):
+        idx = np.where(labels == c)[0]
+        if idx.size > 0:
+            responses[:, c] = spikes[idx].sum(axis=0)
 
-    return final_indices, spikes, labels
+    total = responses.sum(axis=1)
+    score = np.full_like(responses, -np.inf)
+    valid = total >= min_total_spikes
+    score[valid] = responses[valid] / total[valid, None]
+
+    pref = np.full(N, -1, dtype=int)
+    pref[valid] = np.argmax(score[valid], axis=1)
+
+    return pref, score
+
+def zscore_vote(spikes, pref, baseline_mu, baseline_sigma, num_classes, eps=1e-8, mu_min=1e-3):
+    """
+    spikes: (B, N) block-reduced spikes
+    pref: (N,) neuron->class assignment
+    baseline_mu: (N,) mean firing from fit snippet
+    baseline_sigma: (N,) std firing from fit snip    # 4) class activations
+    acts = np.zeros((B, num_classes), dtype=float)pet
+    """
+    valid_neurons = baseline_mu >= mu_min
+
+    # Avoid divide-by-zero
+    sigma = np.maximum(baseline_sigma, eps)
+
+    z = np.zeros_like(spikes, dtype=float)
+    z[:, valid_neurons] = (spikes[:, valid_neurons] - baseline_mu[valid_neurons]) / (sigma[valid_neurons] + eps)
+    z = np.maximum(z, 0.0)
+
+    # 4) class activations
+    acts = np.zeros((spikes.shape[0], num_classes), dtype=float)
+
+    for c in range(num_classes):
+        idx = np.where((pref == c) & valid_neurons)[0]
+        if idx.size:
+            acts[:, c] = z[:, idx].mean(axis=1)
+
+    pred = np.argmax(acts, axis=1)
+    return pred, acts
+
+
+def WTA_accuracy(
+    spikes, labels, num_classes, smoothening,
+    split, state=None, fit_frac=0.8, reduce="sum",
+    min_total_spikes=1
+):
+    # ---- block reduce first (same unit for baseline & test) ----
+    spikes_b, labels_b = block_reduce(spikes, labels, smoothening, reduce=reduce)
+
+    if split == "train":
+        cut = int(len(labels_b) * fit_frac)
+        spikes_fit, labels_fit = spikes_b[:cut], labels_b[:cut]
+        spikes_test, labels_test = spikes_b[cut:], labels_b[cut:]
+
+        pref, score = get_elite_nodes_wta(spikes_fit, labels_fit, num_classes, min_total_spikes)
+        baseline_mu = spikes_fit.mean(axis=0)
+        baseline_sigma = spikes_fit.std(axis=0)
+
+        state = {"pref": pref, "baseline_mu": baseline_mu, "baseline_sigma": baseline_sigma}
+
+    elif split == "test":
+        if state is None:
+            raise ValueError("Pass state from train (pref + baseline_mu).")
+        pref = state["pref"]
+        baseline_mu = state["baseline_mu"]
+        baseline_sigma = state["baseline_sigma"]
+        spikes_test, labels_test = spikes_b, labels_b
+
+    else:
+        raise ValueError("split must be 'train' or 'test'")
+
+    # loop over each item and plot mean spikes per neuron
+    for i in range(len(labels_b)):
+        fig, ax = plt.subplots()
+        ax.bar(range(spikes_b.shape[1]), spikes_b[i])
+        ax.set_ylabel("Spikes")
+        ax.set_xlabel("Neuron")
+        ax.set_title(f"Class {labels_b[i]}")
+        idxs = np.where(pref == labels_b[i])[0]
+        for p in idxs:
+            ax.axvline(p, color="red", linewidth=1, alpha=0.2)
+        ax.legend(["Pref", "Spikes"])
+        plt.savefig(f"plots/spikes_item_{i}.png")
+        plt.show()
+
+    print("baseline_mu min/mean/max:", baseline_mu.min(), baseline_mu.mean(), baseline_mu.max())
+    print("nonzero pct:", np.mean(baseline_mu > 0))
+
+    pred, acts = zscore_vote(
+        spikes_test,
+        pref,
+        baseline_mu,
+        baseline_sigma,
+        num_classes,
+    )
+    # create bar plot of acts per item to gauge response in spikes and the comparable z-score
+
+
+    acc = (pred == labels_test).mean()
+
+    # Clip to non-negative before bincount to avoid errors
+    pred_safe = np.clip(pred, 0, num_classes - 1)
+    labels_test_safe = np.clip(labels_test, 0, num_classes - 1)
+    pref_safe = np.clip(pref, 0, num_classes - 1)
+
+    debug = {
+        "acc": float(acc),
+        "pred_dist": np.bincount(pred_safe, minlength=num_classes),
+        "label_dist": np.bincount(labels_test_safe, minlength=num_classes),
+        "neurons_per_class": np.bincount(pref_safe, minlength=num_classes),
+    }
+    print(debug)
+    return acc, debug, state
+
+    # fig, ax = plt.subplots(2, 1)
+
+    # # reduce samples
+    # cmap = plt.get_cmap("Set3", num_classes)
+    # colors = cmap.colors
+
+    # # Define an intensity factor (values between 0 and 1)
+    # intensity_factor = 0.5  # 70% of the original brightness
+
+    # # Reduce the intensity of each color by scaling its RGB components
+    # colors_adjusted = [
+    #     tuple(np.clip(np.array(color) * intensity_factor, 0, 1)) for color in colors
+    # ]
+
+    # block_size = smoothening
+
+    # # Calculate the number of complete blocks
+    # num_blocks = spikes.shape[0] // block_size
+
+    # # Initialize a list to hold the mean of each block
+    # means = []
+    # labs = []
+
+    # # Loop through each block, calculate mean along axis=0 (i.e. column-wise)
+    # for i in range(num_blocks):
+    #     # add spikes
+    #     block = spikes[i * block_size : (i + 1) * block_size]
+    #     block_mean = np.mean(block, axis=0)
+    #     means.append(block_mean)
+    #     # add labels
+    #     block_lab = labels[i * block_size : (i + 1) * block_size]
+    #     block_maj = np.argmax(np.bincount(block_lab))
+    #     labs.append(block_maj)
+
+    # # Optionally convert to a NumPy array for further processing
+    # spikes = np.array(means)
+    # labels = np.array(labs)
+
+    # acts = np.zeros((spikes.shape[0], num_classes))
+    # for c in range(num_classes):
+    #     activity = np.sum(spikes[:, indices[:, c]], axis=1)
+    #     acts[:, c] = activity
+
+    # # Determine the range of points to plot for activity
+    # if n_last_points is not None and n_last_points < len(acts):
+    #     start_idx = len(acts) - n_last_points
+    #     plot_acts = acts[start_idx:]
+    #     plot_labels = labels[start_idx:]
+    # else:
+    #     plot_acts = acts
+    #     plot_labels = labels
+
+    # # Plot activity for each class
+    # for c in range(num_classes):
+    #     ax[0].plot(plot_acts[:, c], color=colors[c], label=f"Class {c}")
+
+    # # Add the horizontal line below the spikes
+    # y_offset = 0
+    # box_height = np.max(plot_acts)
+
+    # # We iterate through the time steps to identify contiguous segments
+    # segment_start = 0
+    # current_label = plot_labels[0]
+    # labeled_classes = set()
+
+    # # Loop through the labels to draw segments
+    # for i in range(1, len(plot_labels)):
+    #     if plot_labels[i] != current_label:
+    #         # Draw a rectangle patch for the segment that just ended
+    #         rect = patches.Rectangle(
+    #             (segment_start, y_offset),
+    #             i - segment_start,  # width of the rectangle
+    #             box_height,  # height of the rectangle
+    #             linewidth=2,
+    #             facecolor=colors_adjusted[current_label],
+    #         )
+    #         ax[0].add_patch(rect)
+
+    #         # Mark this class as having been labeled
+    #         labeled_classes.add(current_label)
+
+    #         # Update for the new segment
+    #         current_label = plot_labels[i]
+    #         segment_start = i
+
+    # # Handle the final segment
+    # patch_label = (
+    #     f"Class {current_label}" if current_label not in labeled_classes else None
+    # )
+    # rect = patches.Rectangle(
+    #     (segment_start, y_offset),
+    #     len(plot_labels) - segment_start,
+    #     box_height,
+    #     linewidth=2,
+    #     edgecolor=colors_adjusted[current_label],
+    #     facecolor=colors_adjusted[current_label],
+    #     label=patch_label,
+    # )
+    # ax[0].add_patch(rect)
+
+    # if train:
+    #     title = "Top responding nodes by class during training"
+    # else:
+    #     title = "Top responding nodes by class during testing"
+    # ax[0].set_ylabel("Spiking rate")
+
+    # """
+    # Plot accuracy in second plot
+    # """
+    # predictions = np.argmax(acts, axis=1)
+    # precision = np.zeros(spikes.shape[0])
+    # hit = 0
+    # for i in range(precision.shape[0]):
+    #     hit += predictions[i] == labels[i]
+    #     precision[i] = hit / (i + 1)
+
+    # ax[1].plot(precision)
+    # ax[1].set_ylabel("Accuracy (%)")
+    # ax[1].set_xlabel(f"Time (intervals of {smoothening} ms)")
+    # ax[0].set_title(title)
+    # ax[0].legend(loc="upper right")
+    # plt.show()
+    # return precision[-1]
 
 
 def plot_epoch_training(acc, cluster, val_acc=None, val_phi=None):
@@ -395,195 +633,6 @@ def plot_epoch_training(acc, cluster, val_acc=None, val_phi=None):
     ax0.legend(lines, labels, loc="upper center")
 
     plt.show()
-
-
-def top_responders_plotted(
-    spikes,
-    labels,
-    num_classes,
-    narrow_top,
-    smoothening,
-    train,
-    compute_not_plot,
-    n_last_points=None,
-):
-
-    # get indicess
-    indices, spikes, labels = get_elite_nodes(
-        spikes=spikes,
-        labels=labels,
-        num_classes=num_classes,
-        narrow_top=narrow_top,
-    )
-
-    if compute_not_plot:
-        block_size = smoothening
-
-        # Calculate the number of complete blocks
-        num_blocks = spikes.shape[0] // block_size
-
-        # Initialize a list to hold the mean of each block
-        means = []
-        labs = []
-
-        # Loop through each block, calculate mean along axis=0 (i.e. column-wise)
-        for i in range(num_blocks):
-            # add spikes
-            block = spikes[i * block_size : (i + 1) * block_size]
-            block_mean = np.mean(block, axis=0)
-            means.append(block_mean)
-            # add labels
-            block_lab = labels[i * block_size : (i + 1) * block_size]
-            block_maj = np.argmax(np.bincount(block_lab))
-            labs.append(block_maj)
-
-        # Optionally convert to a NumPy array for further processing
-        spikes = np.array(means)
-        labels = np.array(labs)
-
-        acts = np.zeros((spikes.shape[0], num_classes))
-        for c in range(num_classes):
-            acts[:, c] = np.sum(spikes[:, indices[:, c]], axis=1)
-
-        predictions = np.argmax(acts, axis=1)
-        precision = np.zeros(spikes.shape[0])
-        hit = 0
-        for i in range(precision.shape[0]):
-            hit += predictions[i] == labels[i]
-            precision[i] = hit / (i + 1)
-
-        # Debug: Print some statistics
-        print(f"Debug accuracy - Total samples: {len(predictions)}")
-        print(f"Debug accuracy - Correct predictions: {hit}")
-        print(f"Debug accuracy - Final accuracy: {precision[-1]}")
-        print(f"Debug accuracy - Prediction distribution: {np.bincount(predictions)}")
-        print(f"Debug accuracy - Label distribution: {np.bincount(labels)}")
-
-        # return the final accuracy measurement
-        return precision[-1]
-    fig, ax = plt.subplots(2, 1)
-
-    # reduce samples
-    cmap = plt.get_cmap("Set3", num_classes)
-    colors = cmap.colors
-
-    # Define an intensity factor (values between 0 and 1)
-    intensity_factor = 0.5  # 70% of the original brightness
-
-    # Reduce the intensity of each color by scaling its RGB components
-    colors_adjusted = [
-        tuple(np.clip(np.array(color) * intensity_factor, 0, 1)) for color in colors
-    ]
-
-    block_size = smoothening
-
-    # Calculate the number of complete blocks
-    num_blocks = spikes.shape[0] // block_size
-
-    # Initialize a list to hold the mean of each block
-    means = []
-    labs = []
-
-    # Loop through each block, calculate mean along axis=0 (i.e. column-wise)
-    for i in range(num_blocks):
-        # add spikes
-        block = spikes[i * block_size : (i + 1) * block_size]
-        block_mean = np.mean(block, axis=0)
-        means.append(block_mean)
-        # add labels
-        block_lab = labels[i * block_size : (i + 1) * block_size]
-        block_maj = np.argmax(np.bincount(block_lab))
-        labs.append(block_maj)
-
-    # Optionally convert to a NumPy array for further processing
-    spikes = np.array(means)
-    labels = np.array(labs)
-
-    acts = np.zeros((spikes.shape[0], num_classes))
-    for c in range(num_classes):
-        activity = np.sum(spikes[:, indices[:, c]], axis=1)
-        acts[:, c] = activity
-
-    # Determine the range of points to plot for activity
-    if n_last_points is not None and n_last_points < len(acts):
-        start_idx = len(acts) - n_last_points
-        plot_acts = acts[start_idx:]
-        plot_labels = labels[start_idx:]
-    else:
-        plot_acts = acts
-        plot_labels = labels
-
-    # Plot activity for each class
-    for c in range(num_classes):
-        ax[0].plot(plot_acts[:, c], color=colors[c], label=f"Class {c}")
-
-    # Add the horizontal line below the spikes
-    y_offset = 0
-    box_height = np.max(plot_acts)
-
-    # We iterate through the time steps to identify contiguous segments
-    segment_start = 0
-    current_label = plot_labels[0]
-    labeled_classes = set()
-
-    # Loop through the labels to draw segments
-    for i in range(1, len(plot_labels)):
-        if plot_labels[i] != current_label:
-            # Draw a rectangle patch for the segment that just ended
-            rect = patches.Rectangle(
-                (segment_start, y_offset),
-                i - segment_start,  # width of the rectangle
-                box_height,  # height of the rectangle
-                linewidth=2,
-                facecolor=colors_adjusted[current_label],
-            )
-            ax[0].add_patch(rect)
-
-            # Mark this class as having been labeled
-            labeled_classes.add(current_label)
-
-            # Update for the new segment
-            current_label = plot_labels[i]
-            segment_start = i
-
-    # Handle the final segment
-    patch_label = (
-        f"Class {current_label}" if current_label not in labeled_classes else None
-    )
-    rect = patches.Rectangle(
-        (segment_start, y_offset),
-        len(plot_labels) - segment_start,
-        box_height,
-        linewidth=2,
-        edgecolor=colors_adjusted[current_label],
-        facecolor=colors_adjusted[current_label],
-        label=patch_label,
-    )
-    ax[0].add_patch(rect)
-
-    if train:
-        title = "Top responding nodes by class during training"
-    else:
-        title = "Top responding nodes by class during testing"
-    ax[0].set_ylabel("Spiking rate")
-
-    """
-    Plot accuracy in second plot
-    """
-    predictions = np.argmax(acts, axis=1)
-    precision = np.zeros(spikes.shape[0])
-    hit = 0
-    for i in range(precision.shape[0]):
-        hit += predictions[i] == labels[i]
-        precision[i] = hit / (i + 1)
-
-    ax[1].plot(precision)
-    ax[1].set_ylabel("Accuracy (%)")
-    ax[1].set_xlabel(f"Time (intervals of {smoothening} ms)")
-    ax[0].set_title(title)
-    ax[0].legend(loc="upper right")
-    plt.show()
-    return precision[-1]
 
 
 def spike_plot(data, labels):

@@ -663,12 +663,12 @@ class ImageDataStreamer:
         # Reshape to match your expected format (T*B, N_pixels) -> (10000,225)
         spikes = spikes_flat.transpose(0, 1).reshape(spikes_flat.shape[1]*spikes_flat.shape[0], spikes_flat.shape[2])
 
-        import matplotlib.pyplot as plt
+        # import matplotlib.pyplot as plt
 
-        fig, ax = plt.subplots(figsize=(10, 10))
-        ax.imshow(images[0].cpu().numpy().squeeze(0))
-        plt.show()
-        plt.close(fig)
+        # fig, ax = plt.subplots(figsize=(10, 10))
+        # ax.imshow(images[0].cpu().numpy().squeeze(0))
+        # plt.show()
+        # plt.close(fig)
 
         return spikes.cpu().numpy()
 

@@ -58,7 +58,7 @@ def run_once(
         tau_m_exc = 30
         tau_m_inh = 20
         Rm_exc = 10
-        Rm_inh = 15
+        Rm_inh = 20
         max_rate_hz = 1000.0
 
 
@@ -79,8 +79,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 6000, 500, 1000
-        b_tr, b_va, b_te = 500, 500, 500
+        img_tr, img_va, img_te = 6000, 100, 2000
+        b_tr, b_va, b_te = 100, 100, 500
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -382,8 +382,8 @@ def main():
         default="mnist",
         help="image dataset to use for image-only or multimodal modes",
     )
-    parser.add_argument("--heatmap_plot", action="store_true", default=True, help="plot the heatmap of the weights")
-    parser.add_argument("--get_giffed", action="store_true", default=False, help="create gif from heatmap plots")
+    parser.add_argument("--heatmap-plot", action="store_true", default=False, help="plot the heatmap of the weights")
+    parser.add_argument("--get-giffed", action="store_true", default=False, help="create gif from heatmap plots")
     parser.add_argument(
         "--geom-noise-var",
         type=float,

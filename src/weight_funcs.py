@@ -372,17 +372,17 @@ def spike_timing(
                     delta_w = learning_rate_exc * (x_pre_exc - x_tar) * (w_max - weights[j, i])**mu 
                     weights[j, i] += delta_w
 
-            else:  # inhibitory synapse (your chosen rule)
-                if spikes[j] == 1:
-                    x_post = spike_trace[i]
-                    # pre spike: correlate with recent post activity, minus target
-                    delta_w = learning_rate_inh * (x_post - rho)
-                    weights[j, i] -= delta_w
+            # else:  # inhibitory synapse (your chosen rule)
+            #     if spikes[j] == 1:
+            #         x_post = spike_trace[i]
+            #         pre spike: correlate with recent post activity, minus target
+            #         delta_w = learning_rate_inh * (x_post - rho)
+            #         weights[j, i] -= delta_w
 
-                if spikes[i] == 1:
-                    x_pre_inh = spike_trace[j]
-                    # post spike: correlate with recent pre activity
-                    delta_w = learning_rate_inh * x_pre_inh
-                    weights[j, i] -= delta_w
+            #     if spikes[i] == 1:
+            #         x_pre_inh = spike_trace[j]
+            #         post spike: correlate with recent pre activity
+            #         delta_w = learning_rate_inh * x_pre_inh
+            #         weights[j, i] -= delta_w
 
     return weights
