@@ -3,6 +3,7 @@ from matplotlib.colors import ListedColormap, BoundaryNorm
 import networkx as nx
 import numpy as np
 import matplotlib
+
 matplotlib.use("TkAgg")
 
 
@@ -13,13 +14,23 @@ def enforce_per_exc_sparsity(W_se, frac=0.10):
     """
     W = W_se.copy()
     N_x = W.shape[0]
-    k = int(np.ceil(frac * N_x))
+    k = int(np.floor(frac * N_x))
 
-    for j in range(W.shape[1]):
+    # get nonzero weights
+    for j in range(
+        W.shape[1]
+    ):  # Get indices of top-k scores (O(N_x) average, faster than full sort)
+        # get current pre-synaptic weights
         col = W[:, j]
-        if k < len(col):
-            thresh = np.partition(col, -k)[-k]
-            col[col < thresh] = 0.0
+        # get top-responding
+        topk_idx = np.argpartition(col, -k)[-k:]
+
+        # Build mask: keep only those indices
+        mask = np.zeros(N_x, dtype=bool)
+        mask[topk_idx] = True
+
+        # Zero the rest
+        col[~mask] = 0.0
         W[:, j] = col
 
     return W
@@ -90,15 +101,18 @@ def gaussian_ei_local(N_exc, N_inh, H_e, W_e, sigma=1.5, peak=1.0, frac=None):
     W_ei *= peak
 
     if frac is not None:
-        W_ei = topk_mask_per_col(W_ei, frac)   # keeps top frac of excitatory inputs per inhibitory neuron
+        W_ei = topk_mask_per_col(
+            W_ei, frac
+        )  # keeps top frac of excitatory inputs per inhibitory neuron
 
     return W_ei, home_idx, centers
+
 
 def mexican_hat_ie_far(
     H_e, W_e, inh_centers, peak=1.0, frac=None, r0=2.0, sigma_r=2.0, local_r=2.0
 ):
     coords = exc_coords(H_e, W_e)  # (N_exc,2)
-    centers = inh_centers           # (N_inh,2) — continuous positions
+    centers = inh_centers  # (N_inh,2) — continuous positions
 
     # Distances from inhibitory center to each excit neuron -> (N_inh, N_exc)
     d2 = ((centers[:, None, :] - coords[None, :, :]) ** 2).sum(axis=2)
@@ -120,6 +134,19 @@ def mexican_hat_ie_far(
     return W_ie
 
 
+def torus_d2(centers, coords, H, W):
+    """
+    centers: (N_post, 2)  [row, col] float or int
+    coords:  (N_pre,  2)  [row, col] float or int
+    returns: (N_post, N_pre) squared torus distance
+    """
+    dr = np.abs(centers[:, None, 0] - coords[None, :, 0])
+    dc = np.abs(centers[:, None, 1] - coords[None, :, 1])
+    dr = np.minimum(dr, H - dr)
+    dc = np.minimum(dc, W - dc)
+    return dr * dr + dc * dc
+
+
 def gaussian_se_weights(
     N_x, N_exc, H, W, H_e, W_e, sigma=2.0, peak=1.0, truncate=0.01, fraction=0.1
 ):
@@ -128,33 +155,40 @@ def gaussian_se_weights(
     Each excitatory neuron gets a Gaussian receptive field over the (H,W) input grid.
     """
     assert H * W == N_x
-    assert H_e * W_e >= N_exc
+    assert H_e * W_e == N_exc
 
+    # define ratio between layers
+    step_size = N_x / N_exc
+
+    # create 1D array of centers
+    centers_1d = np.arange(0, N_x, step_size)
+
+    # convert centers to 2D
+    rows = centers_1d // W
+    cols = centers_1d % W
+
+    # combine cols and rows
+    centers = np.stack((rows, cols), axis=1)
+
+    # define input space
     inp_coords = np.array([(r, c) for r in range(H) for c in range(W)], dtype=float)
-
-    # Use the SAME grid as E→E, E→I, I→E
-    centers_r = np.linspace(0, H - 1, H_e)
-    centers_c = np.linspace(0, W - 1, W_e)
-    centers = np.array([(r, c) for r in centers_r for c in centers_c], dtype=float)[:N_exc]
 
     # Compute Gaussian weights: for each exc center, distance^2 to all inputs
     # Result: (N_exc, N_x)
-    d2 = ((centers[:, None, :] - inp_coords[None, :, :]) ** 2).sum(axis=2)
-    G = np.exp(-d2 / (2 * sigma**2))
+    d2 = torus_d2(centers, inp_coords, H, W)
+    G_post_pre = peak * np.exp(-d2 / (2 * sigma**2))  # (N_exc, N_x)
 
-    # Normalize each receptive field and scale by peak
-    G /= G.max(axis=1, keepdims=True) + 1e-12
-    G *= peak
+    # convert to pre×post weights (N_x, N_exc)
+    W_se = G_post_pre.T
 
-    # Truncate tiny weights to exactly 0 for sparsity
-    if truncate is not None:
-        G[G < truncate] = 0.0
+    # sparsify per excitatory neuron (per column)
+    W_se = enforce_per_exc_sparsity(W_se, frac=fraction)
 
-    # enforce sparsity
-    G = enforce_per_exc_sparsity(G.T, frac=fraction)
+    # sanity check: incoming per exc
+    S = W_se.sum(axis=0)
+    print("incoming per exc:", S.min(), S.max(), S.mean(), "ratio", S.max() / S.min())
 
-    # Return in (N_x, N_exc) orientation for weights[:st, st:ex]
-    return G
+    return W_se
 
 
 def grid_shape(n):
@@ -222,15 +256,18 @@ def gaussian_ee_weights(
 
     return W
 
-def create_3D_weights_plot(weights, title, x_label, y_label, z_label, axis_flip, H_, W_):
+
+def create_3D_weights_plot(
+    weights, title, x_label, y_label, z_label, axis_flip, H_, W_
+):
     total_input = weights.sum(axis=axis_flip)
     Z = total_input.reshape(H_, W_)
     x = np.arange(W_)
     y = np.arange(H_)
     X, Y = np.meshgrid(x, y)
     fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(X, Y, Z, cmap='viridis')
+    ax = fig.add_subplot(111, projection="3d")
+    ax.plot_surface(X, Y, Z, cmap="viridis")
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
     ax.set_zlabel(z_label)
@@ -238,15 +275,17 @@ def create_3D_weights_plot(weights, title, x_label, y_label, z_label, axis_flip,
     plt.show()
     return fig, ax
 
+
 def plot_weights_individual(weights, H_, W_, N, title):
     for j in range(N // 2, N):
-        rf = weights[j, :].reshape(H_, W_)
+        rf = weights[:, j].reshape(H_, W_)
         plt.imshow(rf)
         plt.title(f"{title} {j}")
         plt.colorbar()
         plt.show()
         if input("Press Enter to continue...") == "q":
             break
+
 
 # Create weight array
 def create_weights(
@@ -271,7 +310,7 @@ def create_weights(
     st = N_x  # stimulation
     ex = st + N_exc  # excitatory
     ih = ex + N_inh  # inhibitory
-    plot_weights_st = False
+    plot_weights_st = True
     plot_weights_ex = False
     plot_weights_ei = False
     plot_weights_ie = False
@@ -285,7 +324,7 @@ def create_weights(
     ref_x = np.sqrt(H * W)
     ref_e = np.sqrt(H_e * W_e)
 
-    _fse = 0.5 / ref_x
+    _fse = 2.0 / ref_x
     _fee = 0.8 / ref_e
     _fei = 1.0 / ref_e
     _fr0 = 3.0 / ref_e
@@ -308,7 +347,6 @@ def create_weights(
         # input poisson weights
         weights[:st, st:ex][mask_se] = se_weights
 
-
         # hidden excitatory weights
         weights[st:ex, st:ex][mask_ee] = ee_weights
         # remove excitatory self-connecting (diagonal) weights
@@ -324,8 +362,7 @@ def create_weights(
         weights[ex:ih, st:ex][inh_mask] = 0
 
     else:
-
-        weights_st_ex = gaussian_se_weights(
+        W_se = gaussian_se_weights(
             N_x,
             N_exc,
             H,
@@ -337,9 +374,10 @@ def create_weights(
             truncate=0.01,
             fraction=w_dense_se,
         )
-        weights[:st, st:ex] = weights_st_ex
+        weights[:st, st:ex] = W_se
+        print(f"density receiving W_se: {(W_se > 0).mean(axis=0).mean()}")
 
-        weights_ex_ex = gaussian_ee_weights(
+        W_ee = gaussian_ee_weights(
             N_exc,
             H_e,
             W_e,
@@ -347,7 +385,8 @@ def create_weights(
             peak=ee_weights,
             frac=w_dense_ee,
         )
-        weights[st:ex, st:ex] = weights_ex_ex
+        weights[st:ex, st:ex] = W_ee
+        print(f"density receiving W_ee: {(W_ee > 0).mean(axis=0).mean()}")
 
         # --- E->I local pooling ---
         W_ei, _, inh_centers = gaussian_ei_local(
@@ -360,6 +399,7 @@ def create_weights(
             frac=w_dense_ei,  # density meaning: fraction of exc inputs to each I
         )
         weights[st:ex, ex:ih] = W_ei
+        print(f"density receiving W_ei: {(W_ei > 0).mean(axis=0).mean()}")
 
         H_i, W_i = 10, 25
 
@@ -368,7 +408,7 @@ def create_weights(
             H_e=H_e,
             W_e=W_e,
             inh_centers=inh_centers,
-            peak=ie_weights,  
+            peak=ie_weights,
             frac=w_dense_ie,
             r0=rf_scale * _fr0 * ref_e,
             sigma_r=rf_scale * _fsr * ref_e,
@@ -376,25 +416,98 @@ def create_weights(
         )
 
         weights[ex:ih, st:ex] = W_ie
+        print(f"density receiving W_ie: {(np.abs(W_ie) > 0).mean(axis=0).mean()}")
 
     if plot_weights_st:
-        create_3D_weights_plot(weights[:st, st:ex], "ST->EX Outgoing Weights", "input neuron", "input neuron", "connectivity strength", 1, H, W)
-        create_3D_weights_plot(weights[:st, st:ex], "ST->EX Incoming Weights", "excitatory neuron", "excitatory neuron", "connectivity strength", 0, H_e, W_e)
-        plot_weights_individual(weights[:st, st:ex], H_e, W_e, N_x, "ST->EX")
+        create_3D_weights_plot(
+            weights[:st, st:ex],
+            "ST->EX Outgoing Weights",
+            "input neuron",
+            "input neuron",
+            "connectivity strength",
+            1,
+            H,
+            W,
+        )
+        create_3D_weights_plot(
+            weights[:st, st:ex],
+            "ST->EX Incoming Weights",
+            "excitatory neuron",
+            "excitatory neuron",
+            "connectivity strength",
+            0,
+            H_e,
+            W_e,
+        )
+        plot_weights_individual(weights[:st, st:ex], H, W, N_x, "ST->EX")
 
     if plot_weights_ex:
-        create_3D_weights_plot(weights[st:ex, st:ex], "EX->EX Outgoing Weights", "excitatory neuron", "excitatory neuron", "connectivity strength", 1, H_e, W_e)
-        create_3D_weights_plot(weights[st:ex, st:ex], "EX->EX Incoming Weights", "excitatory neuron", "inhibitory neuron", "connectivity strength", 0, H_e, W_e)
+        create_3D_weights_plot(
+            weights[st:ex, st:ex],
+            "EX->EX Outgoing Weights",
+            "excitatory neuron",
+            "excitatory neuron",
+            "connectivity strength",
+            1,
+            H_e,
+            W_e,
+        )
+        create_3D_weights_plot(
+            weights[st:ex, st:ex],
+            "EX->EX Incoming Weights",
+            "excitatory neuron",
+            "inhibitory neuron",
+            "connectivity strength",
+            0,
+            H_e,
+            W_e,
+        )
         plot_weights_individual(weights[st:ex, st:ex], H_e, W_e, N_exc, "EX->EX")
     if plot_weights_ei:
-        create_3D_weights_plot(weights[st:ex, ex:ih], "E->I Outgoing Weights", "excitatory neuron", "excitatory neuron", "connectivity strength", 1, H_e, W_e)
-        create_3D_weights_plot(weights[st:ex, ex:ih], "E->I Incoming Weights", "inhibitory neuron", "inhibitory neuron", "connectivity strength", 0, H_i, W_i)
+        create_3D_weights_plot(
+            weights[st:ex, ex:ih],
+            "E->I Outgoing Weights",
+            "excitatory neuron",
+            "excitatory neuron",
+            "connectivity strength",
+            1,
+            H_e,
+            W_e,
+        )
+        create_3D_weights_plot(
+            weights[st:ex, ex:ih],
+            "E->I Incoming Weights",
+            "inhibitory neuron",
+            "inhibitory neuron",
+            "connectivity strength",
+            0,
+            H_i,
+            W_i,
+        )
         plot_weights_individual(weights[st:ex, ex:ih], H_i, W_i, N_exc, "E->I")
     if plot_weights_ie:
-        create_3D_weights_plot(np.abs(weights[ex:ih, st:ex]), "I->E Outgoing Weights", "inhibitory neuron", "inhibitory neuron", "connectivity strength", 1, H_i, W_i)
-        create_3D_weights_plot(np.abs(weights[ex:ih, st:ex]), "I->E Incoming Weights", "excitatory neuron", "excitatory neuron", "connectivity strength", 0, H_e, W_e)
+        create_3D_weights_plot(
+            np.abs(weights[ex:ih, st:ex]),
+            "I->E Outgoing Weights",
+            "inhibitory neuron",
+            "inhibitory neuron",
+            "connectivity strength",
+            1,
+            H_i,
+            W_i,
+        )
+        create_3D_weights_plot(
+            np.abs(weights[ex:ih, st:ex]),
+            "I->E Incoming Weights",
+            "excitatory neuron",
+            "excitatory neuron",
+            "connectivity strength",
+            0,
+            H_e,
+            W_e,
+        )
         plot_weights_individual(np.abs(weights[ex:ih, st:ex]), H_e, W_e, N_inh, "I->E")
-    
+
     # if plot_weights:
     if plot_weights:
         boundaries = [np.min(weights), -0.001, 0.001, np.max(weights)]
