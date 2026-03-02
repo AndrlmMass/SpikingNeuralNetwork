@@ -1,16 +1,14 @@
 import os
 import random
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-import matplotlib
 import librosa
 import librosa.display
 
-matplotlib.use("Agg")
-
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
 from PIL import Image
 import glob
@@ -432,18 +430,20 @@ def WTA_accuracy(
         raise ValueError("split must be 'train' or 'test'")
 
     # loop over each item and plot mean spikes per neuron
-    for i in range(len(labels_b)):
-        fig, ax = plt.subplots()
-        ax.bar(range(spikes_b.shape[1]), spikes_b[i])
-        ax.set_ylabel("Spikes")
-        ax.set_xlabel("Neuron")
-        ax.set_title(f"Class {labels_b[i]}")
-        idxs = np.where(pref == labels_b[i])[0]
-        for p in idxs:
-            ax.axvline(p, color="red", linewidth=1, alpha=0.2)
-        ax.legend(["Pref", "Spikes"])
-        plt.savefig(f"plots/spikes_item_{i}.png")
-        plt.show()
+    # for i in range(len(labels_b)):
+    #     fig, ax = plt.subplots()
+    #     ax.bar(range(spikes_b.shape[1]), spikes_b[i])
+    #     ax.set_ylabel("Spikes")
+    #     ax.set_xlabel("Neuron")
+    #     ax.set_title(f"Class {labels_b[i]}")
+    #     idxs = np.where(pref == labels_b[i])[0]
+    #     response = np.sum(spikes_b[i, idxs])
+    #     population_response = np.sum(spikes_b[i])
+    #     for p in idxs:
+    #         ax.axvline(p, color="red", linewidth=1, alpha=0.2)
+    #     ax.legend(["Pref", "Spikes", f"Response: {response:.2f}", f"Population: {population_response:.2f}"])
+    #     plt.savefig(f"plots/spikes_item_{i}.png")
+    #     plt.show()
 
     print("baseline_mu min/mean/max:", baseline_mu.min(), baseline_mu.mean(), baseline_mu.max())
     print("nonzero pct:", np.mean(baseline_mu > 0))
@@ -878,12 +878,17 @@ def heatmap_spike_response(
     run,
     dataset,
     num,
+    st,
+    spike_trace,
+    ex,
+    x_target,
     weight_tracking_sleep,
     weights_st_ex,
     weights_ex_ex,
     weights_ex_ih,
     weights_ih_ex,
 ):
+
     # define subplot
     fig, axs = plt.subplots(figsize=(10, 6), nrows=3, ncols=4)
 
@@ -905,8 +910,9 @@ def heatmap_spike_response(
 
         avg_spikes_reshaped = avg_spikes.reshape((rows, cols))
         im = ax.imshow(avg_spikes_reshaped, cmap="viridis", interpolation="nearest")
-        fig.colorbar(im, ax=ax, shrink=0.5)
-        ax.set_title(title, fontsize=10)
+        cbar = fig.colorbar(im, ax=ax, shrink=0.5)
+        cbar.ax.tick_params(labelsize=3)  # Adjust this value as needed
+        ax.set_title(title, fontsize=5)
         ax.set_xticks([])
         ax.set_yticks([])
         return im
@@ -916,6 +922,23 @@ def heatmap_spike_response(
     create_plot(spikes_in, axs[0, 0], "Input activity", input_size, input_size, ax_flip=0)
     create_plot(spikes_exc, axs[0, 1], "Excitatory activity", 25, 40, ax_flip=0)
     create_plot(spikes_ih, axs[0, 2], "Inhibitory activity", 10, 25, ax_flip=0)
+
+    # add barplot of spike_trace distribution
+    n = len(spike_trace)
+    colors = []
+    for i in range(n):
+        if i < st:
+            colors.append("green")
+        elif i < ex:
+            colors.append("blue")
+        else:
+            colors.append("red")
+
+    axs[0, 3].bar(np.arange(len(spike_trace)), spike_trace, color=colors)
+    axs[0, 3].set_title("Spike trace distribution")
+    axs[0, 3].set_xlabel("Neuron")
+    axs[0, 3].set_ylabel("Spike count", fontsize=5)
+    axs[0, 3].axhline(y=x_target, color="black", linestyle="--", linewidth=1)
 
     # (Optional) bottom plot: example summary trace
     # If you don’t want this, delete these lines.
@@ -984,14 +1007,7 @@ def gif_spike_rate_by_label(
         return
 
     frame_one = frames[0]
-    frame_one.save(
-        output_filename,
-        format="GIF",
-        append_images=frames[1:],
-        save_all=True,
-        duration=duration,
-        loop=loop,
-    )
+    frame_one.save(output_filename, format="GIF", append_images=frames[1:], save_all=True, duration=duration, loop=loop)
 
     print("gif made!")
 

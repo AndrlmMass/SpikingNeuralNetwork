@@ -344,12 +344,18 @@ def spike_timing(
     N_x,  # Starting index for postsynaptic neurons
     spikes,  # Binary spike indicator array
     nonzero_pre_idx,  # Typed list: for each post neuron, an array of nonzero pre indices
+    x_tar,
+    track_weights,
 ):
     n_neurons = spike_trace.shape[0]
-    rho = 0.001
-    x_tar = 0.25
-    mu = 0.8
+    #rho = 0.001
+    mu = 0.6
     w_max = 3.0
+    if track_weights:
+        list_x_pre = []
+        first_term = []
+        second_term = []
+        delta_w_list = []
 
     # Loop over postsynaptic neurons, parallelized.
     for i in prange(N_x, n_neurons):
@@ -359,18 +365,22 @@ def spike_timing(
         pre_indices = nonzero_pre_idx[i-N_x]
 
         # Iterate only over connections that exist.
-        for j in pre_indices:
-            # Skip if the presynaptic neuron did not spike
-            if spikes[j] == 0 and spikes[i] == 0:
-                continue
-
-            # Determine if the connection is excitatory or inhibitory.
-            if j < (n_neurons - N_inh):  # excitatory synapse
-                if spikes[i] == 1:
+        if spikes[i] == 1:
+            for j in pre_indices:
+                # Determine if the connection is excitatory or inhibitory.
+                if j < (n_neurons - N_inh):  # excitatory synapse
                     x_pre_exc = spike_trace[j]
                     # add to average pre activity
-                    delta_w = learning_rate_exc * (x_pre_exc - x_tar) * (w_max - weights[j, i])**mu 
+                    base = max(w_max - weights[j, i], 0.0)
+                    delta_w = learning_rate_exc * (x_pre_exc - x_tar) * base**mu 
+                    #print(f"delta_w: {delta_w}", f"x_pre_exc: {x_pre_exc}", f"x_tar: {x_tar}", f"first_term: {x_pre_exc - x_tar}", f"second term: {(w_max - weights[j, i])**mu}")
                     weights[j, i] += delta_w
+
+                    if track_weights:
+                        list_x_pre.append(x_pre_exc)
+                        first_term.append(x_pre_exc - x_tar)
+                        second_term.append(base**mu)
+                        delta_w_list.append(delta_w)
 
             # else:  # inhibitory synapse (your chosen rule)
             #     if spikes[j] == 1:
@@ -383,6 +393,9 @@ def spike_timing(
             #         x_pre_inh = spike_trace[j]
             #         post spike: correlate with recent pre activity
             #         delta_w = learning_rate_inh * x_pre_inh
-            #         weights[j, i] -= delta_w
+            #         weights[j, i] -= delta_w  
 
-    return weights
+    if track_weights:
+        return weights, list_x_pre, first_term, second_term, delta_w_list
+    else:
+        return weights, None, None, None, None

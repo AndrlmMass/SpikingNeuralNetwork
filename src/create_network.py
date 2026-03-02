@@ -285,8 +285,8 @@ def create_weights(
     ref_x = np.sqrt(H * W)
     ref_e = np.sqrt(H_e * W_e)
 
-    _fse = 1.0 / ref_x
-    _fee = 0.5 / ref_e
+    _fse = 0.5 / ref_x
+    _fee = 0.8 / ref_e
     _fei = 1.0 / ref_e
     _fr0 = 3.0 / ref_e
     _fsr = 0.5 / ref_e

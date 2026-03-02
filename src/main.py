@@ -47,19 +47,19 @@ def run_once(
         use_validation_data = True
         w_dense_se = 0.1
         w_dense_ee = 0.1
-        w_dense_ei = 0.2
+        w_dense_ei = 0.1
         w_dense_ie = 0.1
         se_weights = 3.0
-        ee_weights = 1.0
-        ei_weights = 2.0
-        ie_weights = -1.0
-        tau_syn_exc = 15
+        ee_weights = 3.0
+        ei_weights = 3.0
+        ie_weights = -2.0
+        tau_syn_exc = 7.5
         tau_syn_inh = 7.5
-        tau_m_exc = 30
-        tau_m_inh = 20
-        Rm_exc = 10
-        Rm_inh = 20
-        max_rate_hz = 1000.0
+        tau_m_exc = 5
+        tau_m_inh = 5
+        Rm_exc = 50
+        Rm_inh = 50
+        max_rate_hz = 67.0
 
 
     ts_spec = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -79,8 +79,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 6000, 100, 2000
-        b_tr, b_va, b_te = 100, 100, 500
+        img_tr, img_va, img_te = 30000, 300, 5000
+        b_tr, b_va, b_te = 300, 300, 500
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -146,7 +146,7 @@ def run_once(
         pr = cProfile.Profile()
         pr.enable()
         snn_N.train_network(
-            train_weights=True,
+            train_weights=not args.no_train,
             noisy_potential=True,
             compare_decay_rates=False,
             check_sleep_interval=35000,
@@ -176,6 +176,8 @@ def run_once(
             plot_spectrograms=False,
             use_validation_data=False,
             var_noise=args.noise_level,
+            x_tar=0.4,
+            track_weights=bool(args.track_weights),
             sleep=not args.no_sleep,
             sleep_mode=str(args.sleep_mode),
             narrow_top=0.2,
@@ -214,7 +216,7 @@ def run_once(
             print(f"WARNING: could not write/print profile stats: {e}")
     else:
         snn_N.train_network(
-            train_weights=True,
+            train_weights=not args.no_train,
             noisy_potential=True,
             compare_decay_rates=False,
             check_sleep_interval=35000,
@@ -246,6 +248,8 @@ def run_once(
             membrane_resistance_exc=Rm_exc,
             membrane_resistance_inh=Rm_inh,
             min_weight_inh=-25,
+            x_tar=0.4,
+            track_weights=bool(args.track_weights),
             sleep=not args.no_sleep,
             sleep_mode=str(args.sleep_mode),
             narrow_top=0.2,
@@ -292,6 +296,7 @@ def run_once(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", type=int, default=1, help="number of repeated runs")
+    parser.add_argument("--no-train", action="store_true", default=False, help="disable training")
     parser.add_argument(
         "--sleep-rate",
         type=float,
@@ -352,6 +357,12 @@ def main():
         help="create minimal dataset (geomfig: 4 per split) and force recreate",
     )
     parser.add_argument(
+        "--track-weights",
+        action="store_true",
+        default=False,
+        help="track weights during training",
+    )
+    parser.add_argument(
         "--dataset",
         type=str,
         choices=[
@@ -382,7 +393,7 @@ def main():
         default="mnist",
         help="image dataset to use for image-only or multimodal modes",
     )
-    parser.add_argument("--heatmap-plot", action="store_true", default=False, help="plot the heatmap of the weights")
+    parser.add_argument("--heatmap-plot", action="store_true", default=True, help="plot the heatmap of the weights")
     parser.add_argument("--get-giffed", action="store_true", default=False, help="create gif from heatmap plots")
     parser.add_argument(
         "--geom-noise-var",

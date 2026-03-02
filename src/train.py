@@ -99,6 +99,8 @@ def update_weights(
     learning_rate_inh,
     tau_LTP,
     tau_LTD,
+    track_weights,
+    x_tar,
     st=None,
     ex=None,
     ih=None,
@@ -141,16 +143,20 @@ def update_weights(
     # Old threshold-based sleep removed; now using schedule-based sleep only
 
     if timing_update:
-        weights = spike_timing(
+        weights, list_x_pre, first_term, second_term, delta_w = spike_timing(
             learning_rate_exc=learning_rate_exc,
             learning_rate_inh=learning_rate_inh,
             N_inh=N_inh,
             weights=weights,
             N_x=N_x,
             spikes=spikes,
+            x_tar=x_tar,
             nonzero_pre_idx=nonzero_pre_idx,
             spike_trace=spike_trace,
+            track_weights=track_weights,
         )
+        if track_weights:
+            print(f"list_x_pre: {sum(list_x_pre)/(len(list_x_pre)+1e-5)}", f"first_term: {sum(first_term)/(len(first_term)+1e-3)}", f"second_term: {sum(second_term)/(len(second_term)+1e-3)}", f"x_tar: {x_tar}", f"delta_w: {sum(delta_w)/(len(delta_w)+1e-3)}")
 
     # add noise to weights if desired
     if noisy_weights:
@@ -238,7 +244,7 @@ def update_membrane_potential(
         return mp_new, I_syn_exc, I_syn_inh, {
             "delta_mp_ex": mp_delta_exc,
             "delta_mp_ih": mp_delta_inh,
-            "delta_I_syn_ex": delta_I_syn_exc,
+            "delta_I_syn_exc": delta_I_syn_exc,
             "delta_I_syn_inh": delta_I_syn_inh,
         }
     else:
@@ -381,6 +387,8 @@ def train_network(
     tau_trace,
     tau_syn_exc,
     tau_syn_inh,
+    track_weights,
+    x_tar,
     beta,
     mean_noise,
     var_noise,
@@ -473,7 +481,7 @@ def train_network(
     # Compute for neurons N_x to N_post-1
     nonzero_pre_idx = List()
     for i in range(st, ih):
-        pre_idx = np.nonzero(weights[:ih, i])[0]
+        pre_idx = np.nonzero(weights[:, i])[0]
         nonzero_pre_idx.append(pre_idx.astype(np.int64))
 
     sleep_amount = 0
@@ -612,25 +620,32 @@ def train_network(
     _track_stats = False
     num = 0
     for t in pbar:
-        if t % num_steps == 0 and save_plots:
+        if t % num_steps == 0:
             if track_stats:
                 _track_stats = True
-            heatmap_spike_response(
-                spikes[t - iterations - 1 : t - 1, st:ex],
-                spikes[t - iterations - 1 : t - 1, :st],
-                spikes[t - iterations - 1 : t - 1, ex:],
-                spike_labels[t - 1],
-                dataset=dataset,
-                run=run,
-                num=num,
-                weight_tracking_sleep=weight_tracking_sleep,
-                weights_st_ex=weights[:st, st:ex],
-                weights_ex_ex=weights[st:ex, st:ex],
-                weights_ex_ih=weights[st:ex, ex:ih],
-                weights_ih_ex=weights[ex:ih, st:ex],
-            )
-            # update num
-            num += 1
+            if save_plots:
+                heatmap_spike_response(
+                    spikes[t - iterations - 1 : t - 1, st:ex],
+                    spikes[t - iterations - 1 : t - 1, :st],
+                    spikes[t - iterations - 1 : t - 1, ex:],
+                    spike_labels[t - 1],
+                    spike_trace=spike_trace,
+                    dataset=dataset,
+                    run=run,
+                    num=num,
+                    st=st,
+                    ex=ex,
+                    x_target=x_tar,
+                    weight_tracking_sleep=weight_tracking_sleep,
+                    weights_st_ex=weights[:st, st:ex],
+                    weights_ex_ex=weights[st:ex, st:ex],
+                    weights_ex_ih=weights[st:ex, ex:ih],
+                    weights_ih_ex=weights[ex:ih, st:ex],
+                )
+                # update num
+                num += 1
+            x_tar = np.mean(spike_trace)
+            print("new x_tar: ", x_tar)
         # Reset sleep flags for this timestep
         sleep_now_inh = False
         sleep_now_exc = False
@@ -826,8 +841,8 @@ def train_network(
                     delta_mp_ih[:, t] = tracking_package["delta_mp_ih"]
 
                     # track synaptic current
-                    delta_I_syn_ex[:, t] = tracking_package["delta_I_syn_ex"]
-                    delta_I_syn_ih[:, t] = tracking_package["delta_I_syn_ih"]
+                    delta_I_syn_ex[:, t] = tracking_package["delta_I_syn_exc"]
+                    delta_I_syn_ih[:, t] = tracking_package["delta_I_syn_inh"]
 
                     I_syn_ex[:,t] = I_syn_exc
                     I_syn_ih[:,t] = I_syn_inh
@@ -895,6 +910,7 @@ def train_network(
                         vectorized_trace=vectorized_trace,
                         delta_w=delta_w,
                         N_exc=N_exc,
+                        x_tar=x_tar,
                         timing_update=timing_update,
                         trace_update=trace_update,
                         spike_times=spike_times,
@@ -905,6 +921,7 @@ def train_network(
                         max_weight_exc=max_weight_exc,
                         min_weight_inh=min_weight_inh,
                         max_weight_inh=max_weight_inh,
+                        track_weights=track_weights,
                         noisy_weights=noisy_weights,
                         weight_mean_noise=weight_mean_noise,
                         weight_var_noise=weight_var_noise,
@@ -1022,8 +1039,8 @@ def train_network(
         )
         if track_stats:
             # track synaptic current
-            delta_I_syn_ex[:, t] = tracking_package["delta_I_syn_ex"]
-            delta_I_syn_ih[:, t] = tracking_package["delta_I_syn_ih"]
+            delta_I_syn_ex[:, t] = tracking_package["delta_I_syn_exc"]
+            delta_I_syn_ih[:, t] = tracking_package["delta_I_syn_inh"]
 
             I_syn_ex[:,t] = I_syn_exc
             I_syn_ih[:,t] = I_syn_inh
@@ -1092,6 +1109,8 @@ def train_network(
                 trace_update=trace_update,
                 spike_times=spike_times,
                 spike_trace=spike_trace,
+                x_tar=x_tar,
+                track_weights=track_weights,
                 weight_decay_rate_exc=weight_decay_rate_exc,
                 weight_decay_rate_inh=weight_decay_rate_inh,
                 min_weight_exc=min_weight_exc,
@@ -1243,4 +1262,5 @@ def train_network(
         a,
         weight_tracking_sleep,
         spike_trace,
+        x_tar,
     )
