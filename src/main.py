@@ -45,28 +45,40 @@ def run_once(
         classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         num_input = 784
         use_validation_data = True
-        w_dense_se = 0.1
-        w_dense_ee = 0.1
-        w_dense_ei = 0.1
-        w_dense_ie = 0.1
-        se_weights = 3.0
-        ee_weights = 3.0
-        ei_weights = 3.0
+        w_dense_se = 0.05
+        w_dense_ee = 0.025
+        w_dense_ei = 0.05
+        w_dense_ie = 0.05
+        se_weights = 4.0
+        ee_weights = 2.0
+        ei_weights = 4.0
         ie_weights = -2.0
-        tau_syn_exc = 7.5
-        tau_syn_inh = 7.5
-        tau_m_exc = 5
-        tau_m_inh = 5
-        Rm_exc = 50
-        Rm_inh = 50
-        max_rate_hz = 67.0
-
+        tau_syn_exc = 10
+        tau_syn_inh = 9
+        learning_rate_exc = 0.0002  # slightly reduced
+        tau_m_exc = 20
+        tau_m_inh = 15
+        Rm_exc = 15
+        Rm_inh = 17.5
+        max_rate_hz = 250.0
+        delta_adaption = 0.5
+        tau_trace = 20
+        tau_adaption = 200
+        w_max = 10
+        num_steps = 350
+        x_tar = 0.1
+        mu_weight = 0.6
 
     ts_spec = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # init class
     snn_N = snn_sleepy(
-        classes=classes, random_state=seed, N_x=num_input, N_exc=1000, N_inh=250, ts_spec=ts_spec
+        classes=classes,
+        random_state=seed,
+        N_x=num_input,
+        N_exc=1024,
+        N_inh=225,
+        ts_spec=ts_spec,
     )
 
     # acquire data
@@ -79,8 +91,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 30000, 300, 5000
-        b_tr, b_va, b_te = 300, 300, 500
+        img_tr, img_va, img_te = 30000, 500, 5000
+        b_tr, b_va, b_te = 100, 500, 500
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -89,7 +101,7 @@ def run_once(
         batch_audio_test=600,
         all_audio_val=200,
         batch_audio_val=200,
-        num_steps=100,
+        num_steps=num_steps,
         all_images_train=img_tr,
         batch_image_train=b_tr,
         all_images_test=img_te,
@@ -163,6 +175,9 @@ def run_once(
             membrane_resistance_inh=Rm_inh,
             force_train=True,
             plot_spikes_train=False,
+            delta_adaption=delta_adaption,
+            tau_trace=tau_trace,
+            mu_weight=mu_weight,
             plot_weights=False,
             plot_epoch_performance=False,
             plot_weights_per_epoch=bool(getattr(args, "plot_weights_per_epoch", False)),
@@ -176,7 +191,7 @@ def run_once(
             plot_spectrograms=False,
             use_validation_data=False,
             var_noise=args.noise_level,
-            x_tar=0.4,
+            x_tar=x_tar,
             track_weights=bool(args.track_weights),
             sleep=not args.no_sleep,
             sleep_mode=str(args.sleep_mode),
@@ -187,7 +202,9 @@ def run_once(
             A_plus=1.0,
             tau_LTD=20,
             tau_LTP=20,
-            learning_rate_exc=0.00005,
+            tau_adaption=tau_adaption,
+            w_max=w_max,
+            learning_rate_exc=learning_rate_exc,
             learning_rate_inh=0.0005,
             accuracy_method="pca_lr",
             test_only=False,
@@ -201,7 +218,7 @@ def run_once(
         )
         pr.disable()
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        directory = os.path.join("results","comparison_runs",f"{args.image_dataset}")
+        directory = os.path.join("results", "comparison_runs", f"{args.image_dataset}")
         os.makedirs(directory, exist_ok=True)
         profile_path = args.profile_output or os.path.join(
             directory,
@@ -239,16 +256,21 @@ def run_once(
             plot_spectrograms=False,
             use_validation_data=False,
             var_noise=args.noise_level,
+            mu_weight=mu_weight,
             max_weight_exc=25,
             tau_syn_exc=tau_syn_exc,
             tau_syn_inh=tau_syn_inh,
             tau_m_exc=tau_m_exc,
             tau_m_inh=tau_m_inh,
+            delta_adaption=delta_adaption,
+            tau_trace=tau_trace,
             track_stats=bool(args.track_stats),
             membrane_resistance_exc=Rm_exc,
             membrane_resistance_inh=Rm_inh,
             min_weight_inh=-25,
-            x_tar=0.4,
+            tau_adaption=tau_adaption,
+            w_max=w_max,
+            x_tar=x_tar,
             track_weights=bool(args.track_weights),
             sleep=not args.no_sleep,
             sleep_mode=str(args.sleep_mode),
@@ -258,7 +280,7 @@ def run_once(
             run=run_id,
             tau_LTD=28,
             tau_LTP=25,
-            learning_rate_exc=0.00001,
+            learning_rate_exc=learning_rate_exc,
             learning_rate_inh=0.00005,
             accuracy_method="pca_lr",
             test_only=False,
@@ -296,7 +318,9 @@ def run_once(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", type=int, default=1, help="number of repeated runs")
-    parser.add_argument("--no-train", action="store_true", default=False, help="disable training")
+    parser.add_argument(
+        "--no-train", action="store_true", default=False, help="disable training"
+    )
     parser.add_argument(
         "--sleep-rate",
         type=float,
@@ -393,8 +417,18 @@ def main():
         default="mnist",
         help="image dataset to use for image-only or multimodal modes",
     )
-    parser.add_argument("--heatmap-plot", action="store_true", default=True, help="plot the heatmap of the weights")
-    parser.add_argument("--get-giffed", action="store_true", default=False, help="create gif from heatmap plots")
+    parser.add_argument(
+        "--heatmap-plot",
+        action="store_true",
+        default=True,
+        help="plot the heatmap of the weights",
+    )
+    parser.add_argument(
+        "--get-giffed",
+        action="store_true",
+        default=False,
+        help="create gif from heatmap plots",
+    )
     parser.add_argument(
         "--geom-noise-var",
         type=float,
@@ -483,7 +517,7 @@ def main():
     parser.add_argument(
         "--track-stats",
         action="store_true",
-        default=False,
+        default=True,
         help="track statistics during training",
     )
     args, _ = parser.parse_known_args()

@@ -15,6 +15,7 @@ def enforce_per_exc_sparsity(W_se, frac=0.10):
     W = W_se.copy()
     N_x = W.shape[0]
     k = int(np.floor(frac * N_x))
+    print((W > 0).mean(axis=0).mean())
 
     # get nonzero weights
     for j in range(
@@ -33,25 +34,13 @@ def enforce_per_exc_sparsity(W_se, frac=0.10):
         col[~mask] = 0.0
         W[:, j] = col
 
+    print((W > 0).mean(axis=0).mean())
+
     return W
 
 
 def exc_coords(H_e, W_e):
     return np.array([(r, c) for r in range(H_e) for c in range(W_e)], dtype=float)
-
-
-def topk_mask_per_col(W, frac):
-    """Keep top frac per column (incoming sparsity per postsyn)."""
-    W = W.copy()
-    n_rows, n_cols = W.shape
-    k = int(np.ceil(frac * n_rows))
-    for j in range(n_cols):
-        col = W[:, j]
-        if k < n_rows:
-            thr = np.partition(col, -k)[-k]
-            col[col < thr] = 0.0
-        W[:, j] = col
-    return W
 
 
 def inh_grid_shape(N_inh, H_e, W_e):
@@ -101,35 +90,66 @@ def gaussian_ei_local(N_exc, N_inh, H_e, W_e, sigma=1.5, peak=1.0, frac=None):
     W_ei *= peak
 
     if frac is not None:
-        W_ei = topk_mask_per_col(
+        W_ei = enforce_per_exc_sparsity(
             W_ei, frac
         )  # keeps top frac of excitatory inputs per inhibitory neuron
 
-    return W_ei, home_idx, centers
+    return (
+        W_ei,
+        home_idx,
+        centers,
+    )
 
 
 def mexican_hat_ie_far(
-    H_e, W_e, inh_centers, peak=1.0, frac=None, r0=2.0, sigma_r=2.0, local_r=2.0
+    H_e,
+    W_e,
+    inh_centers,
+    peak=1.0,
+    frac=None,
+    r0=2.0,
+    sigma_r=2.0,
+    local_r=2.0,
+    jitter=0.1,
+    torus=True,
+    self_zero=True,
 ):
     coords = exc_coords(H_e, W_e)  # (N_exc,2)
     centers = inh_centers  # (N_inh,2) — continuous positions
 
-    # Distances from inhibitory center to each excit neuron -> (N_inh, N_exc)
-    d2 = ((centers[:, None, :] - coords[None, :, :]) ** 2).sum(axis=2)
+    if jitter is not None and jitter > 0:
+        centers += np.random.uniform(-jitter, jitter, size=centers.shape)
+        centers[:, 0] = np.clip(centers[:, 0], 0, H_e - 1)
+        centers[:, 1] = np.clip(centers[:, 1], 0, W_e - 1)
 
-    d = np.sqrt(d2)
-    ring = np.exp(-((d - r0) ** 2) / (2 * sigma_r**2))
-    ring /= ring.max(axis=1, keepdims=True) + 1e-12
-    W_ie = peak * ring
+    # Distances: (N_exc, N_x)
+    if torus:
+        d2 = torus_d2(centers, coords, H_e, W_e)
+    else:
+        d2 = ((centers[:, None, :] - coords[None, :, :]) ** 2).sum(axis=2)
+
+    W_ie = np.exp(-d2 / (2 * sigma_r**2))
+
+    # normalize rows so max=1 then scale
+    W_ie /= W_ie.max(axis=1, keepdims=True) + 1e-12
+    W_ie *= peak
+
+    if self_zero:
+        np.fill_diagonal(W_ie, 0.0)
+
+    # d = np.sqrt(d2)
+    # ring = np.exp(-((d - r0) ** 2) / (2 * sigma_r**2))
+    # ring /= ring.max(axis=1, keepdims=True) + 1e-12
+    # W_ie = peak * ring
 
     # Optional: sparsify per inhibitory neuron (per row)
     if frac is not None:
         W_ie = enforce_topk_per_row_abs(W_ie, frac=frac)
 
-    # Guarantee "don't inhibit your own local pool" strongly:
-    # (hard zero at the exact center exc neuron)
-    # inside mexican_hat_ie_far after computing d
-    W_ie[d <= local_r] = 0.0
+    # # Guarantee "don't inhibit your own local pool" strongly:
+    # # (hard zero at the exact center exc neuron)
+    # # inside mexican_hat_ie_far after computing d
+    # W_ie[d <= local_r] = 0.0
 
     return W_ie
 
@@ -148,45 +168,67 @@ def torus_d2(centers, coords, H, W):
 
 
 def gaussian_se_weights(
-    N_x, N_exc, H, W, H_e, W_e, sigma=2.0, peak=1.0, truncate=0.01, fraction=0.1
+    N_x,
+    N_exc,
+    H,
+    W,
+    H_e,
+    W_e,
+    sigma=2.0,
+    peak=1.0,
+    truncate=None,
+    fraction=0.1,
+    torus=True,
+    jitter=0.25,
 ):
-    """
-    Returns W_se with shape (N_x, N_exc): input->exc weights.
-    Each excitatory neuron gets a Gaussian receptive field over the (H,W) input grid.
-    """
     assert H * W == N_x
     assert H_e * W_e == N_exc
 
-    # define ratio between layers
-    step_size = N_x / N_exc
+    # Exc neurons live on (H_e, W_e) grid
+    coords_e = exc_coords(H_e, W_e)  # (N_exc, 2) in exc-grid units
 
-    # create 1D array of centers
-    centers_1d = np.arange(0, N_x, step_size)
+    # Map exc-grid coords -> input-grid coords (continuous)
+    centers = np.empty_like(coords_e)
+    centers[:, 0] = coords_e[:, 0] * (H - 1) / max(H_e - 1, 1)
+    centers[:, 1] = coords_e[:, 1] * (W - 1) / max(W_e - 1, 1)
 
-    # convert centers to 2D
-    rows = centers_1d // W
-    cols = centers_1d % W
+    # Break perfect alignment with discrete pixels (optional but often helps)
+    if jitter is not None and jitter > 0:
+        centers += np.random.uniform(-jitter, jitter, size=centers.shape)
+        centers[:, 0] = np.clip(centers[:, 0], 0, H - 1)
+        centers[:, 1] = np.clip(centers[:, 1], 0, W - 1)
 
-    # combine cols and rows
-    centers = np.stack((rows, cols), axis=1)
-
-    # define input space
+    # Input coords
     inp_coords = np.array([(r, c) for r in range(H) for c in range(W)], dtype=float)
 
-    # Compute Gaussian weights: for each exc center, distance^2 to all inputs
-    # Result: (N_exc, N_x)
-    d2 = torus_d2(centers, inp_coords, H, W)
-    G_post_pre = peak * np.exp(-d2 / (2 * sigma**2))  # (N_exc, N_x)
+    # Distances: (N_exc, N_x)
+    if torus:
+        d2 = torus_d2(centers, inp_coords, H, W)
+    else:
+        d2 = ((centers[:, None, :] - inp_coords[None, :, :]) ** 2).sum(axis=2)
 
-    # convert to pre×post weights (N_x, N_exc)
-    W_se = G_post_pre.T
+    sigmas = np.random.normal(loc=sigma, scale=2.0, size=(N_exc, 1))
+    sigmas = np.clip(sigmas, 1.0, None)  # enforce positive + not-too-small
+    G = np.exp(-d2 / (2 * sigmas**2))
 
-    # sparsify per excitatory neuron (per column)
+    if truncate is not None:
+        G[G < truncate] = 0.0
+
+    # Global normalization instead:
+    G /= G.max() + 1e-12  # normalize to global max=1
+    G *= peak  # scale to peak
+
+    # pre x post
+    W_se = G.T
+
+    # sparsify once
     W_se = enforce_per_exc_sparsity(W_se, frac=fraction)
 
-    # sanity check: incoming per exc
-    S = W_se.sum(axis=0)
-    print("incoming per exc:", S.min(), S.max(), S.mean(), "ratio", S.max() / S.min())
+    # Normalize total incoming drive per excitatory neuron
+    col_sums = W_se.sum(axis=0)
+    col_sums = np.where(col_sums > 0, col_sums, 1.0)
+    target_sum = peak * fraction * N_x * 0.5
+    W_se = W_se * (target_sum / col_sums)[np.newaxis, :]
 
     return W_se
 
@@ -227,7 +269,13 @@ def enforce_topk_per_row(W, frac):
 
 
 def gaussian_ee_weights(
-    N_exc, H_e, W_e, sigma=2.0, peak=1.0, frac=None, self_zero=True
+    N_exc,
+    H_e,
+    W_e,
+    sigma=2.0,
+    peak=1.0,
+    frac=None,
+    self_zero=True,
 ):
     """
     Returns W_ee (N_exc, N_exc): excitatory->excitatory.
@@ -239,7 +287,6 @@ def gaussian_ee_weights(
         [(r, c) for r in range(H_e) for c in range(W_e)], dtype=float
     )  # (N_exc,2)
     d2 = ((coords[:, None, :] - coords[None, :, :]) ** 2).sum(axis=2)  # (N_exc,N_exc)
-
     W = np.exp(-d2 / (2 * sigma**2))
 
     # normalize rows so max=1 then scale
@@ -276,15 +323,25 @@ def create_3D_weights_plot(
     return fig, ax
 
 
-def plot_weights_individual(weights, H_, W_, N, title):
-    for j in range(N // 2, N):
-        rf = weights[:, j].reshape(H_, W_)
-        plt.imshow(rf)
-        plt.title(f"{title} {j}")
-        plt.colorbar()
-        plt.show()
-        if input("Press Enter to continue...") == "q":
-            break
+def plot_weights_individual(weights, H_, W_, N, title, dir):
+    if dir == "outgoing":
+        for j in range(N // 2, N):
+            rf = weights[j, :].reshape(H_, W_)
+            plt.imshow(rf)
+            plt.title(f"{title} {j}")
+            plt.colorbar()
+            plt.show()
+            if input("Press Enter to continue...") == "q":
+                break
+    elif dir == "incoming":
+        for j in range(N // 2, N):
+            rf = weights[:, j].reshape(H_, W_)
+            plt.imshow(rf)
+            plt.title(f"{title} {j}")
+            plt.colorbar()
+            plt.show()
+            if input("Press Enter to continue...") == "q":
+                break
 
 
 # Create weight array
@@ -310,8 +367,8 @@ def create_weights(
     st = N_x  # stimulation
     ex = st + N_exc  # excitatory
     ih = ex + N_inh  # inhibitory
-    plot_weights_st = True
-    plot_weights_ex = False
+    plot_weights_se = False
+    plot_weights_ee = False
     plot_weights_ei = False
     plot_weights_ie = False
 
@@ -319,16 +376,16 @@ def create_weights(
     H = int(np.sqrt(N_x))
     W = H
 
-    H_e, W_e = 25, 40
+    H_e, W_e = 32, 32
 
     ref_x = np.sqrt(H * W)
     ref_e = np.sqrt(H_e * W_e)
 
     _fse = 2.0 / ref_x
-    _fee = 0.8 / ref_e
-    _fei = 1.0 / ref_e
-    _fr0 = 3.0 / ref_e
-    _fsr = 0.5 / ref_e
+    _fee = 2.0 / ref_e
+    _fei = 2.0 / ref_e
+    _fr0 = 4.0 / ref_e
+    _fsr = 1.0 / ref_e
     _flr = 0.5 / ref_e
 
     if random_weights:
@@ -389,7 +446,11 @@ def create_weights(
         print(f"density receiving W_ee: {(W_ee > 0).mean(axis=0).mean()}")
 
         # --- E->I local pooling ---
-        W_ei, _, inh_centers = gaussian_ei_local(
+        (
+            W_ei,
+            _,
+            inh_centers,
+        ) = gaussian_ei_local(
             N_exc=N_exc,
             N_inh=N_inh,
             H_e=H_e,
@@ -401,7 +462,7 @@ def create_weights(
         weights[st:ex, ex:ih] = W_ei
         print(f"density receiving W_ei: {(W_ei > 0).mean(axis=0).mean()}")
 
-        H_i, W_i = 10, 25
+        H_i, W_i = 15, 15
 
         # --- I->E far inhibition (center-surround / mexican hat) ---
         W_ie = mexican_hat_ie_far(
@@ -418,7 +479,7 @@ def create_weights(
         weights[ex:ih, st:ex] = W_ie
         print(f"density receiving W_ie: {(np.abs(W_ie) > 0).mean(axis=0).mean()}")
 
-    if plot_weights_st:
+    if plot_weights_se:
         create_3D_weights_plot(
             weights[:st, st:ex],
             "ST->EX Outgoing Weights",
@@ -439,9 +500,11 @@ def create_weights(
             H_e,
             W_e,
         )
-        plot_weights_individual(weights[:st, st:ex], H, W, N_x, "ST->EX")
+        plot_weights_individual(
+            weights[:st, st:ex], H, W, N_x, "ST->EX", dir="incoming"
+        )
 
-    if plot_weights_ex:
+    if plot_weights_ee:
         create_3D_weights_plot(
             weights[st:ex, st:ex],
             "EX->EX Outgoing Weights",
@@ -462,7 +525,9 @@ def create_weights(
             H_e,
             W_e,
         )
-        plot_weights_individual(weights[st:ex, st:ex], H_e, W_e, N_exc, "EX->EX")
+        plot_weights_individual(
+            weights[st:ex, st:ex], H_e, W_e, N_exc, "EX->EX", dir="incoming"
+        )
     if plot_weights_ei:
         create_3D_weights_plot(
             weights[st:ex, ex:ih],
@@ -484,7 +549,9 @@ def create_weights(
             H_i,
             W_i,
         )
-        plot_weights_individual(weights[st:ex, ex:ih], H_i, W_i, N_exc, "E->I")
+        plot_weights_individual(
+            weights[st:ex, ex:ih], H_i, W_i, N_exc, "E->I", dir="incoming"
+        )
     if plot_weights_ie:
         create_3D_weights_plot(
             np.abs(weights[ex:ih, st:ex]),
@@ -506,7 +573,9 @@ def create_weights(
             H_e,
             W_e,
         )
-        plot_weights_individual(np.abs(weights[ex:ih, st:ex]), H_e, W_e, N_inh, "I->E")
+        plot_weights_individual(
+            np.abs(weights[ex:ih, st:ex]), H_e, W_e, N_inh, "I->E", dir="outgoing"
+        )
 
     # if plot_weights:
     if plot_weights:

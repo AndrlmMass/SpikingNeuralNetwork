@@ -71,14 +71,21 @@ class snn_sleepy:
             self.image_dataset = getattr(self, "image_dataset", "unknown")
             try:
                 self._acc_log_dir = os.path.join(
-                    "results", "acc_history", f"{self.image_dataset}", f"acc_{self.ts_spec}"
+                    "results",
+                    "acc_history",
+                    f"{self.image_dataset}",
+                    f"acc_{self.ts_spec}",
                 )
                 os.makedirs(self._acc_log_dir, exist_ok=True)
             except Exception:
                 pass
-            self._acc_log_file = os.path.join(self._acc_log_dir, f"acc_{self.ts_spec}.jsonl")
+            self._acc_log_file = os.path.join(
+                self._acc_log_dir, f"acc_{self.ts_spec}.jsonl"
+            )
 
-    def _record_accuracy(self, split: str, value, epoch: int | None = None, method: str | None = None):
+    def _record_accuracy(
+        self, split: str, value, epoch: int | None = None, method: str | None = None
+    ):
         try:
             acc_val = float(value) if value is not None else None
         except Exception:
@@ -156,7 +163,9 @@ class snn_sleepy:
 
     def _plot_accuracy(self):
         """Plot train/val accuracy (left axis) and val phi (right axis) from JSONL log."""
-        if not getattr(self, "_acc_log_file", None) or not os.path.exists(self._acc_log_file):
+        if not getattr(self, "_acc_log_file", None) or not os.path.exists(
+            self._acc_log_file
+        ):
             return
 
         records = self._read_jsonl(self._acc_log_file)
@@ -178,7 +187,7 @@ class snn_sleepy:
 
             split = r.get("split")
             method = r.get("method")
-            
+
             if "accuracy" in r and r["accuracy"] is not None:
                 acc_val = float(r["accuracy"])
                 if split == "train":
@@ -204,40 +213,83 @@ class snn_sleepy:
                     val_phi[int(epoch)] = float(r["phi"])
 
         # Nothing to plot
-        has_any_acc = (train_acc_pca or train_acc_top or train_acc_default or 
-                      val_acc_pca or val_acc_top or val_acc_default or val_phi)
+        has_any_acc = (
+            train_acc_pca
+            or train_acc_top
+            or train_acc_default
+            or val_acc_pca
+            or val_acc_top
+            or val_acc_default
+            or val_phi
+        )
         if not has_any_acc:
             return
 
         fig, (ax, ax2) = plt.subplots(2, 1, sharex=True)
 
-
-        
         handles = []
         handles2 = []
         labels = []
         labels2 = []
-        
+
         if train_acc_pca:
             xs = sorted(train_acc_pca)
-            line = ax.plot(xs, [train_acc_pca[e] for e in xs], label="train acc (pca_lr)", linestyle="-", marker="o", markersize=3, color="blue")
+            train_acc = np.asarray([train_acc_pca[e] for e in xs])
+            line = ax.plot(
+                xs,
+                train_acc,
+                label="train acc (pca_lr)",
+                linestyle="-",
+                marker="o",
+                markersize=3,
+                color="blue",
+            )
             handles.append(line[0])
             labels.append("Train accuracy")
         if val_acc_pca:
             xs = sorted(val_acc_pca)
-            line = ax.plot(xs, [val_acc_pca[e] for e in xs], label="val acc (pca_lr)", linestyle="-", marker="o", markersize=3, color="lightblue")
+            val_acc = np.asarray([val_acc_pca[e] for e in xs])
+            line = ax.plot(
+                xs,
+                val_acc,
+                label="val acc (pca_lr)",
+                linestyle="-",
+                marker="o",
+                markersize=3,
+                color="lightblue",
+            )
             handles.append(line[0])
             labels.append("Val accuracy")
         if train_acc_top:
             xs = sorted(train_acc_top)
-            line = ax2.plot(xs, [train_acc_top[e] for e in xs], label="train acc (top)", linestyle="-", marker="s", markersize=3, color="red")
+            line = ax2.plot(
+                xs,
+                [train_acc_top[e] for e in xs],
+                label="train acc (top)",
+                linestyle="-",
+                marker="s",
+                markersize=3,
+                color="red",
+            )
             handles2.append(line[0])
             labels2.append("Train accuracy")
         if val_acc_top:
             xs = sorted(val_acc_top)
-            line = ax2.plot(xs, [val_acc_top[e] for e in xs], label="val acc (top)", linestyle="-", marker="s", markersize=3, color="orange")
+            line = ax2.plot(
+                xs,
+                [val_acc_top[e] for e in xs],
+                label="val acc (top)",
+                linestyle="-",
+                marker="s",
+                markersize=3,
+                color="orange",
+            )
             handles2.append(line[0])
             labels2.append("Val accuracy")
+
+        # add mean line from the first position
+        y_line = (val_acc[0] + train_acc[0]) / 2
+        ax.axhline(y=y_line, linestyle="dashed", linewidth=1, color="grey")
 
         fig.supylabel("Accuracy")
         fig.supxlabel("Epoch")
@@ -248,7 +300,14 @@ class snn_sleepy:
         if val_phi:
             ax_tw = ax.twinx()
             xs = sorted(val_phi)
-            phi_line = ax_tw.plot(xs, [val_phi[e] for e in xs], linestyle="--", label="val phi", color="green", linewidth=1.5)
+            phi_line = ax_tw.plot(
+                xs,
+                [val_phi[e] for e in xs],
+                linestyle="--",
+                label="val phi",
+                color="green",
+                linewidth=1.5,
+            )
             ax_tw.set_ylabel("Phi")
             handles.append(phi_line[0])
             labels.append("Phi")
@@ -1436,18 +1495,15 @@ class snn_sleepy:
                     self.resting_potential,
                     self.max_time,
                 )
+
     def plot_spikes(self, run):
         label_for_plotting = input("Which label should we plot? ")
         while label_for_plotting != "stop":
             if label_for_plotting == "all":
                 frame_folder = f"plots\\spikes\\{self.image_dataset}\\all\\{self.ts}\\{self.ts_spec}"
-                output_filename = (
-                    f"plots\\spikes\\{self.image_dataset}\\all\\{self.ts}\\{self.ts_spec}\\evolution.gif"
-                )
+                output_filename = f"plots\\spikes\\{self.image_dataset}\\all\\{self.ts}\\{self.ts_spec}\\evolution.gif"
             else:
-                frame_folder = (
-                    f"plots\\spikes\\{self.image_dataset}\\{label_for_plotting}\\{self.ts}\\{self.ts_spec}"
-                )
+                frame_folder = f"plots\\spikes\\{self.image_dataset}\\{label_for_plotting}\\{self.ts}\\{self.ts_spec}"
                 output_filename = f"plots\\spikes\\{self.image_dataset}\\{label_for_plotting}\\{self.ts}\\{self.ts_spec}\\evolution.gif"
             gif_spike_rate_by_label(
                 frame_folder=frame_folder,
@@ -1474,7 +1530,7 @@ class snn_sleepy:
         w_target_inh=-0.01,
         var_noise=1,
         min_weight_inh=-25,
-        x_tar=0.4,
+        x_tar=0.1,
         track_weights=False,
         max_weight_inh=-0.01,
         max_weight_exc=25,
@@ -1511,6 +1567,7 @@ class snn_sleepy:
         A_minus=0.5,
         tau_LTD=10,
         tau_LTP=10,
+        w_max=10,
         early_stopping=False,
         early_stopping_patience_pct=0.1,  # Patience as percentage of total epochs (0.1 = 10%)
         dt=1,
@@ -1541,6 +1598,7 @@ class snn_sleepy:
         weight_var_noise=0.005,
         num_inh=10,
         num_exc=50,
+        mu_weight=0.6,
         plot_epoch_performance=True,
         plot_weights_per_epoch=False,  # Plot weights after each epoch (for debugging)
         plot_spikes_per_epoch=False,  # Plot spikes after each epoch (for debugging)
@@ -1700,10 +1758,18 @@ class snn_sleepy:
             initial_sum_total = sum_weights
 
             # Per-column initial sums (one per post-neuron)
-            initial_sum_st_ex = np.sum(np.abs(self.weights[:self.st, self.st:self.ex]), axis=0)  # (N_exc,)
-            initial_sum_ex_ex = np.sum(np.abs(self.weights[self.st:self.ex, self.st:self.ex]), axis=0)  # (N_exc,)
-            initial_sum_ex_ih = np.sum(np.abs(self.weights[self.st:self.ex, self.ex:self.ih]), axis=0)  # (N_inh,)
-            initial_sum_ih_ex = np.sum(np.abs(self.weights[self.ex:self.ih, self.st:self.ex]), axis=0)  # (N_exc,)
+            initial_sum_st_ex = np.sum(
+                np.abs(self.weights[: self.st, self.st : self.ex]), axis=0
+            )  # (N_exc,)
+            initial_sum_ex_ex = np.sum(
+                np.abs(self.weights[self.st : self.ex, self.st : self.ex]), axis=0
+            )  # (N_exc,)
+            initial_sum_ex_ih = np.sum(
+                np.abs(self.weights[self.st : self.ex, self.ex : self.ih]), axis=0
+            )  # (N_inh,)
+            initial_sum_ih_ex = np.sum(
+                np.abs(self.weights[self.ex : self.ih, self.st : self.ex]), axis=0
+            )  # (N_exc,)
 
             baseline_sum_exc = sum_weights_exc * beta
             baseline_sum_inh = sum_weights_inh * beta
@@ -1722,6 +1788,8 @@ class snn_sleepy:
                 tau_syn_inh=tau_syn_inh,
                 tau_m_exc=tau_m_exc,
                 tau_m_inh=tau_m_inh,
+                w_max=w_max,
+                mu_weight=mu_weight,
                 resting_potential=self.resting_potential,
                 membrane_resistance_exc=membrane_resistance_exc,
                 membrane_resistance_inh=membrane_resistance_inh,
@@ -1846,7 +1914,7 @@ class snn_sleepy:
             I_syn_exc = np.zeros(self.N_exc)
             I_syn_inh = np.zeros(self.N_inh)
             spike_times = np.zeros(self.N)
-            a = np.zeros(self.N - self.st)
+            a = np.zeros(self.N_exc + self.N_inh)
 
             # create spike threshold array
             spike_threshold = np.full(
@@ -1984,7 +2052,6 @@ class snn_sleepy:
                             _I_syn_inh_te,
                             _spike_times_te,
                             _a_te,
-                            _weight_tracking_te,
                             _spike_trace_te,
                             _,
                         ) = train_network(
@@ -2037,7 +2104,7 @@ class snn_sleepy:
                             acc_te_batch, dbg_test, _ = WTA_accuracy(
                                 spikes=spikes_te_out[:, self.st : self.ex],
                                 labels=labels_te_out,
-                                num_classes=self.N_classes, 
+                                num_classes=self.N_classes,
                                 smoothening=self.num_steps,
                                 split="test",
                                 state=state,
@@ -2335,7 +2402,6 @@ class snn_sleepy:
                     I_syn_inh,
                     spike_times,
                     a,
-                    weight_tracking_epoch,
                     spike_trace,
                     x_tar,
                 ) = train_network(
@@ -2395,7 +2461,9 @@ class snn_sleepy:
                         )
                         print(f"Training Accuracy (TOP): {train_acc_batch:.4f}")
                         try:
-                            self._record_accuracy("train", train_acc_batch, epoch=e + 1, method="top")
+                            self._record_accuracy(
+                                "train", train_acc_batch, epoch=e + 1, method="top"
+                            )
                             self._plot_accuracy()
                         except Exception:
                             pass
@@ -2449,13 +2517,22 @@ class snn_sleepy:
                                 f"  Input spikes: {total_input_spikes} ({input_spike_rate*100:.4f}% rate)"
                             )
                             print(
-                                f"  Excitatory spikes: {total_exc_spikes} ({exc_spike_rate*100:.4f}% rate)")
-                            print(f"  Inhibitory spikes: {total_inh_spikes} ({inh_spike_rate*100:.4f}% rate)")
+                                f"  Excitatory spikes: {total_exc_spikes} ({exc_spike_rate*100:.4f}% rate)"
+                            )
+                            print(
+                                f"  Inhibitory spikes: {total_inh_spikes} ({inh_spike_rate*100:.4f}% rate)"
+                            )
 
                             # get nonzero weights
-                            nz_st_ws = self.weights[:self.st, self.st:self.ex][self.weights[:self.st, self.st:self.ex] != 0]
-                            nz_ex_ws = self.weights[self.st:self.ex, self.st:self.ih][self.weights[self.st:self.ex, self.st:self.ih] != 0]
-                            nz_ih_ws = self.weights[self.ex:self.ih, self.st:self.ex][self.weights[self.ex:self.ih, self.st:self.ex] != 0]
+                            nz_st_ws = self.weights[: self.st, self.st : self.ex][
+                                self.weights[: self.st, self.st : self.ex] != 0
+                            ]
+                            nz_ex_ws = self.weights[
+                                self.st : self.ex, self.st : self.ih
+                            ][self.weights[self.st : self.ex, self.st : self.ih] != 0]
+                            nz_ih_ws = self.weights[
+                                self.ex : self.ih, self.st : self.ex
+                            ][self.weights[self.ex : self.ih, self.st : self.ex] != 0]
                             print(f"Mean input weights: {np.mean(nz_st_ws)}")
                             print(f"Mean excitatory weights: {np.mean(nz_ex_ws)}")
                             print(f"Mean inhibitory weights: {np.mean(nz_ih_ws)}")
@@ -2524,7 +2601,7 @@ class snn_sleepy:
                                 print(
                                     f"Training Accuracy (PCA+LR): {train_acc_pca:.4f}"
                                 )
-                                
+
                                 # Also compute top_method accuracy for comparison
                                 try:
                                     train_acc_top, dbg_train, state = WTA_accuracy(
@@ -2538,16 +2615,24 @@ class snn_sleepy:
                                         f"Training Accuracy (TOP): {train_acc_top:.4f}"
                                     )
                                 except Exception as ex:
-                                    print(f"Warning: Top method accuracy computation failed ({ex})")
+                                    print(
+                                        f"Warning: Top method accuracy computation failed ({ex})"
+                                    )
                                     train_acc_top = None
-                                
+
                                 try:
                                     self._record_accuracy(
-                                        "train", train_acc_pca, epoch=e + 1, method="pca_lr"
+                                        "train",
+                                        train_acc_pca,
+                                        epoch=e + 1,
+                                        method="pca_lr",
                                     )
                                     if train_acc_top is not None:
                                         self._record_accuracy(
-                                            "train", train_acc_top, epoch=e + 1, method="top"
+                                            "train",
+                                            train_acc_top,
+                                            epoch=e + 1,
+                                            method="top",
                                         )
                                     self._plot_accuracy()
                                 except Exception:
@@ -2590,9 +2675,6 @@ class snn_sleepy:
                 )  # Use test dataset size for pre-allocation
                 all_spikes_val = np.zeros((max_val_samples, self.N), dtype=np.int8)
                 all_labels_val = np.zeros(max_val_samples, dtype=np.int32)
-                all_mp_val = np.zeros(
-                    (max_val_samples, self.N - self.N_x), dtype=np.float32
-                )
                 val_sample_count = 0
                 val_batches_counted = 0
 
@@ -2738,7 +2820,6 @@ class snn_sleepy:
                         I_syn_inh_te,
                         spike_times_te,
                         a_te,
-                        weight_tracking_te,
                         _spike_trace_te,
                         _,
                     ) = train_network(
@@ -2769,7 +2850,6 @@ class snn_sleepy:
                         **common_args,
                     )
 
-
                     # Store results for accumulation (use pre-allocated arrays)
                     batch_size = spikes_te_out.shape[0]
                     all_spikes_val[val_sample_count : val_sample_count + batch_size] = (
@@ -2778,8 +2858,6 @@ class snn_sleepy:
                     all_labels_val[val_sample_count : val_sample_count + batch_size] = (
                         labels_te_out
                     )
-                    all_mp_val[val_sample_count : val_sample_count + batch_size] = mp_te
-                    val_sample_count += batch_size
 
                     # 4) Compute phi metrics using the trained outputs
                     phi_tr, phi_te, *unused = calculate_phi(
@@ -2871,7 +2949,6 @@ class snn_sleepy:
                             means = []
                             labs = []
 
-                            
                         else:
                             print(
                                 "Warning: Not enough blocks for top-responders analysis"
@@ -3004,7 +3081,6 @@ class snn_sleepy:
                 # Use pre-allocated arrays (no concatenation needed)
                 spikes_te_out = all_spikes_val[:val_sample_count]
                 labels_te_out = all_labels_val[:val_sample_count]
-                mp_te = all_mp_val[:val_sample_count]
 
                 # If using PCA+LR, compute accuracy once using aggregated spikes
                 if accuracy_method == "pca_lr":
@@ -3075,7 +3151,7 @@ class snn_sleepy:
                                 y_test=y_te,
                             )
                             acc_te = float(accs.get("test", 0.0))
-                            
+
                             # Also compute top_method validation accuracy for comparison
                             try:
                                 val_acc_top, dbg_test, _ = WTA_accuracy(
@@ -3088,7 +3164,9 @@ class snn_sleepy:
                                 )
                                 print(f"Validation Accuracy (WTA): {val_acc_top:.4f}")
                             except Exception as ex_top:
-                                print(f"Warning: WTA validation accuracy computation failed ({ex_top})")
+                                print(
+                                    f"Warning: WTA validation accuracy computation failed ({ex_top})"
+                                )
                                 val_acc_top = None
                     except Exception as ex:
                         print(f"Warning: PCA+LR accuracy failed ({ex}); using 0.0")
@@ -3104,9 +3182,13 @@ class snn_sleepy:
                 self.val_performance_tracker[e] = [phi_te, acc_te]
                 try:
                     if accuracy_method == "pca_lr":
-                        self._record_accuracy("val", acc_te, epoch=e + 1, method="pca_lr")
+                        self._record_accuracy(
+                            "val", acc_te, epoch=e + 1, method="pca_lr"
+                        )
                         if val_acc_top is not None:
-                            self._record_accuracy("val", val_acc_top, epoch=e + 1, method="top")
+                            self._record_accuracy(
+                                "val", val_acc_top, epoch=e + 1, method="top"
+                            )
                     elif accuracy_method == "top" and acc_te is not None:
                         self._record_accuracy("val", acc_te, epoch=e + 1, method="top")
                     self._record_phi("val", phi_te, epoch=e + 1)
@@ -3212,7 +3294,10 @@ class snn_sleepy:
                     # Clean up training results
                     del mp_train, spikes_tr_out, labels_tr_out, sleep_tr_out
                     # Clean up accumulated arrays (use validation names since we evaluate on validation data)
-                    del all_spikes_val, all_labels_val, all_mp_val
+                    del (
+                        all_spikes_val,
+                        all_labels_val,
+                    )
                     # Clean up temporary variables (validation accumulation variables)
                     del val_acc, val_phi
                     try:
@@ -3582,7 +3667,6 @@ class snn_sleepy:
                         _I_syn_inh_te,
                         _st_te,
                         _a_te,
-                        _weight_tracking_te,
                         _spike_trace_te,
                         _,
                     ) = train_network(
@@ -3615,7 +3699,6 @@ class snn_sleepy:
                         sleep_ratio=0.0,
                         **_ca,
                     )
-
 
                     # Align to full bins and expand labels to per-timestep once
                     bs = spikes_te_out.shape[0]
@@ -4016,7 +4099,6 @@ class snn_sleepy:
                                 I_syn_inh,
                                 _spike_times_tr,
                                 _a_tr,
-                                _weight_tracking_tr,
                                 _spike_trace_tr,
                                 x_tar,
                             ) = train_network(
@@ -4066,7 +4148,6 @@ class snn_sleepy:
                                 I_syn_inh_te,
                                 _spike_times_te,
                                 _a_te,
-                                _weight_tracking_te,
                                 _spike_trace_te,
                                 _,
                             ) = train_network(
@@ -4286,7 +4367,9 @@ class snn_sleepy:
                     test_acc_dict = accs
                     try:
                         if isinstance(test_acc_dict, dict) and "test" in test_acc_dict:
-                            self._record_accuracy("test", test_acc_dict.get("test"), method="pca_lr")
+                            self._record_accuracy(
+                                "test", test_acc_dict.get("test"), method="pca_lr"
+                            )
                             self._plot_accuracy()
                     except Exception:
                         pass

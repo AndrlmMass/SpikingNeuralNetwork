@@ -2,6 +2,7 @@ import os
 import random
 import numpy as np
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -313,6 +314,7 @@ def plot_glmm_with_raw_accuracy(
 
     return output_path
 
+
 def block_reduce(spikes, labels, block_size, reduce="sum"):
     """Convert (T, N) spikes into (B, N) blocks and majority labels per block."""
     if block_size <= 1:
@@ -346,6 +348,7 @@ def block_reduce(spikes, labels, block_size, reduce="sum"):
 
     return spikes_b, labels_b
 
+
 def get_elite_nodes_wta(spikes, labels, num_classes, min_total_spikes=10):
     mask = (labels >= 0) & (labels < num_classes)
     spikes = spikes[mask]
@@ -370,7 +373,10 @@ def get_elite_nodes_wta(spikes, labels, num_classes, min_total_spikes=10):
 
     return pref, score
 
-def zscore_vote(spikes, pref, baseline_mu, baseline_sigma, num_classes, eps=1e-8, mu_min=1e-3):
+
+def zscore_vote(
+    spikes, pref, baseline_mu, baseline_sigma, num_classes, eps=1e-8, mu_min=1e-3
+):
     """
     spikes: (B, N) block-reduced spikes
     pref: (N,) neuron->class assignment
@@ -384,7 +390,9 @@ def zscore_vote(spikes, pref, baseline_mu, baseline_sigma, num_classes, eps=1e-8
     sigma = np.maximum(baseline_sigma, eps)
 
     z = np.zeros_like(spikes, dtype=float)
-    z[:, valid_neurons] = (spikes[:, valid_neurons] - baseline_mu[valid_neurons]) / (sigma[valid_neurons] + eps)
+    z[:, valid_neurons] = (spikes[:, valid_neurons] - baseline_mu[valid_neurons]) / (
+        sigma[valid_neurons] + eps
+    )
     z = np.maximum(z, 0.0)
 
     # 4) class activations
@@ -400,9 +408,15 @@ def zscore_vote(spikes, pref, baseline_mu, baseline_sigma, num_classes, eps=1e-8
 
 
 def WTA_accuracy(
-    spikes, labels, num_classes, smoothening,
-    split, state=None, fit_frac=0.8, reduce="sum",
-    min_total_spikes=1
+    spikes,
+    labels,
+    num_classes,
+    smoothening,
+    split,
+    state=None,
+    fit_frac=0.8,
+    reduce="sum",
+    min_total_spikes=1,
 ):
     # ---- block reduce first (same unit for baseline & test) ----
     spikes_b, labels_b = block_reduce(spikes, labels, smoothening, reduce=reduce)
@@ -412,11 +426,17 @@ def WTA_accuracy(
         spikes_fit, labels_fit = spikes_b[:cut], labels_b[:cut]
         spikes_test, labels_test = spikes_b[cut:], labels_b[cut:]
 
-        pref, score = get_elite_nodes_wta(spikes_fit, labels_fit, num_classes, min_total_spikes)
+        pref, score = get_elite_nodes_wta(
+            spikes_fit, labels_fit, num_classes, min_total_spikes
+        )
         baseline_mu = spikes_fit.mean(axis=0)
         baseline_sigma = spikes_fit.std(axis=0)
 
-        state = {"pref": pref, "baseline_mu": baseline_mu, "baseline_sigma": baseline_sigma}
+        state = {
+            "pref": pref,
+            "baseline_mu": baseline_mu,
+            "baseline_sigma": baseline_sigma,
+        }
 
     elif split == "test":
         if state is None:
@@ -445,9 +465,6 @@ def WTA_accuracy(
     #     plt.savefig(f"plots/spikes_item_{i}.png")
     #     plt.show()
 
-    print("baseline_mu min/mean/max:", baseline_mu.min(), baseline_mu.mean(), baseline_mu.max())
-    print("nonzero pct:", np.mean(baseline_mu > 0))
-
     pred, acts = zscore_vote(
         spikes_test,
         pref,
@@ -456,7 +473,6 @@ def WTA_accuracy(
         num_classes,
     )
     # create bar plot of acts per item to gauge response in spikes and the comparable z-score
-
 
     acc = (pred == labels_test).mean()
 
@@ -882,12 +898,14 @@ def heatmap_spike_response(
     spike_trace,
     ex,
     x_target,
-    weight_tracking_sleep,
     weights_st_ex,
     weights_ex_ex,
     weights_ex_ih,
     weights_ih_ex,
 ):
+    import matplotlib
+
+    matplotlib.use("Agg")
 
     # define subplot
     fig, axs = plt.subplots(figsize=(10, 6), nrows=3, ncols=4)
@@ -910,18 +928,20 @@ def heatmap_spike_response(
 
         avg_spikes_reshaped = avg_spikes.reshape((rows, cols))
         im = ax.imshow(avg_spikes_reshaped, cmap="viridis", interpolation="nearest")
-        cbar = fig.colorbar(im, ax=ax, shrink=0.5)
-        cbar.ax.tick_params(labelsize=3)  # Adjust this value as needed
-        ax.set_title(title, fontsize=5)
+        cbar = fig.colorbar(im, ax=ax, shrink=0.8)
+        cbar.ax.tick_params(labelsize=6)  # Adjust this value as needed
+        ax.set_title(title, fontsize=8)
         ax.set_xticks([])
         ax.set_yticks([])
         return im
 
     # top row heatmaps
     input_size = int(np.sqrt(spikes_in.shape[1]))
-    create_plot(spikes_in, axs[0, 0], "Input activity", input_size, input_size, ax_flip=0)
-    create_plot(spikes_exc, axs[0, 1], "Excitatory activity", 25, 40, ax_flip=0)
-    create_plot(spikes_ih, axs[0, 2], "Inhibitory activity", 10, 25, ax_flip=0)
+    create_plot(
+        spikes_in, axs[0, 0], "Input activity", input_size, input_size, ax_flip=0
+    )
+    create_plot(spikes_exc, axs[0, 1], "Excitatory activity", 32, 32, ax_flip=0)
+    create_plot(spikes_ih, axs[0, 2], "Inhibitory activity", 15, 15, ax_flip=0)
 
     # add barplot of spike_trace distribution
     n = len(spike_trace)
@@ -945,17 +965,28 @@ def heatmap_spike_response(
     # convert data to numpy
 
     # create heatmap plots
-    create_plot(weights_st_ex, axs[1,0], "St->Ex Incoming Weights", input_size, input_size, ax_flip=1)
-    create_plot(weights_ex_ex, axs[1,1], "Ex->Ex Incoming Weights", 25, 40, ax_flip=1)
-    create_plot(weights_ex_ih, axs[1,2], "Ex->Ih Incoming Weights", 25, 40, ax_flip=1)
-    create_plot(np.abs(weights_ih_ex), axs[1,3], "Ih->Ex Incoming Weights", 10, 25, ax_flip=1)
+    create_plot(
+        weights_st_ex,
+        axs[1, 0],
+        "St->Ex Outgoing Weights",
+        input_size,
+        input_size,
+        ax_flip=1,
+    )
+    create_plot(weights_ex_ex, axs[1, 1], "Ex->Ex Outgoing Weights", 32, 32, ax_flip=1)
+    create_plot(weights_ex_ih, axs[1, 2], "Ex->Ih Outgoing Weights", 32, 32, ax_flip=1)
+    create_plot(
+        np.abs(weights_ih_ex), axs[1, 3], "Ih->Ex Outgoing Weights", 15, 15, ax_flip=1
+    )
 
-    create_plot(weights_st_ex, axs[2,0], "St->Ex Outgoing Weights", 25, 40, ax_flip=0)
-    create_plot(weights_ex_ex, axs[2,1], "Ex->Ex Outgoing Weights", 25, 40, ax_flip=0)
-    create_plot(weights_ex_ih, axs[2,2], "Ex->Ih Outgoing Weights", 10, 25, ax_flip=0)
-    create_plot(np.abs(weights_ih_ex), axs[2,3], "Ih->Ex Outgoing Weights", 25, 40, ax_flip=0)
+    create_plot(weights_st_ex, axs[2, 0], "St->Ex Incoming Weights", 32, 32, ax_flip=0)
+    create_plot(weights_ex_ex, axs[2, 1], "Ex->Ex Incoming Weights", 32, 32, ax_flip=0)
+    create_plot(weights_ex_ih, axs[2, 2], "Ex->Ih Incoming Weights", 15, 15, ax_flip=0)
+    create_plot(
+        np.abs(weights_ih_ex), axs[2, 3], "Ih->Ex Incoming Weights", 32, 32, ax_flip=0
+    )
 
-    row_labels = ["Spike activity", "Incoming weights", "Outgoing weights"]
+    row_labels = ["Spike activity", "Outgoing weights", "Incoming weights"]
 
     for i in range(3):
         # get axis bounding box in figure coords
@@ -963,27 +994,28 @@ def heatmap_spike_response(
         y_center = bbox.y0 + bbox.height / 2
 
         fig.text(
-            0.02,                  # x position (left margin)
-            y_center,              # vertical center of row
+            0.02,  # x position (left margin)
+            y_center,  # vertical center of row
             row_labels[i],
             va="center",
             ha="left",
             rotation=90,
             fontsize=8,
-            fontweight="bold"
+            fontweight="bold",
         )
 
     fig.suptitle(f"Run: {num}, Label {label}")
     from datetime import datetime
+
     ts = datetime.now().strftime("%Y.%m.%d")
     ts_spec = datetime.now().strftime("%Y%m%d_%H%M%S")
-    directory = os.path.join("plots","spikes",dataset,str(label),ts, str(run))
+    directory = os.path.join("plots", "spikes", dataset, str(label), ts, str(run))
     os.makedirs(directory, exist_ok=True)
     out_path = os.path.join(directory, f"{ts_spec}.png")
     # save based on class
     fig.savefig(out_path, dpi=300)
     # save for global plotting
-    directory = os.path.join("plots","spikes",dataset,"all",ts, str(run))
+    directory = os.path.join("plots", "spikes", dataset, "all", ts, str(run))
     os.makedirs(directory, exist_ok=True)
     out_path_glob = os.path.join(directory, f"{ts_spec}.png")
     fig.savefig(out_path_glob, dpi=300)
@@ -1007,7 +1039,14 @@ def gif_spike_rate_by_label(
         return
 
     frame_one = frames[0]
-    frame_one.save(output_filename, format="GIF", append_images=frames[1:], save_all=True, duration=duration, loop=loop)
+    frame_one.save(
+        output_filename,
+        format="GIF",
+        append_images=frames[1:],
+        save_all=True,
+        duration=duration,
+        loop=loop,
+    )
 
     print("gif made!")
 

@@ -4,10 +4,12 @@ from numba import njit, prange
 
 
 @njit
-def normalize_weights_per_column(weights, initial_sums, row_start, row_end, col_start, col_end):
+def normalize_weights_per_column(
+    weights, initial_sums, row_start, row_end, col_start, col_end
+):
     """
     Normalize weights per column (post-neuron) to not exceed initial sums.
-    
+
     Args:
         weights: Full weight matrix
         initial_sums: Array of initial column sums (one per post-neuron)
@@ -16,17 +18,15 @@ def normalize_weights_per_column(weights, initial_sums, row_start, row_end, col_
     """
     W = weights[row_start:row_end, col_start:col_end]
     current_sums = np.sum(np.abs(W), axis=0)
-    
+
     # Scale factor: min(1.0, initial_sum / current_sum) to cap at initial
     scale = np.where(
-        current_sums > 1e-12,
-        np.minimum(1.0, initial_sums / current_sums),
-        1.0
+        current_sums > 0, np.minimum(1.0, initial_sums / current_sums), 1.0
     )
-    
+
     # Apply scaling column-wise
     weights[row_start:row_end, col_start:col_end] *= scale[np.newaxis, :]
-    
+
     return weights
 
 
@@ -346,11 +346,11 @@ def spike_timing(
     nonzero_pre_idx,  # Typed list: for each post neuron, an array of nonzero pre indices
     x_tar,
     track_weights,
+    w_max,
+    mu_weight,
 ):
     n_neurons = spike_trace.shape[0]
-    #rho = 0.001
-    mu = 0.6
-    w_max = 3.0
+    # rho = 0.001
     if track_weights:
         list_x_pre = []
         first_term = []
@@ -362,7 +362,7 @@ def spike_timing(
         # Retrieve the pre-synaptic indices that have a nonzero connection to neuron i.
         # Note: We assume the nonzero_pre_idx list is indexed relative to the postsynaptic
         # neurons starting at N_x (i.e., index 0 in the list corresponds to neuron N_x)
-        pre_indices = nonzero_pre_idx[i-N_x]
+        pre_indices = nonzero_pre_idx[i - N_x]
 
         # Iterate only over connections that exist.
         if spikes[i] == 1:
@@ -372,14 +372,14 @@ def spike_timing(
                     x_pre_exc = spike_trace[j]
                     # add to average pre activity
                     base = max(w_max - weights[j, i], 0.0)
-                    delta_w = learning_rate_exc * (x_pre_exc - x_tar) * base**mu 
-                    #print(f"delta_w: {delta_w}", f"x_pre_exc: {x_pre_exc}", f"x_tar: {x_tar}", f"first_term: {x_pre_exc - x_tar}", f"second term: {(w_max - weights[j, i])**mu}")
+                    delta_w = learning_rate_exc * (x_pre_exc - x_tar) * base**mu_weight
+                    # print(f"delta_w: {delta_w}", f"x_pre_exc: {x_pre_exc}", f"x_tar: {x_tar}", f"first_term: {x_pre_exc - x_tar}", f"second term: {(w_max - weights[j, i])**mu}")
                     weights[j, i] += delta_w
 
                     if track_weights:
                         list_x_pre.append(x_pre_exc)
                         first_term.append(x_pre_exc - x_tar)
-                        second_term.append(base**mu)
+                        second_term.append(base**mu_weight)
                         delta_w_list.append(delta_w)
 
             # else:  # inhibitory synapse (your chosen rule)
@@ -393,7 +393,7 @@ def spike_timing(
             #         x_pre_inh = spike_trace[j]
             #         post spike: correlate with recent pre activity
             #         delta_w = learning_rate_inh * x_pre_inh
-            #         weights[j, i] -= delta_w  
+            #         weights[j, i] -= delta_w
 
     if track_weights:
         return weights, list_x_pre, first_term, second_term, delta_w_list
