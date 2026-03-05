@@ -8,3 +8,5 @@ pycache/
 *.pyc
 plots/
 results/
+figures/
+profile/
