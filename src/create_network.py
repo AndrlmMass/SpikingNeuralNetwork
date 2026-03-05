@@ -632,13 +632,13 @@ def create_arrays(
     ex = st + N_exc  # excitatory
     ih = ex + N_inh  # inhibitory
 
-    membrane_potential_train = np.zeros((total_time_train, ih - st))
+    membrane_potential_train = np.zeros((ih - st))
     if total_time_train > 0:
-        membrane_potential_train[0] = resting_membrane
+        membrane_potential_train[:] = resting_membrane
 
-    membrane_potential_test = np.zeros((total_time_test, ih - st))
+    membrane_potential_test = np.zeros((ih - st))
     if total_time_test > 0:
-        membrane_potential_test[0] = resting_membrane
+        membrane_potential_test[:] = resting_membrane
 
     spikes_train = np.zeros((total_time_train, N), dtype=np.int8)
     if data_train is not None and total_time_train > 0:

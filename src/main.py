@@ -91,8 +91,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 30000, 500, 5000
-        b_tr, b_va, b_te = 100, 500, 500
+        img_tr, img_va, img_te = 30000, 100, 5000
+        b_tr, b_va, b_te = 100, 100, 500
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -154,76 +154,75 @@ def run_once(
         random_weights=args.random_weights,
     )
 
-    if getattr(args, "profile", False):
+    if args.profile:
         pr = cProfile.Profile()
         pr.enable()
-        snn_N.train_network(
-            train_weights=not args.no_train,
-            noisy_potential=True,
-            compare_decay_rates=False,
-            check_sleep_interval=35000,
-            weight_decay_rate_exc=[0.99997],
-            weight_decay_rate_inh=[0.99997],
-            max_weight_exc=25,
-            min_weight_inh=-25,
-            samples=10,
-            tau_syn_exc=tau_syn_exc,
-            tau_syn_inh=tau_syn_inh,
-            tau_m_exc=tau_m_exc,
-            tau_m_inh=tau_m_inh,
-            membrane_resistance_exc=Rm_exc,
-            membrane_resistance_inh=Rm_inh,
-            force_train=True,
-            plot_spikes_train=False,
-            delta_adaption=delta_adaption,
-            tau_trace=tau_trace,
-            mu_weight=mu_weight,
-            plot_weights=False,
-            plot_epoch_performance=False,
-            plot_weights_per_epoch=bool(getattr(args, "plot_weights_per_epoch", False)),
-            plot_spikes_per_epoch=bool(getattr(args, "plot_spikes_per_epoch", False)),
-            sleep_synchronized=False,
-            plot_top_response_test=False,
-            plot_top_response_train=False,
-            plot_tsne_during_training=False,
-            heatmap_plot=bool(args.heatmap_plot),
-            tsne_plot_interval=1,
-            plot_spectrograms=False,
-            use_validation_data=False,
-            var_noise=args.noise_level,
-            x_tar=x_tar,
-            track_weights=bool(args.track_weights),
-            sleep=not args.no_sleep,
-            sleep_mode=str(args.sleep_mode),
-            narrow_top=0.2,
-            track_stats=bool(args.track_stats),
-            run=run_id,
-            A_minus=0.95,
-            A_plus=1.0,
-            tau_LTD=20,
-            tau_LTP=20,
-            tau_adaption=tau_adaption,
-            w_max=w_max,
-            learning_rate_exc=learning_rate_exc,
-            learning_rate_inh=0.0005,
-            accuracy_method="pca_lr",
-            test_only=False,
-            use_QDA=False,
-            early_stopping=bool(args.early_stopping),
-            early_stopping_patience_pct=0.3,
-            sleep_ratio=float(args.sleep_rate),
-            sleep_max_iters=int(args.sleep_max_iters),
-            on_timeout=str(args.on_timeout),
-            normalize_weights=bool(args.normalize_weights),
-        )
+    snn_N.train_network(
+        train_weights=not args.no_train,
+        noisy_potential=True,
+        compare_decay_rates=False,
+        check_sleep_interval=35000,
+        weight_decay_rate_exc=[0.99997],
+        weight_decay_rate_inh=[0.99997],
+        max_weight_exc=25,
+        min_weight_inh=-25,
+        samples=10,
+        tau_syn_exc=tau_syn_exc,
+        tau_syn_inh=tau_syn_inh,
+        tau_m_exc=tau_m_exc,
+        tau_m_inh=tau_m_inh,
+        membrane_resistance_exc=Rm_exc,
+        membrane_resistance_inh=Rm_inh,
+        force_train=True,
+        plot_spikes_train=False,
+        delta_adaption=delta_adaption,
+        tau_trace=tau_trace,
+        mu_weight=mu_weight,
+        plot_weights=False,
+        plot_epoch_performance=False,
+        plot_weights_per_epoch=args.plot_weights_per_epoch,
+        plot_spikes_per_epoch=args.plot_spikes_per_epoch,
+        sleep_synchronized=False,
+        plot_top_response_test=False,
+        plot_top_response_train=False,
+        plot_tsne_during_training=False,
+        heatmap_plot=args.heatmap_plot,
+        tsne_plot_interval=1,
+        plot_spectrograms=False,
+        use_validation_data=False,
+        var_noise=args.noise_level,
+        x_tar=x_tar,
+        track_weights=args.track_weights,
+        sleep=not args.no_sleep,
+        sleep_mode=args.sleep_mode,
+        narrow_top=0.2,
+        track_stats=args.track_stats,
+        run=run_id,
+        A_minus=0.95,
+        A_plus=1.0,
+        tau_LTD=20,
+        tau_LTP=20,
+        tau_adaption=tau_adaption,
+        w_max=w_max,
+        learning_rate_exc=learning_rate_exc,
+        learning_rate_inh=0.0005,
+        accuracy_method="pca_lr",
+        test_only=False,
+        use_QDA=False,
+        early_stopping=args.early_stopping,
+        early_stopping_patience_pct=0.3,
+        sleep_ratio=args.sleep_rate,
+        sleep_max_iters=args.sleep_max_iters,
+        on_timeout=args.on_timeout,
+        normalize_weights=args.normalize_weights,
+    )
+    if args.profile:
         pr.disable()
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        directory = os.path.join("results", "comparison_runs", f"{args.image_dataset}")
+        td = datetime.now().strftime("%Y%m%d")
+        directory = os.path.join("profile", f"{args.image_dataset}", td)
         os.makedirs(directory, exist_ok=True)
-        profile_path = args.profile_output or os.path.join(
-            directory,
-            f"profile_{ts}_sr{args.sleep_rate}__nl{args.noise_level}_run{run_idx+1}.prof",
-        )
+        profile_path = os.path.join(directory, f"profile_{ts}_run{run_idx+1}.prof")
         try:
             pr.dump_stats(profile_path)
             print(f"Profile saved to: {profile_path}")
@@ -231,67 +230,6 @@ def run_once(
             pstats.Stats(pr).sort_stats("cumtime").print_stats(20)
         except Exception as e:
             print(f"WARNING: could not write/print profile stats: {e}")
-    else:
-        snn_N.train_network(
-            train_weights=not args.no_train,
-            noisy_potential=True,
-            compare_decay_rates=False,
-            check_sleep_interval=35000,
-            weight_decay_rate_exc=[0.99997],
-            weight_decay_rate_inh=[0.99997],
-            samples=10,
-            force_train=True,
-            plot_spikes_train=False,
-            plot_weights=False,
-            heatmap_plot=bool(args.heatmap_plot),
-            get_giffed=bool(args.get_giffed),
-            plot_epoch_performance=False,
-            plot_weights_per_epoch=bool(getattr(args, "plot_weights_per_epoch", False)),
-            plot_spikes_per_epoch=bool(getattr(args, "plot_spikes_per_epoch", False)),
-            sleep_synchronized=False,
-            plot_top_response_test=False,
-            plot_top_response_train=False,
-            plot_tsne_during_training=False,
-            tsne_plot_interval=1,
-            plot_spectrograms=False,
-            use_validation_data=False,
-            var_noise=args.noise_level,
-            mu_weight=mu_weight,
-            max_weight_exc=25,
-            tau_syn_exc=tau_syn_exc,
-            tau_syn_inh=tau_syn_inh,
-            tau_m_exc=tau_m_exc,
-            tau_m_inh=tau_m_inh,
-            delta_adaption=delta_adaption,
-            tau_trace=tau_trace,
-            track_stats=bool(args.track_stats),
-            membrane_resistance_exc=Rm_exc,
-            membrane_resistance_inh=Rm_inh,
-            min_weight_inh=-25,
-            tau_adaption=tau_adaption,
-            w_max=w_max,
-            x_tar=x_tar,
-            track_weights=bool(args.track_weights),
-            sleep=not args.no_sleep,
-            sleep_mode=str(args.sleep_mode),
-            narrow_top=0.2,
-            A_minus=0.95,
-            A_plus=1.0,
-            run=run_id,
-            tau_LTD=28,
-            tau_LTP=25,
-            learning_rate_exc=learning_rate_exc,
-            learning_rate_inh=0.00005,
-            accuracy_method="pca_lr",
-            test_only=False,
-            use_QDA=False,
-            early_stopping=bool(args.early_stopping),
-            early_stopping_patience_pct=0.3,
-            sleep_ratio=float(args.sleep_rate),
-            sleep_max_iters=int(args.sleep_max_iters),
-            on_timeout=str(args.on_timeout),
-            normalize_weights=bool(args.normalize_weights),
-        )
 
     if disable_plotting:
         result = snn_N.analyze_results(
@@ -472,12 +410,6 @@ def main():
         help="enable cProfile around training to find hotspots",
     )
     parser.add_argument(
-        "--profile-output",
-        type=str,
-        default=None,
-        help="optional path for .prof output (default: results/profile_*.prof)",
-    )
-    parser.add_argument(
         "--plot-acc-history",
         action="store_true",
         default=False,
@@ -517,7 +449,7 @@ def main():
     parser.add_argument(
         "--track-stats",
         action="store_true",
-        default=True,
+        default=False,
         help="track statistics during training",
     )
     args, _ = parser.parse_known_args()
@@ -671,15 +603,6 @@ def main():
         "results_by_sleep_rate": {str(sr): [] for sr in sleep_rates},
         "results_by_noise_levels": {str(sr): [] for sr in noise_levels},
     }
-
-    # Save initial file
-    try:
-        with open(results_filename, "w") as f:
-            json.dump(initial_results_data, f, indent=2)
-        print(f"Results will be saved incrementally to: {results_filename}")
-    except Exception as e:
-        print(f"WARNING: Could not initialize results file: {e}")
-        results_filename = None
 
     # Function to save results incrementally
     def save_results_incremental(sleep_rate, noise_level, run_idx, result):

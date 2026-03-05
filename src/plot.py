@@ -928,8 +928,6 @@ def heatmap_spike_response(
 
         avg_spikes_reshaped = avg_spikes.reshape((rows, cols))
         im = ax.imshow(avg_spikes_reshaped, cmap="viridis", interpolation="nearest")
-        cbar = fig.colorbar(im, ax=ax, shrink=0.8)
-        cbar.ax.tick_params(labelsize=6)  # Adjust this value as needed
         ax.set_title(title, fontsize=8)
         ax.set_xticks([])
         ax.set_yticks([])
@@ -1013,12 +1011,12 @@ def heatmap_spike_response(
     os.makedirs(directory, exist_ok=True)
     out_path = os.path.join(directory, f"{ts_spec}.png")
     # save based on class
-    fig.savefig(out_path, dpi=300)
+    fig.savefig(out_path, dpi=100)
     # save for global plotting
     directory = os.path.join("plots", "spikes", dataset, "all", ts, str(run))
     os.makedirs(directory, exist_ok=True)
     out_path_glob = os.path.join(directory, f"{ts_spec}.png")
-    fig.savefig(out_path_glob, dpi=300)
+    fig.savefig(out_path_glob, dpi=100)
     plt.close(fig)  # ✅ important if called in a loop
 
 
