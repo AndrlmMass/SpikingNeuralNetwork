@@ -1501,7 +1501,6 @@ class snn_sleepy:
                     self.mp_test,
                     self.pre_trace,
                     self.post_trace,
-                    self.spike_times,
                     self.resting_potential,
                     self.max_time,
                 )
@@ -1788,10 +1787,6 @@ class snn_sleepy:
             max_sum_inh = sum_weights_inh * alpha
             max_sum = sum_weights * alpha
 
-            # Auto-adjust check_sleep_interval based on batch size
-            # To prevent sleep from fragmenting data into too few segments
-            timesteps_per_epoch = self.batch_train * self.num_steps
-
             # Bundle common training arguments
             common_args = dict(
                 tau_syn_exc=tau_syn_exc,
@@ -1923,7 +1918,6 @@ class snn_sleepy:
             # create missing arrays
             I_syn_exc = np.zeros(self.N_exc)
             I_syn_inh = np.zeros(self.N_inh)
-            spike_times = np.zeros(self.N)
             a = np.zeros(self.N_exc + self.N_inh)
 
             # create spike threshold array
@@ -2057,7 +2051,6 @@ class snn_sleepy:
                             _sleep_te_out,
                             _I_syn_exc_te,
                             _I_syn_inh_te,
-                            _spike_times_te,
                             _a_te,
                             _weight_tracking_te,
                             _spike_trace_te,
@@ -2077,7 +2070,6 @@ class snn_sleepy:
                             timing_update=timing_update,
                             track_weights=track_weights,
                             x_tar=x_tar,
-                            spike_times=spike_times.copy(),
                             a=a.copy(),
                             spike_trace=spike_trace_te,
                             tau_trace=tau_trace,
@@ -2146,14 +2138,14 @@ class snn_sleepy:
                         else:
                             if te_idx.size == 0:
                                 te_idx = va_idx
-                            accs = self._pca_eval(
+                            acc = self._pca_eval(
                                 X_train=None,
                                 y_train=None,
                                 X_test=X_te,
                                 y_test=y_te,
                                 split="test",
                             )
-                            acc_pca = float(accs.get("test", 0.0))
+                            acc_pca = acc
                     except Exception as ex:
                         print(f"Warning: PCA+LR (test-only) failed ({ex}); using 0.0")
                         acc_pca = 0.0
@@ -2194,7 +2186,6 @@ class snn_sleepy:
                     del (
                         I_syn_exc,
                         I_syn_inh,
-                        spike_times,
                         a,
                         spike_threshold,
                     )
@@ -2326,12 +2317,12 @@ class snn_sleepy:
                     self._arrays_pre_allocated = True
                 else:
                     # Reuse pre-allocated arrays
-                    mp_train = np.zeros((self.T_train, self.N - self.N_x))
-                    mp_train[0] = self.resting_potential
+                    mp_train = np.zeros(self.N - self.N_x)
+                    mp_train[:] = self.resting_potential
                     spikes_train = np.zeros((self.T_train, self.N), dtype=np.int8)
                     # Copy data to spikes array
                     spikes_train[:, : self.N_x] = data_train
-                    spike_trace = np.zeros(self.N)
+                    spike_trace = np.zeros(self.N - self.N_inh)
                 # 3a) Train on the training set
                 # Ensure data width matches expected N_x
                 if data_train is not None and data_train.shape[1] != self.N_x:
@@ -2347,9 +2338,9 @@ class snn_sleepy:
                         data_train = np.concatenate([data_train, pad_block], axis=1)
                     else:
                         data_train = data_train[:, : self.N_x]
-                run = int(time.time() * 1000)
-                pr = cProfile.Profile()
-                pr.enable()
+                # run = int(time.time() * 1000)
+                # pr = cProfile.Profile()
+                # pr.enable()
                 (
                     self.weights,
                     spikes_tr_out,
@@ -2363,7 +2354,6 @@ class snn_sleepy:
                     sleep_tr_out,
                     I_syn_exc,
                     I_syn_inh,
-                    spike_times,
                     a,
                     weight_tracking_epoch,
                     spike_trace,
@@ -2385,7 +2375,6 @@ class snn_sleepy:
                     spikes=spikes_train,
                     check_sleep_interval=check_sleep_interval,
                     timing_update=timing_update,
-                    spike_times=spike_times.copy(),
                     spike_threshold=spike_threshold,
                     a=a,
                     track_weights=track_weights,
@@ -2395,19 +2384,19 @@ class snn_sleepy:
                     sleep_ratio=getattr(self, "sleep_ratio", 0.0),
                     **common_args,
                 )
-                pr.disable()
-                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-                td = datetime.now().strftime("%Y%m%d")
-                directory = os.path.join("profile", f"{self.image_dataset}", td)
-                os.makedirs(directory, exist_ok=True)
-                profile_path = os.path.join(directory, f"profile_{ts}.prof")
-                try:
-                    pr.dump_stats(profile_path)
-                    print(f"Profile saved to: {profile_path}")
-                    # Print top hotspots by cumulative time
-                    pstats.Stats(pr).sort_stats("cumtime").print_stats(20)
-                except Exception as e:
-                    print(f"WARNING: could not write/print profile stats: {e}")
+                # pr.disable()
+                # ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                # td = datetime.now().strftime("%Y%m%d")
+                # directory = os.path.join("profile", f"{self.image_dataset}", td)
+                # os.makedirs(directory, exist_ok=True)
+                # profile_path = os.path.join(directory, f"profile_{ts}.prof")
+                # try:
+                #     pr.dump_stats(profile_path)
+                #     print(f"Profile saved to: {profile_path}")
+                #     # Print top hotspots by cumulative time
+                #     pstats.Stats(pr).sort_stats("cumtime").print_stats(20)
+                # except Exception as e:
+                #     print(f"WARNING: could not write/print profile stats: {e}")
                 spike_threshold = thresh_tr
                 # plot gif
                 if get_giffed:
@@ -2441,7 +2430,6 @@ class snn_sleepy:
                             self._record_accuracy(
                                 "train", train_acc_batch, epoch=e + 1, method="top"
                             )
-                            self._plot_accuracy()
                         except Exception:
                             pass
 
@@ -2585,11 +2573,10 @@ class snn_sleepy:
                                     if train_acc_top is not None:
                                         self._record_accuracy(
                                             "train",
-                                            acc,
+                                            train_acc_top,
                                             epoch=e + 1,
                                             method="top",
                                         )
-                                    self._plot_accuracy()
                                 except Exception:
                                     pass
 
@@ -2643,7 +2630,6 @@ class snn_sleepy:
                 labels_te_out = None
                 sleep_te_out = None
                 I_syn_te = None
-                spike_times_te = None
                 a_te = None
                 T_test_batch = 0
                 st = self.N_x
@@ -2704,8 +2690,6 @@ class snn_sleepy:
 
                     # 3b) Test on the test set
                     # Ensure required state arrays exist even if not set earlier
-                    if "spike_times" not in locals():
-                        spike_times = np.zeros(self.N)
                     if "a" not in locals():
                         a = np.zeros(self.N)
                     if "I_syn" not in locals():
@@ -2726,7 +2710,6 @@ class snn_sleepy:
                         sleep_te_out,
                         I_syn_exc_te,
                         I_syn_inh_te,
-                        spike_times_te,
                         a_te,
                         weight_tracking_te,
                         _spike_trace_te,
@@ -2750,7 +2733,6 @@ class snn_sleepy:
                         spikes=spikes_test.copy(),
                         check_sleep_interval=check_sleep_interval,
                         timing_update=timing_update,
-                        spike_times=spike_times.copy(),
                         a=a.copy(),
                         I_syn_exc=I_syn_exc.copy(),
                         I_syn_inh=I_syn_inh.copy(),
@@ -2767,6 +2749,7 @@ class snn_sleepy:
                     all_labels_val[val_sample_count : val_sample_count + batch_size] = (
                         labels_te_out
                     )
+                    val_sample_count += batch_size
 
                     # 4) Compute phi metrics using the trained outputs
                     phi_tr, phi_te, *unused = calculate_phi(
@@ -2876,24 +2859,27 @@ class snn_sleepy:
 
                             if X_te_dist.size > 0:
                                 # Estimate test accuracy
-                                acc = self._pca_eval(
+                                acc = self._pca_eval(  # VAL STOPS HERE
                                     X_train=None,
                                     y_train=None,
                                     X_test=X_te_dist,
                                     y_test=y_te_dist,
                                     split="val",
                                 )
+                                # record accuracy
+                                self._record_accuracy(
+                                    "val",
+                                    acc,
+                                    epoch=e + 1,
+                                    method="pca_lr",
+                                )
+                                print(f"Validation Accuracy (PCA+LR): {acc}")
                             else:
                                 print(
                                     "Warning: No features available for PCA+LR prediction analysis"
                                 )
-                                predictions = np.array([])
-                                true_labels = np.array([])
-
                         except Exception as ex:
                             print(f"Warning: PCA+LR prediction analysis failed ({ex})")
-                            predictions = np.array([])
-                            true_labels = np.array([])
 
                 # Use pre-allocated arrays (no concatenation needed)
                 spikes_te_out = all_spikes_val[:val_sample_count]
@@ -2901,79 +2887,59 @@ class snn_sleepy:
 
                 # If using PCA+LR, compute accuracy once using aggregated spikes
                 if accuracy_method == "pca_lr":
-                    try:
-                        X_te, y_te = bin_spikes_by_label_no_breaks(
+                    X_te, y_te = bin_spikes_by_label_no_breaks(
+                        spikes=spikes_te_out[:, self.st : self.ex],
+                        labels=labels_te_out,
+                    )
+
+                    if X_tr.size == 0 or X_te.size == 0:
+                        print(
+                            "Warning: empty features for PCA+LR; setting accuracy to 0.0"
+                        )
+                        acc_te = 0.0
+                    else:
+                        # Check sample requirements for PCA+LR
+                        min_samples_needed = max(
+                            10, self.N_classes * 5
+                        )  # At least 5 samples per class
+                        recommended_samples = (
+                            self.N_classes * 20
+                        )  # Recommended: 20 samples per class
+
+                        # Show validation data distribution
+                        val_dist = np.bincount(y_te, minlength=self.N_classes)
+                        print(f"\nValidation Data Distribution:")
+                        for i in range(self.N_classes):
+                            count = val_dist[i]
+                            percentage = (
+                                (count / len(y_te)) * 100 if len(y_te) > 0 else 0
+                            )
+                            print(
+                                f"  Class {i}: {count:3d} samples ({percentage:5.1f}%)"
+                            )
+                        accs = self._pca_eval(
+                            X_train=None,
+                            y_train=None,
+                            X_test=X_te,
+                            y_test=y_te,
+                            split="val",
+                        )
+                        acc_te = accs
+
+                        # Also compute top_method validation accuracy for comparison
+                        val_acc_top, dbg_test, _ = WTA_accuracy(
                             spikes=spikes_te_out[:, self.st : self.ex],
                             labels=labels_te_out,
+                            num_classes=self.N_classes,
+                            smoothening=self.num_steps,
+                            split="test",
+                            state=state,
                         )
-
-                        if X_tr.size == 0 or X_te.size == 0:
-                            print(
-                                "Warning: empty features for PCA+LR; setting accuracy to 0.0"
+                        # record accuracy
+                        if val_acc_top is not None:
+                            self._record_accuracy(
+                                "val", val_acc_top, epoch=e + 1, method="top"
                             )
-                            acc_te = 0.0
-                        else:
-                            # Check sample requirements for PCA+LR
-                            min_samples_needed = max(
-                                10, self.N_classes * 5
-                            )  # At least 5 samples per class
-                            recommended_samples = (
-                                self.N_classes * 20
-                            )  # Recommended: 20 samples per class
-
-                            print(
-                                f"PCA+LR Validation: {len(X_te)} samples (min: {min_samples_needed}, recommended: {recommended_samples})"
-                            )
-
-                            if len(X_te) < min_samples_needed:
-                                print(
-                                    f"⚠️  WARNING: Only {len(X_te)} validation samples - PCA+LR may be unreliable"
-                                )
-                            elif len(X_te) < recommended_samples:
-                                print(
-                                    f"ℹ️  NOTE: {len(X_te)} validation samples - more data would improve estimation"
-                                )
-
-                            # Show validation data distribution
-                            val_dist = np.bincount(y_te, minlength=self.N_classes)
-                            print(f"\nValidation Data Distribution:")
-                            for i in range(self.N_classes):
-                                count = val_dist[i]
-                                percentage = (
-                                    (count / len(y_te)) * 100 if len(y_te) > 0 else 0
-                                )
-                                print(
-                                    f"  Class {i}: {count:3d} samples ({percentage:5.1f}%)"
-                                )
-                            accs = self._pca_eval(
-                                X_train=None,
-                                y_train=None,
-                                X_test=X_te,
-                                y_test=y_te,
-                                split="val",
-                            )
-                            acc_te = float(accs.get("test", 0.0))
-
-                            # Also compute top_method validation accuracy for comparison
-                            try:
-                                val_acc_top, dbg_test, _ = WTA_accuracy(
-                                    spikes=spikes_te_out[:, self.st : self.ex],
-                                    labels=labels_te_out,
-                                    num_classes=self.N_classes,
-                                    smoothening=self.num_steps,
-                                    split="test",
-                                    state=state,
-                                )
-                                print(f"Validation Accuracy (WTA): {val_acc_top:.4f}")
-                            except Exception as ex_top:
-                                print(
-                                    f"Warning: WTA validation accuracy computation failed ({ex_top})"
-                                )
-                                val_acc_top = None
-                    except Exception as ex:
-                        print(f"Warning: PCA+LR accuracy failed ({ex}); using 0.0")
-                        acc_te = 0.0
-                        val_acc_top = None
 
                 # Update performance tracking
                 self.performance_tracker[e] = [phi_te, acc_te]
@@ -3089,7 +3055,6 @@ class snn_sleepy:
                         labels_te_out,
                         sleep_te_out,
                         I_syn_te,
-                        spike_times_te,
                         a_te,
                     )
                     # Clean up training results
@@ -3253,7 +3218,6 @@ class snn_sleepy:
             del (
                 I_syn_exc,
                 I_syn_inh,
-                spike_times,
                 a,
                 spike_threshold,
             )
@@ -3484,7 +3448,6 @@ class snn_sleepy:
                         spikes=spikes_test.copy(),
                         check_sleep_interval=1000000,
                         timing_update=False,
-                        spike_times=np.zeros(self.N),
                         a=np.zeros(ih - st),
                         I_syn_exc=np.zeros(self.N_exc),
                         I_syn_inh=np.zeros(self.N_inh),
@@ -3878,7 +3841,6 @@ class snn_sleepy:
                                 sleep_tr_out,
                                 I_syn_exc,
                                 I_syn_inh,
-                                _spike_times_tr,
                                 _a_tr,
                                 _weight_tracking_tr,
                                 _spike_trace_tr,
@@ -3902,7 +3864,6 @@ class snn_sleepy:
                                 spikes=spikes_train_init.copy(),
                                 check_sleep_interval=check_sleep_interval,
                                 timing_update=timing_update,
-                                spike_times=spike_times.copy(),
                                 a=a.copy(),
                                 spike_threshold=spike_threshold.copy(),
                                 I_syn=I_syn.copy(),
@@ -3928,7 +3889,6 @@ class snn_sleepy:
                                 sleep_te_out,
                                 I_syn_exc_te,
                                 I_syn_inh_te,
-                                _spike_times_te,
                                 _a_te,
                                 _weight_tracking_te,
                                 _spike_trace_te,
@@ -3952,7 +3912,6 @@ class snn_sleepy:
                                 spikes=spikes_test_init.copy(),
                                 check_sleep_interval=check_sleep_interval,
                                 timing_update=timing_update,
-                                spike_times=spike_times.copy(),
                                 a=a.copy(),
                                 spike_threshold=spike_threshold.copy(),
                                 I_syn=I_syn.copy(),

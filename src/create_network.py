@@ -594,7 +594,7 @@ def create_weights(
         plt.show()
 
         inh_in_per_E = (-W_ie).sum(axis=0)
-        exc_in_per_E = weights_ex_ex.sum(axis=0)
+        exc_in_per_E = W_ee.sum(axis=0)
 
         print(
             "exc incoming per E: min/mean/max =",
@@ -632,11 +632,11 @@ def create_arrays(
     ex = st + N_exc  # excitatory
     ih = ex + N_inh  # inhibitory
 
-    membrane_potential_train = np.zeros((ih - st))
+    membrane_potential_train = np.zeros(ih - st)
     if total_time_train > 0:
         membrane_potential_train[:] = resting_membrane
 
-    membrane_potential_test = np.zeros((ih - st))
+    membrane_potential_test = np.zeros(ih - st)
     if total_time_test > 0:
         membrane_potential_test[:] = resting_membrane
 
@@ -649,7 +649,7 @@ def create_arrays(
         spikes_test[:, :st] = data_test
 
     # create spike traces for each neuron
-    spike_trace = np.zeros(N, dtype=np.float32)
+    spike_trace = np.zeros(N - N_inh, dtype=np.float32)
 
     return (
         membrane_potential_train,

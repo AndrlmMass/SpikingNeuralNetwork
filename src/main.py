@@ -66,7 +66,7 @@ def run_once(
         tau_adaption = 200
         w_max = 10
         num_steps = 350
-        x_tar = 0.1
+        x_tar = 0.5
         mu_weight = 0.6
 
     ts_spec = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -91,8 +91,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 30000, 100, 5000
-        b_tr, b_va, b_te = 100, 100, 500
+        img_tr, img_va, img_te = 30000, 250, 5000
+        b_tr, b_va, b_te = 1000, 250, 500
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -231,27 +231,6 @@ def run_once(
         except Exception as e:
             print(f"WARNING: could not write/print profile stats: {e}")
 
-    if disable_plotting:
-        result = snn_N.analyze_results(
-            t_sne_test=False,
-            t_sne_train=False,
-            pca_train=False,
-            pca_test=False,
-            calculate_phi=False,
-        )
-    else:
-        result = snn_N.analyze_results(t_sne_test=True)
-
-    acc_dict = result[0] if isinstance(result, tuple) else result
-    final_test_phi = getattr(snn_N, "final_test_phi", None)
-    # Optional: plot accuracy histories at end
-    try:
-        if getattr(args, "plot_acc_history", False) and not disable_plotting:
-            snn_N.plot_accuracy_history()
-    except Exception as e:
-        print(f"Warning: failed to plot accuracy history ({e})")
-    return acc_dict, final_test_phi
-
 
 def main():
     parser = argparse.ArgumentParser()
@@ -287,11 +266,11 @@ def main():
     parser.add_argument(
         "--no-sleep",
         action="store_true",
-        default=False,
+        default=True,
         help="disable sleep during training (default: sleep enabled)",
     )
     parser.add_argument(
-        "--normalize-weights",
+        "--no_normalize-weights",
         action="store_true",
         default=False,
         help="enable per-group weight-sum normalization (may slow training)",
@@ -358,7 +337,7 @@ def main():
     parser.add_argument(
         "--heatmap-plot",
         action="store_true",
-        default=True,
+        default=False,
         help="plot the heatmap of the weights",
     )
     parser.add_argument(
@@ -585,80 +564,6 @@ def main():
         args.dataset if getattr(args, "dataset", None) else args.image_dataset
     )
 
-    initial_results_data = {
-        "timestamp": datetime.now().isoformat(),
-        "status": "in_progress",
-        "image_dataset": dataset_name,
-        "args": {
-            "runs": args.runs,
-            "sleep_rates": [float(sr) for sr in sleep_rates],
-            "noise_levels": [float(sr) for sr in noise_levels],
-            "sleep_max_iters": args.sleep_max_iters,
-            "on_timeout": args.on_timeout,
-            "early_stopping": args.early_stopping,
-            "no_sleep": args.no_sleep,
-            "normalize_weights": args.normalize_weights,
-            "image_dataset": dataset_name,
-        },
-        "results_by_sleep_rate": {str(sr): [] for sr in sleep_rates},
-        "results_by_noise_levels": {str(sr): [] for sr in noise_levels},
-    }
-
-    # Function to save results incrementally
-    def save_results_incremental(sleep_rate, noise_level, run_idx, result):
-        if results_filename is None:
-            return
-        try:
-            try:
-                with open(results_filename, "r") as f:
-                    results_data = json.load(f)
-            except (FileNotFoundError, json.JSONDecodeError):
-                results_data = initial_results_data.copy()
-
-            if isinstance(result, tuple) and len(result) >= 2:
-                acc_dict, phi = result[0], result[1]
-            elif isinstance(result, tuple) and len(result) == 1:
-                acc_dict, phi = result[0], None
-            else:
-                acc_dict, phi = result, None
-
-            result_entry = {
-                "run": int(run_idx + 1),
-                "sleep_rate": float(sleep_rate),
-                "noise_level": float(noise_level),
-                "image_dataset": dataset_name,
-                "test_accuracy": (
-                    safe_float(acc_dict.get("test"))
-                    if isinstance(acc_dict, dict)
-                    else None
-                ),
-                "train_accuracy": (
-                    safe_float(acc_dict.get("train"))
-                    if isinstance(acc_dict, dict)
-                    else None
-                ),
-                "val_accuracy": (
-                    safe_float(acc_dict.get("val"))
-                    if isinstance(acc_dict, dict)
-                    else None
-                ),
-                "final_test_phi": safe_float(phi),
-            }
-
-            if sleep_rate not in results_data["results_by_sleep_rate"]:
-                results_data["results_by_sleep_rate"][sleep_rate] = []
-
-            if noise_level not in results_data["results_by_noise_level"]:
-                results_data["results_by_noise_level"][noise_level] = []
-
-            results_data["results_by_sleep_rate"][sleep_rate].append(result_entry)
-            results_data["results_by_noise_level"][noise_level].append(result_entry)
-
-            with open(results_filename, "w") as f:
-                json.dump(results_data, f, indent=2)
-        except Exception as e:
-            print(f"WARNING: Could not save incremental results: {e}")
-
     # Run for each sleep rate
     preview_requested = bool(getattr(args, "preview_dataset", False))
     preview_consumed = False
@@ -695,11 +600,6 @@ def main():
                 if preview_this_run:
                     preview_consumed = True
                 all_results.append((sleep_rate, noise_level, run_idx, result))
-                save_results_incremental(sleep_rate, noise_level, run_idx, result)
-                if excel_run_number is not None:
-                    save_to_excel(
-                        sleep_rate, noise_level, run_idx, result, excel_run_number
-                    )
 
         if args.runs > 0 and len(all_results) > 0:
             print("\n" + "=" * 70)
@@ -885,75 +785,6 @@ def main():
                 return float(max(values)) if values else None
             except (ValueError, TypeError):
                 return None
-
-        if results_filename and os.path.exists(results_filename):
-            try:
-                with open(results_filename, "r") as f:
-                    results_data = json.load(f)
-            except (FileNotFoundError, json.JSONDecodeError) as e:
-                print(f"WARNING: Could not read existing results file: {e}")
-                results_data = initial_results_data.copy()
-        else:
-            results_data = initial_results_data.copy()
-
-        results_data["image_dataset"] = dataset_name
-
-        all_test_accs_from_file = []
-        all_test_phis_from_file = []
-
-        for sleep_rate_key, results_list in results_data[
-            "results_by_sleep_rate"
-        ].items():
-            for result_entry in results_list:
-                if result_entry.get("test_accuracy") is not None:
-                    all_test_accs_from_file.append(result_entry["test_accuracy"])
-                if result_entry.get("final_test_phi") is not None:
-                    all_test_phis_from_file.append(result_entry["final_test_phi"])
-
-        results_data["summary"] = {
-            "total_runs": len(all_test_accs_from_file),
-            "overall_mean_test_accuracy": safe_stat_mean(all_test_accs_from_file),
-            "overall_std_test_accuracy": safe_stat_std(all_test_accs_from_file),
-            "overall_mean_final_test_phi": safe_stat_mean(all_test_phis_from_file),
-            "overall_std_final_test_phi": safe_stat_std(all_test_phis_from_file),
-            "per_sleep_rate_summary": {},
-        }
-
-        for sleep_rate_key in sorted(
-            results_data["results_by_sleep_rate"].keys(), key=lambda x: float(x)
-        ):
-            results_list = results_data["results_by_sleep_rate"][sleep_rate_key]
-            test_accs = [
-                r["test_accuracy"]
-                for r in results_list
-                if r.get("test_accuracy") is not None
-            ]
-            test_phis = [
-                r["final_test_phi"]
-                for r in results_list
-                if r.get("final_test_phi") is not None
-            ]
-
-            if test_accs or test_phis:
-                results_data["summary"]["per_sleep_rate_summary"][sleep_rate_key] = {
-                    "mean_test_accuracy": safe_stat_mean(test_accs),
-                    "std_test_accuracy": safe_stat_std(test_accs),
-                    "mean_final_test_phi": safe_stat_mean(test_phis),
-                    "std_final_test_phi": safe_stat_std(test_phis),
-                    "best_test_accuracy": safe_stat_max(test_accs),
-                    "best_final_test_phi": safe_stat_max(test_phis),
-                }
-
-        results_data["status"] = "completed"
-        results_data["completed_timestamp"] = datetime.now().isoformat()
-
-        try:
-            with open(results_filename, "w") as f:
-                json.dump(results_data, f, indent=2)
-            print(f"\nFinal results with summary saved to: {results_filename}")
-        except Exception as e:
-            print(f"\nWARNING: Failed to save final results: {e}")
-            print("Results were computed but could not be saved.")
 
 
 if __name__ == "__main__":

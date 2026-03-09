@@ -954,8 +954,8 @@ def heatmap_spike_response(
 
     axs[0, 3].bar(np.arange(len(spike_trace)), spike_trace, color=colors)
     axs[0, 3].set_title("Spike trace distribution")
-    axs[0, 3].set_xlabel("Neuron")
     axs[0, 3].set_ylabel("Spike count", fontsize=5)
+    axs[0, 3].set_xticks([])
     axs[0, 3].axhline(y=x_target, color="black", linestyle="--", linewidth=1)
 
     # (Optional) bottom plot: example summary trace
