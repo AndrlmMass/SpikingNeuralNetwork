@@ -33,7 +33,7 @@ def report_numba_status():
         pass
 
 
-@njit(cache=True)
+@njit(cache=True, parallel=True)
 def clip_weights(
     weights,
     nz_cols_exc,

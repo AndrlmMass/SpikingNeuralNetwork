@@ -3329,10 +3329,7 @@ class snn_sleepy:
                             data_test = data_test[:, : self.N_x]
 
                     T_te = data_test.shape[0]
-                    st = self.N_x
-                    ex = st + self.N_exc
-                    ih = ex + self.N_inh
-                    mp_test = np.zeros((ih - st))
+                    mp_test = np.zeros((self.ih - self.st))
                     mp_test[:] = self.resting_potential
                     spikes_test = np.zeros((T_te, self.N), dtype=np.int8)
                     spikes_test[:, :st] = data_test
@@ -3342,8 +3339,13 @@ class snn_sleepy:
                         _ca = common_args
                     except Exception:
                         _ca = dict(
-                            tau_syn_exc=tau_syn_exc,
-                            tau_syn_inh=tau_syn_inh,
+                            N_classes=self.N_classes,
+                            supervised=self.supervised,
+                            unsupervised=self.unsupervised,
+                            tau_pre_trace_exc=tau_pre_trace_exc,
+                            tau_pre_trace_inh=tau_pre_trace_inh,
+                            tau_post_trace_exc=tau_post_trace_exc,
+                            tau_post_trace_inh=tau_post_trace_inh,
                             resting_potential=self.resting_potential,
                             membrane_resistance_exc=membrane_resistance_exc,
                             membrane_resistance_inh=membrane_resistance_inh,
@@ -3353,21 +3355,16 @@ class snn_sleepy:
                             max_weight_inh=max_weight_inh,
                             N_exc=self.N_exc,
                             N_inh=self.N_inh,
-                            max_sum=max_sum,
-                            max_sum_exc=max_sum_exc,
-                            max_sum_inh=max_sum_inh,
-                            baseline_sum=baseline_sum,
-                            baseline_sum_exc=baseline_sum_exc,
-                            baseline_sum_inh=baseline_sum_inh,
                             beta=beta,
-                            sleep_synchronized=sleep_synchronized,
                             num_exc=num_exc,
                             num_inh=num_inh,
                             weight_decay=weight_decay,
-                            weight_decay_rate_exc=weight_decay_rate_exc[0],
-                            weight_decay_rate_inh=weight_decay_rate_inh[0],
+                            weight_decay_rate_exc=decay_exc,
+                            weight_decay_rate_inh=decay_inh,
                             learning_rate_exc=learning_rate_exc,
                             learning_rate_inh=learning_rate_inh,
+                            w_interval=w_interval,
+                            interval=interval,
                             w_target_exc=w_target_exc,
                             w_target_inh=w_target_inh,
                             tau_LTP=tau_LTP,
@@ -3376,9 +3373,10 @@ class snn_sleepy:
                             tau_m_inh=tau_m_inh,
                             max_mp=max_mp,
                             min_mp=min_mp,
-                            interval=interval,
                             dt=self.dt,
                             N=self.N,
+                            clip_exc_weights=clip_exc_weights,
+                            clip_inh_weights=clip_inh_weights,
                             A_plus=A_plus,
                             A_minus=A_minus,
                             trace_update=trace_update,
@@ -3396,14 +3394,6 @@ class snn_sleepy:
                             weight_var_noise=weight_var_noise,
                             vectorized_trace=vectorized_trace,
                             N_x=self.N_x,
-                            normalize_weights=normalize_weights,
-                            initial_sum_exc=initial_sum_exc,
-                            initial_sum_inh=initial_sum_inh,
-                            initial_sum_total=initial_sum_total,
-                            # pass hard-pause knobs
-                            sleep_max_iters=sleep_max_iters,
-                            on_timeout=on_timeout,
-                            sleep_tol_frac=sleep_tol_frac,
                         )
 
                     (
