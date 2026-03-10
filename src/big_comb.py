@@ -297,7 +297,7 @@ class snn_sleepy:
         ax.axhline(y=y_line, linestyle="dashed", linewidth=1, color="grey")
 
         fig.supylabel("Accuracy")
-        fig.supxlabel("Epoch")
+        fig.supxlabel("Batch")
         ax.set_ylabel("PCA+LR")
         ax2.set_ylabel("WTA")
 
@@ -795,9 +795,6 @@ class snn_sleepy:
             self.N = self.N_exc + self.N_inh + self.N_x  # total neurons
 
         elif imageMNIST:
-            # Image only mode
-            total_images = all_images_train + all_images_test + all_images_val
-
             self.batch_train = batch_image_train
             self.batch_test = batch_image_test
             self.all_train = all_images_train
@@ -1505,7 +1502,7 @@ class snn_sleepy:
                     self.max_time,
                 )
 
-    def plot_spikes(self, run):
+    def plot_spikes(self):
         label_for_plotting = input("Which label should we plot? ")
         while label_for_plotting != "stop":
             if label_for_plotting == "all":
@@ -1595,7 +1592,6 @@ class snn_sleepy:
         time_stop_mp=None,
         mean_noise=0,
         max_mp=40,
-        run=0,
         heatmap_plot=False,
         get_giffed=False,
         sleep_synchronized=True,
@@ -1739,9 +1735,7 @@ class snn_sleepy:
                 # Search for existing data
                 if len(folders) > 0:
                     for folder in folders:
-                        json_file_path = os.path.join(
-                            "data", "mdata", folder, "data_parameters.json"
-                        )
+                        json_file_path = os.path.join("data", "mdata", folder)
                         if os.path.exists(json_file_path):
                             with open(json_file_path, "r") as j:
                                 ex_params = json.loads(j.read())
@@ -2400,7 +2394,7 @@ class snn_sleepy:
                 spike_threshold = thresh_tr
                 # plot gif
                 if get_giffed:
-                    self.plot_spikes(run=run)
+                    self.plot_spikes()
 
                 # accumulate sleep percent if available
                 try:
@@ -2700,7 +2694,6 @@ class snn_sleepy:
                         except Exception:
                             spike_threshold = np.zeros(self.N)
 
-                    run = int(time.time() * 1000)
                     (
                         weights_te,
                         spikes_te_out,
@@ -3413,8 +3406,6 @@ class snn_sleepy:
                             sleep_tol_frac=sleep_tol_frac,
                         )
 
-                    run = int(time.time() * 1000)
-
                     (
                         _wte,
                         spikes_te_out,
@@ -3829,7 +3820,6 @@ class snn_sleepy:
                                 vectorized_trace=vectorized_trace,
                                 N_x=self.N_x,
                             )
-                            run = int(time.time() * 1000)
 
                             # 3a) Train on the training set
                             (
@@ -3873,13 +3863,11 @@ class snn_sleepy:
 
                             # plot gif
                             if get_giffed:
-                                self.plot_spikes(run=run)
+                                self.plot_spikes()
 
                             # Clean up unused variables
                             del unused
 
-                            # 3b) Test on the test set
-                            run = int(time.time() * 1000)
                             (
                                 weights_te,
                                 spikes_te_out,
