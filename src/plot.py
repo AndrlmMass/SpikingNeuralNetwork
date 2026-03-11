@@ -438,7 +438,7 @@ def WTA_accuracy(
             "baseline_sigma": baseline_sigma,
         }
 
-    elif split == "test":
+    elif split == "test" or split == "val":
         if state is None:
             raise ValueError("Pass state from train (pref + baseline_mu).")
         pref = state["pref"]

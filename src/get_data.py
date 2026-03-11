@@ -644,15 +644,12 @@ class ImageDataStreamer:
         # r_max = 67 Hz
         # dt assumed 1 ms
         dt_ms = 1.0
-        p = images * self.max_rate_hz * (dt_ms / 1000.0)   # (B, 1, H, W) or (B, H, W)
+        p = images * self.max_rate_hz * (dt_ms / 1000.0)  # (B, 1, H, W) or (B, H, W)
         p = p.clamp(0.0, 1.0)  # safety cap
 
         # Generate Poisson spikes
-        # Output shape: (T, B, C, H, W) -> where C = 1 -> (100,100,1,15,15) 
-        spikes = (
-            torch.rand((self.num_steps,) + p.shape, device=p.device)
-            < p
-        ).float()
+        # Output shape: (T, B, C, H, W) -> where C = 1 -> (100,100,1,15,15)
+        spikes = (torch.rand((self.num_steps,) + p.shape, device=p.device) < p).float()
 
         # Remove channel dim if present -> (100,100,15,15)
         spikes = spikes.squeeze(2)
@@ -661,7 +658,9 @@ class ImageDataStreamer:
         spikes_flat = spikes.flatten(start_dim=2)  # (T, B, N_pixels) -> (100,100,225)
 
         # Reshape to match your expected format (T*B, N_pixels) -> (10000,225)
-        spikes = spikes_flat.transpose(0, 1).reshape(spikes_flat.shape[1]*spikes_flat.shape[0], spikes_flat.shape[2])
+        spikes = spikes_flat.transpose(0, 1).reshape(
+            spikes_flat.shape[1] * spikes_flat.shape[0], spikes_flat.shape[2]
+        )
 
         # import matplotlib.pyplot as plt
 
@@ -671,7 +670,6 @@ class ImageDataStreamer:
         # plt.close(fig)
 
         return spikes.cpu().numpy()
-
 
     def get_total_samples(self):
         """Return total number of available training samples."""
@@ -685,9 +683,9 @@ class ImageDataStreamer:
         if partition in ("all", "test"):
             self.ptr_test = 0
 
-
     def gabor_pack_quadrants(self, images):
         import math
+
         """
         images: (B,1,H,W) in [0,1]
         returns: (B,1,H,W) with 4 gabor maps packed into quadrants
@@ -698,10 +696,10 @@ class ImageDataStreamer:
         device, dtype = images.device, images.dtype
 
         # --- resolution-aware scaling ---
-        S = int(math.sqrt(H * W))      # auto adapts (28 for MNIST)
-        ksize = max(5, S // 4)         # kernel ~ 1/4 of image width
+        S = int(math.sqrt(H * W))  # auto adapts (28 for MNIST)
+        ksize = max(5, S // 4)  # kernel ~ 1/4 of image width
         if ksize % 2 == 0:
-            ksize += 1                 # force odd
+            ksize += 1  # force odd
 
         sigma = ksize / 3
         lambd = ksize / 2
@@ -728,7 +726,7 @@ class ImageDataStreamer:
             k = k / (k.norm() + 1e-8)
             return k
 
-        thetas = [0.0, math.pi/2, math.pi/4, 3*math.pi/4]
+        thetas = [0.0, math.pi / 2, math.pi / 4, 3 * math.pi / 4]
         kernels = torch.stack([gabor(t) for t in thetas], dim=0)
         kernels = kernels[:, None, :, :]  # (4,1,k,k)
 
@@ -740,8 +738,8 @@ class ImageDataStreamer:
         resp = resp.abs()
 
         # normalize per image
-        rmin = resp.amin(dim=(1,2,3), keepdim=True)
-        rmax = resp.amax(dim=(1,2,3), keepdim=True)
+        rmin = resp.amin(dim=(1, 2, 3), keepdim=True)
+        rmax = resp.amax(dim=(1, 2, 3), keepdim=True)
         resp = (resp - rmin) / (rmax - rmin + 1e-8)
 
         # --- pack into quadrants ---
@@ -750,19 +748,28 @@ class ImageDataStreamer:
         w1 = W // 2
         w2 = W - w1
 
-        packed = torch.zeros((B,1,H,W), device=device, dtype=dtype)
+        packed = torch.zeros((B, 1, H, W), device=device, dtype=dtype)
 
-        tl = F.interpolate(resp[:,0:1], size=(h1,w1), mode="bilinear", align_corners=False)
-        tr = F.interpolate(resp[:,1:2], size=(h1,w2), mode="bilinear", align_corners=False)
-        bl = F.interpolate(resp[:,2:3], size=(h2,w1), mode="bilinear", align_corners=False)
-        br = F.interpolate(resp[:,3:4], size=(h2,w2), mode="bilinear", align_corners=False)
+        tl = F.interpolate(
+            resp[:, 0:1], size=(h1, w1), mode="bilinear", align_corners=False
+        )
+        tr = F.interpolate(
+            resp[:, 1:2], size=(h1, w2), mode="bilinear", align_corners=False
+        )
+        bl = F.interpolate(
+            resp[:, 2:3], size=(h2, w1), mode="bilinear", align_corners=False
+        )
+        br = F.interpolate(
+            resp[:, 3:4], size=(h2, w2), mode="bilinear", align_corners=False
+        )
 
-        packed[:,:, :h1, :w1] = tl
-        packed[:,:, :h1, w1:] = tr
-        packed[:,:, h1:, :w1] = bl
-        packed[:,:, h1:, w1:] = br
+        packed[:, :, :h1, :w1] = tl
+        packed[:, :, :h1, w1:] = tr
+        packed[:, :, h1:, :w1] = bl
+        packed[:, :, h1:, w1:] = br
 
         return packed
+
 
 class GeomfigDataStreamer:
     """
@@ -1105,20 +1112,6 @@ def load_audio_batch(
 
     # Extend labels to match spike data (repeat each label for num_steps)
     spike_labels = labels.repeat(num_steps)
-
-    # Optional visualization of spectrograms + spikes for this batch
-    if plot_spectrograms:
-        try:
-            plot_audio_spectrograms_and_spikes(
-                audio_data=audio_batch,
-                spikes=spike_data,
-                spike_labels=spike_labels,
-                audio_labels=labels,
-                num_steps=num_steps,
-                sample_rate=getattr(audio_streamer, "target_sr", 22050),
-            )
-        except Exception as e:
-            print(f"Warning: failed to plot spectrograms for this batch: {e}")
 
     return spike_data, spike_labels
 
