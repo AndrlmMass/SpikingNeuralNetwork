@@ -4,8 +4,10 @@ from typing import Dict, Tuple, Optional
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegressionCV
 from sklearn.metrics import accuracy_score
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+from sklearn.metrics import matthews_corrcoef
 
 
 def pca_logistic_regression(
@@ -39,7 +41,9 @@ def pca_logistic_regression(
         preds = clf.predict(X_test_p)
         # compute accuracy
         acc = (preds == y_test).mean()
-        return acc
+        # compute MCC
+        mcc = matthews_corrcoef(y_true=y_test, y_pred=preds)
+        return acc, mcc
 
     if n_components is not None and variance_ratio is not None:
         raise ValueError("n_components and variance_ratio can't both be true")
@@ -60,8 +64,13 @@ def pca_logistic_regression(
     X_train_p = pca.fit_transform(X_train)
     X_test_p = pca.transform(X_test)
 
-    clf = LogisticRegression(
-        multi_class="multinomial", solver="lbfgs", max_iter=max_iter
+    clf = LogisticRegressionCV(
+        penalty="l1",
+        solver="saga",
+        multi_class="multinomial",
+        max_iter=max_iter,
+        cv=5,  # number of CV folds for selecting C
+        n_jobs=-1,  # parallelise over folds
     )
     clf.fit(X_train_p, y_train)
 
@@ -71,7 +80,10 @@ def pca_logistic_regression(
     # compute accuracy
     acc = float((preds == y_test).mean())
 
-    return acc, scaler, pca, clf
+    # compute MCC
+    mcc = matthews_corrcoef(y_true=y_test, y_pred=preds)
+
+    return acc, mcc, scaler, pca, clf
 
 
 def pca_quadratic_discriminant(

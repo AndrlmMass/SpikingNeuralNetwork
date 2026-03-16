@@ -1,6 +1,7 @@
 import warnings
 import numpy as np
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
@@ -8,6 +9,7 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
+
 warnings.filterwarnings("error", category=RuntimeWarning)
 
 
@@ -420,7 +422,7 @@ def calculate_phi(
         n_c = idx.size
         if n_c > 0:
             mu_c = centroids[:, c]
-            BCSS_train += n_c * float(np.sum((mu_c - overall_mean) ** 2))
+            BCSS_train += (n_c / n_train) * float(np.sum((mu_c - overall_mean) ** 2))
 
     # Calculate clustering coefficient
     """
@@ -513,32 +515,23 @@ def calculate_phi(
 
     # Estimate BCSS (test) using test class means and counts
     n_test = scores_test_pca.shape[0]
-    overall_mean_test = np.mean(scores_test_pca, axis=0)
     k_eff_test = max(1, present_test_classes.size)
-    BCSS_test = 0.0
-    for c in present_test_classes:
-        idx = np.where(labels_test_unique == c)[0]
-        n_c = idx.size
-        if n_c > 0:
-            mu_c_test = np.mean(scores_test_pca[idx], axis=0)
-            BCSS_test += n_c * float(np.sum((mu_c_test - overall_mean_test) ** 2))
 
     # Calculate clustering coefficient with safe divisions
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=RuntimeWarning)
 
-        test_denom1 = max(small_num, k_eff_test - 1)
         test_denom2 = max(small_num, n_test - k_eff_test)
 
         if WCSS_test <= small_num:
             phi_test = 0.0
         else:
-            phi_test = (BCSS_test / test_denom1) / (WCSS_test / test_denom2)
+            phi_test = (BCSS_train / denom1_tr) / (WCSS_test / test_denom2)
 
         if not np.isfinite(phi_test):
             phi_test = 0.0
 
-        BCSS_test_scaled = BCSS_test / max(small_num, k_eff_test - 1)
+        BCSS_test_scaled = BCSS_train / max(small_num, k_eff_test - 1)
         BCSS_train_scaled = BCSS_train / max(small_num, k_eff_train - 1)
         WCSS_test_scaled = WCSS_test / max(small_num, n_test - k_eff_test)
         WCSS_train_scaled = WCSS_train / max(small_num, n_train - k_eff_train)

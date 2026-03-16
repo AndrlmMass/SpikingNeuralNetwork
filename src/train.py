@@ -197,10 +197,6 @@ def update_weights(
             weights = normalize_weights_per_column(
                 weights, initial_sum_ex_ih, st, ex, ex, ih
             )
-    # if initial_sum_ih_ex is not None:
-    #     weights = normalize_weights_per_column(
-    #         weights, initial_sum_ih_ex, ex, ih, st, ex
-    #     )
 
     return weights, sleep_now_inh, sleep_now_exc
 
@@ -217,6 +213,8 @@ def update_membrane_potential(
     membrane_resistance_exc,
     membrane_resistance_inh,
     dt,
+    st,
+    ex,
     track_stats,
     N_exc,
     N_inh,
@@ -243,35 +241,35 @@ def update_membrane_potential(
         delta_I_syn_ex = np.empty(0)
         delta_I_syn_ih = np.empty(0)
 
-    for j in prange(N_exc):
+    for i in prange(N_exc):  # postsynaptic neurons
         drive = 0.0
-        for k in range(spikes.shape[0]):
-            if spikes[k] != 0:
-                drive += weights_exc[j, k]
-        d_I = (-I_syn_exc[j] + drive) * dt / tau_syn_exc
-        I_syn_exc[j] += d_I
+        for j in range(spikes.shape[0]):  # presynaptic neurons
+            if spikes[j] != 0:
+                drive += weights_exc[i, j]
+        d_I = (-I_syn_exc[i] + drive) * dt / tau_syn_exc
+        I_syn_exc[i] += d_I
         d_mp = (
-            (-(mp[j] - resting_potential) + membrane_resistance_exc * I_syn_exc[j])
+            (-(mp[i] - resting_potential) + membrane_resistance_exc * I_syn_exc[i])
             / tau_m_exc
             * dt
         )
-        mp_new[j] = mp[j] + d_mp
+        mp_new[i] = mp[i] + d_mp
         if noisy_potential and sleep_now_inh and sleep_now_exc:
-            mp_new[j] += np.random.normal(mean_noise, var_noise)
+            mp_new[i] += np.random.normal(mean_noise, var_noise)
         if track_stats:
-            delta_mp_ex[j] = d_mp
-            delta_I_syn_ex[j] = d_I
+            delta_mp_ex[i] = d_mp
+            delta_I_syn_ex[i] = d_I
 
-    for j in prange(N_inh):
+    for i in prange(N_inh):
         drive = 0.0
-        for k in range(spikes.shape[0]):
-            if spikes[k] != 0:
-                drive += weights_inh[j, k]
-        d_I = (-I_syn_inh[j] + drive) * dt / tau_syn_inh
-        I_syn_inh[j] += d_I
-        idx = N_exc + j
+        for j in range(st, ex):
+            if spikes[j] != 0:
+                drive += weights_inh[i, j]
+        d_I = (-I_syn_inh[i] + drive) * dt / tau_syn_inh
+        I_syn_inh[i] += d_I
+        idx = N_exc + i
         d_mp = (
-            (-(mp[idx] - resting_potential) + membrane_resistance_inh * I_syn_inh[j])
+            (-(mp[idx] - resting_potential) + membrane_resistance_inh * I_syn_inh[i])
             / tau_m_inh
             * dt
         )
@@ -279,8 +277,8 @@ def update_membrane_potential(
         if noisy_potential and sleep_now_inh and sleep_now_exc:
             mp_new[idx] += np.random.normal(mean_noise, var_noise)
         if track_stats:
-            delta_mp_ih[j] = d_mp
-            delta_I_syn_ih[j] = d_I
+            delta_mp_ih[i] = d_mp
+            delta_I_syn_ih[i] = d_I
 
     return (
         mp_new,
@@ -341,25 +339,12 @@ def update_spikes(
         else:
             spike_trace[idx] *= decay
 
-    # Always return tracking arrays — zero cost when track_stats=False
-    if track_stats:
-        a_ex = a[:N_exc].copy()
-        spike_threshold_ex = spike_threshold[:N_exc].copy()
-        spike_trace_ex = spike_trace.copy()
-    else:
-        a_ex = np.empty(0)
-        spike_threshold_ex = np.empty(0)
-        spike_trace_ex = np.empty(0)
-
     return (
         mp,
         spikes,
         spike_threshold,
         a,
         spike_trace,
-        a_ex,
-        spike_threshold_ex,
-        spike_trace_ex,
     )
 
 
@@ -501,17 +486,18 @@ def train_network(
     sleep_now_exc = False
 
     if track_stats:
-        delta_mp_ex = np.zeros(T)
-        delta_mp_ih = np.zeros(T)
-        mp_ex = np.zeros(T)
-        mp_ih = np.zeros(T)
-        delta_I_syn_ex = np.zeros(T)
-        delta_I_syn_ih = np.zeros(T)
-        I_syn_ex = np.zeros(T)
-        I_syn_ih = np.zeros(T)
-        a_ex = np.zeros(T)
-        spike_threshold_ex = np.zeros(T)
-        spike_trace_ex = np.zeros(T)
+        delta_mp_ex = 0.0
+        delta_mp_ih = 0.0
+        mp_ex = 0.0
+        mp_ih = 0.0
+        delta_I_syn_ex = 0.0
+        delta_I_syn_ih = 0.0
+        I_syn_ex = 0.0
+        I_syn_ih = 0.0
+        a_ex = 0.0
+        spike_threshold_ex = 0.0
+        spike_trace_ex = 0.0
+        track_count = 0
 
     # # track STDP update size
     # x_pre = np.zeros((N,T))
@@ -562,6 +548,7 @@ def train_network(
     plot_time += 1
     num_steps = int(T - 2)
     update_weight_freq = int(T // 1000)
+
     iterations = 100
     plot_threads = []
     _track_stats = False
@@ -787,6 +774,8 @@ def train_network(
                     tau_m_exc=tau_m_exc,
                     tau_m_inh=tau_m_inh,
                     dt=dt,
+                    st=st,
+                    ex=ex,
                     N_exc=N_exc,
                     N_inh=N_inh,
                     track_stats=_track_stats,
@@ -802,16 +791,16 @@ def train_network(
                 )
                 if _track_stats:
                     # track mp vars
-                    delta_mp_ex[t] = delta_mp_ex_.mean()
-                    delta_mp_ih[t] = delta_mp_ih_.mean()
-                    mp_ex[t] = mp_prev[:N_exc].mean()
-                    mp_ih[t] = mp_prev[N_exc:].mean()
+                    delta_mp_ex += delta_mp_ex_.mean()
+                    delta_mp_ih += delta_mp_ih_.mean()
+                    mp_ex += mp_prev[:N_exc].mean()
+                    mp_ih += mp_prev[N_exc:].mean()
 
                     # track synaptic current
-                    delta_I_syn_ex[t] = delta_I_syn_ex_.mean()
-                    delta_I_syn_ih[t] = delta_I_syn_ih_.mean()
-                    I_syn_ex[t] = I_syn_exc.mean()
-                    I_syn_ih[t] = I_syn_inh.mean()
+                    delta_I_syn_ex += delta_I_syn_ex_.mean()
+                    delta_I_syn_ih += delta_I_syn_ih_.mean()
+                    I_syn_ex += I_syn_exc.mean()
+                    I_syn_ih += I_syn_inh.mean()
 
                 # Prepare current spikes vector (no sensory spikes during sleep)
                 sleep_spikes_cur = np.zeros_like(spikes_prev)
@@ -823,9 +812,6 @@ def train_network(
                     spike_threshold,
                     a,
                     spike_trace,
-                    a_ex_,
-                    spike_threshold_ex_,
-                    spike_trace_ex_,
                 ) = update_spikes(
                     N_exc=N_exc,
                     N_inh=N_inh,
@@ -850,9 +836,9 @@ def train_network(
 
                 if _track_stats:
                     # track adaptive spiking threshold
-                    a_ex[t] = a_ex_.mean()
-                    spike_threshold_ex[t] = spike_threshold_ex_.mean()
-                    spike_trace_ex[t] = spike_trace_ex_.mean()
+                    a_ex += a.mean()
+                    spike_threshold_ex += spike_threshold.mean()
+                    spike_trace_ex += spike_trace.mean()
 
                 # Update weights once per internal sleep iteration (use previous spikes_prev)
                 if train_weights and t % update_weight_freq == 0:
@@ -947,6 +933,9 @@ def train_network(
                         ex=ex,
                     )
 
+                    weights_exc = np.ascontiguousarray(weights[:, st:ex].T)
+                    weights_inh = np.ascontiguousarray(weights[:, ex:ih].T)
+
                 # Advance internal counters and previous-step states
                 spikes_prev = sleep_spikes_cur
                 sleep_iter += 1
@@ -977,6 +966,8 @@ def train_network(
             tau_m_inh=tau_m_inh,
             track_stats=_track_stats,
             dt=dt,
+            st=st,
+            ex=ex,
             N_exc=N_exc,
             N_inh=N_inh,
             noisy_potential=noisy_potential,
@@ -992,17 +983,17 @@ def train_network(
 
         if _track_stats:
             # track synaptic current
-            delta_I_syn_ex[t] = delta_I_syn_ex_.mean()
-            delta_I_syn_ih[t] = delta_I_syn_ih_.mean()
+            delta_I_syn_ex += delta_I_syn_ex_.mean()
+            delta_I_syn_ih += delta_I_syn_ih_.mean()
 
-            I_syn_ex[t] = I_syn_exc.mean()
-            I_syn_ih[t] = I_syn_inh.mean()
+            I_syn_ex += I_syn_exc.mean()
+            I_syn_ih += I_syn_inh.mean()
 
             # track mp vars
-            delta_mp_ex[t] = delta_mp_ex_.mean()
-            delta_mp_ih[t] = delta_mp_ih_.mean()
-            mp_ex[t] = mp[:N_exc].mean()
-            mp_ih[t] = mp[N_exc:].mean()
+            delta_mp_ex += delta_mp_ex_.mean()
+            delta_mp_ih += delta_mp_ih_.mean()
+            mp_ex += mp[:N_exc].mean()
+            mp_ih += mp[N_exc:].mean()
 
         # update spikes array
         (
@@ -1011,9 +1002,6 @@ def train_network(
             spike_threshold,
             a,
             spike_trace,
-            a_ex_,
-            spike_threshold_ex_,
-            spike_trace_ex_,
         ) = update_spikes(
             N_exc=N_exc,
             N_inh=N_inh,
@@ -1037,9 +1025,12 @@ def train_network(
         )
         if _track_stats:
             # track adaptive spiking threshold
-            a_ex[t] = a_ex_.mean()
-            spike_threshold_ex[t] = spike_threshold_ex_.mean()
-            spike_trace_ex[t] = spike_trace_ex_.mean()
+            a_ex += a.mean()
+            spike_threshold_ex += spike_threshold.mean()
+            spike_trace_ex += spike_trace.mean()
+            track_count += 1
+
+        d = 5
 
         # update weights
         if train_weights and t % update_weight_freq == 0:
@@ -1105,6 +1096,11 @@ def train_network(
                 initial_sum_ih_ex=initial_sum_ih_ex,
             )
 
+            weights_exc = np.ascontiguousarray(weights[:, st:ex].T)
+            weights_inh = np.ascontiguousarray(weights[:, ex:ih].T)
+
+        d = 2
+
         # Apply scheduled sleep flags (non-hard-pause mode only). For hard-pause we only mark at window start.
         if sleep and sleep_window > 0 and not sleep_hard_pause:
             if (t % check_sleep_interval) < sleep_window:
@@ -1125,25 +1121,23 @@ def train_network(
         mp_prev = mp
         spikes_prev = spikes[t]
 
-    sleep_percent = (sleep_amount / T) * 100
-
     # After the loop, before return:
     for pt in plot_threads:
         pt.join(timeout=0)  # don't block, daemon threads finish on their own
 
-    if track_stats:
+    if track_stats and train_weights:
         # compute the mean of the trackers
-        mean_delta_mp_ex = delta_mp_ex.mean()
-        mean_delta_mp_ih = delta_mp_ih.mean()
-        mean_mp_ex = mp_ex.mean()
-        mean_mp_ih = mp_ih.mean()
-        mean_delta_I_syn_ex = delta_I_syn_ex.mean()
-        mean_delta_I_syn_ih = delta_I_syn_ih.mean()
-        mean_a_ex = a_ex.mean()
+        mean_delta_mp_ex = delta_mp_ex / max(1, track_count)
+        mean_delta_mp_ih = delta_mp_ih / max(1, track_count)
+        mean_mp_ex = mp_ex / max(1, track_count)
+        mean_mp_ih = mp_ih / max(1, track_count)
+        mean_delta_I_syn_ex = delta_I_syn_ex / max(1, track_count)
+        mean_delta_I_syn_ih = delta_I_syn_ih / max(1, track_count)
+        mean_a_ex = a_ex / max(1, track_count)
         # mean_a_ih = a_ih.mean()
-        mean_spike_threshold_ex = spike_threshold_ex.mean()
+        mean_spike_threshold_ex = spike_threshold_ex / max(1, track_count)
         # mean_spike_threshold_ih = spike_threshold_ih.mean()
-        mean_spike_trace_ex = spike_trace_ex.mean()
+        mean_spike_trace_ex = spike_trace_ex / max(1, track_count)
         spikes_st = spikes[:, :st].mean(axis=0)
         spikes_ex = spikes[:, st:ex].mean(axis=0)
         spikes_ih = spikes[:, ex:ih].mean(axis=0)
@@ -1153,8 +1147,8 @@ def train_network(
         print(f"Mean delta I syn ih: {mean_delta_I_syn_ih}")
         print(f"Mean membrane potential ex: {mean_mp_ex}")
         print(f"Mean membrane potential ih: {mean_mp_ih}")
-        print(f"Mean I syn ex: {I_syn_ex.mean()}")
-        print(f"Mean I syn ih: {I_syn_ih.mean()}")
+        print(f"Mean I syn ex: {I_syn_ex/max(1,track_count)}")
+        print(f"Mean I syn ih: {I_syn_ih/max(1,track_count)}")
         print(f"Mean a ex: {mean_a_ex}")
         # print(f"Mean a ih: {mean_a_ih}")
         print(f"Mean spike threshold ex: {mean_spike_threshold_ex}")
@@ -1163,6 +1157,23 @@ def train_network(
         print(f"Mean spikes ih: {spikes_ih.mean()}")
         print(f"Mean spikes ex: {spikes_ex.mean()}")
         print(f"Mean spike trace ex: {mean_spike_trace_ex}")
+        print(f"weights st->ex: ", weights[:st, st:ex][weights[:st, st:ex] != 0].mean())
+        print(
+            f"weights ex->ex: ",
+            weights[st:ex, st:ex][weights[st:ex, st:ex] != 0].mean(),
+        )
+        print(
+            f"weights ex->ih: ",
+            weights[st:ex, ex:ih][weights[st:ex, ex:ih] != 0].mean(),
+        )
+        print(
+            f"weights ih->ex: ",
+            weights[ex:ih, st:ex][weights[ex:ih, st:ex] != 0].mean(),
+        )
+        # After each batch, print these:
+        print("std ex->ih:", weights[st:ex, ex:ih][weights[st:ex, ex:ih] != 0].std())
+        print("std ex->ex:", weights[st:ex, st:ex][weights[st:ex, st:ex] != 0].std())
+        print("std st->ex:", weights[:st, st:ex][weights[:st, st:ex] != 0].std())
     return (
         weights,
         spikes,
@@ -1173,7 +1184,7 @@ def train_network(
         max_sum_inh,
         max_sum_exc,
         spike_labels,
-        sleep_percent,
+        0,
         I_syn_exc,
         I_syn_inh,
         a,

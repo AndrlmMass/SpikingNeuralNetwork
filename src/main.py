@@ -87,8 +87,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 100, 100, 100
-        b_tr, b_va, b_te = 100, 100, 100
+        img_tr, img_va, img_te = 30000, 500, 10000
+        b_tr, b_va, b_te = 1000, 500, 1000
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -303,7 +303,7 @@ def main():
     parser.add_argument(
         "--heatmap-plot",
         action="store_true",
-        default=False,
+        default=True,
         help="plot the heatmap of the weights",
     )
     parser.add_argument(
@@ -394,7 +394,7 @@ def main():
     parser.add_argument(
         "--track-stats",
         action="store_true",
-        default=False,
+        default=True,
         help="track statistics during training",
     )
     parser.add_argument(
