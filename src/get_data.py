@@ -662,12 +662,12 @@ class ImageDataStreamer:
             spikes_flat.shape[1] * spikes_flat.shape[0], spikes_flat.shape[2]
         )
 
-        # import matplotlib.pyplot as plt
+        import matplotlib.pyplot as plt
 
-        # fig, ax = plt.subplots(figsize=(10, 10))
-        # ax.imshow(images[0].cpu().numpy().squeeze(0))
-        # plt.show()
-        # plt.close(fig)
+        fig, ax = plt.subplots(figsize=(10, 10))
+        ax.imshow(images[0].cpu().numpy().squeeze(0))
+        plt.show()
+        plt.close(fig)
 
         return spikes.cpu().numpy()
 

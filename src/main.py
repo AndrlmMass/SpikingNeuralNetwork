@@ -51,7 +51,7 @@ def run_once(
         ie_weights = -2.0
         tau_syn_exc = 10
         tau_syn_inh = 9
-        learning_rate_exc = 0.0002  # slightly reduced
+        learning_rate_exc = 0.0004
         tau_m_exc = 20
         tau_m_inh = 15
         Rm_exc = 15
@@ -87,8 +87,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 30000, 500, 10000
-        b_tr, b_va, b_te = 1000, 500, 1000
+        img_tr, img_va, img_te = 200, 200, 200
+        b_tr, b_va, b_te = 100, 100, 100
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -168,6 +168,7 @@ def run_once(
         plot_top_response_train=False,
         plot_tsne_during_training=False,
         heatmap_plot=args.heatmap_plot,
+        save_model=args.save_model,
         tsne_plot_interval=1,
         plot_spectrograms=False,
         use_validation_data=False,
@@ -365,6 +366,12 @@ def main():
         action="store_true",
         default=False,
         help="plot and save weights after each epoch (for debugging, saves to plots/weights_epoch_*.png)",
+    )
+    parser.add_argument(
+        "--save-model",
+        action="store_true",
+        default=True,
+        help="store trained model weights for later re-training.",
     )
     parser.add_argument(
         "--plot-spikes-per-epoch",

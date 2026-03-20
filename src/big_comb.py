@@ -195,6 +195,7 @@ class snn_sleepy:
             val_acc_top = {}
         if phi:
             val_phi = {}
+            train_phi = {}
         if mcc:
             train_mcc = {}
             val_mcc = {}
@@ -224,6 +225,8 @@ class snn_sleepy:
                 # Based on your log format: phi is recorded under split="val"
                 if split == "val" and phi:
                     val_phi[int(epoch)] = float(r["phi"])
+                if split == "train" and phi:
+                    train_phi[int(epoch)] = float(r["phi"])
 
             if "mcc" in r and r["mcc"] is not None:
                 # Based on your log format: mcc is recorded under split="val"
@@ -232,16 +235,12 @@ class snn_sleepy:
                 if split == "train" and mcc:
                     train_mcc[int(epoch)] = float(r["mcc"])
 
-        if wta:
-            fig, (ax, ax2) = plt.subplots(2, 1, sharex=True)
-        else:
-            fig, ax = plt.subplots()
+        fig, (ax, ax2) = plt.subplots(2, 1)
 
         handles = []
         labels = []
-        if wta:
-            labels2 = []
-            handles2 = []
+        labels2 = []
+        handles2 = []
 
         # if train_acc_pca:
         #     xs = sorted(train_acc_pca)
@@ -264,17 +263,29 @@ class snn_sleepy:
                 xs,
                 val_acc,
                 label="val acc (pca_lr)",
-                linestyle="dotted",
+                linestyle=(0, (5, 10)),  # loosely dashed
                 marker="o",
                 markersize=3,
-                color="red",
+                color="indianred",
                 linewidth=1.5,
             )
             handles.append(line[0])
             labels.append("Val accuracy")
+            train_acc = np.asarray([train_acc_pca[e] for e in xs])
+            line = ax.plot(
+                xs,
+                train_acc,
+                label="train acc (pca_lr)",
+                linestyle=(0, (5, 1)),
+                marker="o",
+                markersize=3,
+                color="lightcoral",
+            )
+            handles.append(line[0])
+            labels.append("Train accuracy")
         if wta:
             xs = sorted(train_acc_top)
-            line = ax2.plot(
+            line = ax.plot(
                 xs,
                 [train_acc_top[e] for e in xs],
                 label="train acc (top)",
@@ -286,7 +297,7 @@ class snn_sleepy:
             handles2.append(line[0])
             labels2.append("Train accuracy")
             xs = sorted(val_acc_top)
-            line = ax2.plot(
+            line = ax.plot(
                 xs,
                 [val_acc_top[e] for e in xs],
                 label="val acc (top)",
@@ -313,24 +324,26 @@ class snn_sleepy:
             )
             handles.append(mcc_line[0])
             labels.append("MCC")
-            # xs = sorted(train_mcc)
-            # mcc_line = ax.plot(
-            #     xs,
-            #     [train_mcc[e] for e in xs],
-            #     linestyle="dashed",
-            #     label="train mcc",
-            #     color="blue",
-            #     marker="s",
-            #     markersize=3,
-            #     linewidth=1.5,
-            # )
-            # handles.append(mcc_line[0])
-            # labels.append("train mcc")
+            xs = sorted(train_mcc)
+            mcc_line = ax.plot(
+                xs,
+                [train_mcc[e] for e in xs],
+                linestyle="dashed",
+                label="train mcc",
+                color="blue",
+                marker="s",
+                markersize=3,
+                linewidth=1.5,
+            )
+            handles.append(mcc_line[0])
+            labels.append("train mcc")
 
         # add mean line from the first position
         if pca:
             y_line = val_acc[0]
+            y_line_current = val_acc.mean()
             ax.axhline(y=y_line, linestyle="dashed", linewidth=1, color="grey")
+            ax.axhline(y=y_line_current, linestyle="dashed", linewidth=1, color="red")
 
         if wta:
             fig.supylabel("Accuracy")
@@ -342,21 +355,32 @@ class snn_sleepy:
 
         # Phi (right axis)
         if phi:
-            ax_tw = ax.twinx()
             xs = sorted(val_phi)
-            phi_line = ax_tw.plot(
+            phi_line_val = ax2.plot(
                 xs,
                 [val_phi[e] for e in xs],
-                linestyle="--",
+                linestyle=(0, (1, 10)),
                 label="val phi",
-                color="green",
+                color="deepskyblue",
                 marker="p",
                 markersize=3,
                 linewidth=1.5,
             )
-            ax_tw.set_ylabel("Phi")
-            handles.append(phi_line[0])
-            labels.append("Phi")
+            phi_line_train = ax2.plot(
+                xs,
+                [train_phi[e] for e in xs],
+                linestyle=(0, (1, 1)),
+                label="train phi",
+                color="skyblue",
+                marker="p",
+                markersize=3,
+                linewidth=1.5,
+            )
+            ax2.set_ylabel("Clustering")
+            handles2.append(phi_line_val[0])
+            labels2.append("Phi val")
+            handles2.append(phi_line_train[0])
+            labels2.append("Phi train")
 
         # Create legend with white background, box, and smaller font
         if handles:
@@ -364,13 +388,10 @@ class snn_sleepy:
         else:
             ax.legend(loc="lower left", framealpha=1.0, fontsize=5)
 
-        if wta:
-            if handles2:
-                ax2.legend(
-                    handles2, labels2, loc="lower left", framealpha=1.0, fontsize=5
-                )
-            else:
-                ax2.legend(loc="lower left", framealpha=1.0, fontsize=5)
+        if handles2:
+            ax2.legend(handles2, labels2, loc="lower left", framealpha=1.0, fontsize=5)
+        else:
+            ax2.legend(loc="lower left", framealpha=1.0, fontsize=5)
 
         out_path = self._acc_log_file.replace(".jsonl", ".png")
         fig.savefig(out_path, dpi=200, bbox_inches="tight")
@@ -1880,9 +1901,6 @@ class snn_sleepy:
             else:
                 self.performance_tracker = np.zeros((self.epochs, 2))
 
-            # early stopping setup
-            patience_epochs = None
-
             # define progress bar
             pbar_total = 1 if (test_only and not train_weights) else self.epochs
             pbar = tqdm(
@@ -1919,10 +1937,11 @@ class snn_sleepy:
             # Track sleep percentages across epochs
             sleep_percent_sum = 0.0
             sleep_percent_count = 0
+            best_val = 0.0
+            default_pca = None
 
             # loop over self.epochs
             for e in range(self.epochs):
-
                 # Reset test/val indices at the beginning of each epoch
                 self.current_test_idx = 0
                 # Reset streamer validation/train pointers (streamers ignore start_idx)
@@ -2274,7 +2293,8 @@ class snn_sleepy:
                 acc_LR_sum = 0.0
                 acc_top_sum = 0.0
                 mcc_sum = 0.0
-                phi_sum = 0.0
+                phi_val_sum = 0.0
+                phi_train_sum = 0.0
                 val_sample_count = 0
 
                 # Predefine variables used in the test loop so cleanup never fails
@@ -2398,7 +2418,7 @@ class snn_sleepy:
                     acc_top_sum += acc_top
 
                     # Phi estimation
-                    phi_train, phi_val, *unused = calculate_phi(
+                    phi_train, phi_val, *unused, pca = calculate_phi(
                         spikes_train=spikes_tr_out[:, self.st : self.ex],
                         spikes_test=spikes_te_out[:, self.st : self.ex],
                         labels_train=labels_tr_out,
@@ -2407,20 +2427,36 @@ class snn_sleepy:
                         pca_variance=self.pca_variance,
                         random_state=random_state,
                         num_classes=self.N_classes,
+                        pca=default_pca,
                     )
-                    phi_sum += phi_val
-                    print("phi train: ", phi_train)
+                    phi_val_sum += phi_val
+                    phi_train_sum += phi_train
+
+                    # assign pca as default_pca
+                    if e == 0:
+                        default_pca = pca
 
                 # estimate the mean accuracy and phi
                 final_acc_top = acc_top_sum / max(1, total_num_vals)
                 final_acc_LR = acc_LR_sum / max(1, total_num_vals)
-                final_phi = phi_sum / max(1, total_num_vals)
+                final_val_phi = phi_val_sum / max(1, total_num_vals)
+                final_train_phi = phi_train_sum / max(1, total_num_vals)
                 final_mcc = mcc_sum / max(1, total_num_vals)
+
+                # save weights if val improved
+                if final_acc_LR > best_val:
+                    best_val = final_acc_LR
+                    if save_model:
+                        self.process(
+                            save_model=True,
+                            model_parameters=self.model_parameters,
+                        )
+                    print(f"New best model saved (val acc: {best_val:.4f})")
 
                 # print results
                 print(f"Validation accuracy (PCA+LR): {final_acc_LR}")
                 print(f"Validation accuracy (WTA): {final_acc_top}")
-                print(f"Validation phi: {final_phi}")
+                print(f"Validation phi: {final_val_phi}")
                 print(f"Validation MCC: {final_mcc}")
 
                 # record the test accuracy
@@ -2438,14 +2474,17 @@ class snn_sleepy:
                         epoch=e + 1,
                         method="pca_lr",
                     )
-                if final_phi is not None:
-                    self._record_phi("val", final_phi, epoch=e + 1)
+                if final_val_phi is not None:
+                    self._record_phi("val", final_val_phi, epoch=e + 1)
+
+                if final_train_phi is not None:
+                    self._record_phi("train", final_train_phi, epoch=e + 1)
 
                 if final_mcc is not None:
                     self._record_mcc("val", final_mcc, epoch=e + 1)
 
                 # plot validation and training accuracy progress
-                self._plot_accuracy(mcc=True, pca=True, wta=False, phi=True)
+                self._plot_accuracy(mcc=False, pca=True, wta=False, phi=True)
 
                 # Rinse memory
                 if e != self.epochs - 1:
@@ -2477,7 +2516,7 @@ class snn_sleepy:
                 pbar.set_description(f"Epoch {e+1}/{self.epochs}")
                 # Handle None valuTruees safely
                 acc_str = f"{final_acc_LR:.3f}" if final_acc_LR is not None else "N/A"
-                phi_str = f"{final_phi:.2f}" if final_phi is not None else "N/A"
+                phi_str = f"{final_val_phi:.2f}" if final_val_phi is not None else "N/A"
                 pbar.set_postfix(acc=acc_str, phi=phi_str)
                 pbar.update(1)
             pbar.close()
@@ -2505,23 +2544,21 @@ class snn_sleepy:
 
         # Reuse test-only evaluator logic with partition="test"
         total_num_tests = max(1, self.all_images_test // self.batch_image_test)
+        bs_spikes = int(self.batch_image_test * self.num_steps)
         test_sample_count = 0
         acc_top_sum = 0.0
         acc_LR_sum = 0.0
         mcc_sum = 0.0
-        phi_sum = 0.0
+        phi_val_sum = 0.0
+        phi_train_sum = 0.0
 
-        for __ in range(total_num_tests):
-            bs = min(
-                self.batch_image_test,
-                self.all_images_test - self.batch_image_test + test_sample_count,
-            )
-            bs_spikes = int(bs * self.num_steps)
+        for idx_test in range(total_num_tests):
             # make sure we are actually generating content from the test-set of MNIST
+            test_start_idx = idx_test * self.batch_image_test
             data_test, labels_test = load_image_batch(
                 self.image_streamer,
-                0,
-                bs,
+                test_start_idx,
+                self.batch_image_test,
                 self.num_steps,
                 self.pixel_size,
                 partition="test",
@@ -2641,7 +2678,7 @@ class snn_sleepy:
                 sleep=False,
                 dataset=self.image_dataset,
                 train_weights=False,
-                T=T_test_batch,
+                T=bs_spikes,
                 mean_noise=mean_noise,
                 run=self.ts_spec,
                 save_plots=False,
@@ -2662,7 +2699,7 @@ class snn_sleepy:
             )
 
             # Increase sample index
-            test_sample_count += bs
+            test_sample_count += self.batch_image_test
 
             # PCA+LR accuracy estimation
             acc_LR, mcc = self._pca_eval(
@@ -2696,6 +2733,7 @@ class snn_sleepy:
                 pca_variance=self.pca_variance,
                 random_state=random_state,
                 num_classes=self.N_classes,
+                pca=default_pca,
             )
             phi_sum += phi_te
             print("phi train: ", phi_tr)

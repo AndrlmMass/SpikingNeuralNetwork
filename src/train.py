@@ -109,6 +109,8 @@ def update_weights(
     tau_LTP,
     tau_LTD,
     track_weights,
+    normalize_now,
+    update_weights_now,
     x_tar,
     st=None,
     ex=None,
@@ -149,9 +151,7 @@ def update_weights(
         max_weight_inh=max_weight_inh,
     )
 
-    # Old threshold-based sleep removed; now using schedule-based sleep only
-
-    if timing_update:
+    if timing_update and update_weights_now:
         weights, list_x_pre, first_term, second_term, delta_w = spike_timing(
             learning_rate_exc=learning_rate_exc,
             learning_rate_inh=learning_rate_inh,
@@ -184,7 +184,7 @@ def update_weights(
 
     # Per-column normalization (if enabled and initial sums provided)
     # Only normalize every N timesteps for performance
-    if normalize_per_column:
+    if normalize_per_column and normalize_now:
         if initial_sum_st_ex is not None:
             weights = normalize_weights_per_column(
                 weights, initial_sum_st_ex, 0, st, st, ex
@@ -547,8 +547,8 @@ def train_network(
     # Initial snapshot
     plot_time += 1
     num_steps = int(T - 2)
-    update_weight_freq = int(T // 1000)
-
+    update_weight_freq = max(1, int(10 * T // num_steps))
+    normalize_freq = max(1, int(T // num_steps))
     iterations = 100
     plot_threads = []
     _track_stats = False
@@ -557,8 +557,13 @@ def train_network(
 
     process = psutil.Process(os.getpid())
     print(f"Memory before training: {process.memory_info().rss / 1024**2:.0f} MB")
-
+    update_weights_now = False
+    normalize_now = False
     for t in pbar:
+        if t % update_weight_freq == 0:
+            update_weights_now = True
+        if t % normalize_freq == 0:
+            normalize_now = True
         if t % num_steps == 0:
             if track_stats:
                 _track_stats = True
@@ -841,7 +846,7 @@ def train_network(
                     spike_trace_ex += spike_trace.mean()
 
                 # Update weights once per internal sleep iteration (use previous spikes_prev)
-                if train_weights and t % update_weight_freq == 0:
+                if train_weights:
                     weights, _, _ = update_weights(
                         spikes=spikes_prev,
                         weights=weights,
@@ -859,6 +864,8 @@ def train_network(
                         delta_w=delta_w,
                         N_exc=N_exc,
                         x_tar=x_tar,
+                        update_weights_now=update_weights_now,
+                        normalize_now=normalize_now,
                         timing_update=timing_update,
                         trace_update=trace_update,
                         spike_trace=spike_trace,
@@ -1054,6 +1061,8 @@ def train_network(
                 spike_trace=spike_trace,
                 w_max=w_max,
                 x_tar=x_tar,
+                normalize_now=normalize_now,
+                update_weights_now=update_weights_now,
                 track_weights=track_weights,
                 weight_decay_rate_exc=weight_decay_rate_exc,
                 weight_decay_rate_inh=weight_decay_rate_inh,

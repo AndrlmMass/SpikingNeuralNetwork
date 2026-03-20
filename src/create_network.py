@@ -385,7 +385,7 @@ def create_weights(
     _fee = 2.0 / ref_e
     _fei = 2.0 / ref_e
     _fr0 = 4.0 / ref_e
-    _fsr = 1.0 / ref_e
+    _fsr = 3.0 / ref_e
     _flr = 0.5 / ref_e
 
     if random_weights:
@@ -550,7 +550,7 @@ def create_weights(
             W_i,
         )
         plot_weights_individual(
-            weights[st:ex, ex:ih], H_i, W_i, N_exc, "E->I", dir="incoming"
+            weights[st:ex, ex:ih], H_e, W_e, N_inh, "E->I", dir="incoming"
         )
     if plot_weights_ie:
         create_3D_weights_plot(

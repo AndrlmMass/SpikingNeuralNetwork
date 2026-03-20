@@ -297,6 +297,7 @@ def calculate_phi(
     pca_variance,
     random_state,
     num_classes,
+    pca,
 ):
     """
     Recipe:
@@ -392,12 +393,14 @@ def calculate_phi(
 
     """ Perform PCA on the binned data """
     # Create a PCA instance
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=RuntimeWarning)
-        pca = PCA(n_components=pca_variance, random_state=random_state)
-        pca.fit(spike_train_rates_std)
-        n_components = pca.n_components_
-        scores_train_pca = pca.transform(spike_train_rates_std)
+    if pca is None:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning)
+            pca = PCA(n_components=pca_variance, random_state=random_state)
+            pca.fit(spike_train_rates_std)
+
+    n_components = pca.n_components_
+    scores_train_pca = pca.transform(spike_train_rates_std)
 
     # Calculate centroids and WCSS (train)
     centroids = np.zeros((n_components, num_classes))
@@ -543,4 +546,5 @@ def calculate_phi(
         WCSS_test_scaled,
         BCSS_train_scaled,
         BCSS_test_scaled,
+        pca,
     )
