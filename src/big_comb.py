@@ -362,13 +362,11 @@ class snn_sleepy:
             handles.append(l2)
             labels.append("baseline val acc")
             labels.append("average val acc")
-        if wta:
-            fig.supylabel("Accuracy")
-            fig.supxlabel("Batch")
-            ax.set_ylabel("PCA+LR")
-        else:
-            ax.set_ylabel("Accuracy")
-            ax.set_xlabel("Batches")
+
+        ax.set_ylabel("Accuracy")
+        ax2.set_ylabel("Clustering")
+        fig.supxlabel("Batches")
+        ax.set_ylim(bottom=0.7, top=1.0)
 
         # Phi (right axis)
         if phi:
@@ -1657,6 +1655,7 @@ class snn_sleepy:
         use_phi=True,
         use_pca=True,
         PCA_plot=True,
+        gif_pca_plot=True,
     ):
         self.dt = dt
         self.pca_variance = pca_variance
@@ -1712,6 +1711,7 @@ class snn_sleepy:
         self.model_parameters["classes"] = self.classes
 
         # initiate the evaluator
+        x_tar = np.full(shape=self.N_exc, fill_value=x_tar)
         eval = Evaluator(
             xp_var_or_comps=pca_variance,
             num_classes=self.N_classes,
@@ -2430,6 +2430,16 @@ class snn_sleepy:
             except:
                 pass
             gc.collect()
+
+        # create gif if wanted after finishing training
+        if gif_pca_plot:
+            from plot import GenerateGif
+
+            output_filename = f"{self.ts_spec}.gif"
+            gif = GenerateGif(
+                frame_folder=pca_plotter.dir, output_filename=output_filename
+            )
+            gif.create()
 
         # Final test pass even if early-stopped (evaluate on test partition)
         from get_data import load_image_batch

@@ -956,7 +956,6 @@ def heatmap_spike_response(
     axs[0, 3].set_title("Spike trace distribution")
     axs[0, 3].set_ylabel("Spike count", fontsize=5)
     axs[0, 3].set_xticks([])
-    axs[0, 3].axhline(y=x_target, color="black", linestyle="--", linewidth=1)
 
     # (Optional) bottom plot: example summary trace
     # If you don’t want this, delete these lines.
@@ -1070,23 +1069,34 @@ class GenerateGif:
         self.duration = duration
         self.loop = loop
 
-    def create(self):
+    @classmethod
+    def from_PCAScatterDisplay(self, PCAS):
+        from copy import deepcopy
+
+        self.frame_folder = deepcopy(PCAS.dir)
+
+    def create(self, frame_folder=None, output_filename=None):
         import glob
         from PIL import Image
 
+        if frame_folder is None:
+            frame_folder = self.frame_folder
+        if output_filename is None:
+            output_filename = self.output_filename
+
         # Find all JPG or PNG files in the specified folder
         # Adjust the extension if your files have a different format (e.g., '*.png')
-        files = glob.glob(f"{self.frame_folder}/*.png")
+        files = glob.glob(f"{frame_folder}/*.png")
         files_sorted = sorted(files, key=lambda f: int(f.split("\\")[-1].split(".")[0]))
         frames = [Image.open(image) for image in files_sorted]
 
         if not frames:
-            print(f"No images found in {self.frame_folder}")
+            print(f"No images found in {frame_folder}")
             return
 
         frame_one = frames[0]
         frame_one.save(
-            self.output_filename,
+            os.path.join(frame_folder, output_filename),
             format="GIF",
             append_images=frames[1:],
             save_all=True,
@@ -1094,7 +1104,7 @@ class GenerateGif:
             loop=self.loop,
         )
 
-        print("gif made!")
+        print("PCA gif made!")
 
 
 class PCAScatterDisplay:
@@ -1119,19 +1129,19 @@ class PCAScatterDisplay:
         self.ax_.clear()
         for c in np.unique(Y).astype(int):
             mask = Y == c
-            self.ax_.scatter(X[mask, 0], X[mask, 1], label=str(c), alpha=0.5, s=10)
+            self.ax_.scatter(X[mask, 0], X[mask, 1], alpha=0.5, s=20)
 
         self.ax_.legend()
-        title = f"Epoch {epoch}"
+        title = f"Batch {epoch}"
         if phi is not None:
             title += f": $\\phi$={phi:.2f}"
         self.ax_.set_title(title)
 
         date = datetime.now().strftime("%m%d%Y")
         ts = datetime.now().strftime("%m%d%Y_%H%M%S")
-        out = os.path.join("plots", "PCA", dataset, date, run)
-        os.makedirs(out, exist_ok=True)
-        self.figure_.savefig(os.path.join(out, f"{ts}.png"), dpi=100)
+        self.dir = os.path.join("plots", "PCA", dataset, date, run)
+        os.makedirs(self.dir, exist_ok=True)
+        self.figure_.savefig(os.path.join(self.dir, f"{ts}.png"), dpi=100)
 
 
 def plot_floats_and_spikes(images, spikes, spike_labels, img_labels, num_steps):

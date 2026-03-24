@@ -366,7 +366,9 @@ def spike_timing(
                         x_pre_exc = spike_trace[j]
                         base = max(w_max - weights[j, i], 0.0)
                         delta_w = (
-                            learning_rate_exc * (x_pre_exc - x_tar) * base**mu_weight
+                            learning_rate_exc
+                            * (x_pre_exc - x_tar[i - N_x])
+                            * base**mu_weight
                         )
                         weights[j, i] += delta_w
                         list_x_pre.append(x_pre_exc)
@@ -384,7 +386,9 @@ def spike_timing(
                         x_pre_exc = spike_trace[j]
                         base = max(w_max - weights[j, i], 0.0)
                         delta_w = (
-                            learning_rate_exc * (x_pre_exc - x_tar) * base**mu_weight
+                            learning_rate_exc
+                            * (x_pre_exc - x_tar[i - N_x])
+                            * base**mu_weight
                         )
                         weights[j, i] += delta_w
         return weights, None, None, None, None

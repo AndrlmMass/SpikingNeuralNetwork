@@ -42,10 +42,10 @@ def run_once(
         w_dense_ee = 0.05
         w_dense_ei = 0.1
         w_dense_ie = 0.1
-        se_weights = 0.5
+        se_weights = 0.7
         ee_weights = 0.3
-        ei_weights = 0.3
-        ie_weights = -0.3
+        ei_weights = 1.0
+        ie_weights = -1.0
         tau_syn_exc = 10
         tau_syn_inh = 9
         learning_rate_exc = 0.0004
@@ -84,8 +84,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 30000, 500, 5000
-        b_tr, b_va, b_te = 200, 500, 1000
+        img_tr, img_va, img_te = 10000, 300, 2000
+        b_tr, b_va, b_te = 1000, 300, 500
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,

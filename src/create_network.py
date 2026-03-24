@@ -564,6 +564,8 @@ def create_weights(
             H_e,
             W_e,
         )
+        W_i = int(np.sqrt(N_inh))
+        H_i = W_i
         create_3D_weights_plot(
             weights[st:ex, ex:ih],
             "E->I Incoming Weights",

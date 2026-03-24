@@ -348,6 +348,18 @@ def update_spikes(
     )
 
 
+@njit(parallel=True, cache=True)
+def update_x_tar(spike_trace, nonzero_pre_idx, N_x, x_tar):
+    # loop over all postsynaptic indices
+    for i in prange(N_x, spike_trace.shape[0]):
+        # retrieve presynaptic indices
+        pre_indices = nonzero_pre_idx[i - N_x]
+        # compute mean
+        if len(pre_indices) > 0:
+            x_tar[i - N_x] = spike_trace[pre_indices].mean()
+    return x_tar
+
+
 def _plot_background(kwargs):
     heatmap_spike_response(**kwargs)
 
@@ -500,13 +512,13 @@ def train_network(
         spike_trace_ex = 0.0
         track_count = 0
 
-    # # track STDP update size
-    # x_pre = np.zeros((N,T))
-    # x_post = np.zeros((N-N_x,T))
-    # delta_w_exc = np.zeros((T))
-    # delta_w_inh = np.zeros((T))
-    # weights_track_ex = np.zeros((T))
-    # weights_track_ih = np.zeros((T))
+        # # track STDP update size
+        # x_pre = np.zeros((N,T))
+        # x_post = np.zeros((N-N_x,T))
+        # delta_w_exc = np.zeros((T))
+        # delta_w_inh = np.zeros((T))
+        # weights_track_ex = np.zeros((T))
+        # weights_track_ih = np.zeros((T))
     # Update membrane potentials using previous step spikes
     mp_new = np.zeros_like(mp)
     weights_exc = np.ascontiguousarray(weights[:, st:ex].T)
@@ -531,6 +543,11 @@ def train_network(
     for i in range(st, ih):
         pre_idx = np.nonzero(weights[:, i])[0]
         nonzero_pre_idx.append(pre_idx.astype(np.int64))
+
+    nonzero_pre_idx_exc = List()
+    for i in range(st, ex):
+        pre_idx = np.nonzero(weights[:ex, i])[0]
+        nonzero_pre_idx_exc.append(pre_idx.astype(np.int64))
 
     sleep_amount = 0
     virtual_sleep_iters_epoch = 0
@@ -563,8 +580,15 @@ def train_network(
     update_weights_now = False
     normalize_now = False
     for t in pbar:
-        if t % update_weight_freq == 0:
+        if t % update_weight_freq == 0 and train_weights:
             update_weights_now = True
+            # update x_tar as often as we update weights
+            x_tar = update_x_tar(
+                spike_trace=spike_trace,
+                nonzero_pre_idx=nonzero_pre_idx_exc,
+                N_x=N_x,
+                x_tar=x_tar,
+            )
         if t % normalize_freq == 0:
             normalize_now = True
         if t % num_steps == 0:
@@ -595,8 +619,6 @@ def train_network(
                 plot_threads.append(plot_thread)
                 # update num
                 num += 1
-            x_tar = np.mean(spike_trace[spike_trace > 0])
-            # print("new x_tar: ", x_tar)
         # Reset sleep flags for this timestep
         sleep_now_inh = False
         sleep_now_exc = False
