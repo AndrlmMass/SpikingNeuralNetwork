@@ -1063,6 +1063,77 @@ def get_contiguous_segment(indices):
     return max(segments, key=len)
 
 
+class GenerateGif:
+    def __init__(self, frame_folder, output_filename, duration=100, loop=0):
+        self.frame_folder = frame_folder
+        self.output_filename = output_filename
+        self.duration = duration
+        self.loop = loop
+
+    def create(self):
+        import glob
+        from PIL import Image
+
+        # Find all JPG or PNG files in the specified folder
+        # Adjust the extension if your files have a different format (e.g., '*.png')
+        files = glob.glob(f"{self.frame_folder}/*.png")
+        files_sorted = sorted(files, key=lambda f: int(f.split("\\")[-1].split(".")[0]))
+        frames = [Image.open(image) for image in files_sorted]
+
+        if not frames:
+            print(f"No images found in {self.frame_folder}")
+            return
+
+        frame_one = frames[0]
+        frame_one.save(
+            self.output_filename,
+            format="GIF",
+            append_images=frames[1:],
+            save_all=True,
+            duration=self.duration,
+            loop=self.loop,
+        )
+
+        print("gif made!")
+
+
+class PCAScatterDisplay:
+    def __init__(self, scaler, pca=None):
+        self.scaler = scaler
+        self.pca = pca
+        self.figure_ = None
+        self.ax_ = None
+
+    def plot(self, X, Y, *, epoch, run, dataset, phi=None):
+        from datetime import datetime
+        import matplotlib.pyplot as plt
+        import numpy as np
+        import os
+
+        X = self.scaler.transform(X)
+        if self.pca is not None:
+            X = self.pca.transform(X)
+
+        if self.figure_ is None:
+            self.figure_, self.ax_ = plt.subplots()
+        self.ax_.clear()
+        for c in np.unique(Y).astype(int):
+            mask = Y == c
+            self.ax_.scatter(X[mask, 0], X[mask, 1], label=str(c), alpha=0.5, s=10)
+
+        self.ax_.legend()
+        title = f"Epoch {epoch}"
+        if phi is not None:
+            title += f": $\\phi$={phi:.2f}"
+        self.ax_.set_title(title)
+
+        date = datetime.now().strftime("%m%d%Y")
+        ts = datetime.now().strftime("%m%d%Y_%H%M%S")
+        out = os.path.join("plots", "PCA", dataset, date, run)
+        os.makedirs(out, exist_ok=True)
+        self.figure_.savefig(os.path.join(out, f"{ts}.png"), dpi=100)
+
+
 def plot_floats_and_spikes(images, spikes, spike_labels, img_labels, num_steps):
     """
     Given:

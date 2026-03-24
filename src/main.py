@@ -2,11 +2,8 @@ from big_comb import snn_sleepy
 import argparse
 import numpy as np
 import random
-import json
 from datetime import datetime
 import os
-import cProfile
-import pstats
 import pandas as pd
 
 
@@ -41,14 +38,14 @@ def run_once(
         classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         num_input = 784
         use_validation_data = True
-        w_dense_se = 0.05
-        w_dense_ee = 0.025
-        w_dense_ei = 0.05
-        w_dense_ie = 0.05
-        se_weights = 4.0
-        ee_weights = 2.0
-        ei_weights = 4.0
-        ie_weights = -2.0
+        w_dense_se = 0.1
+        w_dense_ee = 0.05
+        w_dense_ei = 0.1
+        w_dense_ie = 0.1
+        se_weights = 0.5
+        ee_weights = 0.3
+        ei_weights = 0.3
+        ie_weights = -0.3
         tau_syn_exc = 10
         tau_syn_inh = 9
         learning_rate_exc = 0.0004
@@ -87,8 +84,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 200, 200, 200
-        b_tr, b_va, b_te = 100, 100, 100
+        img_tr, img_va, img_te = 30000, 500, 5000
+        b_tr, b_va, b_te = 200, 500, 1000
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -160,6 +157,7 @@ def run_once(
         tau_trace=tau_trace,
         mu_weight=mu_weight,
         plot_weights=False,
+        plot_PCA=args.plot_PCA,
         plot_epoch_performance=False,
         plot_weights_per_epoch=args.plot_weights_per_epoch,
         plot_spikes_per_epoch=args.plot_spikes_per_epoch,
@@ -308,6 +306,12 @@ def main():
         help="plot the heatmap of the weights",
     )
     parser.add_argument(
+        "--plot-PCA",
+        action="store_true",
+        default=True,
+        help="plot the PCA of the network activity",
+    )
+    parser.add_argument(
         "--get-giffed",
         action="store_true",
         default=False,
@@ -401,7 +405,7 @@ def main():
     parser.add_argument(
         "--track-stats",
         action="store_true",
-        default=True,
+        default=False,
         help="track statistics during training",
     )
     parser.add_argument(

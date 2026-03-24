@@ -7,38 +7,6 @@ import matplotlib
 matplotlib.use("TkAgg")
 
 
-def enforce_per_exc_sparsity(W_se, frac=0.10):
-    """
-    W_se: (N_x, N_exc)
-    frac: fraction of nonzero weights per excitatory neuron
-    """
-    W = W_se.copy()
-    N_x = W.shape[0]
-    k = int(np.floor(frac * N_x))
-    print((W > 0).mean(axis=0).mean())
-
-    # get nonzero weights
-    for j in range(
-        W.shape[1]
-    ):  # Get indices of top-k scores (O(N_x) average, faster than full sort)
-        # get current pre-synaptic weights
-        col = W[:, j]
-        # get top-responding
-        topk_idx = np.argpartition(col, -k)[-k:]
-
-        # Build mask: keep only those indices
-        mask = np.zeros(N_x, dtype=bool)
-        mask[topk_idx] = True
-
-        # Zero the rest
-        col[~mask] = 0.0
-        W[:, j] = col
-
-    print((W > 0).mean(axis=0).mean())
-
-    return W
-
-
 def exc_coords(H_e, W_e):
     return np.array([(r, c) for r in range(H_e) for c in range(W_e)], dtype=float)
 
@@ -49,6 +17,20 @@ def inh_grid_shape(N_inh, H_e, W_e):
     H_i = max(H_i, 1)
     W_i = int(np.ceil(N_inh / H_i))
     return H_i, W_i
+
+
+def weight_compliance(frac, N, weights, peak, type):
+    current_sum = np.sum(weights, axis=1)
+    current_sum = np.where(current_sum == 0, 1e-12, current_sum)  # guard dead rows
+    optimal_sum = frac * N * peak  # drop int() — truncation shifts your budget
+    ratio = optimal_sum / current_sum
+    weights = weights * ratio[:, None]
+    # print changes
+    weights_abs = abs(weights)
+    structural = (weights_abs > 0).mean(axis=1).mean()  # should ≈ frac
+    effective = weights_abs.sum(axis=1).mean() / (N * peak)  # should == frac exactly
+    print(f"{type}: structural = {structural} and effective = {effective}")
+    return weights
 
 
 def grid_home_indices(N_inh, H_e, W_e):
@@ -66,7 +48,9 @@ def grid_home_indices(N_inh, H_e, W_e):
     return home_idx
 
 
-def gaussian_ei_local(N_exc, N_inh, H_e, W_e, sigma=1.5, peak=1.0, frac=None):
+def gaussian_ei_local(
+    N_exc, N_inh, H_e, W_e, sigma=1.5, peak=1.0, frac=None, torus=True
+):
     assert H_e * W_e == N_exc
     coords = exc_coords(H_e, W_e)  # (N_exc, 2) integer grid
 
@@ -76,12 +60,11 @@ def gaussian_ei_local(N_exc, N_inh, H_e, W_e, sigma=1.5, peak=1.0, frac=None):
     cs = np.linspace(0, W_e - 1, W_i)
     centers = np.array([(r, c) for r in rs for c in cs], dtype=float)[:N_inh]
 
-    # For mexican_hat later: map each I center to nearest E neuron index
-    d2_home = ((centers[:, None, :] - coords[None, :, :]) ** 2).sum(axis=2)
-    home_idx = d2_home.argmin(axis=1)
-
     # Gaussian E→I weights using continuous centers (no rounding artifacts)
-    d2 = ((coords[:, None, :] - centers[None, :, :]) ** 2).sum(axis=2)
+    if torus:
+        d2 = torus_d2(centers, coords, H_e, W_e)  # → (N_inh, N_exc)
+    else:
+        d2 = ((centers[:, None, :] - coords[None, :, :]) ** 2).sum(axis=2)
     W_ei = np.exp(-d2 / (2 * sigma**2))
 
     W_ei[W_ei < 0.01] = 0.0
@@ -89,14 +72,14 @@ def gaussian_ei_local(N_exc, N_inh, H_e, W_e, sigma=1.5, peak=1.0, frac=None):
     W_ei /= W_ei.max(axis=0, keepdims=True) + 1e-12
     W_ei *= peak
 
-    if frac is not None:
-        W_ei = enforce_per_exc_sparsity(
-            W_ei, frac
-        )  # keeps top frac of excitatory inputs per inhibitory neuron
+    # ensure weight strength complies with the sum of compliant weights
+    W_ei = weight_compliance(frac=frac, N=N_exc, weights=W_ei, peak=peak, type="W_ei")
+
+    W_ei = W_ei.T
 
     return (
         W_ei,
-        home_idx,
+        d2.argmin(axis=1),
         centers,
     )
 
@@ -104,6 +87,7 @@ def gaussian_ei_local(N_exc, N_inh, H_e, W_e, sigma=1.5, peak=1.0, frac=None):
 def mexican_hat_ie_far(
     H_e,
     W_e,
+    N_exc,
     inh_centers,
     peak=1.0,
     frac=None,
@@ -112,7 +96,6 @@ def mexican_hat_ie_far(
     local_r=2.0,
     jitter=0.1,
     torus=True,
-    self_zero=True,
 ):
     coords = exc_coords(H_e, W_e)  # (N_exc,2)
     centers = inh_centers  # (N_inh,2) — continuous positions
@@ -128,28 +111,22 @@ def mexican_hat_ie_far(
     else:
         d2 = ((centers[:, None, :] - coords[None, :, :]) ** 2).sum(axis=2)
 
-    W_ie = np.exp(-d2 / (2 * sigma_r**2))
+    d = np.sqrt(d2)
 
-    # normalize rows so max=1 then scale
-    W_ie /= W_ie.max(axis=1, keepdims=True) + 1e-12
-    W_ie *= peak
+    # ring profile
+    ring = np.exp(-((d - r0) ** 2) / (2 * sigma_r**2))
 
-    if self_zero:
-        np.fill_diagonal(W_ie, 0.0)
+    # soft center suppression: 1 at the ring, ~0 at the center
+    # sigma_local controls how wide the no-inhibition zone is
+    center_suppress = 1.0 - np.exp(-(d**2) / (2 * local_r**2))
 
-    # d = np.sqrt(d2)
-    # ring = np.exp(-((d - r0) ** 2) / (2 * sigma_r**2))
-    # ring /= ring.max(axis=1, keepdims=True) + 1e-12
-    # W_ie = peak * ring
+    ring = ring * center_suppress
 
-    # Optional: sparsify per inhibitory neuron (per row)
-    if frac is not None:
-        W_ie = enforce_topk_per_row_abs(W_ie, frac=frac)
+    ring /= ring.max(axis=1, keepdims=True) + 1e-12
+    W_ie = peak * ring
 
-    # # Guarantee "don't inhibit your own local pool" strongly:
-    # # (hard zero at the exact center exc neuron)
-    # # inside mexican_hat_ie_far after computing d
-    # W_ie[d <= local_r] = 0.0
+    # ensure weight strength complies with the sum of compliant weights
+    W_ie = weight_compliance(frac=frac, N=N_exc, weights=W_ie, peak=peak, type="W_ie")
 
     return W_ie
 
@@ -176,7 +153,6 @@ def gaussian_se_weights(
     W_e,
     sigma=2.0,
     peak=1.0,
-    truncate=None,
     fraction=0.1,
     torus=True,
     jitter=0.25,
@@ -207,28 +183,17 @@ def gaussian_se_weights(
     else:
         d2 = ((centers[:, None, :] - inp_coords[None, :, :]) ** 2).sum(axis=2)
 
-    sigmas = np.random.normal(loc=sigma, scale=2.0, size=(N_exc, 1))
+    sigmas = np.random.normal(loc=sigma, scale=0.3, size=(N_exc, 1))
     sigmas = np.clip(sigmas, 1.0, None)  # enforce positive + not-too-small
     G = np.exp(-d2 / (2 * sigmas**2))
-
-    if truncate is not None:
-        G[G < truncate] = 0.0
-
-    # Global normalization instead:
-    G /= G.max() + 1e-12  # normalize to global max=1
-    G *= peak  # scale to peak
 
     # pre x post
     W_se = G.T
 
-    # sparsify once
-    W_se = enforce_per_exc_sparsity(W_se, frac=fraction)
-
-    # Normalize total incoming drive per excitatory neuron
-    col_sums = W_se.sum(axis=0)
-    col_sums = np.where(col_sums > 0, col_sums, 1.0)
-    target_sum = peak * fraction * N_x * 0.5
-    W_se = W_se * (target_sum / col_sums)[np.newaxis, :]
+    # ensure weight strength complies with the sum of compliant weights
+    W_se = weight_compliance(
+        frac=fraction, N=N_exc, weights=W_se, peak=peak, type="W_se"
+    )
 
     return W_se
 
@@ -276,6 +241,7 @@ def gaussian_ee_weights(
     peak=1.0,
     frac=None,
     self_zero=True,
+    torus=True,
 ):
     """
     Returns W_ee (N_exc, N_exc): excitatory->excitatory.
@@ -286,7 +252,12 @@ def gaussian_ee_weights(
     coords = np.array(
         [(r, c) for r in range(H_e) for c in range(W_e)], dtype=float
     )  # (N_exc,2)
-    d2 = ((coords[:, None, :] - coords[None, :, :]) ** 2).sum(axis=2)  # (N_exc,N_exc)
+
+    if torus:
+        d2 = torus_d2(coords, coords, H_e, W_e)
+    else:
+        d2 = ((coords[:, None, :] - coords[None, :, :]) ** 2).sum(axis=2)
+
     W = np.exp(-d2 / (2 * sigma**2))
 
     # normalize rows so max=1 then scale
@@ -296,10 +267,8 @@ def gaussian_ee_weights(
     if self_zero:
         np.fill_diagonal(W, 0.0)
 
-    if frac is not None:
-        W = enforce_topk_per_row(W, frac=frac)
-        if self_zero:
-            np.fill_diagonal(W, 0.0)
+    # ensure weight strength complies with the sum of compliant weights
+    W = weight_compliance(frac=frac, N=N_exc, weights=W, peak=peak, type="W_ee")
 
     return W
 
@@ -317,7 +286,6 @@ def create_3D_weights_plot(
     ax.plot_surface(X, Y, Z, cmap="viridis")
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
-    ax.set_zlabel(z_label)
     ax.set_title(title)
     plt.show()
     return fig, ax
@@ -342,6 +310,62 @@ def plot_weights_individual(weights, H_, W_, N, title, dir):
             plt.show()
             if input("Press Enter to continue...") == "q":
                 break
+
+
+def plot_single_neuron_weights(
+    weights,
+    st,
+    ex,
+    H,
+    W,
+    H_e,
+    W_e,
+    id_=None,
+    loop=True,
+):
+    if loop:
+        N = ex - st
+    else:
+        N = 1
+    for i in range(st, ex):
+        if id_ is not None:
+            id = id_ + i - st
+        else:
+            id = i
+        # create plot structure
+        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2)
+
+        # fetch all weights related to id
+        w_se = weights[:st, id].reshape(H, W)
+        w_ee = weights[id, st:ex].reshape(H_e, W_e)
+        ih_id = np.argmax(weights[id, ex:]) + ex
+        w_ie = weights[st:ex, ih_id].reshape(H_e, W_e)
+        w_ei = np.abs(weights[ih_id, st:ex]).reshape(H_e, W_e)
+
+        # plot incoming and outgoing weights
+        im1 = ax1.imshow(w_se)
+        im2 = ax2.imshow(w_ee)
+        im3 = ax4.imshow(w_ei)
+        im4 = ax3.imshow(w_ie)
+
+        # add colorbars
+        for ax, im in zip([ax1, ax2, ax3, ax4], [im1, im2, im3, im4]):
+            fig.colorbar(im, ax=ax)
+
+        # set labels and title
+        fig.suptitle(f"Incoming and outgoing weights for exc: {id}")
+        ax1.set_title("Stimulation to Excitatory")
+        ax2.set_title("Excitatory to Excitatory")
+        ax3.set_title("Excitatory to Inhibitory")
+        ax4.set_title("Inhibitory to Excitatory")
+
+        plt.show()
+
+        id = None
+        cont = input("Continue?")
+
+        if cont != "":
+            break
 
 
 # Create weight array
@@ -371,6 +395,7 @@ def create_weights(
     plot_weights_ee = False
     plot_weights_ei = False
     plot_weights_ie = False
+    plot_single_ee = False
 
     # input poisson weights
     H = int(np.sqrt(N_x))
@@ -381,12 +406,12 @@ def create_weights(
     ref_x = np.sqrt(H * W)
     ref_e = np.sqrt(H_e * W_e)
 
-    _fse = 2.0 / ref_x
+    _fse = 1.0 / ref_x
     _fee = 2.0 / ref_e
     _fei = 2.0 / ref_e
-    _fr0 = 4.0 / ref_e
-    _fsr = 3.0 / ref_e
-    _flr = 0.5 / ref_e
+    _fr0 = 3.0 / ref_e
+    _fsr = 2.0 / ref_e
+    _flr = 2.0 / ref_e
 
     if random_weights:
         weights = np.zeros(shape=(N, N))
@@ -428,11 +453,10 @@ def create_weights(
             W_e,
             sigma=rf_scale * _fse * ref_x,
             peak=se_weights,
-            truncate=0.01,
             fraction=w_dense_se,
+            torus=True,
         )
         weights[:st, st:ex] = W_se
-        print(f"density receiving W_se: {(W_se > 0).mean(axis=0).mean()}")
 
         W_ee = gaussian_ee_weights(
             N_exc,
@@ -443,7 +467,6 @@ def create_weights(
             frac=w_dense_ee,
         )
         weights[st:ex, st:ex] = W_ee
-        print(f"density receiving W_ee: {(W_ee > 0).mean(axis=0).mean()}")
 
         # --- E->I local pooling ---
         (
@@ -460,7 +483,6 @@ def create_weights(
             frac=w_dense_ei,  # density meaning: fraction of exc inputs to each I
         )
         weights[st:ex, ex:ih] = W_ei
-        print(f"density receiving W_ei: {(W_ei > 0).mean(axis=0).mean()}")
 
         H_i, W_i = 15, 15
 
@@ -474,10 +496,13 @@ def create_weights(
             r0=rf_scale * _fr0 * ref_e,
             sigma_r=rf_scale * _fsr * ref_e,
             local_r=rf_scale * _flr * ref_e,
+            N_exc=N_exc,
         )
 
         weights[ex:ih, st:ex] = W_ie
-        print(f"density receiving W_ie: {(np.abs(W_ie) > 0).mean(axis=0).mean()}")
+    # if plot_by_exc_neuron:
+    #     # add plotting function that compares all inputs and outputs to a single excitatory neuron
+    #     ...
 
     if plot_weights_se:
         create_3D_weights_plot(
@@ -575,6 +600,17 @@ def create_weights(
         )
         plot_weights_individual(
             np.abs(weights[ex:ih, st:ex]), H_e, W_e, N_inh, "I->E", dir="outgoing"
+        )
+    if plot_single_ee:
+        plot_single_neuron_weights(
+            weights,
+            st,
+            ex,
+            H,
+            W,
+            H_e,
+            W_e,
+            id_=1400,
         )
 
     # if plot_weights:

@@ -326,7 +326,7 @@ def update_spikes(
             mp[j] = reset_potential
 
     if spike_adaption:
-        for j in range(N_exc):
+        for j in range(n_total):
             a[j] += (-a[j] / tau_adaption) * dt
             if spikes[st + j] == 1:
                 a[j] += delta_adaption
@@ -430,6 +430,7 @@ def train_network(
     I_syn_exc,
     I_syn_inh,
     a,
+    time_per_item,
     spike_threshold,
     sleep_ratio=0.0,
     normalize_weights=False,
@@ -546,14 +547,16 @@ def train_network(
     pbar = tqdm(range(1, T), desc=desc, leave=False, mininterval=1.0)
     # Initial snapshot
     plot_time += 1
-    num_steps = int(T - 2)
-    update_weight_freq = max(1, int(10 * T // num_steps))
-    normalize_freq = max(1, int(T // num_steps))
+    num_steps = max(1, int((T * 100) // time_per_item))
+    update_weight_freq = max(1, int(T // time_per_item))
+    normalize_freq = max(1, int(T // time_per_item))
     iterations = 100
     plot_threads = []
     _track_stats = False
     num = 0
     import psutil, os
+
+    print(f"The network will update its weights {update_weight_freq} times")
 
     process = psutil.Process(os.getpid())
     print(f"Memory before training: {process.memory_info().rss / 1024**2:.0f} MB")
@@ -1037,8 +1040,6 @@ def train_network(
             spike_trace_ex += spike_trace.mean()
             track_count += 1
 
-        d = 5
-
         # update weights
         if train_weights and t % update_weight_freq == 0:
             weights, sleep_now_inh, sleep_now_exc = update_weights(
@@ -1107,8 +1108,6 @@ def train_network(
 
             weights_exc = np.ascontiguousarray(weights[:, st:ex].T)
             weights_inh = np.ascontiguousarray(weights[:, ex:ih].T)
-
-        d = 2
 
         # Apply scheduled sleep flags (non-hard-pause mode only). For hard-pause we only mark at window start.
         if sleep and sleep_window > 0 and not sleep_hard_pause:

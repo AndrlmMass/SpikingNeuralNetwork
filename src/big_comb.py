@@ -2,14 +2,10 @@ import numpy as np
 import os
 import gc
 from tqdm import tqdm
-import cProfile
 import json
-import pstats
-import time
 from datetime import datetime
 from train import train_network
 from get_data import (
-    create_data,
     GeomfigDataStreamer,
 )
 from plot import (
@@ -17,11 +13,9 @@ from plot import (
     heat_map,
     WTA_accuracy,
     gif_spike_rate_by_label,
+    PCAScatterDisplay,
 )
-from analysis import (
-    calculate_phi,
-    bin_spikes_by_label_no_breaks,
-)
+from evaluation import Evaluator
 from create_network import create_weights, create_arrays
 import matplotlib.pyplot as plt
 
@@ -157,6 +151,14 @@ class snn_sleepy:
             # Non-fatal: continue even if logging fails
             print(f"Warning: failed to persist mcc record ({e})")
 
+    def spikes_per_item(self, spikes, labels):
+        T = spikes.shape[0]
+        t = self.num_steps
+        N = spikes.shape[1]
+        spikes = spikes.reshape(T // t, t, N).mean(1)
+        labels = labels.reshape(T // t, t).mean(1).astype(int)
+        return spikes, labels
+
     def _read_jsonl(self, path):
         records = []
         with open(path, "r", encoding="utf-8") as f:
@@ -263,7 +265,7 @@ class snn_sleepy:
                 xs,
                 val_acc,
                 label="val acc (pca_lr)",
-                linestyle=(0, (5, 10)),  # loosely dashed
+                linestyle=(0, (3, 5, 1, 5)),  # dash dotted
                 marker="o",
                 markersize=3,
                 color="indianred",
@@ -342,9 +344,24 @@ class snn_sleepy:
         if pca:
             y_line = val_acc[0]
             y_line_current = val_acc.mean()
-            ax.axhline(y=y_line, linestyle="dashed", linewidth=1, color="grey")
-            ax.axhline(y=y_line_current, linestyle="dashed", linewidth=1, color="red")
-
+            l1 = ax.axhline(
+                y=y_line,
+                linestyle="solid",
+                linewidth=0.5,
+                color="grey",
+                label="baseline val acc",
+            )
+            l2 = ax.axhline(
+                y=y_line_current,
+                linestyle="solid",
+                linewidth=0.5,
+                color="red",
+                label="average val acc",
+            )
+            handles.append(l1)
+            handles.append(l2)
+            labels.append("baseline val acc")
+            labels.append("average val acc")
         if wta:
             fig.supylabel("Accuracy")
             fig.supxlabel("Batch")
@@ -359,7 +376,7 @@ class snn_sleepy:
             phi_line_val = ax2.plot(
                 xs,
                 [val_phi[e] for e in xs],
-                linestyle=(0, (1, 10)),
+                linestyle="dotted",
                 label="val phi",
                 color="deepskyblue",
                 marker="p",
@@ -1425,39 +1442,6 @@ class snn_sleepy:
         self.weights = np.load(os.path.join("model", folder, "weights.npy"))
         # Other large artifacts are not persisted to save disk space.
 
-    def _pca_eval(self, X_train, y_train, X_test, y_test, split):
-        """Run PCA-based classifier with configured options, return (accs, scaler, pca, clf)."""
-        if self.use_QDA:
-            from pca_linear_classifier import pca_quadratic_discriminant
-
-            return pca_quadratic_discriminant(
-                X_train=X_train,
-                y_train=y_train,
-                X_test=X_test,
-                y_test=y_test,
-                variance_ratio=self.pca_variance,
-                reg_param=0.5,
-            )
-        else:
-            from pca_linear_classifier import pca_logistic_regression
-
-            if split == "train":
-                self.clf = None
-                self.pca = None
-                self.scaler = None
-
-            return pca_logistic_regression(
-                X_train=X_train,
-                y_train=y_train,
-                split=split,
-                X_test=X_test,
-                y_test=y_test,
-                variance_ratio=self.pca_variance,
-                clf=self.clf,
-                scaler=self.scaler,
-                pca=self.pca,
-            )
-
     def prepare_network(
         self,
         plot_weights=False,
@@ -1627,6 +1611,7 @@ class snn_sleepy:
         time_stop_mp=None,
         mean_noise=0,
         max_mp=40,
+        plot_PCA=False,
         heatmap_plot=False,
         get_giffed=False,
         sleep_synchronized=True,
@@ -1669,6 +1654,9 @@ class snn_sleepy:
         sleep_tol_frac=1e-3,
         sleep_mode="static",
         track_stats=False,
+        use_phi=True,
+        use_pca=True,
+        PCA_plot=True,
     ):
         self.dt = dt
         self.pca_variance = pca_variance
@@ -1723,18 +1711,18 @@ class snn_sleepy:
         self.model_parameters["se_weights"] = self.se_weights
         self.model_parameters["classes"] = self.classes
 
+        # initiate the evaluator
+        eval = Evaluator(
+            xp_var_or_comps=pca_variance,
+            num_classes=self.N_classes,
+            do_phi=use_phi,
+            do_LR=use_LR,
+            do_pca=use_pca,
+        )
+
         # Always attempt to load a matching model if not forcing a fresh run,
         # regardless of data_loaded (streaming modes don't set data_loaded).
         # In test-only inference with frozen weights, skip loading any saved model
-        if not force_train and not (test_only and not train_weights):
-            try:
-                model_dir = self.process(
-                    load_model=True,
-                    model_parameters=self.model_parameters,
-                )
-            except Exception as e:
-                print(f"Warning: model load skipped ({e})")
-
         if not self.model_loaded:
             # Handle data parameter checking for streaming data
             data_dir = None
@@ -1890,6 +1878,7 @@ class snn_sleepy:
                 on_timeout=on_timeout,
                 sleep_tol_frac=sleep_tol_frac,
                 sleep_mode=sleep_mode,
+                time_per_item=self.num_steps,
             )
 
             # Keep weight calculation variables available for final test pass
@@ -1938,7 +1927,6 @@ class snn_sleepy:
             sleep_percent_sum = 0.0
             sleep_percent_count = 0
             best_val = 0.0
-            default_pca = None
 
             # loop over self.epochs
             for e in range(self.epochs):
@@ -2038,7 +2026,6 @@ class snn_sleepy:
                     spikes_train[:, : self.N_x] = data_train
                     if spike_trace is None:
                         spike_trace = np.zeros(self.N - self.N_inh)
-                d = 5
 
                 (
                     self.weights,
@@ -2120,170 +2107,118 @@ class snn_sleepy:
                             pass
 
                     elif accuracy_method == "pca_lr":
-                        # Use PCA+LR method for training accuracy
-                        try:
-                            # Debug: Check network activity
-                            input_spikes = spikes_tr_out[:, : self.st]
-                            exc_spikes = spikes_tr_out[:, self.st : self.ex]
-                            inh_spikes = spikes_tr_out[:, self.ex : self.ih]
-                            total_input_spikes = np.sum(input_spikes)
-                            total_exc_spikes = np.sum(exc_spikes)
-                            total_inh_spikes = np.sum(inh_spikes)
+                        # Debug: Check network activity
+                        input_spikes = spikes_tr_out[:, : self.st]
+                        exc_spikes = spikes_tr_out[:, self.st : self.ex]
+                        inh_spikes = spikes_tr_out[:, self.ex : self.ih]
+                        total_input_spikes = np.sum(input_spikes)
+                        total_exc_spikes = np.sum(exc_spikes)
+                        total_inh_spikes = np.sum(inh_spikes)
 
-                            input_spike_rate = (
-                                total_input_spikes / input_spikes.size
-                                if input_spikes.size > 0
-                                else 0
-                            )
-                            exc_spike_rate = (
-                                total_exc_spikes / exc_spikes.size
-                                if exc_spikes.size > 0
-                                else 0
-                            )
-                            inh_spike_rate = (
-                                total_inh_spikes / inh_spikes.size
-                                if inh_spikes.size > 0
-                                else 0
-                            )
-                            print(f"Network Activity Check:")
+                        input_spike_rate = (
+                            total_input_spikes / input_spikes.size
+                            if input_spikes.size > 0
+                            else 0
+                        )
+                        exc_spike_rate = (
+                            total_exc_spikes / exc_spikes.size
+                            if exc_spikes.size > 0
+                            else 0
+                        )
+                        inh_spike_rate = (
+                            total_inh_spikes / inh_spikes.size
+                            if inh_spikes.size > 0
+                            else 0
+                        )
+                        print(f"Network Activity Check:")
+                        print(
+                            f"  Input spikes: {total_input_spikes} ({input_spike_rate*100:.4f}% rate)"
+                        )
+                        print(
+                            f"  Excitatory spikes: {total_exc_spikes} ({exc_spike_rate*100:.4f}% rate)"
+                        )
+                        print(
+                            f"  Inhibitory spikes: {total_inh_spikes} ({inh_spike_rate*100:.4f}% rate)"
+                        )
+
+                        # get nonzero weights
+                        nz_st_ws = self.weights[: self.st, self.st : self.ex][
+                            self.weights[: self.st, self.st : self.ex] != 0
+                        ]
+                        nz_ex_ws = self.weights[self.st : self.ex, self.st : self.ih][
+                            self.weights[self.st : self.ex, self.st : self.ih] != 0
+                        ]
+                        nz_ih_ws = self.weights[self.ex : self.ih, self.st : self.ex][
+                            self.weights[self.ex : self.ih, self.st : self.ex] != 0
+                        ]
+                        print(f"Mean input weights: {np.mean(nz_st_ws)}")
+                        print(f"Mean excitatory weights: {np.mean(nz_ex_ws)}")
+                        print(f"Mean inhibitory weights: {np.mean(nz_ih_ws)}")
+
+                        X_tr, y_tr = self.spikes_per_item(
+                            spikes=exc_spikes,
+                            labels=labels_tr_out,
+                        )
+
+                        if X_tr.size > 0:
+                            # Check if we have enough samples for reliable PCA+LR
+                            min_samples_needed = max(
+                                10, self.N_classes * 5
+                            )  # At least 5 samples per class
+                            recommended_samples = (
+                                self.N_classes * 20
+                            )  # Recommended: 20 samples per class
+
                             print(
-                                f"  Input spikes: {total_input_spikes} ({input_spike_rate*100:.4f}% rate)"
-                            )
-                            print(
-                                f"  Excitatory spikes: {total_exc_spikes} ({exc_spike_rate*100:.4f}% rate)"
-                            )
-                            print(
-                                f"  Inhibitory spikes: {total_inh_spikes} ({inh_spike_rate*100:.4f}% rate)"
+                                f"Training samples: {len(X_tr)} (min needed: {min_samples_needed}, recommended: {recommended_samples})"
                             )
 
-                            # get nonzero weights
-                            nz_st_ws = self.weights[: self.st, self.st : self.ex][
-                                self.weights[: self.st, self.st : self.ex] != 0
-                            ]
-                            nz_ex_ws = self.weights[
-                                self.st : self.ex, self.st : self.ih
-                            ][self.weights[self.st : self.ex, self.st : self.ih] != 0]
-                            nz_ih_ws = self.weights[
-                                self.ex : self.ih, self.st : self.ex
-                            ][self.weights[self.ex : self.ih, self.st : self.ex] != 0]
-                            print(f"Mean input weights: {np.mean(nz_st_ws)}")
-                            print(f"Mean excitatory weights: {np.mean(nz_ex_ws)}")
-                            print(f"Mean inhibitory weights: {np.mean(nz_ih_ws)}")
-
-                            X_tr, y_tr = bin_spikes_by_label_no_breaks(
-                                spikes=exc_spikes,
-                                labels=labels_tr_out,
-                            )
-
-                            if X_tr.size > 0:
-                                # Check if we have enough samples for reliable PCA+LR
-                                min_samples_needed = max(
-                                    10, self.N_classes * 5
-                                )  # At least 5 samples per class
-                                recommended_samples = (
-                                    self.N_classes * 20
-                                )  # Recommended: 20 samples per class
-
+                            if len(X_tr) < min_samples_needed:
                                 print(
-                                    f"Training samples: {len(X_tr)} (min needed: {min_samples_needed}, recommended: {recommended_samples})"
+                                    f"⚠️  WARNING: Only {len(X_tr)} samples - PCA+LR may be unreliable (need ≥{min_samples_needed})"
+                                )
+                            elif len(X_tr) < recommended_samples:
+                                print(
+                                    f"ℹ️  NOTE: {len(X_tr)} samples available - consider using more for better PCA+LR estimation"
                                 )
 
-                                if len(X_tr) < min_samples_needed:
-                                    print(
-                                        f"⚠️  WARNING: Only {len(X_tr)} samples - PCA+LR may be unreliable (need ≥{min_samples_needed})"
-                                    )
-                                elif len(X_tr) < recommended_samples:
-                                    print(
-                                        f"ℹ️  NOTE: {len(X_tr)} samples available - consider using more for better PCA+LR estimation"
-                                    )
+                            eval.fit(X=X_tr, Y=y_tr)
+                            if e == 0:
+                                from copy import deepcopy
 
-                                # Calculate training accuracy using PCA+LR with proper train/test split
-                                # Use 80% for training, 20% for testing to avoid data leakage
-                                from sklearn.model_selection import train_test_split
+                                scaler = deepcopy(eval.scaler)
+                                pca = deepcopy(eval.pca)
+                                pca_plotter = PCAScatterDisplay(scaler=scaler, pca=pca)
+                            acc, phi = eval.score(X=X_tr, Y=y_tr)
 
-                                if len(X_tr) >= 10:  # Need minimum samples for split
-                                    X_tr_split, X_te_split, y_tr_split, y_te_split = (
-                                        train_test_split(
-                                            X_tr,
-                                            y_tr,
-                                            test_size=0.2,
-                                            random_state=42,
-                                            stratify=y_tr,
-                                        )
-                                    )
-                                    print(
-                                        f"PCA+LR split: {len(X_tr_split)} train, {len(X_te_split)} test samples"
-                                    )
-                                else:
-                                    # Not enough samples for proper split, use original approach but note the limitation
-                                    raise ValueError(
-                                        "not enough samples to split and perform accuracy estimation"
-                                    )
+                            print(f"Training Accuracy (PCA+LR): {acc:.4f}")
+                            print(f"Training clustering (Phi): {phi:.4f}")
 
-                                acc, mcc, self.scaler, self.pca, self.clf = (
-                                    self._pca_eval(  # TRAIN STOPS HERE
-                                        X_train=X_tr_split,
-                                        y_train=y_tr_split,
-                                        X_test=X_te_split,
-                                        y_test=y_te_split,
-                                        split="train",
-                                    )
+                            self._record_accuracy(
+                                "train",
+                                acc,
+                                epoch=e + 1,
+                                method="pca_lr",
+                            )
+                            self._record_phi(
+                                "train",
+                                phi,
+                                epoch=e + 1,
+                            )
+
+                            # Show training data distribution
+                            train_dist = np.bincount(y_tr, minlength=self.N_classes)
+                            print(f"\nTraining Data Distribution:")
+                            for i in range(self.N_classes):
+                                count = train_dist[i]
+                                percentage = (
+                                    (count / len(y_tr)) * 100 if len(y_tr) > 0 else 0
                                 )
-                                print(f"Training Accuracy (PCA+LR): {acc:.4f}")
-                                print(f"Training MCC (PCA+LR): {mcc:.4f}")
-
-                                # Also compute top_method accuracy for comparison
-                                try:
-                                    train_acc_top, __, state = WTA_accuracy(
-                                        spikes=spikes_tr_out[:, self.st : self.ex],
-                                        labels=labels_tr_out,
-                                        num_classes=self.N_classes,
-                                        smoothening=self.num_steps,
-                                        split="train",
-                                    )
-                                    print(
-                                        f"Training Accuracy (TOP): {train_acc_top:.4f}"
-                                    )
-                                except Exception as ex:
-                                    print(
-                                        f"Warning: Top method accuracy computation failed ({ex})"
-                                    )
-                                    train_acc_top = None
-                                self._record_accuracy(
-                                    "train",
-                                    acc,
-                                    epoch=e + 1,
-                                    method="pca_lr",
+                                print(
+                                    f"  Class {i}: {count:3d} samples ({percentage:5.1f}%)"
                                 )
-                                self._record_accuracy(
-                                    "train",
-                                    train_acc_top,
-                                    epoch=e + 1,
-                                    method="top",
-                                )
-                                self._record_mcc(
-                                    "train",
-                                    mcc,
-                                    epoch=e + 1,
-                                )
-
-                                # Show training data distribution
-                                train_dist = np.bincount(y_tr, minlength=self.N_classes)
-                                print(f"\nTraining Data Distribution:")
-                                for i in range(self.N_classes):
-                                    count = train_dist[i]
-                                    percentage = (
-                                        (count / len(y_tr)) * 100
-                                        if len(y_tr) > 0
-                                        else 0
-                                    )
-                                    print(
-                                        f"  Class {i}: {count:3d} samples ({percentage:5.1f}%)"
-                                    )
-                            else:
-                                print("No training features available for PCA+LR")
-                        except Exception as ex:
-                            print(f"Training PCA+LR failed: {ex}")
+                        else:
+                            print("No training features available for PCA+LR")
 
                     print(f"{'-'*50}")
 
@@ -2338,7 +2273,7 @@ class snn_sleepy:
                     spikes_test = np.zeros((T_val_batch, self.N), dtype=np.int8)
                     spikes_test[:, : self.st] = data_test
                     spike_trace_val = np.zeros(self.N - self.N_inh)
-                    a_test = np.zeros(self.N_exc)
+                    a_test = np.zeros(self.N_exc + self.N_inh)
                     I_syn_exc_test = np.zeros(self.N_exc)
                     I_syn_inh_test = np.zeros(self.N_inh)
                     spike_threshold_test = np.full(
@@ -2390,58 +2325,32 @@ class snn_sleepy:
                     val_sample_count += batch_size
 
                     # Prepare features from validation data for testing
-                    X_val_dist, y_val_dist = bin_spikes_by_label_no_breaks(
+                    X_val, y_val = self.spikes_per_item(
                         spikes=spikes_te_out[:, self.st : self.ex],
                         labels=labels_te_out,
                     )
 
                     # PCA+LR accuracy estimation
-                    acc_LR, mcc = self._pca_eval(
-                        X_train=None,
-                        y_train=None,
-                        X_test=X_val_dist,
-                        y_test=y_val_dist,
-                        split="val",
-                    )
-                    acc_LR_sum += acc_LR
-                    mcc_sum += mcc
+                    acc, phi = eval.score(X=X_val, Y=y_val)
 
-                    # WTA accuracy estimation
-                    acc_top, _, _ = WTA_accuracy(
-                        spikes=spikes_te_out[:, self.st : self.ex],
-                        labels=labels_te_out,
-                        num_classes=self.N_classes,
-                        smoothening=self.num_steps,
-                        split="val",
-                        state=state,
-                    )
-                    acc_top_sum += acc_top
+                    # if PCA_plot
+                    if PCA_plot:
+                        pca_plotter.plot(
+                            X=X_val,
+                            Y=y_val,
+                            epoch=e,
+                            run=self.ts_spec,
+                            dataset=self.image_dataset,
+                            phi=phi,
+                        )
 
-                    # Phi estimation
-                    phi_train, phi_val, *unused, pca = calculate_phi(
-                        spikes_train=spikes_tr_out[:, self.st : self.ex],
-                        spikes_test=spikes_te_out[:, self.st : self.ex],
-                        labels_train=labels_tr_out,
-                        labels_test=labels_te_out,
-                        num_steps=self.num_steps,
-                        pca_variance=self.pca_variance,
-                        random_state=random_state,
-                        num_classes=self.N_classes,
-                        pca=default_pca,
-                    )
-                    phi_val_sum += phi_val
-                    phi_train_sum += phi_train
-
-                    # assign pca as default_pca
-                    if e == 0:
-                        default_pca = pca
+                    # update summed scores
+                    acc_LR_sum += acc
+                    phi_val_sum += phi
 
                 # estimate the mean accuracy and phi
-                final_acc_top = acc_top_sum / max(1, total_num_vals)
                 final_acc_LR = acc_LR_sum / max(1, total_num_vals)
                 final_val_phi = phi_val_sum / max(1, total_num_vals)
-                final_train_phi = phi_train_sum / max(1, total_num_vals)
-                final_mcc = mcc_sum / max(1, total_num_vals)
 
                 # save weights if val improved
                 if final_acc_LR > best_val:
@@ -2451,22 +2360,15 @@ class snn_sleepy:
                             save_model=True,
                             model_parameters=self.model_parameters,
                         )
-                    print(f"New best model saved (val acc: {best_val:.4f})")
+                    new_best = "New best "
+                else:
+                    new_best = ""
 
                 # print results
-                print(f"Validation accuracy (PCA+LR): {final_acc_LR}")
-                print(f"Validation accuracy (WTA): {final_acc_top}")
+                print(f"{new_best}Validation accuracy (PCA+LR): {final_acc_LR}")
                 print(f"Validation phi: {final_val_phi}")
-                print(f"Validation MCC: {final_mcc}")
 
                 # record the test accuracy
-                if final_acc_top is not None:
-                    self._record_accuracy(
-                        "val",
-                        final_acc_top,
-                        epoch=e + 1,
-                        method="top",
-                    )
                 if final_acc_LR is not None:
                     self._record_accuracy(
                         "val",
@@ -2476,12 +2378,6 @@ class snn_sleepy:
                     )
                 if final_val_phi is not None:
                     self._record_phi("val", final_val_phi, epoch=e + 1)
-
-                if final_train_phi is not None:
-                    self._record_phi("train", final_train_phi, epoch=e + 1)
-
-                if final_mcc is not None:
-                    self._record_mcc("val", final_mcc, epoch=e + 1)
 
                 # plot validation and training accuracy progress
                 self._plot_accuracy(mcc=False, pca=True, wta=False, phi=True)
@@ -2546,11 +2442,8 @@ class snn_sleepy:
         total_num_tests = max(1, self.all_images_test // self.batch_image_test)
         bs_spikes = int(self.batch_image_test * self.num_steps)
         test_sample_count = 0
-        acc_top_sum = 0.0
-        acc_LR_sum = 0.0
-        mcc_sum = 0.0
-        phi_val_sum = 0.0
-        phi_train_sum = 0.0
+        acc_te_sum = 0.0
+        phi_te_sum = 0.0
 
         for idx_test in range(total_num_tests):
             # make sure we are actually generating content from the test-set of MNIST
@@ -2571,11 +2464,11 @@ class snn_sleepy:
             mp_test[:] = self.resting_potential
             spikes_test = np.zeros((bs_spikes, self.N), dtype=np.int8)
             spikes_test[:, : self.st] = data_test
-            a = np.zeros(self.N_exc)
+            a = np.zeros(self.N_exc + self.N_inh)
             I_syn_exc = np.zeros(self.N_exc)
             I_syn_inh = np.zeros(self.N_inh)
             spike_threshold = np.full(
-                self.N_exc, fill_value=spike_threshold_default, dtype=float
+                self.N_exc + self.N_inh, fill_value=spike_threshold_default, dtype=float
             )
             spike_trace_te = np.zeros(self.N - self.N_inh)
 
@@ -2656,6 +2549,7 @@ class snn_sleepy:
                     on_timeout=on_timeout,
                     sleep_tol_frac=sleep_tol_frac,
                     sleep_mode=sleep_mode,
+                    time_per_item=self.num_steps,
                 )
 
             (
@@ -2701,63 +2595,27 @@ class snn_sleepy:
             # Increase sample index
             test_sample_count += self.batch_image_test
 
-            # PCA+LR accuracy estimation
-            acc_LR, mcc = self._pca_eval(
-                X_train=None,
-                y_train=None,
-                X_test=spikes_te_out[:, self.st : self.ex],
-                y_test=labels_te_out,
-                split="test",
-            )
-            acc_LR_sum += acc_LR
-            mcc_sum += mcc
-
-            # WTA accuracy estimation
-            acc_top, dbg_test, _ = WTA_accuracy(
+            # Prepare features from testing
+            X_te, y_te = self.spikes_per_item(
                 spikes=spikes_te_out[:, self.st : self.ex],
                 labels=labels_te_out,
-                num_classes=self.N_classes,
-                smoothening=self.num_steps,
-                split="test",
-                state=state,
             )
-            acc_top_sum += acc_top
 
-            # Phi estimation
-            phi_tr, phi_te, *_ = calculate_phi(
-                spikes_train=spikes_tr_out[:, self.st : self.ex],
-                spikes_test=spikes_te_out[:, self.st : self.ex],
-                labels_train=labels_tr_out,
-                labels_test=labels_te_out,
-                num_steps=self.num_steps,
-                pca_variance=self.pca_variance,
-                random_state=random_state,
-                num_classes=self.N_classes,
-                pca=default_pca,
-            )
-            phi_sum += phi_te
-            print("phi train: ", phi_tr)
+            # PCA+LR accuracy estimation
+            acc, phi = eval.score(X=X_te, Y=y_te)
+
+            # update summed scores
+            acc_te_sum += acc
+            phi_te_sum += phi
 
         # estimate the mean accuracy and phi
-        final_acc_top = acc_top_sum / max(1, total_num_tests)
-        final_acc_LR = acc_LR_sum / max(1, total_num_tests)
-        final_phi = phi_sum / max(1, total_num_tests)
-        final_mcc = mcc_sum / max(1, total_num_tests)
+        final_acc_LR = acc_te_sum / max(1, total_num_tests)
+        final_phi = phi_te_sum / max(1, total_num_tests)
 
         # print results
         print(f"Testing accuracy (PCA+LR): {final_acc_LR}")
-        print(f"Testing accuracy (WTA): {final_acc_top}")
         print(f"Testing phi: {final_phi}")
-        print(f"Testing MCC: {final_mcc}")
 
-        # record the test accuracy
-        if final_acc_top is not None:
-            self._record_accuracy(
-                "test",
-                final_acc_top,
-                epoch=e + 1,
-                method="top",
-            )
         if final_acc_LR is not None:
             self._record_accuracy(
                 "test",
