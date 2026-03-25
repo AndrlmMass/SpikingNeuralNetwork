@@ -38,21 +38,21 @@ def run_once(
         classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         num_input = 784
         use_validation_data = True
-        w_dense_se = 0.1
-        w_dense_ee = 0.05
-        w_dense_ei = 0.1
-        w_dense_ie = 0.1
-        se_weights = 0.7
+        w_dense_se = 0.1  # reduced from 0.1
+        w_dense_ee = 0.025  # reduced from 0.05
+        w_dense_ei = 0.1  # reduced from 0.1
+        w_dense_ie = 0.1  # reduced from 0.1
+        se_weights = 0.8  # increased from 0.5
         ee_weights = 0.3
-        ei_weights = 1.0
-        ie_weights = -1.0
+        ei_weights = 0.0  # increased from 0.3
+        ie_weights = -0.0  # increased from -0.3
         tau_syn_exc = 10
         tau_syn_inh = 9
-        learning_rate_exc = 0.0004
+        learning_rate_exc = 0.01  # increased from 0.0004
         tau_m_exc = 20
         tau_m_inh = 15
         Rm_exc = 15
-        Rm_inh = 17.5
+        Rm_inh = 15
         max_rate_hz = 250.0
         delta_adaption = 0.5
         tau_trace = 20
@@ -84,8 +84,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 10000, 300, 2000
-        b_tr, b_va, b_te = 1000, 300, 500
+        img_tr, img_va, img_te = 30000, 100, 5000
+        b_tr, b_va, b_te = 100, 100, 1000
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,

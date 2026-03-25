@@ -401,13 +401,14 @@ def create_weights(
     H = int(np.sqrt(N_x))
     W = H
 
-    H_e, W_e = 32, 32
+    H_e = int(np.sqrt(N_exc))
+    W_e = H_e
 
     ref_x = np.sqrt(H * W)
     ref_e = np.sqrt(H_e * W_e)
 
     _fse = 1.0 / ref_x
-    _fee = 2.0 / ref_e
+    _fee = 1.5 / ref_e
     _fei = 2.0 / ref_e
     _fr0 = 3.0 / ref_e
     _fsr = 2.0 / ref_e
@@ -614,6 +615,7 @@ def create_weights(
             W_e,
             id_=1400,
         )
+    d = 4
 
     # if plot_weights:
     if plot_weights:

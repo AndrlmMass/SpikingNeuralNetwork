@@ -366,7 +366,7 @@ class snn_sleepy:
         ax.set_ylabel("Accuracy")
         ax2.set_ylabel("Clustering")
         fig.supxlabel("Batches")
-        ax.set_ylim(bottom=0.7, top=1.0)
+        ax.set_ylim(bottom=0.4, top=1.0)
 
         # Phi (right axis)
         if phi:

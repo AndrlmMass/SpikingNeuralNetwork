@@ -8,7 +8,6 @@ import numpy as np
 from weight_funcs import (
     sleep_func,
     spike_timing,
-    vectorized_trace_func,
     normalize_weights_per_column,
 )
 from plot import heatmap_spike_response
@@ -511,6 +510,9 @@ def train_network(
         spike_threshold_ex = 0.0
         spike_trace_ex = 0.0
         track_count = 0
+        x_tar_sum = 0
+        x_tar_count = 0
+        x_tar_sum = 0
 
         # # track STDP update size
         # x_pre = np.zeros((N,T))
@@ -564,7 +566,7 @@ def train_network(
     pbar = tqdm(range(1, T), desc=desc, leave=False, mininterval=1.0)
     # Initial snapshot
     plot_time += 1
-    num_steps = max(1, int((T * 100) // time_per_item))
+    num_steps = max(1, int((T * 5) // time_per_item))
     update_weight_freq = max(1, int(T // time_per_item))
     normalize_freq = max(1, int(T // time_per_item))
     iterations = 100
@@ -579,6 +581,8 @@ def train_network(
     print(f"Memory before training: {process.memory_info().rss / 1024**2:.0f} MB")
     update_weights_now = False
     normalize_now = False
+
+    # create heatmap spike plot before training to verify that it starts off as wrong
     for t in pbar:
         if t % update_weight_freq == 0 and train_weights:
             update_weights_now = True
@@ -589,6 +593,10 @@ def train_network(
                 N_x=N_x,
                 x_tar=x_tar,
             )
+            # update x_tar tracker
+            if track_stats:
+                x_tar_sum += x_tar.mean()
+                x_tar_count += 1
         if t % normalize_freq == 0:
             normalize_now = True
         if t % num_steps == 0:
@@ -1164,6 +1172,7 @@ def train_network(
         mean_delta_I_syn_ex = delta_I_syn_ex / max(1, track_count)
         mean_delta_I_syn_ih = delta_I_syn_ih / max(1, track_count)
         mean_a_ex = a_ex / max(1, track_count)
+        mean_x_tar = x_tar_sum / max(1, x_tar_count)
         # mean_a_ih = a_ih.mean()
         mean_spike_threshold_ex = spike_threshold_ex / max(1, track_count)
         # mean_spike_threshold_ih = spike_threshold_ih.mean()
@@ -1180,6 +1189,7 @@ def train_network(
         print(f"Mean I syn ex: {I_syn_ex/max(1,track_count)}")
         print(f"Mean I syn ih: {I_syn_ih/max(1,track_count)}")
         print(f"Mean a ex: {mean_a_ex}")
+        print(f"Mean x_tar: {mean_x_tar}")
         # print(f"Mean a ih: {mean_a_ih}")
         print(f"Mean spike threshold ex: {mean_spike_threshold_ex}")
         # print(f"Mean spike threshold ih: {mean_spike_threshold_ih}")
@@ -1204,6 +1214,7 @@ def train_network(
         print("std ex->ih:", weights[st:ex, ex:ih][weights[st:ex, ex:ih] != 0].std())
         print("std ex->ex:", weights[st:ex, st:ex][weights[st:ex, st:ex] != 0].std())
         print("std st->ex:", weights[:st, st:ex][weights[:st, st:ex] != 0].std())
+    print(np.mean(weights[st:ex, st:ex], axis=1)[32:].mean())
     return (
         weights,
         spikes,
