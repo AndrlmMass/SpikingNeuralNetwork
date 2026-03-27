@@ -38,28 +38,27 @@ def run_once(
         classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         num_input = 784
         use_validation_data = True
-        w_dense_se = 0.1  # reduced from 0.1
-        w_dense_ee = 0.025  # reduced from 0.05
-        w_dense_ei = 0.1  # reduced from 0.1
-        w_dense_ie = 0.1  # reduced from 0.1
-        se_weights = 0.8  # increased from 0.5
-        ee_weights = 0.3
-        ei_weights = 0.0  # increased from 0.3
-        ie_weights = -0.0  # increased from -0.3
+        w_dense_se = 0.05  # original: 0.1
+        w_dense_ee = 0.05  # original: 0.05
+        w_dense_ei = 0.05  # original: 0.1
+        w_dense_ie = 0.05  # original: 0.1
+        se_weights = 1.0  # original: 0.5
+        ee_weights = 0.7
+        ei_weights = 0.7  # original: 0.3
+        ie_weights = -0.5  # original: -0.3
         tau_syn_exc = 10
         tau_syn_inh = 9
-        learning_rate_exc = 0.01  # increased from 0.0004
+        learning_rate_exc = 0.0004  # original: 0.0004
         tau_m_exc = 20
         tau_m_inh = 15
-        Rm_exc = 15
-        Rm_inh = 15
+        Rm_exc = 17
+        Rm_inh = 19
         max_rate_hz = 250.0
         delta_adaption = 0.5
         tau_trace = 20
         tau_adaption = 200
         w_max = 10
         num_steps = 350
-        x_tar = 0.5
         mu_weight = 0.6
 
     ts_spec = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -84,8 +83,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 30000, 100, 5000
-        b_tr, b_va, b_te = 100, 100, 1000
+        img_tr, img_va, img_te = 10000, 100, 1000
+        b_tr, b_va, b_te = 50, 50, 1000
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -171,7 +170,6 @@ def run_once(
         plot_spectrograms=False,
         use_validation_data=False,
         var_noise=args.noise_level,
-        x_tar=x_tar,
         track_weights=args.track_weights,
         sleep=not args.no_sleep,
         sleep_mode=args.sleep_mode,
@@ -265,7 +263,7 @@ def main():
     parser.add_argument(
         "--track-weights",
         action="store_true",
-        default=False,
+        default=True,
         help="track weights during training",
     )
     parser.add_argument(
@@ -405,7 +403,7 @@ def main():
     parser.add_argument(
         "--track-stats",
         action="store_true",
-        default=False,
+        default=True,
         help="track statistics during training",
     )
     parser.add_argument(

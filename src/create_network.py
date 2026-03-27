@@ -72,6 +72,9 @@ def gaussian_ei_local(
     W_ei /= W_ei.max(axis=0, keepdims=True) + 1e-12
     W_ei *= peak
 
+    # remove small weights
+    W_ei[W_ei < 0.01] = 0.0
+
     # ensure weight strength complies with the sum of compliant weights
     W_ei = weight_compliance(frac=frac, N=N_exc, weights=W_ei, peak=peak, type="W_ei")
 
@@ -124,6 +127,9 @@ def mexican_hat_ie_far(
 
     ring /= ring.max(axis=1, keepdims=True) + 1e-12
     W_ie = peak * ring
+
+    # remove small weights
+    W_ie[W_ie > -0.01] = 0.0
 
     # ensure weight strength complies with the sum of compliant weights
     W_ie = weight_compliance(frac=frac, N=N_exc, weights=W_ie, peak=peak, type="W_ie")
@@ -189,6 +195,9 @@ def gaussian_se_weights(
 
     # pre x post
     W_se = G.T
+
+    # remove small weights
+    W_se[W_se < 0.01] = 0.0
 
     # ensure weight strength complies with the sum of compliant weights
     W_se = weight_compliance(
@@ -266,6 +275,10 @@ def gaussian_ee_weights(
 
     if self_zero:
         np.fill_diagonal(W, 0.0)
+
+
+    # remove small weights
+    W[W < 0.01] = 0.0
 
     # ensure weight strength complies with the sum of compliant weights
     W = weight_compliance(frac=frac, N=N_exc, weights=W, peak=peak, type="W_ee")
@@ -395,7 +408,7 @@ def create_weights(
     plot_weights_ee = False
     plot_weights_ei = False
     plot_weights_ie = False
-    plot_single_ee = False
+    plot_single_ee = True
 
     # input poisson weights
     H = int(np.sqrt(N_x))
@@ -408,10 +421,10 @@ def create_weights(
     ref_e = np.sqrt(H_e * W_e)
 
     _fse = 1.0 / ref_x
-    _fee = 1.5 / ref_e
-    _fei = 2.0 / ref_e
-    _fr0 = 3.0 / ref_e
-    _fsr = 2.0 / ref_e
+    _fee = 1.0 / ref_e
+    _fei = 1.0 / ref_e
+    _fr0 = 1.5 / ref_e
+    _fsr = 1.0 / ref_e
     _flr = 2.0 / ref_e
 
     if random_weights:
@@ -501,9 +514,6 @@ def create_weights(
         )
 
         weights[ex:ih, st:ex] = W_ie
-    # if plot_by_exc_neuron:
-    #     # add plotting function that compares all inputs and outputs to a single excitatory neuron
-    #     ...
 
     if plot_weights_se:
         create_3D_weights_plot(
@@ -615,7 +625,6 @@ def create_weights(
             W_e,
             id_=1400,
         )
-    d = 4
 
     # if plot_weights:
     if plot_weights:

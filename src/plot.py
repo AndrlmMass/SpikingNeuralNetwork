@@ -897,7 +897,8 @@ def heatmap_spike_response(
     st,
     spike_trace,
     ex,
-    x_target,
+    x_target_se,
+    x_target_ex,
     weights_st_ex,
     weights_ex_ex,
     weights_ex_ih,
@@ -956,10 +957,8 @@ def heatmap_spike_response(
     axs[0, 3].set_title("Spike trace distribution")
     axs[0, 3].set_ylabel("Spike count", fontsize=5)
     axs[0, 3].set_xticks([])
-
-    # (Optional) bottom plot: example summary trace
-    # If you don’t want this, delete these lines.
-    # convert data to numpy
+    axs[0, 3].axhline(y=x_target_se, color="blue", linestyle="--", linewidth=0.1)
+    axs[0, 3].axhline(y=x_target_ex, color="green", linestyle="--", linewidth=0.1)
 
     # create heatmap plots
     create_plot(
@@ -1113,6 +1112,7 @@ class PCAScatterDisplay:
         self.pca = pca
         self.figure_ = None
         self.ax_ = None
+        self.colors_ = None
 
     def plot(self, X, Y, *, epoch, run, dataset, phi=None):
         from datetime import datetime
@@ -1126,10 +1126,13 @@ class PCAScatterDisplay:
 
         if self.figure_ is None:
             self.figure_, self.ax_ = plt.subplots()
+        if self.colors_ is None:
+            self.colors_ = plt.cm.tab10(np.linspace(0, 1, len(np.unique(Y))))
         self.ax_.clear()
         for c in np.unique(Y).astype(int):
             mask = Y == c
-            self.ax_.scatter(X[mask, 0], X[mask, 1], alpha=0.5, s=20)
+            self.ax_.scatter(X[mask, 0], X[mask, 1], alpha=0.5, s=20, c=self.colors_[c])
+            self.ax_.scatter(X[mask, 0].mean(), X[mask, 1].mean(), s=100, marker="x", c=self.colors_[c])
 
         self.ax_.legend()
         title = f"Batch {epoch}"

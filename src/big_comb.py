@@ -1553,7 +1553,6 @@ class snn_sleepy:
         w_target_inh=-0.01,
         var_noise=1,
         min_weight_inh=-25,
-        x_tar=0.1,
         track_weights=False,
         max_weight_inh=-0.01,
         max_weight_exc=25,
@@ -1711,7 +1710,6 @@ class snn_sleepy:
         self.model_parameters["classes"] = self.classes
 
         # initiate the evaluator
-        x_tar = np.full(shape=self.N_exc, fill_value=x_tar)
         eval = Evaluator(
             xp_var_or_comps=pca_variance,
             num_classes=self.N_classes,
@@ -1922,6 +1920,8 @@ class snn_sleepy:
                 fill_value=spike_threshold_default,
                 dtype=float,
             )
+            x_tar_se = None
+            x_tar_ex = None
 
             # Track sleep percentages across epochs
             sleep_percent_sum = 0.0
@@ -2043,7 +2043,8 @@ class snn_sleepy:
                     a,
                     __,
                     spike_trace,
-                    x_tar,
+                    x_tar_se,
+                    x_tar_ex,
                 ) = train_network(
                     weights=(self.weights if train_weights else self.weights.copy()),
                     spike_labels=labels_train,
@@ -2063,8 +2064,9 @@ class snn_sleepy:
                     timing_update=timing_update,
                     spike_threshold=spike_threshold,
                     a=a,
+                    x_tar_se=x_tar_se,
+                    x_tar_ex=x_tar_ex,
                     track_weights=track_weights,
-                    x_tar=x_tar,
                     I_syn_exc=I_syn_exc,
                     I_syn_inh=I_syn_inh,
                     sleep_ratio=getattr(self, "sleep_ratio", 0.0),
@@ -2293,6 +2295,7 @@ class snn_sleepy:
                         weight_tracking_te,
                         _spike_trace_te,
                         _,
+                        _,
                     ) = train_network(  # VAL STOPS HERE
                         weights=self.weights.copy(),
                         spike_labels=labels_test.copy(),
@@ -2306,7 +2309,6 @@ class snn_sleepy:
                         save_plots=heatmap_plot,
                         tau_trace=tau_trace,
                         track_weights=False,
-                        x_tar=x_tar,
                         spike_trace=spike_trace_val,
                         var_noise=var_noise,
                         spikes=spikes_test.copy(),
@@ -2588,7 +2590,6 @@ class snn_sleepy:
                 save_plots=False,
                 tau_trace=tau_trace,
                 track_weights=track_weights,
-                x_tar=x_tar,
                 spike_trace=spike_trace_te,
                 var_noise=var_noise,
                 spikes=spikes_test.copy(),
