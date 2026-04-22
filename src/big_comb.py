@@ -155,8 +155,8 @@ class snn_sleepy:
         T = spikes.shape[0]
         t = self.num_steps
         N = spikes.shape[1]
-        spikes = spikes.reshape(T // t, t, N).mean(1)
-        labels = labels.reshape(T // t, t).mean(1).astype(int)
+        spikes = spikes.reshape(T // t, t, N).mean(axis=1)
+        labels = labels.reshape(T // t, t).mean(axis=1).astype(int)
         return spikes, labels
 
     def _read_jsonl(self, path):
@@ -366,7 +366,7 @@ class snn_sleepy:
         ax.set_ylabel("Accuracy")
         ax2.set_ylabel("Clustering")
         fig.supxlabel("Batches")
-        ax.set_ylim(bottom=0.4, top=1.0)
+        ax.set_ylim(bottom=0.0, top=1.0)
 
         # Phi (right axis)
         if phi:
@@ -803,7 +803,7 @@ class snn_sleepy:
         )
         self.batch_test = self.batch_audio_test if audioMNIST else self.batch_image_test
         self.batch_val = self.batch_audio_val if audioMNIST else self.batch_image_val
-        self.epochs = self.all_train // self.batch_train
+        self.batches = self.all_train // self.batch_train
         self.data_loaded = False
         self.model_loaded = False
         self.test_data_loaded = False
@@ -832,7 +832,7 @@ class snn_sleepy:
             # Use smaller total for both to ensure synchronization
             self.all_train = min(all_audio_train, all_images_train)
             self.all_test = min(all_audio_test, all_images_test)
-            self.epochs = self.all_train // self.batch_train
+            self.batches = self.all_train // self.batch_train
 
             # For multimodal, derive total input as 2 * (floor((sqrt(base))/sqrt(2)))^2
             # where base is original single-modality sqrt(self.N_x)
@@ -865,7 +865,7 @@ class snn_sleepy:
             self.batch_test = batch_audio_test
             self.all_train = all_audio_train
             self.all_test = all_audio_test
-            self.epochs = all_audio_train // batch_audio_train
+            self.batches = all_audio_train // batch_audio_train
 
             # Update network architecture (audio uses original N_x)
             self.st = self.N_x  # stimulation
@@ -878,7 +878,7 @@ class snn_sleepy:
             self.batch_test = batch_image_test
             self.all_train = all_images_train
             self.all_test = all_images_test
-            self.epochs = all_images_train // batch_image_train
+            self.batches = all_images_train // batch_image_train
 
             # Update network architecture (image uses original N_x)
             self.st = self.N_x  # stimulation
@@ -1388,7 +1388,7 @@ class snn_sleepy:
             "all_train": self.all_train,
             "all_test": self.all_test,
             "all_val": self.all_val,
-            "epochs": self.epochs,
+            "epochs": self.batches,
         }
 
         # Save to a streaming parameters file
@@ -1653,7 +1653,7 @@ class snn_sleepy:
         track_stats=False,
         use_phi=True,
         use_pca=True,
-        PCA_plot=True,
+        PCA_plot=False,
         gif_pca_plot=True,
     ):
         self.dt = dt
@@ -1697,7 +1697,7 @@ class snn_sleepy:
         self.model_parameters["batch_train"] = self.batch_train
         self.model_parameters["batch_test"] = self.batch_test
         self.model_parameters["batch_val"] = self.batch_val
-        self.model_parameters["epochs"] = self.epochs
+        self.model_parameters["epochs"] = self.batches
         self.model_parameters["w_dense_ee"] = self.w_dense_ee
         self.model_parameters["w_dense_ei"] = self.w_dense_ei
         self.model_parameters["w_dense_se"] = self.w_dense_se
@@ -1886,16 +1886,16 @@ class snn_sleepy:
                 # single pass; tracker will be (1,2) later
                 self.performance_tracker = np.zeros((1, 2))
             else:
-                self.performance_tracker = np.zeros((self.epochs, 2))
+                self.performance_tracker = np.zeros((self.batches, 2))
 
             # define progress bar
-            pbar_total = 1 if (test_only and not train_weights) else self.epochs
+            pbar_total = 1 if (test_only and not train_weights) else self.batches
             pbar = tqdm(
                 total=pbar_total,
                 desc=(
                     "Test-only"
                     if (test_only and not train_weights)
-                    else f"Epoch 0/{self.epochs}:"
+                    else f"Epoch 0/{self.batches}:"
                 ),
                 unit="it",
                 ncols=80,
@@ -1928,8 +1928,8 @@ class snn_sleepy:
             sleep_percent_count = 0
             best_val = 0.0
 
-            # loop over self.epochs
-            for e in range(self.epochs):
+            # loop over self.batches
+            for e in range(self.batches):
                 # Reset test/val indices at the beginning of each epoch
                 self.current_test_idx = 0
                 # Reset streamer validation/train pointers (streamers ignore start_idx)
@@ -2185,7 +2185,7 @@ class snn_sleepy:
                                 )
 
                             eval.fit(X=X_tr, Y=y_tr)
-                            if e == 0:
+                            if e == 0 and PCA_plot:
                                 from copy import deepcopy
 
                                 scaler = deepcopy(eval.scaler)
@@ -2336,7 +2336,7 @@ class snn_sleepy:
                     acc, phi = eval.score(X=X_val, Y=y_val)
 
                     # if PCA_plot
-                    if PCA_plot:
+                    if PCA_plot and PCA_plot:
                         pca_plotter.plot(
                             X=X_val,
                             Y=y_val,
@@ -2385,7 +2385,7 @@ class snn_sleepy:
                 self._plot_accuracy(mcc=False, pca=True, wta=False, phi=True)
 
                 # Rinse memory
-                if e != self.epochs - 1:
+                if e != self.batches - 1:
                     # Clean up training data
                     del data_train, labels_train
                     # Clean up test data (these exist in the test loop)
@@ -2411,7 +2411,7 @@ class snn_sleepy:
                         pass
                     gc.collect()
 
-                pbar.set_description(f"Epoch {e+1}/{self.epochs}")
+                pbar.set_description(f"Epoch {e+1}/{self.batches}")
                 # Handle None valuTruees safely
                 acc_str = f"{final_acc_LR:.3f}" if final_acc_LR is not None else "N/A"
                 phi_str = f"{final_val_phi:.2f}" if final_val_phi is not None else "N/A"
@@ -2434,7 +2434,7 @@ class snn_sleepy:
             gc.collect()
 
         # create gif if wanted after finishing training
-        if gif_pca_plot:
+        if gif_pca_plot and PCA_plot:
             from plot import GenerateGif
 
             output_filename = f"{self.ts_spec}.gif"
@@ -2567,10 +2567,10 @@ class snn_sleepy:
             (
                 weights_te,
                 spikes_te_out,
-                mp_te,
                 *unused,
                 labels_te_out,
                 sleep_te_out,
+                _,
                 _,
                 _,
                 _,

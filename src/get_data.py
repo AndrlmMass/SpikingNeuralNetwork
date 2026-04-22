@@ -695,6 +695,14 @@ class ImageDataStreamer:
         B, _, H, W = images.shape
         device, dtype = images.device, images.dtype
 
+        # # plot first image before gabor process
+        # import matplotlib.pyplot as plt
+
+        # fig, ax = plt.subplots(figsize=(10, 10))
+        # ax.imshow(images[0].cpu().numpy().squeeze(0))
+        # plt.show()
+        # plt.close(fig)
+
         # --- resolution-aware scaling ---
         S = int(math.sqrt(H * W))  # auto adapts (28 for MNIST)
         ksize = max(5, S // 4)  # kernel ~ 1/4 of image width
@@ -767,6 +775,12 @@ class ImageDataStreamer:
         packed[:, :, :h1, w1:] = tr
         packed[:, :, h1:, :w1] = bl
         packed[:, :, h1:, w1:] = br
+
+        # # plot same image after gabor processing
+        # fig, ax = plt.subplots(figsize=(10, 10))
+        # ax.imshow(packed[0].cpu().numpy().squeeze(0))
+        # plt.show()
+        # plt.close(fig)
 
         return packed
 

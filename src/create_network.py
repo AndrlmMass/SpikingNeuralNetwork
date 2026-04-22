@@ -276,7 +276,6 @@ def gaussian_ee_weights(
     if self_zero:
         np.fill_diagonal(W, 0.0)
 
-
     # remove small weights
     W[W < 0.01] = 0.0
 
@@ -408,7 +407,7 @@ def create_weights(
     plot_weights_ee = False
     plot_weights_ei = False
     plot_weights_ie = False
-    plot_single_ee = True
+    plot_single_ee = False
 
     # input poisson weights
     H = int(np.sqrt(N_x))

@@ -83,8 +83,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 10000, 100, 1000
-        b_tr, b_va, b_te = 50, 50, 1000
+        img_tr, img_va, img_te = 10000, 1000, 1000
+        b_tr, b_va, b_te = 1000, 1000, 1000
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -263,7 +263,7 @@ def main():
     parser.add_argument(
         "--track-weights",
         action="store_true",
-        default=True,
+        default=False,
         help="track weights during training",
     )
     parser.add_argument(
@@ -312,7 +312,7 @@ def main():
     parser.add_argument(
         "--get-giffed",
         action="store_true",
-        default=False,
+        default=True,
         help="create gif from heatmap plots",
     )
     parser.add_argument(
@@ -397,19 +397,19 @@ def main():
     parser.add_argument(
         "--random-weights",
         action="store_true",
-        default=False,
+        default=True,
         help="use random weights (0.01 for ee, 0.05 for se, 0.05 for ei, 0.05 for ie)",
     )
     parser.add_argument(
         "--track-stats",
         action="store_true",
-        default=True,
+        default=False,
         help="track statistics during training",
     )
     parser.add_argument(
         "--epochs",
         type=int,
-        default=1,
+        default=5,
         help="define the number of epochs the model should train",
     )
     args, _ = parser.parse_known_args()

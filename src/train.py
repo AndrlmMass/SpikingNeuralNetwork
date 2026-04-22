@@ -11,6 +11,7 @@ from weight_funcs import (
 )
 from plot import heatmap_spike_response
 
+
 @njit(cache=True, parallel=True)
 def clip_weights(
     weights,
@@ -146,13 +147,6 @@ def update_weights(
         track_weights=track_weights,
     )
 
-    # # add noise to weights if desired
-    # if noisy_weights:
-    #     delta_weight_noise = np.random.normal(
-    #         loc=weight_mean_noise, scale=weight_var_noise, size=weights.shape
-    #     )
-    #     weights += delta_weight_noise
-
     # Per-column normalization (if enabled and initial sums provided)
     # Only normalize every N timesteps for performance
     if normalize_per_column and normalize_now:
@@ -164,13 +158,9 @@ def update_weights(
             weights = normalize_weights_per_column(
                 weights, initial_sum_ex_ex, st, ex, st, ex
             )
-        # if initial_sum_ex_ih is not None:
-        #     weights = normalize_weights_per_column(
-        #         weights, initial_sum_ex_ih, st, ex, ex, ih
-        #     )
-    
+
     if track_weights:
-        return weights, sleep_now_inh, sleep_now_exc, m_x_pre, m_first_term, m_delta_w 
+        return weights, sleep_now_inh, sleep_now_exc, m_x_pre, m_first_term, m_delta_w
 
     return weights, sleep_now_inh, sleep_now_exc, None, None, None
 
@@ -522,8 +512,8 @@ def train_network(
     # Initial snapshot
     plot_time += 1
     num_steps = max(1, int((T * 100) // time_per_item))
-    update_weight_freq = max(1, int(T // (time_per_item)))
-    normalize_freq = max(1, int(T // time_per_item))
+    update_weight_freq = 100  # max(1, int(T // (time_per_item)))
+    normalize_freq = int(update_weight_freq * 100)
     iterations = 100
     plot_threads = []
     _track_stats = False
@@ -675,69 +665,71 @@ def train_network(
 
         # update weights
         if train_weights and t % update_weight_freq == 0:
-            weights, sleep_now_inh, sleep_now_exc, m_x_pre, m_first_term, m_delta_w = update_weights(
-                spikes=spikes_prev,
-                weights=weights,
-                max_sum_exc=max_sum_exc,
-                max_sum_inh=max_sum_inh,
-                baseline_sum_exc=baseline_sum_exc,
-                baseline_sum_inh=baseline_sum_inh,
-                check_sleep_interval=check_sleep_interval,
-                sleep=sleep,
-                nonzero_pre_idx=nonzero_pre_idx,
-                N_x=N_x,
-                vectorized_trace=vectorized_trace,
-                mu_weight=mu_weight,
-                delta_w=delta_w,
-                N_exc=N_exc,
-                timing_update=timing_update,
-                trace_update=trace_update,
-                spike_trace=spike_trace,
-                w_max=w_max,
-                x_tar_se=x_tar_se,
-                x_tar_ex=x_tar_ex,
-                normalize_now=normalize_now,
-                update_weights_now=update_weights_now,
-                track_weights=track_weights,
-                weight_decay_rate_exc=weight_decay_rate_exc,
-                weight_decay_rate_inh=weight_decay_rate_inh,
-                min_weight_exc=min_weight_exc,
-                max_weight_exc=max_weight_exc,
-                min_weight_inh=min_weight_inh,
-                max_weight_inh=max_weight_inh,
-                noisy_weights=noisy_weights,
-                weight_mean_noise=weight_mean_noise,
-                weight_var_noise=weight_var_noise,
-                w_target_exc=w_target_exc,
-                w_target_inh=w_target_inh,
-                sleep_now_inh=sleep_now_inh,
-                sleep_now_exc=sleep_now_exc,
-                t=t,
-                N=N,
-                sleep_synchronized=sleep_synchronized,
-                baseline_sum=baseline_sum,
-                max_sum=max_sum,
-                nz_cols_exc=nz_cols_exc,
-                nz_cols_inh=nz_cols_inh,
-                nz_rows_exc=nz_rows_exc,
-                nz_rows_inh=nz_rows_inh,
-                N_inh=N_inh,
-                A_plus=A_plus,
-                A_minus=A_minus,
-                learning_rate_exc=learning_rate_exc,
-                learning_rate_inh=learning_rate_inh,
-                tau_LTP=tau_LTP,
-                tau_LTD=tau_LTD,
-                dt=dt,
-                st=st,
-                ex=ex,
-                ih=ih,
-                normalize_per_column=normalize_per_column,
-                normalize_per_column_interval=normalize_per_column_interval,
-                initial_sum_st_ex=initial_sum_st_ex,
-                initial_sum_ex_ex=initial_sum_ex_ex,
-                initial_sum_ex_ih=initial_sum_ex_ih,
-                initial_sum_ih_ex=initial_sum_ih_ex,
+            weights, sleep_now_inh, sleep_now_exc, m_x_pre, m_first_term, m_delta_w = (
+                update_weights(
+                    spikes=spikes_prev,
+                    weights=weights,
+                    max_sum_exc=max_sum_exc,
+                    max_sum_inh=max_sum_inh,
+                    baseline_sum_exc=baseline_sum_exc,
+                    baseline_sum_inh=baseline_sum_inh,
+                    check_sleep_interval=check_sleep_interval,
+                    sleep=sleep,
+                    nonzero_pre_idx=nonzero_pre_idx,
+                    N_x=N_x,
+                    vectorized_trace=vectorized_trace,
+                    mu_weight=mu_weight,
+                    delta_w=delta_w,
+                    N_exc=N_exc,
+                    timing_update=timing_update,
+                    trace_update=trace_update,
+                    spike_trace=spike_trace,
+                    w_max=w_max,
+                    x_tar_se=x_tar_se,
+                    x_tar_ex=x_tar_ex,
+                    normalize_now=normalize_now,
+                    update_weights_now=update_weights_now,
+                    track_weights=track_weights,
+                    weight_decay_rate_exc=weight_decay_rate_exc,
+                    weight_decay_rate_inh=weight_decay_rate_inh,
+                    min_weight_exc=min_weight_exc,
+                    max_weight_exc=max_weight_exc,
+                    min_weight_inh=min_weight_inh,
+                    max_weight_inh=max_weight_inh,
+                    noisy_weights=noisy_weights,
+                    weight_mean_noise=weight_mean_noise,
+                    weight_var_noise=weight_var_noise,
+                    w_target_exc=w_target_exc,
+                    w_target_inh=w_target_inh,
+                    sleep_now_inh=sleep_now_inh,
+                    sleep_now_exc=sleep_now_exc,
+                    t=t,
+                    N=N,
+                    sleep_synchronized=sleep_synchronized,
+                    baseline_sum=baseline_sum,
+                    max_sum=max_sum,
+                    nz_cols_exc=nz_cols_exc,
+                    nz_cols_inh=nz_cols_inh,
+                    nz_rows_exc=nz_rows_exc,
+                    nz_rows_inh=nz_rows_inh,
+                    N_inh=N_inh,
+                    A_plus=A_plus,
+                    A_minus=A_minus,
+                    learning_rate_exc=learning_rate_exc,
+                    learning_rate_inh=learning_rate_inh,
+                    tau_LTP=tau_LTP,
+                    tau_LTD=tau_LTD,
+                    dt=dt,
+                    st=st,
+                    ex=ex,
+                    ih=ih,
+                    normalize_per_column=normalize_per_column,
+                    normalize_per_column_interval=normalize_per_column_interval,
+                    initial_sum_st_ex=initial_sum_st_ex,
+                    initial_sum_ex_ex=initial_sum_ex_ex,
+                    initial_sum_ex_ih=initial_sum_ex_ih,
+                    initial_sum_ih_ex=initial_sum_ih_ex,
+                )
             )
 
             weights_exc = np.ascontiguousarray(weights[:, st:ex].T)
