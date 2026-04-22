@@ -83,8 +83,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 10000, 1000, 1000
-        b_tr, b_va, b_te = 1000, 1000, 1000
+        img_tr, img_va, img_te = 10000, 100, 2000
+        b_tr, b_va, b_te = 300, 100, 1000
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -192,6 +192,7 @@ def run_once(
         sleep_max_iters=args.sleep_max_iters,
         on_timeout=args.on_timeout,
         normalize_weights=not args.no_normalize_weights,
+        profile=args.profile,
     )
 
 
@@ -312,7 +313,7 @@ def main():
     parser.add_argument(
         "--get-giffed",
         action="store_true",
-        default=True,
+        default=False,
         help="create gif from heatmap plots",
     )
     parser.add_argument(
@@ -397,7 +398,7 @@ def main():
     parser.add_argument(
         "--random-weights",
         action="store_true",
-        default=True,
+        default=False,
         help="use random weights (0.01 for ee, 0.05 for se, 0.05 for ei, 0.05 for ie)",
     )
     parser.add_argument(

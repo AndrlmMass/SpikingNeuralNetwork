@@ -30,7 +30,7 @@ def normalize_weights_per_column(
     return weights
 
 
-@njit(parallel=True, cache=True)
+# @njit(parallel=True, cache=True)
 def trace_STDP(
     learning_rate_exc,
     learning_rate_inh,
@@ -91,17 +91,14 @@ def trace_STDP(
         for i in prange(N_x, n_neurons):
             pre_indices = nonzero_pre_idx[i - N_x]
             for j in pre_indices:
-                x_pre_exc = spike_trace[j]
                 if j < N_x:
-                    first_trm = x_pre_exc - x_tar_se
-                elif j < n_neurons:
-                    first_trm = x_pre_exc - x_tar_ex
+                    first_trm = spike_trace[j] - x_tar_se
                 else:
-                    continue
+                    first_trm = spike_trace[j] - x_tar_ex
 
                 second_trm = max(w_max - weights[j, i], 0.0) ** mu_weight
 
                 delta_weight = learning_rate_exc * first_trm * second_trm
-                weights[i, j] += delta_weight
+                weights[j, i] += delta_weight
 
         return weights, None, None, None

@@ -1655,6 +1655,7 @@ class snn_sleepy:
         use_pca=True,
         PCA_plot=False,
         gif_pca_plot=True,
+        profile=False,
     ):
         self.dt = dt
         self.pca_variance = pca_variance
@@ -2026,7 +2027,11 @@ class snn_sleepy:
                     spikes_train[:, : self.N_x] = data_train
                     if spike_trace is None:
                         spike_trace = np.zeros(self.N - self.N_inh)
+                if profile:
+                    import cProfile
 
+                    profiler = cProfile.Profile()
+                    profiler.enable()
                 (
                     self.weights,
                     spikes_tr_out,
@@ -2072,6 +2077,12 @@ class snn_sleepy:
                     sleep_ratio=getattr(self, "sleep_ratio", 0.0),
                     **common_args,
                 )
+                if profile:
+                    profiler.disable()
+                    dir = os.path.join("profile", self.image_dataset, self.ts)
+                    os.makedirs(dir, exist_ok=True)
+                    final_dir = os.path.join(dir, f"{self.ts_spec}.prof")
+                    profiler.dump_stats(final_dir)
                 spike_threshold = thresh_tr
                 # plot gif
                 if get_giffed:

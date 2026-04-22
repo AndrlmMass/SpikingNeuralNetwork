@@ -675,7 +675,7 @@ def train_network(
                     baseline_sum_inh=baseline_sum_inh,
                     check_sleep_interval=check_sleep_interval,
                     sleep=sleep,
-                    nonzero_pre_idx=nonzero_pre_idx,
+                    nonzero_pre_idx=nonzero_pre_idx_exc,
                     N_x=N_x,
                     vectorized_trace=vectorized_trace,
                     mu_weight=mu_weight,
@@ -732,8 +732,8 @@ def train_network(
                 )
             )
 
-            weights_exc = np.ascontiguousarray(weights[:, st:ex].T)
-            weights_inh = np.ascontiguousarray(weights[:, ex:ih].T)
+            np.copyto(weights_exc, weights[:, st:ex].T)
+            np.copyto(weights_inh, weights[:, ex:ih].T)
 
             if track_weights:
                 x_pre_sum += m_x_pre
