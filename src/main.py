@@ -83,8 +83,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 10000, 100, 2000
-        b_tr, b_va, b_te = 300, 100, 1000
+        img_tr, img_va, img_te = 1000, 100, 2000
+        b_tr, b_va, b_te = 100, 100, 1000
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -398,7 +398,7 @@ def main():
     parser.add_argument(
         "--random-weights",
         action="store_true",
-        default=False,
+        default=True,
         help="use random weights (0.01 for ee, 0.05 for se, 0.05 for ei, 0.05 for ie)",
     )
     parser.add_argument(
@@ -410,7 +410,7 @@ def main():
     parser.add_argument(
         "--epochs",
         type=int,
-        default=5,
+        default=1,
         help="define the number of epochs the model should train",
     )
     args, _ = parser.parse_known_args()

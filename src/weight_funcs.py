@@ -30,7 +30,7 @@ def normalize_weights_per_column(
     return weights
 
 
-# @njit(parallel=True, cache=True)
+@njit(parallel=True, cache=True)
 def trace_STDP(
     learning_rate_exc,
     learning_rate_inh,
@@ -101,4 +101,4 @@ def trace_STDP(
                 delta_weight = learning_rate_exc * first_trm * second_trm
                 weights[j, i] += delta_weight
 
-        return weights, None, None, None
+        return weights, 0, 0, 0
