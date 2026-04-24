@@ -745,9 +745,9 @@ class ImageDataStreamer:
         # unsigned response
         resp = resp.abs()
 
-        # normalize per image
-        rmin = resp.amin(dim=(1, 2, 3), keepdim=True)
-        rmax = resp.amax(dim=(1, 2, 3), keepdim=True)
+        # Normalize per channel
+        rmin = resp.amin(dim=(2, 3), keepdim=True)  # only spatial dims
+        rmax = resp.amax(dim=(2, 3), keepdim=True)
         resp = (resp - rmin) / (rmax - rmin + 1e-8)
 
         # --- pack into quadrants ---
@@ -776,7 +776,7 @@ class ImageDataStreamer:
         packed[:, :, h1:, :w1] = bl
         packed[:, :, h1:, w1:] = br
 
-        # # plot same image after gabor processing
+        # plot same image after gabor processing
         # fig, ax = plt.subplots(figsize=(10, 10))
         # ax.imshow(packed[0].cpu().numpy().squeeze(0))
         # plt.show()

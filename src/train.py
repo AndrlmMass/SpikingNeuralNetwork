@@ -162,7 +162,7 @@ def update_weights(
     if track_weights:
         return weights, sleep_now_inh, sleep_now_exc, m_x_pre, m_first_term, m_delta_w
 
-    return weights, sleep_now_inh, sleep_now_exc, None, None, None
+    return weights, sleep_now_inh, sleep_now_exc, 0, 0, 0
 
 
 @njit(parallel=True, cache=True)
@@ -179,6 +179,7 @@ def update_membrane_potential(
     dt,
     st,
     ex,
+    ih,
     track_stats,
     N_exc,
     N_inh,
@@ -193,7 +194,6 @@ def update_membrane_potential(
     sleep_now_inh,
     sleep_now_exc,
 ):
-    # Pre-allocate tracking arrays
     if track_stats:
         delta_mp_ex = np.zeros(N_exc)
         delta_mp_ih = np.zeros(N_inh)
@@ -205,13 +205,19 @@ def update_membrane_potential(
         delta_I_syn_ex = np.empty(0)
         delta_I_syn_ih = np.empty(0)
 
-    for i in prange(N_exc):  # postsynaptic neurons
+    # --- Sparse presynaptic indices (computed once, shared across prange) ---
+    nonzero_all = np.where(spikes != 0)[0]  # all spiking → exc targets
+    nonzero_exc_src = np.where(spikes[st:ex] != 0)[0] + st  # exc spiking → inh targets
+
+    # --- Excitatory population ---
+    for i in prange(N_exc):
         drive = 0.0
-        for j in range(spikes.shape[0]):  # presynaptic neurons
-            if spikes[j] != 0:
-                drive += weights_exc[i, j]
+        for j in nonzero_all:  # only active pre-synaptic neurons
+            drive += weights_exc[i, j]
+
         d_I = (-I_syn_exc[i] + drive) * dt / tau_syn_exc
         I_syn_exc[i] += d_I
+
         d_mp = (
             (-(mp[i] - resting_potential) + membrane_resistance_exc * I_syn_exc[i])
             / tau_m_exc
@@ -224,22 +230,24 @@ def update_membrane_potential(
             delta_mp_ex[i] = d_mp
             delta_I_syn_ex[i] = d_I
 
+    # --- Inhibitory population ---
     for i in prange(N_inh):
+        ih_id = i + N_exc
         drive = 0.0
-        for j in range(st, ex):
-            if spikes[j] != 0:
-                drive += weights_inh[i, j]
+        for j in nonzero_exc_src:  # only spiking exc neurons
+            drive += weights_inh[i, j]
+
         d_I = (-I_syn_inh[i] + drive) * dt / tau_syn_inh
         I_syn_inh[i] += d_I
-        idx = N_exc + i
+
         d_mp = (
-            (-(mp[idx] - resting_potential) + membrane_resistance_inh * I_syn_inh[i])
+            (-(mp[ih_id] - resting_potential) + membrane_resistance_inh * I_syn_inh[i])
             / tau_m_inh
             * dt
         )
-        mp_new[idx] = mp[idx] + d_mp
+        mp_new[ih_id] = mp[ih_id] + d_mp
         if noisy_potential and sleep_now_inh and sleep_now_exc:
-            mp_new[idx] += np.random.normal(mean_noise, var_noise)
+            mp_new[ih_id] += np.random.normal(mean_noise, var_noise)
         if track_stats:
             delta_mp_ih[i] = d_mp
             delta_I_syn_ih[i] = d_I
@@ -513,7 +521,7 @@ def train_network(
     plot_time += 1
     num_steps = max(1, int((T * 100) // time_per_item))
     update_weight_freq = 100  # max(1, int(T // (time_per_item)))
-    normalize_freq = int(update_weight_freq * 100)
+    normalize_freq = int(update_weight_freq * 10)
     iterations = 100
     plot_threads = []
     _track_stats = False
@@ -601,6 +609,7 @@ def train_network(
             dt=dt,
             st=st,
             ex=ex,
+            ih=ih,
             N_exc=N_exc,
             N_inh=N_inh,
             noisy_potential=noisy_potential,

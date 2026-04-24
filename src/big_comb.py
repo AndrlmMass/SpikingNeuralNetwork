@@ -180,6 +180,8 @@ class snn_sleepy:
         return a, b
 
     def _plot_accuracy(self, wta, mcc, phi, pca):
+        import pandas as pd
+
         """Plot train/val accuracy (left axis) and val phi (right axis) from JSONL log."""
         if not getattr(self, "_acc_log_file", None) or not os.path.exists(
             self._acc_log_file
@@ -264,26 +266,43 @@ class snn_sleepy:
             line = ax.plot(
                 xs,
                 val_acc,
-                label="val acc (pca_lr)",
-                linestyle=(0, (3, 5, 1, 5)),  # dash dotted
+                linestyle="none",
                 marker="o",
-                markersize=3,
+                markersize=1.0,
+                color="indianred",
+            )
+            window = max(1, val_acc.shape[0] // 5)
+            val_acc_roll_mean = (
+                pd.Series(val_acc).rolling(window=window, min_periods=1).mean()
+            )
+            line2 = ax.plot(
+                xs,
+                val_acc_roll_mean,
                 color="indianred",
                 linewidth=1.5,
             )
-            handles.append(line[0])
+            handles.append(line2[0])
             labels.append("Val accuracy")
             train_acc = np.asarray([train_acc_pca[e] for e in xs])
             line = ax.plot(
                 xs,
                 train_acc,
-                label="train acc (pca_lr)",
-                linestyle=(0, (5, 1)),
+                linestyle="none",
                 marker="o",
-                markersize=3,
+                markersize=1.0,
                 color="lightcoral",
             )
-            handles.append(line[0])
+            window = max(1, train_acc.shape[0] // 5)
+            train_acc_roll_mean = (
+                pd.Series(train_acc).rolling(window=window, min_periods=1).mean()
+            )
+            line2 = ax.plot(
+                xs,
+                train_acc_roll_mean,
+                color="lightcoral",
+                linewidth=1.5,
+            )
+            handles.append(line2[0])
             labels.append("Train accuracy")
         if wta:
             xs = sorted(train_acc_top)
@@ -291,7 +310,7 @@ class snn_sleepy:
                 xs,
                 [train_acc_top[e] for e in xs],
                 label="train acc (top)",
-                linestyle="-",
+                linestyle="none",
                 marker="s",
                 markersize=3,
                 color="red",
@@ -303,7 +322,7 @@ class snn_sleepy:
                 xs,
                 [val_acc_top[e] for e in xs],
                 label="val acc (top)",
-                linestyle="-",
+                linestyle="none",
                 marker="s",
                 markersize=3,
                 color="orange",
@@ -342,59 +361,79 @@ class snn_sleepy:
 
         # add mean line from the first position
         if pca:
+            import pandas as pd
+
             y_line = val_acc[0]
-            y_line_current = val_acc.mean()
+            # # window = max(1, val_acc.shape[0] // 5)
+            # # y_line_current = pd.Series(val_acc).rolling(window=window, min_periods=1).mean()
             l1 = ax.axhline(
                 y=y_line,
-                linestyle="solid",
+                linestyle="dashed",
                 linewidth=0.5,
                 color="grey",
                 label="baseline val acc",
             )
-            l2 = ax.axhline(
-                y=y_line_current,
-                linestyle="solid",
-                linewidth=0.5,
-                color="red",
-                label="average val acc",
-            )
+            # l2 = ax.axhline(
+            #     y=y_line_current,
+            #     linestyle="solid",
+            #     linewidth=0.5,
+            #     color="red",
+            #     label="average val acc",
+            # )
             handles.append(l1)
-            handles.append(l2)
+            # handles.append(l2)
             labels.append("baseline val acc")
-            labels.append("average val acc")
+            # labels.append("average val acc")
 
         ax.set_ylabel("Accuracy")
         ax2.set_ylabel("Clustering")
         fig.supxlabel("Batches")
-        ax.set_ylim(bottom=0.0, top=1.0)
+        ax.set_ylim(bottom=val_acc.min(), top=train_acc.max())
 
         # Phi (right axis)
         if phi:
             xs = sorted(val_phi)
-            phi_line_val = ax2.plot(
+            val_phi_arr = np.asarray([val_phi[e] for e in xs])
+            train_phi_arr = np.asarray([train_phi[e] for e in xs])
+            ax2.plot(
                 xs,
-                [val_phi[e] for e in xs],
-                linestyle="dotted",
-                label="val phi",
-                color="deepskyblue",
-                marker="p",
-                markersize=3,
-                linewidth=1.5,
-            )
-            phi_line_train = ax2.plot(
-                xs,
-                [train_phi[e] for e in xs],
-                linestyle=(0, (1, 1)),
-                label="train phi",
+                val_phi_arr,
+                linestyle="none",
                 color="skyblue",
                 marker="p",
-                markersize=3,
+                markersize=1.0,
+            )
+            window = max(1, val_phi_arr.shape[0] // 5)
+            val_phi_roll_mean = (
+                pd.Series(val_phi_arr).rolling(window=window, min_periods=1).mean()
+            )
+            phi_line_val2 = ax2.plot(
+                xs,
+                val_phi_roll_mean,
+                color="skyblue",
+                linewidth=1.5,
+            )
+            ax2.plot(
+                xs,
+                train_phi_arr,
+                linestyle="none",
+                color="deepskyblue",
+                marker="p",
+                markersize=1.0,
+            )
+            train_phi_roll_mean = (
+                pd.Series(train_phi_arr).rolling(window=window, min_periods=1).mean()
+            )
+            phi_line_train2 = ax2.plot(
+                xs,
+                train_phi_roll_mean,
+                color="deepskyblue",
                 linewidth=1.5,
             )
             ax2.set_ylabel("Clustering")
-            handles2.append(phi_line_val[0])
+            handles2.append(phi_line_val2[0])
             labels2.append("Phi val")
-            handles2.append(phi_line_train[0])
+            handles2.append(phi_line_train2[0])
             labels2.append("Phi train")
 
         # Create legend with white background, box, and smaller font
@@ -1609,7 +1648,7 @@ class snn_sleepy:
         mean_noise=0,
         max_mp=40,
         plot_PCA=False,
-        heatmap_plot=False,
+        heatmap_plot=True,
         get_giffed=False,
         sleep_synchronized=True,
         tau_pre_trace_exc=1,
@@ -1653,8 +1692,9 @@ class snn_sleepy:
         track_stats=False,
         use_phi=True,
         use_pca=True,
-        PCA_plot=False,
+        PCA_plot=True,
         gif_pca_plot=True,
+        gif_spikes_plot=True,
         profile=False,
     ):
         self.dt = dt
@@ -2059,7 +2099,7 @@ class snn_sleepy:
                     tau_trace=tau_trace,
                     T=self.T_train,
                     run=self.ts_spec,
-                    save_plots=False,
+                    save_plots=heatmap_plot,
                     dataset=self.image_dataset,
                     mean_noise=mean_noise,
                     spike_trace=spike_trace.copy(),
@@ -2317,7 +2357,7 @@ class snn_sleepy:
                         T=T_val_batch,
                         mean_noise=mean_noise,
                         run=self.ts_spec,
-                        save_plots=heatmap_plot,
+                        save_plots=False,
                         tau_trace=tau_trace,
                         track_weights=False,
                         spike_trace=spike_trace_val,
@@ -2452,6 +2492,20 @@ class snn_sleepy:
             gif = GenerateGif(
                 frame_folder=pca_plotter.dir, output_filename=output_filename
             )
+            gif.create()
+
+        if gif_spikes_plot and heatmap_plot:
+            from plot import GenerateGif
+            from datetime import datetime
+
+            output_filename = "evolution.gif"
+            directory = os.path.join(
+                "plots", "spikes", self.image_dataset, "all", self.ts, self.ts_spec
+            )
+            os.makedirs(directory, exist_ok=True)
+
+            gif = GenerateGif(frame_folder=directory, output_filename=output_filename)
+
             gif.create()
 
         # Final test pass even if early-stopped (evaluate on test partition)

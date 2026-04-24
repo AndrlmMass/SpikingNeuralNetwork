@@ -62,24 +62,20 @@ def trace_STDP(
             if spikes[i] == 1:
                 pre_indices = nonzero_pre_idx[i - N_x]
                 for j in pre_indices:
-                    # if j < N_x:
-                    #     x_pre_exc = spike_trace[j]
-                    #     first_trm = x_pre_exc - x_tar_se
-                    # elif j < n_neurons:
-                    #     x_pre_exc = spike_trace[j]
-                    #     first_trm = x_pre_exc - x_tar_ex
-                    # else:
-                    #     continue
-                    # base = max(w_max - weights[j, i], 0.0)
-                    if j < n_neurons:
-                        first_trm = A_plus * (spikes[i] * (spike_trace[j] - x_tar))
-                        second_trm = A_minus * (spike_trace[i] * spikes[j])
-                        delta_w = (first_trm - second_trm) / tau_syn
-                        weights[j, i] += delta_w
-                        list_x_pre += spike_trace[j]
-                        first_term += first_trm
-                        delta_w_sum += delta_w
-                        count += 1
+                    if j < N_x:
+                        first_trm = spike_trace[j] - x_tar_se
+                    else:
+                        first_trm = spike_trace[j] - x_tar_ex
+
+                    second_trm = max(w_max - weights[j, i], 0.0) ** mu_weight
+
+                    delta_weight = learning_rate_exc * first_trm * second_trm
+
+                    weights[j, i] += delta_weight
+                    list_x_pre += spike_trace[j]
+                    first_term += first_trm
+                    delta_w_sum += delta_weight
+                    count += 1
         return (
             weights,
             list_x_pre / (count + 1e-5),

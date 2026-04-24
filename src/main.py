@@ -4,7 +4,6 @@ import numpy as np
 import random
 from datetime import datetime
 import os
-import pandas as pd
 
 
 def run_once(
@@ -38,28 +37,29 @@ def run_once(
         classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         num_input = 784
         use_validation_data = True
-        w_dense_se = 0.05  # original: 0.1
-        w_dense_ee = 0.05  # original: 0.05
-        w_dense_ei = 0.05  # original: 0.1
-        w_dense_ie = 0.05  # original: 0.1
-        se_weights = 1.0  # original: 0.5
-        ee_weights = 0.7
-        ei_weights = 0.7  # original: 0.3
-        ie_weights = -0.5  # original: -0.3
-        tau_syn_exc = 10
-        tau_syn_inh = 9
+        w_dense_se = 0.05  # original: 0.05
+        w_dense_ee = 0.1  # original: 0.05
+        w_dense_ei = 0.05  # original: 0.05
+        w_dense_ie = 0.05  # original: 0.05
+        se_weights = 1.0  # original: 1.0
+        ee_weights = 0.5  # original: 0.7
+        ei_weights = 4.0  # original: 0.7
+        ie_weights = -0.7  # original: -0.5
+        tau_syn_exc = 10  # original: 10
+        tau_syn_inh = 9  # original: 9
         learning_rate_exc = 0.0004  # original: 0.0004
-        tau_m_exc = 20
-        tau_m_inh = 15
-        Rm_exc = 17
-        Rm_inh = 19
-        max_rate_hz = 250.0
-        delta_adaption = 0.5
-        tau_trace = 20
-        tau_adaption = 200
-        w_max = 10
-        num_steps = 350
-        mu_weight = 0.6
+        tau_m_exc = 20  # original: 20
+        tau_m_inh = 15  # original: 15
+        Rm_exc = 17  # original: 17
+        Rm_inh = 19  # original: 19
+        max_rate_hz = 90.0  # original: 250.0
+        delta_adaption = 0.5  # original: 0.5
+        tau_trace = 20  # original: 20
+        tau_adaption = 200  # original: 200
+        w_max = 10  # original: 10
+        num_steps = 350  # original: 350
+        mu_weight = 0.6  # original: 0.6
+        pca_variance = 15  # original: 15
 
     ts_spec = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -83,7 +83,7 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 1000, 100, 2000
+        img_tr, img_va, img_te = 5000, 100, 1000
         b_tr, b_va, b_te = 100, 100, 1000
         force_recreate_flag = False
     snn_N.prepare_data(
@@ -193,6 +193,7 @@ def run_once(
         on_timeout=args.on_timeout,
         normalize_weights=not args.no_normalize_weights,
         profile=args.profile,
+        pca_variance=pca_variance,
     )
 
 
