@@ -33,62 +33,46 @@ def normalize_weights_per_column(
 @njit(cache=True, parallel=True)
 def go_sleep(
     weights,
-    sleep_now,
     w_target,
     use_post_targets,
-    use_layer_target,
-    use_static_target,
-    w_target_vec,
+    use_layer_targets,
+    use_static_targets,
     weight_decay_rate,
     nz_rows,
     nz_cols,
 ):
     """
-    Optimized, vectorized version:
-      1) Computes sum of |weights| using slices.
-      2) Checks if the sums exceed max values and sets sleep flags.
-      3) If sleeping is active, applies decay in a vectorized way.
-      4) Recomputes the sum to stop sleeping if below baseline.
+    Compiles normalization function as
+      1) Static targets
+      2) Layer-weight sum targets
+      3) Targets per post-synapse sum
+    These are run for 1/x, where x is the predetermined sleep duration
     """
 
-    # Debug-time scans removed for performance
+    """The static method has the same target throughout training"""
+    if use_static_targets:
+        # Apply decay to columns [N_x, N_post] (excitatory weights)
+        for i in range(nz_rows.size):
+            w = weights[nz_rows[i], nz_cols[i]]
 
-    # Instead of nested loops, use slicing for excitatory/inhibitory sums.
-    # According to your code, columns [0, N_exc+N_x) are excitatory,
-    # and columns [N_exc+N_x, N_post) are inhibitory.
+            # Apply decay to absolute values
+            new_abs_weight = w * (w_target / w) ** weight_decay_rate
 
-    # --- Decay excitatory weights --
-    if sleep_now:
-        # This is the original method
-        if use_static_target:
-            # Apply decay to columns [N_x, N_post] (excitatory weights)
-            for i in range(nz_rows.size):
-                current_weight = weights[nz_rows[i], nz_cols[i]]
-                # Work with absolute values to avoid complex numberst
-                abs_weight = np.abs(current_weight)
-                # Use per-post target if requested, otherwise scalar target
-                if use_post_targets:
-                    abs_target = np.abs(w_target_vec[nz_cols[i]])
-                else:
-                    abs_target = np.abs(w_target)
+            # Apply the original sign
+            weights[nz_rows[i], nz_cols[i]] = new_abs_weight
 
-                # Apply decay to absolute values
-                new_abs_weight = (
-                    abs_target * (abs_weight / abs_target) ** weight_decay_rate
-                )
+        return weights
 
-                # Apply the original sign
-                weights[nz_rows[i], nz_cols[i]] = new_abs_weight
-        elif use_layer_target:
-            pass
+    elif use_layer_targets:
+        pass
 
-        elif use_post_targets:
-            pass
+    elif use_post_targets:
+        pass
 
-    return (
-        weights,
-        sleep_now,
-    )
+    else:
+        raise ValueError(
+            "use_post_targets, use_layer_targets and use_static_targets cannot all be False or True. Only one of these boolean variables can be true at runtime."
+        )
 
 
 @njit(parallel=True, cache=True)

@@ -5,38 +5,11 @@ from numba import njit, prange
 import threading
 import numpy as np
 
-from weight_funcs import (
+from src.weight_dynamics import (
     trace_STDP,
     normalize_weights_per_column,
 )
 from plot import heatmap_spike_response
-
-
-@njit(cache=True, parallel=True)
-def clip_weights(
-    weights,
-    nz_cols_exc,
-    nz_cols_inh,
-    nz_rows_exc,
-    nz_rows_inh,
-    min_weight_exc,
-    max_weight_exc,
-    min_weight_inh,
-    max_weight_inh,
-):
-    for i_ in range(nz_rows_exc.shape[0]):
-        i, j = nz_rows_exc[i_], nz_cols_exc[i_]
-        if weights[i, j] < min_weight_exc:
-            weights[i, j] = min_weight_exc
-        elif weights[i, j] > max_weight_exc:
-            weights[i, j] = max_weight_exc
-    for i_ in range(nz_rows_inh.shape[0]):
-        i, j = nz_rows_inh[i_], nz_cols_inh[i_]
-        if weights[i, j] < min_weight_inh:
-            weights[i, j] = min_weight_inh
-        elif weights[i, j] > max_weight_inh:
-            weights[i, j] = max_weight_inh
-    return weights
 
 
 def update_weights(
@@ -423,16 +396,14 @@ def train_network(
     track_stats=False,
     x_tar_se=None,
     x_tar_ex=None,
-    # Hard-pause sleep settings
-    sleep_hard_pause: bool = True,
-    sleep_epsilon: float = 1e-8,
-    sleep_tol_frac: float = 1e-3,
     sleep_max_iters: int = 5000,
-    on_timeout: str = "scale_to_target",  # one of {"scale_to_target","extend","give_up"}
     sleep_mode: str = "static",  # one of {"static","group","post"}
 ):
 
     # Enforce consistent dtypes for Numba cache stability
+    """
+    Are these necessary?
+    """
     weights = np.asarray(weights, dtype=np.float64)
     spike_trace = np.asarray(spike_trace, dtype=np.float64)
     mp = np.asarray(mp, dtype=np.float64)
@@ -451,20 +422,15 @@ def train_network(
     ex = st + N_exc  # excitatory
     ih = ex + N_inh  # inhibitory
 
-    # Disable training-time plotting snapshots for performance
-    weights_4_plotting_exc = np.empty((0, 0, 0))
-    weights_4_plotting_inh = np.empty((0, 0, 0))
-
     delta_w = np.zeros(shape=weights.shape)
 
     nz_rows_inh, nz_cols_inh = np.nonzero(weights[ex:ih, st:ex])
     nz_rows_exc, nz_cols_exc = np.nonzero(weights[:ex, :ih])
     nz_rows_inh += ex
     nz_cols_inh += st
-    sleep_now_inh = False
-    sleep_now_exc = False
+    sleep_now = False
 
-    if track_stats:
+    if track_stats:  # Add sleep tracking parameters here when this is ready
         delta_mp_ex = 0.0
         delta_mp_ih = 0.0
         mp_ex = 0.0
@@ -490,8 +456,6 @@ def train_network(
     weights_exc = np.ascontiguousarray(weights[:, st:ex].T)
     weights_inh = np.ascontiguousarray(weights[:, ex:ih].T)
 
-    # Suppose weights is your initial 2D numpy array of weights.
-    # Here, we assume that the columns correspond to post-neurons.
     if train_weights:
         desc = "Training network:"
     else:
