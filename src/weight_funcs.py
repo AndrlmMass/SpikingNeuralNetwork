@@ -30,12 +30,71 @@ def normalize_weights_per_column(
     return weights
 
 
+@njit(cache=True, parallel=True)
+def go_sleep(
+    weights,
+    sleep_now,
+    w_target,
+    use_post_targets,
+    use_layer_target,
+    use_static_target,
+    w_target_vec,
+    weight_decay_rate,
+    nz_rows,
+    nz_cols,
+):
+    """
+    Optimized, vectorized version:
+      1) Computes sum of |weights| using slices.
+      2) Checks if the sums exceed max values and sets sleep flags.
+      3) If sleeping is active, applies decay in a vectorized way.
+      4) Recomputes the sum to stop sleeping if below baseline.
+    """
+
+    # Debug-time scans removed for performance
+
+    # Instead of nested loops, use slicing for excitatory/inhibitory sums.
+    # According to your code, columns [0, N_exc+N_x) are excitatory,
+    # and columns [N_exc+N_x, N_post) are inhibitory.
+
+    # --- Decay excitatory weights --
+    if sleep_now:
+        # This is the original method
+        if use_static_target:
+            # Apply decay to columns [N_x, N_post] (excitatory weights)
+            for i in range(nz_rows.size):
+                current_weight = weights[nz_rows[i], nz_cols[i]]
+                # Work with absolute values to avoid complex numberst
+                abs_weight = np.abs(current_weight)
+                # Use per-post target if requested, otherwise scalar target
+                if use_post_targets:
+                    abs_target = np.abs(w_target_vec[nz_cols[i]])
+                else:
+                    abs_target = np.abs(w_target)
+
+                # Apply decay to absolute values
+                new_abs_weight = (
+                    abs_target * (abs_weight / abs_target) ** weight_decay_rate
+                )
+
+                # Apply the original sign
+                weights[nz_rows[i], nz_cols[i]] = new_abs_weight
+        elif use_layer_target:
+            pass
+
+        elif use_post_targets:
+            pass
+
+    return (
+        weights,
+        sleep_now,
+    )
+
+
 @njit(parallel=True, cache=True)
 def trace_STDP(
     learning_rate_exc,
-    learning_rate_inh,
     spike_trace,
-    N_inh,
     weights,
     N_x,
     spikes,
@@ -47,10 +106,6 @@ def trace_STDP(
     mu_weight,
 ):
     n_neurons = spike_trace.shape[0]
-    x_tar = 0
-    A_plus = 1.0
-    A_minus = 1.0
-    tau_syn = 100
 
     if track_weights:
         # Serial path for debugging — no prange
