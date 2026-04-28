@@ -1,275 +1,13 @@
-from numba.typed import List
-from numba import njit
+# import external packages
 from tqdm import tqdm
-from numba import njit, prange
 import threading
 import numpy as np
 
-from src.weight_dynamics import (
-    trace_STDP,
-    normalize_weights_per_column,
-    clip_weights,
-    SleepRegularizer,
-    Normalizer,
-)
+# import internal packages
+from src.regularization import Sleep, Normalizer
+from src.neurons import NeuronState, MembranePotential
+from src.synapses import Learner, Clipper
 from plot import heatmap_spike_response
-
-
-def update_weights(
-    weights,
-    min_weight_exc,
-    max_weight_exc,
-    min_weight_inh,
-    max_weight_inh,
-    nonzero_pre_idx,
-    w_max,
-    spikes,
-    N_inh,
-    N_x,
-    nz_cols_exc,
-    nz_cols_inh,
-    nz_rows_exc,
-    nz_rows_inh,
-    mu_weight,
-    A_plus,  # might reuse in the trace_STDP function
-    A_minus,  # might reuse in the trace_STDP function
-    learning_rate_exc,
-    learning_rate_inh,
-    tau_LTP,  # might reuse in the trace_STDP function
-    tau_LTD,  # might reuse in the trace_STDP function
-    track_weights,
-    normalize_now,
-    normalize_weights,
-    x_tar_se,
-    x_tar_ex,
-    norm_reg_se,
-    norm_reg_ee,
-    sleep_reg_se,
-    sleep_reg_ee,
-    start_sleep,
-    use_sleep,
-    sleep_now,
-    st=None,
-    ex=None,
-    spike_trace=None,
-):
-    """
-    Apply the STDP rule to update synaptic weights using a fully vectorized approach.
-
-    Parameters:
-    - weights: Matrix of weights (2D or 1D, depending on connections).
-    - spike_times: Array of time since the last spike for each neuron (0 indicates a spike at the current timestep).
-    - min_weight_exc, max_weight_exc: Min and max weights for excitatory synapses.
-    - min_weight_inh, max_weight_inh: Min and max weights for inhibitory synapses.
-    - N_inh: Number of inhibitory neurons.
-    - learning_rate_exc, learning_rate_inh: Learning rates for excitatory and inhibitory weights.
-    - tau_pre, tau_post: Time constants for pre- and post-synaptic STDP components.
-
-    Returns:
-    - Updated weights.
-    """
-    # Clip weights before sleep to prevent zero/negative weights
-    weights = clip_weights(
-        weights=weights,
-        nz_cols_exc=nz_cols_exc,
-        nz_cols_inh=nz_cols_inh,
-        nz_rows_exc=nz_rows_exc,
-        nz_rows_inh=nz_rows_inh,
-        min_weight_exc=min_weight_exc,
-        max_weight_exc=max_weight_exc,
-        min_weight_inh=min_weight_inh,
-        max_weight_inh=max_weight_inh,
-    )
-
-    weights, m_x_pre, m_first_term, m_delta_w = trace_STDP(
-        learning_rate_exc=learning_rate_exc,
-        learning_rate_inh=learning_rate_inh,
-        N_inh=N_inh,
-        weights=weights,
-        N_x=N_x,
-        w_max=w_max,
-        mu_weight=mu_weight,
-        spikes=spikes,
-        x_tar_se=x_tar_se,
-        x_tar_ex=x_tar_ex,
-        nonzero_pre_idx=nonzero_pre_idx,
-        spike_trace=spike_trace,
-        track_weights=track_weights,
-    )
-
-    # Per-column normalization (if enabled and initial sums provided)
-    # Only normalize every N timesteps for performance
-    if use_sleep and sleep_now:
-        if start_sleep:
-            sleep_reg_se.onset(weights[:st, st:ex])
-            sleep_reg_ee.onset(weights[st:ex, st:ex])
-        # perform sleep regularization step
-        weights[:st, st:ex] = sleep_reg_se.step(weights[:st, st:ex])
-        weights[st:ex, st:ex] = sleep_reg_ee.step(weights[st:ex, st:ex])
-
-    elif normalize_now and normalize_weights:
-        # perform normalization step
-        weights[:st, st:ex] = norm_reg_se.step(weights[:st, st:ex])
-        weights[st:ex, st:ex] = norm_reg_ee.step(weights[st:ex, st:ex])
-
-    return weights, m_x_pre, m_first_term, m_delta_w
-
-
-@njit(parallel=True, cache=True)
-def update_membrane_potential(
-    mp,
-    mp_new,
-    weights_exc,
-    weights_inh,
-    spikes,
-    noisy_potential,
-    resting_potential,
-    membrane_resistance_exc,
-    membrane_resistance_inh,
-    dt,
-    st,
-    ex,
-    track_stats,
-    N_exc,
-    N_inh,
-    I_syn_exc,
-    I_syn_inh,
-    tau_syn_exc,
-    tau_syn_inh,
-    tau_m_exc,
-    tau_m_inh,
-    mean_noise,
-    var_noise,
-    sleep_now,
-):
-    if track_stats:
-        delta_mp_ex = np.zeros(N_exc)
-        delta_mp_ih = np.zeros(N_inh)
-        delta_I_syn_ex = np.zeros(N_exc)
-        delta_I_syn_ih = np.zeros(N_inh)
-    else:
-        delta_mp_ex = np.empty(0)
-        delta_mp_ih = np.empty(0)
-        delta_I_syn_ex = np.empty(0)
-        delta_I_syn_ih = np.empty(0)
-
-    # --- Sparse presynaptic indices (computed once, shared across prange) ---
-    nonzero_all = np.where(spikes != 0)[0]  # all spiking → exc targets
-    nonzero_exc_src = np.where(spikes[st:ex] != 0)[0] + st  # exc spiking → inh targets
-
-    # --- Excitatory population ---
-    for i in prange(N_exc):
-        drive = 0.0
-        for j in nonzero_all:  # only active pre-synaptic neurons
-            drive += weights_exc[i, j]
-
-        d_I = (-I_syn_exc[i] + drive) * dt / tau_syn_exc
-        I_syn_exc[i] += d_I
-
-        d_mp = (
-            (-(mp[i] - resting_potential) + membrane_resistance_exc * I_syn_exc[i])
-            / tau_m_exc
-            * dt
-        )
-        mp_new[i] = mp[i] + d_mp
-        if noisy_potential and sleep_now:
-            mp_new[i] += np.random.normal(mean_noise, var_noise)
-        if track_stats:
-            delta_mp_ex[i] = d_mp
-            delta_I_syn_ex[i] = d_I
-
-    # --- Inhibitory population ---
-    for i in prange(N_inh):
-        ih_id = i + N_exc
-        drive = 0.0
-        for j in nonzero_exc_src:  # only spiking exc neurons
-            drive += weights_inh[i, j]
-
-        d_I = (-I_syn_inh[i] + drive) * dt / tau_syn_inh
-        I_syn_inh[i] += d_I
-
-        d_mp = (
-            (-(mp[ih_id] - resting_potential) + membrane_resistance_inh * I_syn_inh[i])
-            / tau_m_inh
-            * dt
-        )
-        mp_new[ih_id] = mp[ih_id] + d_mp
-        if noisy_potential and sleep_now:
-            mp_new[ih_id] += np.random.normal(mean_noise, var_noise)
-        if track_stats:
-            delta_mp_ih[i] = d_mp
-            delta_I_syn_ih[i] = d_I
-
-    return (
-        mp_new,
-        I_syn_exc,
-        I_syn_inh,
-        delta_mp_ex,
-        delta_mp_ih,
-        delta_I_syn_ex,
-        delta_I_syn_ih,
-    )
-
-
-@njit(parallel=True, cache=True)
-def update_spikes(
-    st,
-    ih,
-    N_exc,
-    mp,
-    dt,
-    a,
-    spike_trace,
-    spikes,
-    max_mp,
-    min_mp,
-    spike_adaption,
-    tau_adaption,
-    delta_adaption,
-    spike_threshold,
-    spike_threshold_default,
-    reset_potential,
-    tau_trace,
-):
-    decay = np.exp(-dt / tau_trace)
-    n_total = ih - st
-
-    for j in prange(n_total):
-        if mp[j] < min_mp:
-            mp[j] = min_mp
-        elif mp[j] > max_mp:
-            mp[j] = max_mp
-        if mp[j] > spike_threshold[j]:
-            spikes[st + j] = 1
-            mp[j] = reset_potential
-
-    if spike_adaption:
-        for j in range(n_total):
-            a[j] += (-a[j] / tau_adaption) * dt
-            if spikes[st + j] == 1:
-                a[j] += delta_adaption
-            spike_threshold[j] = spike_threshold_default[j] + a[j]
-
-    for j in prange(N_exc + st):
-        idx = j
-        if spikes[idx] == 1:
-            spike_trace[idx] = spike_trace[idx] * decay + 1.0
-        else:
-            spike_trace[idx] *= decay
-
-    return (
-        mp,
-        spikes,
-        spike_threshold,
-        a,
-        spike_trace,
-    )
-
-
-def update_x_tar(spike_trace, N_x):
-    x_tar_se = np.mean(spike_trace[:N_x], axis=0)
-    x_tar_ex = np.mean(spike_trace[N_x:], axis=0)
-    return x_tar_se, x_tar_ex
 
 
 def _plot_background(kwargs):
@@ -296,8 +34,7 @@ def train_network(
     max_sum,
     N_inh,
     N_exc,
-    learning_rate_exc,
-    learning_rate_inh,
+    learning_rate,
     tau_LTP,
     tau_LTD,
     max_mp,
@@ -343,6 +80,9 @@ def train_network(
     I_syn_exc,
     I_syn_inh,
     a,
+    st,
+    ex,
+    ih,
     time_per_item,
     spike_threshold,
     normalize_weights=False,
@@ -364,23 +104,91 @@ def train_network(
     """
     Are these necessary?
     """
-    weights = np.asarray(weights, dtype=np.float64)
-    spike_trace = np.asarray(spike_trace, dtype=np.float64)
-    mp = np.asarray(mp, dtype=np.float64)
-    I_syn_exc = np.asarray(I_syn_exc, dtype=np.float64)
-    I_syn_inh = np.asarray(I_syn_inh, dtype=np.float64)
-    a = np.asarray(a, dtype=np.float64)
-    spike_threshold = np.asarray(spike_threshold, dtype=np.float64)
-    N_x = np.int64(N_x)
-    N_exc = np.int64(N_exc)
-    N_inh = np.int64(N_inh)
-    spike_threshold_default_arr = np.full(
-        N_exc + N_inh, fill_value=spike_threshold_default, dtype=np.float64
-    )
+    # weights = np.asarray(weights, dtype=np.float64)
+    # spike_trace = np.asarray(spike_trace, dtype=np.float64)
+    # mp = np.asarray(mp, dtype=np.float64)
+    # I_syn_exc = np.asarray(I_syn_exc, dtype=np.float64)
+    # I_syn_inh = np.asarray(I_syn_inh, dtype=np.float64)
+    # a = np.asarray(a, dtype=np.float64)
+    # spike_threshold = np.asarray(spike_threshold, dtype=np.float64)
+    # N_x = np.int64(N_x)
+    # N_exc = np.int64(N_exc)
+    # N_inh = np.int64(N_inh)
+    # spike_threshold_default_arr = np.full(
+    #     N_exc + N_inh, fill_value=spike_threshold_default, dtype=np.float64
+    # )
 
-    st = N_x  # stimulation
-    ex = st + N_exc  # excitatory
-    ih = ex + N_inh  # inhibitory
+    # Update membrane potentials using previous step spikes
+    mp_new = np.zeros_like(mp)
+    weights_exc = np.ascontiguousarray(weights[:, st:ex].T)
+    weights_inh = np.ascontiguousarray(weights[:, ex:ih].T)
+
+    nz_rows_inh, nz_cols_inh = np.nonzero(weights[ex:ih, st:ex])
+    nz_rows_exc, nz_cols_exc = np.nonzero(weights[:ex, :ih])
+    nz_rows_inh += ex
+    nz_cols_inh += st
+    sleep_now = False
+
+    # Compute for neurons N_x to N_post-1
+    nonzero_pre_idx = List()
+    for i in range(st, ih):
+        pre_idx = np.nonzero(weights[:, i])[0]
+        nonzero_pre_idx.append(pre_idx.astype(np.int64))
+
+    # initiate neuron class
+    neuron = NeuronState(
+        st=st,
+        ih=ih,
+        N_exc=N_exc,
+        dt=dt,
+        max_mp=max_mp,
+        min_mp=min_mp,
+        spike_adaption=spike_adaption,
+        tau_adaption=tau_adaption,
+        delta_adaption=delta_adaption,
+        spike_threshold_default=spike_threshold_default,
+        reset_potential=reset_potential,
+        tau_trace=tau_trace,
+    )
+    # initiate membrane class
+    membrane = MembranePotential(
+        mp_new=mp_new,
+        resting_potential=resting_potential,
+        membrane_resistance_exc=membrane_resistance_exc,
+        memebrane_resistance_inh=membrane_resistance_inh,
+        dt=dt,
+        st=st,
+        ex=ex,
+        track_stats=track_stats,
+        N_exc=N_exc,
+        N_inh=N_inh,
+        tau_syn_exc=tau_syn_exc,
+        tau_syn_inh=tau_syn_inh,
+        tau_m_exc=tau_m_exc,
+        tau_m_inh=tau_m_inh,
+        mean_noise=mean_noise,
+        var_noise=var_noise,
+    )
+    # initiate learner class
+    learner = Learner(
+        learning_rate=learning_rate,
+        N_x=N_x,
+        nonzero_pre_idx=nonzero_pre_idx,
+        track_weights=track_weights,
+        w_max=w_max,
+        mu_weight=mu_weight,
+    )
+    # initiate clipper
+    clipper = Clipper(
+        nz_cols_exc=nz_cols_exc,
+        nz_cols_inh=nz_cols_inh,
+        nz_rows_exc=nz_rows_exc,
+        nz_rows_inh=nz_rows_inh,
+        min_weight_exc=min_weight_exc,
+        max_weight_exc=max_weight_exc,
+        min_weight_inh=min_weight_inh,
+        max_weight_inh=max_weight_inh,
+    )
 
     # define sleep regularizer
     if sleep or normalize_weights:
@@ -398,7 +206,7 @@ def train_network(
             initial_sums_ee = 0
 
         if sleep:
-            sleep_reg_se = SleepRegularizer(
+            sleep_reg_se = Sleep(
                 mode=reg_mode,
                 duration=sleep_duration,
                 w_target=w_target,
@@ -406,7 +214,7 @@ def train_network(
                 nz_rows=nz_rows_se,
                 nz_cols=nz_cols_se,
             )
-            sleep_reg_ee = SleepRegularizer(
+            sleep_reg_ee = Sleep(
                 mode=reg_mode,
                 duration=sleep_duration,
                 w_target=w_target,
@@ -432,12 +240,6 @@ def train_network(
 
     delta_w = np.zeros(shape=weights.shape)
 
-    nz_rows_inh, nz_cols_inh = np.nonzero(weights[ex:ih, st:ex])
-    nz_rows_exc, nz_cols_exc = np.nonzero(weights[:ex, :ih])
-    nz_rows_inh += ex
-    nz_cols_inh += st
-    sleep_now = False
-
     if track_stats:  # Add sleep tracking parameters here when this is ready
         delta_mp_ex = 0.0
         delta_mp_ih = 0.0
@@ -459,30 +261,15 @@ def train_network(
         delta_w_sum = 0
         x_pre_sum = 0
 
-    # Update membrane potentials using previous step spikes
-    mp_new = np.zeros_like(mp)
-    weights_exc = np.ascontiguousarray(weights[:, st:ex].T)
-    weights_inh = np.ascontiguousarray(weights[:, ex:ih].T)
-
     if train_weights:
         desc = "Training network:"
     else:
         desc = "Testing network:"
 
-    # Compute for neurons N_x to N_post-1
-    nonzero_pre_idx = List()
-    for i in range(st, ih):
-        pre_idx = np.nonzero(weights[:, i])[0]
-        nonzero_pre_idx.append(pre_idx.astype(np.int64))
-
     nonzero_pre_idx_exc = List()
     for i in range(st, ex):
         pre_idx = np.nonzero(weights[:ex, i])[0]
         nonzero_pre_idx_exc.append(pre_idx.astype(np.int64))
-
-    # Maintain previous-step state explicitly so we can evolve during hard-pause sleep
-    mp_prev = mp.copy()
-    spikes_prev = spikes[0].copy()
 
     # Get selected indices
     # Snapshot cadence
@@ -566,33 +353,14 @@ def train_network(
             delta_mp_ih_,
             delta_I_syn_ex_,
             delta_I_syn_ih_,
-        ) = update_membrane_potential(
+        ) = membrane.step(
             mp=mp_prev,
-            mp_new=mp_new,
             weights_exc=weights_exc,
             weights_inh=weights_inh,
             spikes=spikes_prev,
-            resting_potential=resting_potential,
-            membrane_resistance_exc=membrane_resistance_exc,
-            membrane_resistance_inh=membrane_resistance_inh,
-            tau_m_exc=tau_m_exc,
-            tau_m_inh=tau_m_inh,
-            track_stats=_track_stats,
-            dt=dt,
-            st=st,
-            ex=ex,
-            ih=ih,
-            N_exc=N_exc,
-            N_inh=N_inh,
-            noisy_potential=noisy_potential,
-            mean_noise=mean_noise,
-            var_noise=var_noise,
             I_syn_exc=I_syn_exc,
             I_syn_inh=I_syn_inh,
-            tau_syn_exc=tau_syn_exc,
-            tau_syn_inh=tau_syn_inh,
-            sleep_now_inh=sleep_now_inh,
-            sleep_now_exc=sleep_now_exc,
+            noisy_potential_now=noisy_potential_now,
         )
 
         if _track_stats:
@@ -616,27 +384,14 @@ def train_network(
             spike_threshold,
             a,
             spike_trace,
-        ) = update_spikes(
-            N_exc=N_exc,
-            N_inh=N_inh,
-            st=st,
-            ih=ih,
+        ) = neuron.step(
             mp=mp,
-            dt=dt,
             a=a,
-            track_stats=_track_stats,
             spikes=spikes[t],
-            spike_adaption=spike_adaption,
-            tau_adaption=tau_adaption,
-            delta_adaption=delta_adaption,
             spike_trace=spike_trace,
-            max_mp=max_mp,
-            min_mp=min_mp,
             spike_threshold=spike_threshold,
-            spike_threshold_default=spike_threshold_default_arr,
-            reset_potential=reset_potential,
-            tau_trace=tau_trace,
         )
+
         if _track_stats:
             # track adaptive spiking threshold
             a_ex += a.mean()
@@ -644,73 +399,19 @@ def train_network(
             spike_trace_ex += spike_trace.mean()
             track_count += 1
 
-        # update weights
+        # synapse updates
         if train_weights and t % update_weight_freq == 0:
-            weights, sleep_now_inh, sleep_now_exc, m_x_pre, m_first_term, m_delta_w = (
-                update_weights(
-                    spikes=spikes_prev,
-                    weights=weights,
-                    max_sum_exc=max_sum_exc,
-                    max_sum_inh=max_sum_inh,
-                    baseline_sum_exc=baseline_sum_exc,
-                    baseline_sum_inh=baseline_sum_inh,
-                    check_sleep_interval=check_sleep_interval,
-                    sleep=sleep,
-                    nonzero_pre_idx=nonzero_pre_idx_exc,
-                    N_x=N_x,
-                    vectorized_trace=vectorized_trace,
-                    mu_weight=mu_weight,
-                    delta_w=delta_w,
-                    N_exc=N_exc,
-                    timing_update=timing_update,
-                    trace_update=trace_update,
-                    spike_trace=spike_trace,
-                    w_max=w_max,
-                    x_tar_se=x_tar_se,
-                    x_tar_ex=x_tar_ex,
-                    normalize_now=normalize_now,
-                    update_weights_now=update_weights_now,
-                    track_weights=track_weights,
-                    weight_decay_rate_exc=weight_decay_rate,
-                    min_weight_exc=min_weight_exc,
-                    max_weight_exc=max_weight_exc,
-                    min_weight_inh=min_weight_inh,
-                    max_weight_inh=max_weight_inh,
-                    noisy_weights=noisy_weights,
-                    weight_mean_noise=weight_mean_noise,
-                    weight_var_noise=weight_var_noise,
-                    w_target=w_target,
-                    sleep_now=sleep_now,
-                    sleep_reg_se=sleep_reg_se,
-                    sleep_reg_ee=sleep_reg_ee,
-                    t=t,
-                    N=N,
-                    sleep_synchronized=sleep_synchronized,
-                    baseline_sum=baseline_sum,
-                    max_sum=max_sum,
-                    nz_cols_exc=nz_cols_exc,
-                    nz_cols_inh=nz_cols_inh,
-                    nz_rows_exc=nz_rows_exc,
-                    nz_rows_inh=nz_rows_inh,
-                    N_inh=N_inh,
-                    A_plus=A_plus,
-                    A_minus=A_minus,
-                    learning_rate_exc=learning_rate_exc,
-                    learning_rate_inh=learning_rate_inh,
-                    tau_LTP=tau_LTP,
-                    tau_LTD=tau_LTD,
-                    dt=dt,
-                    st=st,
-                    ex=ex,
-                    ih=ih,
-                    normalize_per_column=normalize_per_column,
-                    normalize_per_column_interval=normalize_per_column_interval,
-                    initial_sum_st_ex=initial_sum_st_ex,
-                    initial_sum_ex_ex=initial_sum_ex_ex,
-                    initial_sum_ex_ih=initial_sum_ex_ih,
-                    initial_sum_ih_ex=initial_sum_ih_ex,
-                )
+            # clip weights
+            weights = clipper.step(weights=weights)
+            # perform learning
+            weights, m_x_pre, m_first_term, m_delta_w = learner.step(
+                spike_trace=spike_trace,
+                weights=weights,
+                spikes=spikes,
+                x_tar_se=x_tar_se,
+                x_tar_ex=x_tar_ex,
             )
+            # regularize weights
 
             np.copyto(weights_exc, weights[:, st:ex].T)
             np.copyto(weights_inh, weights[:, ex:ih].T)

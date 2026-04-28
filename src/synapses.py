@@ -1,4 +1,5 @@
 from numba import njit, prange
+from dataclasses import dataclass
 
 
 @njit(cache=True, parallel=True)
@@ -88,18 +89,17 @@ def trace_STDP(
 
                 delta_weight = learning_rate * first_trm * second_trm
                 weights[j, i] += delta_weight
+        return weights, 0, 0, 0
 
 
+@dataclass
 class Learner:
-    def __init__(
-        self, learning_rate, N_x, nonzero_pre_idx, track_weights, w_max, mu_weight
-    ):
-        self.learning_rate = learning_rate
-        self.N_x = N_x
-        self.nonzero_pre_idx = nonzero_pre_idx
-        self.track_weights = track_weights
-        self.w_max = w_max
-        self.mu_weight = mu_weight
+    learning_rate: float
+    N_x: int
+    nonzero_pre_idx: list
+    track_weights: bool
+    w_max: float
+    mu_weight: float
 
     def step(self, weights, spikes, spike_trace, x_tar_se, x_tar_ex):
         return trace_STDP(
@@ -117,36 +117,26 @@ class Learner:
         )
 
 
+@dataclass
 class Clipper:
-    def __init__(
-        self,
-        nz_cols_exc,
-        nz_cols_inh,
-        nz_rows_exc,
-        nz_rows_inh,
-        min_weight_exc,
-        max_weight_exc,
-        min_weight_inh,
-        max_weight_inh,
-    ):
-        self.nz_cols_exc = nz_cols_exc
-        self.nz_cols_inh = nz_cols_inh
-        self.nz_rows_exc = nz_rows_exc
-        self.nz_rows_inh = nz_rows_inh
-        self.min_weight_exc = min_weight_exc
-        self.max_weight_exc = max_weight_exc
-        self.min_weight_inh = min_weight_inh
-        self.max_weight_inh = max_weight_inh
+    nz_cols_exc: list
+    nz_cols_inh: list
+    nz_rows_exc: list
+    nz_rows_inh: list
+    min_weight_exc: float
+    max_weight_exc: float
+    min_weight_inh: float
+    max_weight_inh: float
 
     def step(self, weights):
         return clip_weights(
             weights,
-            self.nz_cols_exc,
-            self.nz_cols_inh,
-            self.nz_rows_exc,
-            self.nz_rows_inh,
-            self.min_weight_exc,
-            self.max_weight_exc,
-            self.min_weight_inh,
-            self.max_weight_inh,
+            nz_cols_exc=self.nz_cols_exc,
+            nz_cols_inh=self.nz_cols_inh,
+            nz_rows_exc=self.nz_rows_exc,
+            nz_rows_inh=self.nz_rows_inh,
+            min_weight_exc=self.min_weight_exc,
+            max_weight_exc=self.max_weight_exc,
+            min_weight_inh=self.min_weight_inh,
+            max_weight_inh=self.max_weight_inh,
         )

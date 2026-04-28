@@ -1,4 +1,5 @@
 import numpy as np
+from dataclasses import dataclass
 from numba import njit, prange
 
 
@@ -31,16 +32,19 @@ def static_sleep(
     return weights
 
 
+@dataclass
 class Normalizer:
-    def __init__(self, mode, initial_sum, target, nz_rows, nz_cols):
-        self.mode = mode
-        self.initial_sum = initial_sum
-        self.target = target
-        self.nz_rows = nz_rows
-        self.nz_cols = nz_cols
+    mode: str
+    initial_sum: np.ndarray
+    target: float
+    nz_rows: list
+    nz_cols: list
 
     def step(self, weights):
-        if self.mode == "layer":
+        if self.mode == "static":
+            return static_norm(weights, self.target, self.nz_rows, self.nz_cols)
+
+        elif self.mode == "layer":
             current_sum = weights[self.nz_rows, self.nz_cols].sum()
             self.scale = np.full(
                 self.nz_rows.size, self.initial_sum.sum() / current_sum
@@ -52,25 +56,27 @@ class Normalizer:
                 minlength=weights.shape[1],
             )
             self.scale = self.initial_sum / (current_sum[self.nz_cols] + 1e-8)
-        if self.mode == "static":
-            return static_norm(weights, self.target, self.nz_rows, self.nz_cols)
         return dynamic(weights, self.scale, self.nz_rows, self.nz_cols)
 
 
-class SleepRegularizer:
-    def __init__(self, mode, duration, w_target, initial_sums, nz_rows, nz_cols):
-        self.mode = mode
-        self.sleep_lambda = 1.0 / duration
-        self.w_target = w_target
-        self.nz_rows = nz_rows
-        self.nz_cols = nz_cols
-        if mode == "post" and np.ndim(initial_sums) == 0:
+@dataclass
+class Sleep:
+    mode: str
+    duration: int
+    freq: int
+    w_target: float
+    initial_sums: np.ndarray
+    nz_rows: np.ndarray
+    nz_cols: np.ndarray
+
+    def __post_init__(self):
+        self.sleep_lambda = 1.0 / self.duration
+        if self.mode == "post" and np.ndim(self.initial_sums) == 0:
             raise ValueError(
                 "post mode requires initial_sums to be a per-neuron vector"
             )
-        if mode == "layer" and np.ndim(initial_sums) != 0:
+        if self.mode == "layer" and np.ndim(self.initial_sums) != 0:
             raise ValueError("layer mode requires initial_sums to be a scalar")
-        self.initial_sums = initial_sums
 
     def onset(self, weights):
         """Call once when sleep begins — precomputes scale from current weights"""
