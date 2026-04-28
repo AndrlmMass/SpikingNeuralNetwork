@@ -8,72 +8,49 @@ import numpy as np
 from src.weight_dynamics import (
     trace_STDP,
     normalize_weights_per_column,
+    clip_weights,
+    SleepRegularizer,
+    Normalizer,
 )
 from plot import heatmap_spike_response
 
 
 def update_weights(
     weights,
-    timing_update,
-    trace_update,
     min_weight_exc,
     max_weight_exc,
     min_weight_inh,
     max_weight_inh,
     nonzero_pre_idx,
-    weight_decay_rate_exc,
-    weight_decay_rate_inh,
-    noisy_weights,
-    weight_mean_noise,
-    weight_var_noise,
-    w_target_exc,
-    w_target_inh,
     w_max,
-    max_sum_exc,
-    max_sum_inh,
-    vectorized_trace,
-    baseline_sum_exc,
-    baseline_sum_inh,
-    check_sleep_interval,
-    sleep_synchronized,
-    baseline_sum,
-    max_sum,
     spikes,
     N_inh,
-    N,
-    N_exc,
-    sleep,
-    sleep_now_inh,
-    sleep_now_exc,
-    delta_w,
     N_x,
     nz_cols_exc,
     nz_cols_inh,
     nz_rows_exc,
     nz_rows_inh,
-    t,
-    dt,
     mu_weight,
-    A_plus,
-    A_minus,
+    A_plus,  # might reuse in the trace_STDP function
+    A_minus,  # might reuse in the trace_STDP function
     learning_rate_exc,
     learning_rate_inh,
-    tau_LTP,
-    tau_LTD,
+    tau_LTP,  # might reuse in the trace_STDP function
+    tau_LTD,  # might reuse in the trace_STDP function
     track_weights,
     normalize_now,
-    update_weights_now,
+    normalize_weights,
     x_tar_se,
     x_tar_ex,
+    norm_reg_se,
+    norm_reg_ee,
+    sleep_reg_se,
+    sleep_reg_ee,
+    start_sleep,
+    use_sleep,
+    sleep_now,
     st=None,
     ex=None,
-    ih=None,
-    normalize_per_column=False,
-    normalize_per_column_interval=1000,
-    initial_sum_st_ex=None,
-    initial_sum_ex_ex=None,
-    initial_sum_ex_ih=None,
-    initial_sum_ih_ex=None,
     spike_trace=None,
 ):
     """
@@ -122,20 +99,20 @@ def update_weights(
 
     # Per-column normalization (if enabled and initial sums provided)
     # Only normalize every N timesteps for performance
-    if normalize_per_column and normalize_now:
-        if initial_sum_st_ex is not None:
-            weights = normalize_weights_per_column(
-                weights, initial_sum_st_ex, 0, st, st, ex
-            )
-        if initial_sum_ex_ex is not None:
-            weights = normalize_weights_per_column(
-                weights, initial_sum_ex_ex, st, ex, st, ex
-            )
+    if use_sleep and sleep_now:
+        if start_sleep:
+            sleep_reg_se.onset(weights[:st, st:ex])
+            sleep_reg_ee.onset(weights[st:ex, st:ex])
+        # perform sleep regularization step
+        weights[:st, st:ex] = sleep_reg_se.step(weights[:st, st:ex])
+        weights[st:ex, st:ex] = sleep_reg_ee.step(weights[st:ex, st:ex])
 
-    if track_weights:
-        return weights, sleep_now_inh, sleep_now_exc, m_x_pre, m_first_term, m_delta_w
+    elif normalize_now and normalize_weights:
+        # perform normalization step
+        weights[:st, st:ex] = norm_reg_se.step(weights[:st, st:ex])
+        weights[st:ex, st:ex] = norm_reg_ee.step(weights[st:ex, st:ex])
 
-    return weights, sleep_now_inh, sleep_now_exc, 0, 0, 0
+    return weights, m_x_pre, m_first_term, m_delta_w
 
 
 @njit(parallel=True, cache=True)
@@ -152,7 +129,6 @@ def update_membrane_potential(
     dt,
     st,
     ex,
-    ih,
     track_stats,
     N_exc,
     N_inh,
@@ -164,8 +140,7 @@ def update_membrane_potential(
     tau_m_inh,
     mean_noise,
     var_noise,
-    sleep_now_inh,
-    sleep_now_exc,
+    sleep_now,
 ):
     if track_stats:
         delta_mp_ex = np.zeros(N_exc)
@@ -197,7 +172,7 @@ def update_membrane_potential(
             * dt
         )
         mp_new[i] = mp[i] + d_mp
-        if noisy_potential and sleep_now_inh and sleep_now_exc:
+        if noisy_potential and sleep_now:
             mp_new[i] += np.random.normal(mean_noise, var_noise)
         if track_stats:
             delta_mp_ex[i] = d_mp
@@ -219,7 +194,7 @@ def update_membrane_potential(
             * dt
         )
         mp_new[ih_id] = mp[ih_id] + d_mp
-        if noisy_potential and sleep_now_inh and sleep_now_exc:
+        if noisy_potential and sleep_now:
             mp_new[ih_id] += np.random.normal(mean_noise, var_noise)
         if track_stats:
             delta_mp_ih[i] = d_mp
@@ -241,11 +216,9 @@ def update_spikes(
     st,
     ih,
     N_exc,
-    N_inh,
     mp,
     dt,
     a,
-    track_stats,
     spike_trace,
     spikes,
     max_mp,
@@ -317,9 +290,7 @@ def train_network(
     min_weight_inh,
     max_weight_inh,
     train_weights,
-    weight_decay,
-    weight_decay_rate_exc,
-    weight_decay_rate_inh,
+    weight_decay_rate,
     sleep_synchronized,
     baseline_sum,
     max_sum,
@@ -333,8 +304,7 @@ def train_network(
     min_mp,
     w_max,
     check_sleep_interval,
-    w_target_exc,
-    w_target_inh,
+    w_target,
     baseline_sum_exc,
     baseline_sum_inh,
     max_sum_exc,
@@ -353,9 +323,6 @@ def train_network(
     spike_threshold_default,
     save_plots,
     reset_potential,
-    spike_slope,
-    spike_intercept,
-    noisy_threshold,
     noisy_weights,
     vectorized_trace,
     spike_labels,
@@ -364,29 +331,21 @@ def train_network(
     dataset,
     timing_update,
     trace_update,
-    interval,
     N_x,
     T,
     tau_trace,
     tau_syn_exc,
     tau_syn_inh,
     track_weights,
-    beta,
     mean_noise,
     var_noise,
-    num_exc,
-    num_inh,
     mu_weight,
     I_syn_exc,
     I_syn_inh,
     a,
     time_per_item,
     spike_threshold,
-    sleep_ratio=0.0,
     normalize_weights=False,
-    initial_sum_exc=None,
-    initial_sum_inh=None,
-    initial_sum_total=None,
     normalize_per_column=False,
     normalize_per_column_interval=1000,
     initial_sum_st_ex=None,
@@ -396,8 +355,9 @@ def train_network(
     track_stats=False,
     x_tar_se=None,
     x_tar_ex=None,
-    sleep_max_iters: int = 5000,
-    sleep_mode: str = "static",  # one of {"static","group","post"}
+    reg_frequency=None,
+    sleep_duration: int = 5000,
+    reg_mode: str = "static",  # one of {"static","group","post"}
 ):
 
     # Enforce consistent dtypes for Numba cache stability
@@ -421,6 +381,54 @@ def train_network(
     st = N_x  # stimulation
     ex = st + N_exc  # excitatory
     ih = ex + N_inh  # inhibitory
+
+    # define sleep regularizer
+    if sleep or normalize_weights:
+        nz_rows_se, nz_cols_se = np.nonzero(weights[:st, st:ex])
+        nz_rows_ee, nz_cols_ee = np.nonzero(weights[st:ex, st:ex])
+
+        if reg_mode == "post":
+            initial_sums_se = weights[:st, st:ex].sum(axis=0)
+            initial_sums_ee = weights[st:ex, st:ex].sum(axis=0)
+        elif reg_mode == "layer":
+            initial_sums_se = np.full(nz_rows_se.size, weights[:st, st:ex].sum())
+            initial_sums_ee = np.full(nz_rows_ee.size, weights[st:ex, st:ex].sum())
+        else:
+            initial_sums_se = 0
+            initial_sums_ee = 0
+
+        if sleep:
+            sleep_reg_se = SleepRegularizer(
+                mode=reg_mode,
+                duration=sleep_duration,
+                w_target=w_target,
+                initial_sums=initial_sums_se,
+                nz_rows=nz_rows_se,
+                nz_cols=nz_cols_se,
+            )
+            sleep_reg_ee = SleepRegularizer(
+                mode=reg_mode,
+                duration=sleep_duration,
+                w_target=w_target,
+                initial_sums=initial_sums_ee,
+                nz_rows=nz_rows_ee,
+                nz_cols=nz_cols_ee,
+            )
+        elif normalize_weights:
+            norm_reg_se = Normalizer(
+                mode=reg_mode,
+                initial_sum=initial_sums_se,
+                target=w_target,
+                nz_rows=nz_rows_se,
+                nz_cols=nz_cols_se,
+            )
+            norm_reg_ee = Normalizer(
+                mode=reg_mode,
+                initial_sum=initial_sums_ee,
+                target=w_target,
+                nz_rows=nz_rows_ee,
+                nz_cols=nz_cols_ee,
+            )
 
     delta_w = np.zeros(shape=weights.shape)
 
@@ -663,8 +671,7 @@ def train_network(
                     normalize_now=normalize_now,
                     update_weights_now=update_weights_now,
                     track_weights=track_weights,
-                    weight_decay_rate_exc=weight_decay_rate_exc,
-                    weight_decay_rate_inh=weight_decay_rate_inh,
+                    weight_decay_rate_exc=weight_decay_rate,
                     min_weight_exc=min_weight_exc,
                     max_weight_exc=max_weight_exc,
                     min_weight_inh=min_weight_inh,
@@ -672,10 +679,10 @@ def train_network(
                     noisy_weights=noisy_weights,
                     weight_mean_noise=weight_mean_noise,
                     weight_var_noise=weight_var_noise,
-                    w_target_exc=w_target_exc,
-                    w_target_inh=w_target_inh,
-                    sleep_now_inh=sleep_now_inh,
-                    sleep_now_exc=sleep_now_exc,
+                    w_target=w_target,
+                    sleep_now=sleep_now,
+                    sleep_reg_se=sleep_reg_se,
+                    sleep_reg_ee=sleep_reg_ee,
                     t=t,
                     N=N,
                     sleep_synchronized=sleep_synchronized,
@@ -789,8 +796,6 @@ def train_network(
         weights,
         spikes,
         mp,
-        weights_4_plotting_exc,
-        weights_4_plotting_inh,
         spike_threshold,
         max_sum_inh,
         max_sum_exc,
