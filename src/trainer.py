@@ -289,6 +289,7 @@ def train_network(
     num = 0
     normalize_now = False
     sleep_now = False
+    empty_spikes = np.zeros(spikes.shape[0])
 
     import psutil, os
 
@@ -385,14 +386,14 @@ def train_network(
             # update spikes array
             (
                 mp,
-                spikes[t],
+                spikes_buf,
                 spike_threshold,
                 a,
                 spike_trace,
             ) = neuron.step(
                 mp=mp,
                 a=a,
-                spikes=spikes[t],
+                spikes=empty_spikes,
                 spike_trace=spike_trace,
                 spike_threshold=spike_threshold,
             )
@@ -404,17 +405,13 @@ def train_network(
             weights, m_x_pre, m_first_term, m_delta_w = learner.step(
                 spike_trace=spike_trace,
                 weights=weights,
-                spikes=spikes,
+                spikes=spikes_buf,
                 x_tar_se=x_tar_se,
                 x_tar_ex=x_tar_ex,
             )
             # regularize weights
-            if sleep and sleep_now:
-                weights[:st, st:ex] = sleep_reg_se.step(weights[:st, st:ex])
-                weights[st:ex, st:ex] = sleep_reg_ee.step(weights[st:ex, st:ex])
-            elif normalize_weights and normalize_now:
-                weights[:st, st:ex] = norm_reg_se.step(weights[:st, st:ex])
-                weights[st:ex, st:ex] = norm_reg_ee.step(weights[st:ex, st:ex])
+            weights[:st, st:ex] = sleep_reg_se.step(weights[:st, st:ex])
+            weights[st:ex, st:ex] = sleep_reg_ee.step(weights[st:ex, st:ex])
 
             np.copyto(weights_exc, weights[:, st:ex].T)
             np.copyto(weights_inh, weights[:, ex:ih].T)
