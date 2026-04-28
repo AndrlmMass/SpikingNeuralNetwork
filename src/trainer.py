@@ -1,11 +1,13 @@
 # import external packages
+from numba.typed import List
+from numba import njit
 from tqdm import tqdm
 import threading
 import numpy as np
 
 # import internal packages
 from src.regularization import Sleep, Normalizer
-from src.neurons import NeuronState, MembranePotential
+from src.neurons import NeuronState, MembranePotential, update_x_tar
 from src.synapses import Learner, Clipper
 from plot import heatmap_spike_response
 
@@ -27,7 +29,7 @@ def train_network(
     max_weight_exc,
     min_weight_inh,
     max_weight_inh,
-    train_weights,
+    training_mode,
     weight_decay_rate,
     sleep_synchronized,
     baseline_sum,
@@ -238,8 +240,6 @@ def train_network(
                 nz_cols=nz_cols_ee,
             )
 
-    delta_w = np.zeros(shape=weights.shape)
-
     if track_stats:  # Add sleep tracking parameters here when this is ready
         delta_mp_ex = 0.0
         delta_mp_ih = 0.0
@@ -261,8 +261,10 @@ def train_network(
         delta_w_sum = 0
         x_pre_sum = 0
 
-    if train_weights:
+    if training_mode == "train":
         desc = "Training network:"
+    elif training_mode == "val":
+        desc = "Validating network"
     else:
         desc = "Testing network:"
 
@@ -280,11 +282,14 @@ def train_network(
     plot_time += 1
     num_steps = max(1, int((T * 100) // time_per_item))
     update_weight_freq = 100  # max(1, int(T // (time_per_item)))
-    normalize_freq = int(update_weight_freq * 10)
     iterations = 100
     plot_threads = []
     _track_stats = False
+    noisy_potential_now = False
     num = 0
+    normalize_now = False
+    sleep_now = False
+
     import psutil, os
 
     print(f"The network will update its weights every {update_weight_freq} steps")
@@ -302,7 +307,7 @@ def train_network(
 
     # create heatmap spike plot before training to verify that it starts off as wrong
     for t in pbar:
-        if t % update_weight_freq == 0 and train_weights:
+        if t % update_weight_freq == 0 and training_mode == "train":
             update_weights_now = True
             # update x_tar as often as we update weights
             x_tar_se, x_tar_ex = update_x_tar(
@@ -314,8 +319,16 @@ def train_network(
                 x_tar_sum_se += x_tar_se.mean()
                 x_tar_sum_ex += x_tar_ex.mean()
                 x_tar_count += 1
-        if t % normalize_freq == 0:
-            normalize_now = True
+        if t % reg_frequency:
+            if normalize_weights:
+                normalize_now = True
+            elif sleep:
+                sleep_now = True
+                noisy_potential_now = True
+                sleep_remaining = sleep_duration
+                sleep_reg_se.onset(weights[:st, st:ex])
+                sleep_reg_ee.onset(weights[st:ex, st:ex])
+
         if t % num_steps == 0:
             if track_stats:
                 _track_stats = True
@@ -345,6 +358,69 @@ def train_network(
                 plot_threads.append(plot_thread)
                 # update num
                 num += 1
+        # Activate napping babyyy
+        while sleep_remaining > 0:
+            # remove input data
+            spikes_buf = spikes_prev.copy()
+            spikes_buf[:st] = 0
+
+            (
+                mp,
+                I_syn_exc,
+                I_syn_inh,
+                delta_mp_ex_,
+                delta_mp_ih_,
+                delta_I_syn_ex_,
+                delta_I_syn_ih_,
+            ) = membrane.step(
+                mp=mp_prev,
+                weights_exc=weights_exc,
+                weights_inh=weights_inh,
+                spikes=spikes_buf,
+                I_syn_exc=I_syn_exc,
+                I_syn_inh=I_syn_inh,
+                noisy_potential_now=noisy_potential_now,
+            )
+
+            # update spikes array
+            (
+                mp,
+                spikes[t],
+                spike_threshold,
+                a,
+                spike_trace,
+            ) = neuron.step(
+                mp=mp,
+                a=a,
+                spikes=spikes[t],
+                spike_trace=spike_trace,
+                spike_threshold=spike_threshold,
+            )
+
+            # synapse updates
+            # clip weights
+            weights = clipper.step(weights=weights)
+            # perform learning
+            weights, m_x_pre, m_first_term, m_delta_w = learner.step(
+                spike_trace=spike_trace,
+                weights=weights,
+                spikes=spikes,
+                x_tar_se=x_tar_se,
+                x_tar_ex=x_tar_ex,
+            )
+            # regularize weights
+            if sleep and sleep_now:
+                weights[:st, st:ex] = sleep_reg_se.step(weights[:st, st:ex])
+                weights[st:ex, st:ex] = sleep_reg_ee.step(weights[st:ex, st:ex])
+            elif normalize_weights and normalize_now:
+                weights[:st, st:ex] = norm_reg_se.step(weights[:st, st:ex])
+                weights[st:ex, st:ex] = norm_reg_ee.step(weights[st:ex, st:ex])
+
+            np.copyto(weights_exc, weights[:, st:ex].T)
+            np.copyto(weights_inh, weights[:, ex:ih].T)
+
+            sleep_remaining -= 1
+
         (
             mp,
             I_syn_exc,
@@ -400,7 +476,7 @@ def train_network(
             track_count += 1
 
         # synapse updates
-        if train_weights and t % update_weight_freq == 0:
+        if update_weights_now:
             # clip weights
             weights = clipper.step(weights=weights)
             # perform learning
@@ -412,15 +488,18 @@ def train_network(
                 x_tar_ex=x_tar_ex,
             )
             # regularize weights
+            if normalize_weights and normalize_now:
+                weights[:st, st:ex] = norm_reg_se.step(weights[:st, st:ex])
+                weights[st:ex, st:ex] = norm_reg_ee.step(weights[st:ex, st:ex])
 
             np.copyto(weights_exc, weights[:, st:ex].T)
             np.copyto(weights_inh, weights[:, ex:ih].T)
 
-            if track_weights:
-                x_pre_sum += m_x_pre
-                first_term_sum += m_first_term
-                # second_term_sum += m_second_term
-                delta_w_sum += m_delta_w
+        if track_weights:
+            x_pre_sum += m_x_pre
+            first_term_sum += m_first_term
+            # second_term_sum += m_second_term
+            delta_w_sum += m_delta_w
 
         # Update maintained previous-step state for next iteration
         mp_prev = mp
@@ -430,7 +509,7 @@ def train_network(
     for pt in plot_threads:
         pt.join(timeout=0)  # don't block, daemon threads finish on their own
 
-    if track_stats and train_weights:
+    if track_stats and training_mode == "train":
         # compute the mean of the trackers
         mean_delta_mp_ex = delta_mp_ex / max(1, track_count)
         mean_delta_mp_ih = delta_mp_ih / max(1, track_count)
@@ -510,3 +589,32 @@ def train_network(
         x_tar_se,
         x_tar_ex,
     )
+
+
+@njit(parallel=True, cache=True)
+def run_sleep(
+    weights,
+    mp,
+    I_syn_exc,
+    I_syn_inh,
+    spike_trace,
+    a,
+    spike_threshold,
+    sleep_duration,
+    scale_se,
+    scale_ee,  # precomputed by onset()
+    nz_rows_se,
+    nz_cols_se,
+    nz_rows_ee,
+    nz_cols_ee,
+    # all static neuron/membrane params...
+):
+    spikes_buf = np.zeros(mp.shape[0])
+    for _ in range(sleep_duration):
+        mp, I_syn_exc, I_syn_inh = _update_membrane(mp, spikes_buf, ...)  # njit helper
+        mp, spikes_buf, spike_threshold, a, spike_trace = _update_spikes(
+            mp, ...
+        )  # njit helper
+        weights = _apply_scale(weights, scale_se, scale_ee, ...)  # njit helper
+        spikes_buf[:] = 0.0
+    return weights, mp, I_syn_exc, I_syn_inh, spike_trace, a, spike_threshold
