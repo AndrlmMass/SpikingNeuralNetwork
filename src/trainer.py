@@ -1,63 +1,14 @@
 # import external packages
 from dataclasses import dataclass
 from tqdm import tqdm
-import threading
 import numpy as np
 
 # import internal packages
 from src.regularization import Sleep, Normalizer
 from src.neurons import NeuronState, MembranePotential, update_x_tar
+from src.performance import report_RAM_usage, spawn_plot_thread
 from src.synapses import Learner, Clipper
 from src.trackers import TrainTracker
-from plot import heatmap_spike_response
-
-
-def _plot_background(kwargs):
-    heatmap_spike_response(**kwargs)
-
-
-def report_RAM_usage():
-    import psutil, os
-
-    process = psutil.Process(os.getpid())
-    print(f"Memory before training: {process.memory_info().rss / 1024**2:.0f} MB")
-
-
-def thread_plotting(
-    self,
-    t,
-    spikes,
-    spike_trace,
-    spike_labels,
-    weights,
-    x_tar_se,
-    x_tar_ee,
-    num,
-    iterations,
-):
-    if not self.save_plots:
-        return num, None
-    plot_kwargs = dict(
-        spikes_exc=spikes[t - iterations - 1 : t - 1, self.st : self.ex].copy(),
-        spikes_in=spikes[t - iterations - 1 : t - 1, : self.st].copy(),
-        spikes_ih=spikes[t - iterations - 1 : t - 1, self.ex :].copy(),
-        label=spike_labels[t - 1],
-        spike_trace=spike_trace.copy(),
-        dataset=self.dataset,
-        run=self.run,
-        num=num,
-        st=self.st,
-        ex=self.ex,
-        x_target_se=x_tar_se,
-        x_target_ex=x_tar_ee,
-        weights_st_ex=weights[: self.st, self.st : self.ex].copy(),
-        weights_ex_ex=weights[self.st : self.ex, self.st : self.ex].copy(),
-        weights_ex_ih=weights[self.st : self.ex, self.ex : self.ih].copy(),
-        weights_ih_ex=weights[self.ex : self.ih, self.st : self.ex].copy(),
-    )
-    thread = threading.Thread(target=_plot_background, args=(plot_kwargs,), daemon=True)
-    thread.start()
-    return num + 1, thread
 
 
 @dataclass
@@ -118,6 +69,8 @@ class Trainer:
     update_weights_freq: int
     reg_frequency: int
     sleep_duration: int
+    stat_tracking_frequency: int
+    update_weight_freq: int
     reg_mode: str
     nz_rows_exc: list  # why do we have so many of these?
     nz_cols_exc: list  # why do we have so many of these?
@@ -244,15 +197,17 @@ class Trainer:
         # define desc and stat-collection
         if training_mode == "train":
             desc = "Training network:"
+            track_stats = self.track_stats
+            track_weights = self.track_weights
             self.tracker.reset()
         elif training_mode == "val":
             desc = "Validating network"
-            self.track_weights = False
-            self.track_stats = False
+            track_weights = False
+            track_stats = False
         else:
             desc = "Testing network:"
-            self.track_weights = False
-            self.track_stats = False
+            track_weights = False
+            track_stats = False
 
         # reset guards
         num = 0
@@ -263,55 +218,45 @@ class Trainer:
         noisy_potential_now = False
 
         # set variables
+        plot_threads = []
         mp_prev = mp.copy()
         spikes_prev = spikes[0].copy()
         weights_exc = np.ascontiguousarray(weights[:, self.st : self.ex].T)
         weights_inh = np.ascontiguousarray(weights[:, self.ex : self.ih].T)
 
+        # prepare progress bar
         pbar = tqdm(range(1, self.T), desc=desc, leave=False, mininterval=1.0)
-        num_steps = max(1, int((self.T * 100) // self.time_per_item))
-        update_weight_freq = 100  # max(1, int(T // (time_per_item)))
-        iterations = 100
-        plot_threads = []
 
         # report ram before training
         report_RAM_usage()
 
-        if x_tar_se is None or x_tar_ee is None:
-            # precompute x_tar_se and x_tar_ee
-            x_tar_se, x_tar_ee = update_x_tar(
-                spike_trace=spike_trace,
-                N_x=self.N_x,
-            )
+        # precompute x_tar_se and x_tar_ee
+        x_tar_se, x_tar_ee = update_x_tar(
+            spike_trace=spike_trace,
+            N_x=self.N_x,
+        )
 
-        # create heatmap spike plot before training to verify that it starts off as wrong
+        # run training for T iterations
         for t in pbar:
-            if t % update_weight_freq == 0 and training_mode == "train":
-                update_weights_now = True
-                # update x_tar as often as we update weights
-                x_tar_se, x_tar_ee = update_x_tar(
-                    spike_trace=spike_trace,
-                    N_x=self.N_x,
-                )
-                # update x_tar tracker
-                if self.track_stats:
-                    x_tar_sum_se += x_tar_se.mean()
-                    x_tar_sum_ee += x_tar_ee.mean()
-                    x_tar_count += 1
-            if t % self.reg_frequency == 0:
-                if self.normalize_weights:
-                    normalize_now = True
-                elif self.sleep:
-                    noisy_potential_now = True
-                    sleep_remaining = self.sleep_duration
-                    self.sleep_se.onset(weights[: self.st, self.st : self.ex])
-                    self.sleep_ee.onset(weights[self.st : self.ex, self.st : self.ex])
+            if training_mode == "train":
+                if t % self.update_weight_freq == 0:
+                    update_weights_now = True
+                if t % self.reg_frequency == 0:
+                    if self.normalize_weights:
+                        normalize_now = True
+                    elif self.sleep:
+                        noisy_potential_now = True
+                        sleep_remaining = self.sleep_duration
+                        self.sleep_se.onset(weights[: self.st, self.st : self.ex])
+                        self.sleep_ee.onset(
+                            weights[self.st : self.ex, self.st : self.ex]
+                        )
 
-            if t % num_steps == 0:
-                if self.track_stats:
+            if t % self.stat_tracking_frequency == 0:
+                if track_stats:
                     _track_stats = True
                 if self.save_plots:
-                    num, thread = self._maybe_plot(
+                    num, thread = spawn_plot_thread(
                         t,
                         spikes,
                         spike_trace,
@@ -319,7 +264,7 @@ class Trainer:
                         weights,
                         x_tar_se,
                         x_tar_ee,
-                        self.num_steps,
+                        self.num,
                         self.plot_iterations,
                     )
                     plot_threads.append(thread)
@@ -384,6 +329,11 @@ class Trainer:
                 weights[self.st : self.ex, self.st : self.ex] = self.sleep_ee.step(
                     weights[self.st : self.ex, self.st : self.ex]
                 )
+                # update x_tar
+                x_tar_se, x_tar_ee = update_x_tar(
+                    spike_trace=spike_trace,
+                    N_x=self.N_x,
+                )
 
                 np.copyto(weights_exc, weights[:, self.st : self.ex].T)
                 np.copyto(weights_inh, weights[:, self.ex : self.ih].T)
@@ -392,6 +342,7 @@ class Trainer:
 
                 if sleep_remaining <= 0:
                     noisy_potential_now = False
+            # WAKE UP!
             (
                 mp,
                 I_syn_exc,
@@ -410,20 +361,6 @@ class Trainer:
                 noisy_potential_now=noisy_potential_now,
             )
 
-            if _track_stats:
-                # track synaptic current
-                delta_I_syn_ex += delta_I_syn_ex_.mean()
-                delta_I_syn_ih += delta_I_syn_ih_.mean()
-
-                I_syn_ex += I_syn_exc.mean()
-                I_syn_ih += I_syn_inh.mean()
-
-                # track mp vars
-                delta_mp_ex += delta_mp_ex_.mean()
-                delta_mp_ih += delta_mp_ih_.mean()
-                mp_ex += mp[: self.N_exc].mean()
-                mp_ih += mp[self.N_exc :].mean()
-
             # update spikes array
             (
                 mp,
@@ -438,13 +375,6 @@ class Trainer:
                 spike_trace=spike_trace,
                 spike_threshold=spike_threshold,
             )
-
-            if _track_stats:
-                # track adaptive spiking threshold
-                a_ex += a.mean()
-                spike_threshold_ex += spike_threshold.mean()
-                spike_trace_ex += spike_trace.mean()
-                track_count += 1
 
             # synapse updates
             if update_weights_now:
@@ -467,6 +397,15 @@ class Trainer:
                         weights[self.st : self.ex, self.st : self.ex]
                     )
                 # update x-tar
+                x_tar_se, x_tar_ee = update_x_tar(
+                    spike_trace=spike_trace,
+                    N_x=self.N_x,
+                )
+                # run synapse tracker
+                if track_weights:
+                    self.tracker.track_synapse(
+                        m_x_pre, m_first_term, m_delta_w, x_tar_se, x_tar_ee
+                    )
 
                 np.copyto(weights_exc, weights[:, self.st : self.ex].T)
                 np.copyto(weights_inh, weights[:, self.ex : self.ih].T)
@@ -474,11 +413,19 @@ class Trainer:
                 update_weights_now = False
                 normalize_now = False
 
-                if track_weights:
-                    x_pre_sum += m_x_pre
-                    first_term_sum += m_first_term
-                    # second_term_sum += m_second_term
-                    delta_w_sum += m_delta_w
+            if _track_stats:
+                self.tracker.track_neuron(
+                    mp=mp,
+                    delta_mp_ex=delta_mp_ex_,
+                    delta_mp_ih=delta_mp_ih_,
+                    I_syn_exc=I_syn_exc,
+                    I_syn_inh=I_syn_inh,
+                    delta_I_syn_ex_=delta_I_syn_ex_,
+                    delta_I_syn_ih=delta_I_syn_ih_,
+                    a=a,
+                    spike_threshold=spike_threshold,
+                    spike_trace=spike_trace,
+                )
 
             # Update maintained previous-step state for next iteration
             mp_prev = mp
@@ -487,6 +434,14 @@ class Trainer:
         # After the loop, before return:
         for pt in plot_threads:
             pt.join(timeout=0)  # don't block, daemon threads finish on their own
+
+        # print final stats - might add if-statement clause for this. Bit annoying for long runs.
+        self.tracker.print(
+            weights=weights,
+            spikes=spikes,
+            track_weights=track_weights,
+            track_stats=track_stats,
+        )
 
         return (
             weights,
