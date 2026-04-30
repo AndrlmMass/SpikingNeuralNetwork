@@ -38,7 +38,7 @@ def trace_STDP(
     spikes,
     nonzero_pre_idx,
     x_tar_se,
-    x_tar_ex,
+    x_tar_ee,
     track_weights,
     w_max,
     mu_weight,
@@ -58,7 +58,7 @@ def trace_STDP(
                     if j < N_x:
                         first_trm = spike_trace[j] - x_tar_se
                     else:
-                        first_trm = spike_trace[j] - x_tar_ex
+                        first_trm = spike_trace[j] - x_tar_ee
 
                     second_trm = max(w_max - weights[j, i], 0.0) ** mu_weight
 
@@ -83,7 +83,7 @@ def trace_STDP(
                 if j < N_x:
                     first_trm = spike_trace[j] - x_tar_se
                 else:
-                    first_trm = spike_trace[j] - x_tar_ex
+                    first_trm = spike_trace[j] - x_tar_ee
 
                 second_trm = max(w_max - weights[j, i], 0.0) ** mu_weight
 
@@ -97,11 +97,10 @@ class Learner:
     learning_rate: float
     N_x: int
     nonzero_pre_idx: list
-    track_weights: bool
     w_max: float
     mu_weight: float
 
-    def step(self, weights, spikes, spike_trace, x_tar_se, x_tar_ex):
+    def step(self, weights, spikes, spike_trace, x_tar_se, x_tar_ee, track_weights):
         return trace_STDP(
             learning_rate=self.learning_rate,
             spike_trace=spike_trace,
@@ -110,8 +109,8 @@ class Learner:
             spikes=spikes,
             nonzero_pre_idx=self.nonzero_pre_idx,
             x_tar_se=x_tar_se,
-            x_tar_ex=x_tar_ex,
-            track_weights=self.track_weights,
+            x_tar_ee=x_tar_ee,
+            track_weights=track_weights,
             w_max=self.w_max,
             mu_weight=self.mu_weight,
         )

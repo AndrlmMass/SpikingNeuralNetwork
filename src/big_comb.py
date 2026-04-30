@@ -1861,7 +1861,6 @@ class snn_sleepy:
                 N_exc=self.N_exc,
                 N_inh=self.N_inh,
                 track_stats=track_stats,
-                max_sum=max_sum,
                 max_sum_exc=max_sum_exc,
                 max_sum_inh=max_sum_inh,
                 baseline_sum=baseline_sum,
