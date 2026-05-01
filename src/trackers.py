@@ -151,10 +151,10 @@ class TrainTracker:
         if track_weights:
             # calculate mean
             self.x_pre_mean = self.x_pre_mean / self.x_tar_count
-            self.first_term_sum += m_first_term
-            self.delta_w_sum += m_delta_w
-            self.x_tar_sum_se += x_tar_se.mean()
-            self.x_tar_sum_ee += x_tar_ee.mean()
+            self.first_term_sum += self.m_first_term
+            self.delta_w_sum += self.m_delta_w
+            self.x_tar_sum_se += self.x_tar_se.mean()
+            self.x_tar_sum_ee += self.x_tar_ee.mean()
             mean_x_tar_se = self.x_tar_sum_se / max(1, self.x_tar_count)
             mean_x_tar_ee = self.x_tar_sum_ee / max(1, self.x_tar_count)
             print(f"Mean x_pre: {self.x_pre_sum/x}")

@@ -20,7 +20,6 @@ class Trainer:
     max_weight_exc: float
     min_weight_inh: float
     max_weight_inh: float
-    training_mode: str
     N_inh: int
     N_exc: int
     learning_rate: float
@@ -50,6 +49,7 @@ class Trainer:
     dataset: str
     N_x: int
     T: int
+    clip_weights: bool
     tau_trace: int | float
     tau_syn_exc: int | float
     tau_syn_inh: int | float
@@ -313,7 +313,8 @@ class Trainer:
 
                 # synapse updates
                 # clip weights
-                weights = self.clipper.step(weights=weights)
+                if self.clip_weights:
+                    weights = self.clipper.step(weights=weights)
                 # perform learning
                 weights, m_x_pre, m_first_term, m_delta_w = self.learner.step(
                     spike_trace=spike_trace,
@@ -378,8 +379,9 @@ class Trainer:
 
             # synapse updates
             if update_weights_now:
-                # clip weights
-                weights = self.clipper.step(weights=weights)
+                if self.clip_weights:
+                    # clip weights
+                    weights = self.clipper.step(weights=weights)
                 # perform learning
                 weights, m_x_pre, m_first_term, m_delta_w = self.learner.step(
                     spike_trace=spike_trace,

@@ -4,7 +4,7 @@ import gc
 from tqdm import tqdm
 import json
 from datetime import datetime
-from train import train_network
+from src.trainer import Trainer
 from get_data import (
     GeomfigDataStreamer,
 )
@@ -1577,19 +1577,10 @@ class snn_sleepy:
 
     def train_network(
         self,
-        plot_spikes_train=False,
-        plot_spikes_test=False,
-        plot_mp_train=False,
-        plot_mp_test=False,
-        plot_weights=True,
-        plot_threshold=False,
-        plot_traces_=False,
         train_weights=False,
         tau_trace=25,
-        learning_rate_exc=0.0008,
-        learning_rate_inh=0.005,
-        w_target_exc=0.01,
-        w_target_inh=-0.01,
+        learning_rate=0.0008,
+        w_target=0.01,
         var_noise=1,
         min_weight_inh=-25,
         track_weights=False,
@@ -1605,12 +1596,10 @@ class snn_sleepy:
         normalize_weights=False,  # Alternative to sleep: maintain initial weight sum
         normalize_per_column=True,  # Per-post-neuron normalization to initial column sums
         normalize_per_column_interval=1000,  # Normalize every N timesteps (default: 1000)
-        force_train=False,
         save_model=True,
         weight_decay=False,
         weight_decay_rate_exc=[0.9999],
         weight_decay_rate_inh=[0.9999],
-        compare_decay_rates=True,
         noisy_potential=True,
         noisy_threshold=False,
         noisy_weights=False,
@@ -1620,8 +1609,7 @@ class snn_sleepy:
         trace_update=False,
         timing_update=True,
         vectorized_trace=False,
-        clip_exc_weights=False,
-        clip_inh_weights=False,
+        clip_weights=False,
         alpha=1.1,
         beta=1.0,
         A_plus=0.5,
@@ -1629,7 +1617,7 @@ class snn_sleepy:
         tau_LTD=10,
         tau_LTP=10,
         w_max=10,
-        early_stopping=False,
+        early_stopping=False,  # reimplement this!
         early_stopping_patience_pct=0.1,  # Patience as percentage of total epochs (0.1 = 10%)
         dt=1,
         membrane_resistance_exc=30,
@@ -1638,57 +1626,26 @@ class snn_sleepy:
         spike_slope=-0.1,
         spike_intercept=-4,
         pca_variance=0.95,
-        w_interval=5,
-        start_time_spike_plot=None,
-        stop_time_spike_plot=None,
-        start_index_mp=None,
-        stop_index_mp=None,
-        time_start_mp=None,
-        time_stop_mp=None,
         mean_noise=0,
         max_mp=40,
-        plot_PCA=False,
         heatmap_plot=True,
         get_giffed=False,
         sleep_synchronized=True,
-        tau_pre_trace_exc=1,
-        tau_pre_trace_inh=1,
-        tau_post_trace_exc=1,
-        tau_post_trace_inh=1,
         weight_mean_noise=0.05,
         weight_var_noise=0.005,
         num_inh=10,
         num_exc=50,
         mu_weight=0.6,
-        plot_epoch_performance=True,
-        plot_weights_per_epoch=False,  # Plot weights after each epoch (for debugging)
-        plot_spikes_per_epoch=False,  # Plot spikes after each epoch (for debugging)
-        narrow_top=0.2,  # Increased from 0.05 to 0.2 (20% of neurons)
-        wide_top=0.15,
         tau_syn_exc=30,
         tau_syn_inh=30,
         tau_m_exc=30,
         tau_m_inh=30,
-        smoothening=350,
-        plot_top_response_train=False,
-        plot_top_response_test=False,
-        plot_tsne_during_training=True,  # New parameter for t-SNE plotting
-        tsne_plot_interval=1,  # Plot t-SNE every N epochs (1 = every epoch)
-        plot_spectrograms=False,
-        random_state=48,
-        samples=10,
         use_validation_data=False,
         accuracy_method="top",
         test_only=False,
-        test_batch_size=None,
-        patience=None,  # Can override percentage with explicit epoch count
         use_QDA=False,
         use_LR=True,
-        # Hard-pause sleep knobs
-        sleep_max_iters=5000,
-        on_timeout="scale_to_target",
-        sleep_tol_frac=1e-3,
-        sleep_mode="static",
+        reg_mode="static",
         track_stats=False,
         use_phi=True,
         use_pca=True,
@@ -1696,6 +1653,8 @@ class snn_sleepy:
         gif_pca_plot=True,
         gif_spikes_plot=True,
         profile=False,
+        update_weight_freq=100,
+        save_training_plots=False,
     ):
         self.dt = dt
         self.pca_variance = pca_variance
@@ -1750,6 +1709,26 @@ class snn_sleepy:
         self.model_parameters["se_weights"] = self.se_weights
         self.model_parameters["classes"] = self.classes
 
+        # prepare variables for training
+        initial_sums_se = self.weights[: self.st, self.st : self.ex].sum()
+        initial_sums_ee = self.weights[self.st : self.ex, self.st : self.ex].sum()
+        mp_new = mp.copy()  # we should maybe not have separate mp's for train and test?
+        nonzero_pre_idx = []
+        for i in range(self.N_exc):  # loop over postsynapses that receive STDP
+            nonzero_pre_idx.append(np.nonzero(self.weights[:, i]))
+        x_tar_se = np.zeros(self.N_x)
+        x_tar_ee = np.zeros(self.N_exc)
+        nz_rows_se, nz_cols_se = np.nonzero(self.weights[: self.st, self.st : self.ex])
+        nz_rows_ee, nz_cols_ee = np.nonzero(
+            self.weights[self.st : self.ex, self.st : self.ex]
+        )
+        nz_rows_exc, nz_cols_exc = np.nonzero(
+            self.weights[: self.ex, : self.ex]
+        )  # maybe it should be st:ex for the second dim?
+        nz_rows_inh, nz_cols_inh = np.nonzero(
+            self.weights[self.st : self.ex, self.ex : self.ih]
+        )
+
         # initiate the evaluator
         eval = Evaluator(
             xp_var_or_comps=pca_variance,
@@ -1757,6 +1736,72 @@ class snn_sleepy:
             do_phi=use_phi,
             do_LR=use_LR,
             do_pca=use_pca,
+        )
+        # initiate the trainer
+        trainer = Trainer(
+            resting_potential=self.resting_potential,
+            membrane_resistance_exc=membrane_resistance_exc,
+            membrane_resistance_inh=membrane_resistance_inh,
+            min_weight_exc=min_weight_exc,
+            max_weight_exc=max_weight_exc,
+            min_weight_inh=min_weight_inh,
+            max_weight_inh=max_weight_inh,
+            N_x=self.N_x,
+            N_inh=self.N_inh,
+            N_exc=self.N_exc,
+            learning_rate=learning_rate,
+            tau_LTP=tau_LTP,
+            tau_LTD=tau_LTD,
+            max_mp=max_mp,
+            min_mp=min_mp,
+            w_max=w_max,
+            clip_weights=clip_weights,
+            w_target=w_target,
+            max_sum_exc=max_sum_exc,
+            max_sum_inh=max_sum_inh,
+            dt=self.dt,
+            run=self.run,
+            A_plus=A_plus,
+            A_minus=A_minus,
+            tau_m_exc=tau_m_exc,
+            tau_m_inh=tau_m_inh,
+            sleep=sleep,
+            spike_adaptation=spike_adaption,
+            tau_adaption=tau_adaption,
+            delta_adaption=delta_adaption,
+            spike_threshold_default=spike_threshold_default,
+            save_plots=save_training_plots,
+            reset_potential=reset_potential,
+            initial_sums_se=initial_sums_se,
+            initial_sums_ee=initial_sums_ee,
+            dataset=self.image_dataset,
+            T=self.T,
+            tau_trace=tau_trace,
+            tau_syn_exc=tau_syn_exc,
+            tau_syn_inh=tau_syn_inh,
+            mean_noise=mean_noise,
+            var_noise=var_noise,
+            mu_weight=mu_weight,
+            st=self.st,
+            ex=self.ex,
+            ih=self.ih,
+            mp_new=mp_new,
+            time_per_item=self.num_steps,
+            normalize_weights=normalize_weights,
+            nonzero_pre_idx=nonzero_pre_idx,
+            track_stats=track_stats,
+            x_tar_se=x_tar_se,
+            x_tar_ee=x_tar_ee,
+            update_weight_freq=update_weight_freq,
+            reg_mode=reg_mode,
+            nz_rows_exc=nz_rows_exc,
+            nz_cols_exc=nz_cols_exc,
+            nz_rows_inh=nz_rows_inh,
+            nz_cols_inh=nz_cols_inh,
+            nz_rows_se=nz_rows_se,
+            nz_cols_se=nz_cols_se,
+            nz_rows_ee=nz_rows_ee,
+            nz_cols_ee=nz_cols_ee,
         )
 
         # Always attempt to load a matching model if not forcing a fresh run,
@@ -2549,84 +2594,6 @@ class snn_sleepy:
             spike_trace_te = np.zeros(self.N - self.N_inh)
 
             # Build common args locally in case outer scope wasn't initialized in this path
-            try:
-                _ca = common_args
-            except Exception:
-                _ca = dict(
-                    tau_syn_exc=tau_syn_exc,
-                    tau_syn_inh=tau_syn_inh,
-                    tau_m_exc=tau_m_exc,
-                    tau_m_inh=tau_m_inh,
-                    w_max=w_max,
-                    mu_weight=mu_weight,
-                    resting_potential=self.resting_potential,
-                    membrane_resistance_exc=membrane_resistance_exc,
-                    membrane_resistance_inh=membrane_resistance_inh,
-                    min_weight_exc=min_weight_exc,
-                    max_weight_exc=max_weight_exc,
-                    min_weight_inh=min_weight_inh,
-                    max_weight_inh=max_weight_inh,
-                    N_exc=self.N_exc,
-                    N_inh=self.N_inh,
-                    track_stats=track_stats,
-                    max_sum=max_sum,
-                    max_sum_exc=max_sum_exc,
-                    max_sum_inh=max_sum_inh,
-                    baseline_sum=baseline_sum,
-                    baseline_sum_exc=baseline_sum_exc,
-                    baseline_sum_inh=baseline_sum_inh,
-                    beta=beta,
-                    sleep_synchronized=sleep_synchronized,
-                    num_exc=num_exc,
-                    num_inh=num_inh,
-                    weight_decay=weight_decay,
-                    weight_decay_rate_exc=weight_decay_rate_exc[0],
-                    weight_decay_rate_inh=weight_decay_rate_inh[0],
-                    learning_rate_exc=learning_rate_exc,
-                    learning_rate_inh=learning_rate_inh,
-                    w_target_exc=w_target_exc,
-                    w_target_inh=w_target_inh,
-                    tau_LTP=tau_LTP,
-                    tau_LTD=tau_LTD,
-                    max_mp=max_mp,
-                    min_mp=min_mp,
-                    interval=interval,
-                    dt=self.dt,
-                    N=self.N,
-                    A_plus=A_plus,
-                    A_minus=A_minus,
-                    trace_update=trace_update,
-                    spike_adaption=spike_adaption,
-                    delta_adaption=delta_adaption,
-                    tau_adaption=tau_adaption,
-                    spike_threshold_default=spike_threshold_default,
-                    spike_intercept=spike_intercept,
-                    spike_slope=spike_slope,
-                    noisy_threshold=noisy_threshold,
-                    reset_potential=reset_potential,
-                    noisy_potential=noisy_potential,
-                    noisy_weights=noisy_weights,
-                    weight_mean_noise=weight_mean_noise,
-                    weight_var_noise=weight_var_noise,
-                    vectorized_trace=vectorized_trace,
-                    N_x=self.N_x,
-                    normalize_weights=normalize_weights,
-                    normalize_per_column=normalize_per_column,
-                    normalize_per_column_interval=normalize_per_column_interval,
-                    initial_sum_exc=initial_sum_exc,
-                    initial_sum_inh=initial_sum_inh,
-                    initial_sum_total=initial_sum_total,
-                    initial_sum_st_ex=initial_sum_st_ex,
-                    initial_sum_ex_ex=initial_sum_ex_ex,
-                    initial_sum_ex_ih=initial_sum_ex_ih,
-                    initial_sum_ih_ex=initial_sum_ih_ex,
-                    # pass hard-pause knobs
-                    sleep_max_iters=sleep_max_iters,
-                    on_timeout=on_timeout,
-                    sleep_tol_frac=sleep_tol_frac,
-                    sleep_mode=sleep_mode,
-                    time_per_item=self.num_steps,
-                )
 
             (
                 weights_te,
