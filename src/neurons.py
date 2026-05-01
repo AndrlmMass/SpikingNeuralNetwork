@@ -135,7 +135,7 @@ def update_spikes(
             a[j] += (-a[j] / tau_adaption) * dt
             if spikes[st + j] == 1:
                 a[j] += delta_adaption
-            spike_threshold[j] = spike_threshold_default[j] + a[j]
+            spike_threshold[j] = spike_threshold_default + a[j]
 
     for j in prange(N_exc + st):
         idx = j

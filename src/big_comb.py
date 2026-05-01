@@ -4,7 +4,7 @@ import gc
 from tqdm import tqdm
 import json
 from datetime import datetime
-from src.trainer import Trainer
+from trainer import Trainer
 from get_data import (
     GeomfigDataStreamer,
 )
@@ -1590,7 +1590,6 @@ class snn_sleepy:
         spike_threshold_default=-55,
         min_mp=-100,
         sleep=False,
-        sleep_ratio=0.0,  # Sleep percentage per interval (e.g., 0.1 = 10%)
         normalize_weights=False,  # Alternative to sleep: maintain initial weight sum
         save_model=True,
         spike_adaption=True,
@@ -1618,7 +1617,7 @@ class snn_sleepy:
         tau_syn_inh=30,
         tau_m_exc=30,
         tau_m_inh=30,
-        use_validation_data=False,
+        use_validation_data=False,  # passed as false - WHY?
         accuracy_method="top",
         use_QDA=False,
         use_LR=True,
@@ -1630,7 +1629,10 @@ class snn_sleepy:
         gif_pca_plot=True,
         gif_spikes_plot=True,
         profile=False,
-        update_weight_freq=100,
+        reg_frequency=10000,  # need to ensure that this is divisible by the number of samples so that regularization doesnt split batches
+        sleep_duration=1000,
+        stat_tracking_frequency=1000,
+        update_weights_freq=100,
         save_training_plots=False,
     ):
         self.dt = dt
@@ -1638,7 +1640,6 @@ class snn_sleepy:
         self.use_validation_data = use_validation_data
         self.use_QDA = use_QDA
         self.use_LR = use_LR
-        self.sleep_ratio = sleep_ratio
         self.normalize_weights = normalize_weights
 
         # ensure conditions are met
@@ -1647,31 +1648,6 @@ class snn_sleepy:
 
         # Save current parameters
         self.model_parameters = {**locals()}
-        remove = [
-            "self",
-            "force_train",
-            "save_model",
-            "plot_mp_train",
-            "plot_mp_test",
-            "plot_spikes_train",
-            "plot_spikes_test",
-            "plot_weights",
-            "plot_threshold",
-            "plot_traces_",
-            "start_time_spike_plot",
-            "stop_time_spike_plot",
-            "start_index_mp",
-            "stop_index_mp",
-            "time_start_mp",
-            "time_stop_mp",
-            "plot_top_response_train",
-            "plot_top_response_test",
-        ]
-
-        # Remove elements from model_parameters
-        for element in remove:
-            self.model_parameters.pop(element)
-
         self.model_parameters["all_train"] = self.all_train
         self.model_parameters["all_test"] = self.all_test
         self.model_parameters["all_val"] = self.all_val
@@ -1689,6 +1665,9 @@ class snn_sleepy:
         self.model_parameters["ei_weights"] = self.ei_weights
         self.model_parameters["se_weights"] = self.se_weights
         self.model_parameters["classes"] = self.classes
+        del self.model_parameters[
+            "self"
+        ]  # Remove self reference to avoid issues with JSON serialization
 
         # prepare variables for training
         initial_sums_se = self.weights[: self.st, self.st : self.ex].sum()
@@ -1725,6 +1704,12 @@ class snn_sleepy:
             resting_potential=self.resting_potential,
             membrane_resistance_exc=membrane_resistance_exc,
             membrane_resistance_inh=membrane_resistance_inh,
+            update_weights_freq=update_weights_freq,
+            reg_frequency=reg_frequency,
+            sleep_duration=sleep_duration,
+            stat_tracking_frequency=stat_tracking_frequency,
+            track_stats=track_stats,
+            track_weights=track_weights,
             min_weight_exc=min_weight_exc,
             max_weight_exc=max_weight_exc,
             min_weight_inh=min_weight_inh,
@@ -1747,7 +1732,7 @@ class snn_sleepy:
             tau_m_exc=tau_m_exc,
             tau_m_inh=tau_m_inh,
             sleep=sleep,
-            spike_adaptation=spike_adaptation,
+            spike_adaption=spike_adaption,
             tau_adaption=tau_adaption,
             delta_adaption=delta_adaption,
             spike_threshold_default=spike_threshold_default,
@@ -1756,7 +1741,6 @@ class snn_sleepy:
             initial_sums_se=initial_sums_se,
             initial_sums_ee=initial_sums_ee,
             dataset=self.image_dataset,
-            T=self.T,
             tau_trace=tau_trace,
             tau_syn_exc=tau_syn_exc,
             tau_syn_inh=tau_syn_inh,
@@ -1770,11 +1754,8 @@ class snn_sleepy:
             time_per_item=self.num_steps,
             normalize_weights=normalize_weights,
             nonzero_pre_idx=nonzero_pre_idx,
-            track_stats=track_stats,
-            track_weights=track_weights,
             x_tar_se=x_tar_se,
             x_tar_ee=x_tar_ee,
-            update_weight_freq=update_weight_freq,
             reg_mode=reg_mode,
             nz_rows_exc=nz_rows_exc,
             nz_cols_exc=nz_cols_exc,
@@ -2360,7 +2341,7 @@ class snn_sleepy:
 
         # Reuse test-only evaluator logic with partition="test"
         total_num_tests = max(1, self.all_images_test // self.batch_image_test)
-        bs_spikes = int(self.batch_image_test * self.num_steps)
+        T_test_batch = int(self.batch_image_test * self.num_steps)
         test_sample_count = 0
         acc_te_sum = 0.0
         phi_te_sum = 0.0
@@ -2382,7 +2363,7 @@ class snn_sleepy:
 
             mp_test = np.zeros((self.ih - self.st))
             mp_test[:] = self.resting_potential
-            spikes_test = np.zeros((bs_spikes, self.N), dtype=np.int8)
+            spikes_test = np.zeros((T_test_batch, self.N), dtype=np.int8)
             spikes_test[:, : self.st] = data_test
             a_test = np.zeros(self.N_exc + self.N_inh)
             I_syn_exc_test = np.zeros(self.N_exc)

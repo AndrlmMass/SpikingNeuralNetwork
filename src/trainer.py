@@ -4,11 +4,11 @@ from tqdm import tqdm
 import numpy as np
 
 # import internal packages
-from src.regularization import Sleep, Normalizer
-from src.neurons import NeuronState, MembranePotential, update_x_tar
-from src.performance import report_RAM_usage, spawn_plot_thread
-from src.synapses import Learner, Clipper
-from src.trackers import TrainTracker
+from regularization import Sleep, Normalizer
+from neurons import NeuronState, MembranePotential, update_x_tar
+from performance import report_RAM_usage, spawn_plot_thread
+from synapses import Learner, Clipper
+from trackers import TrainTracker
 
 
 @dataclass
@@ -46,7 +46,6 @@ class Trainer:
     initial_sums_ee: np.ndarray
     dataset: str
     N_x: int
-    T: int
     clip_weights: bool
     tau_trace: int | float
     tau_syn_exc: int | float
@@ -67,8 +66,9 @@ class Trainer:
     update_weights_freq: int
     reg_frequency: int
     sleep_duration: int
+    track_weights: bool
+    track_stats: bool
     stat_tracking_frequency: int
-    update_weight_freq: int
     reg_mode: str
     nz_rows_exc: list  # why do we have so many of these?
     nz_cols_exc: list  # why do we have so many of these?
@@ -100,7 +100,7 @@ class Trainer:
             mp_new=self.mp_new,
             resting_potential=self.resting_potential,
             membrane_resistance_exc=self.membrane_resistance_exc,
-            memebrane_resistance_inh=self.membrane_resistance_inh,
+            membrane_resistance_inh=self.membrane_resistance_inh,
             dt=self.dt,
             st=self.st,
             ex=self.ex,
@@ -136,6 +136,9 @@ class Trainer:
         # initiate tracker
         self.tracker = TrainTracker(
             N_exc=self.N_exc,
+            st=self.st,
+            ex=self.ex,
+            ih=self.ih,
             track_stats=self.track_stats,
             track_weights=self.track_weights,
         )
@@ -185,7 +188,6 @@ class Trainer:
         spike_trace,
         training_mode,
         spike_threshold,
-        track_weights,
         I_syn_exc,
         I_syn_inh,
         a,
@@ -223,7 +225,7 @@ class Trainer:
         weights_inh = np.ascontiguousarray(weights[:, self.ex : self.ih].T)
 
         # prepare progress bar
-        pbar = tqdm(range(1, self.T), desc=desc, leave=False, mininterval=1.0)
+        pbar = tqdm(range(1, spikes.shape[0]), desc=desc, leave=False, mininterval=1.0)
 
         # report ram before training
         report_RAM_usage()
