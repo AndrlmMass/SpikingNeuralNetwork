@@ -22,6 +22,7 @@ class TrainTracker:
         self.track_count = self.x_tar_count = 0
         self.x_tar_sum_se = self.x_tar_sum_ee = 0.0
         self.first_term_sum = self.delta_w_sum = self.x_pre_sum = 0.0
+        self.second_term_sum = 0.0
 
     def track_neuron(
         self,
@@ -53,12 +54,14 @@ class TrainTracker:
         self,
         m_x_pre,
         m_first_term,
+        m_second_term,
         m_delta_w,
         x_tar_se,
         x_tar_ee,
     ):
         self.x_pre_sum += m_x_pre
         self.first_term_sum += m_first_term
+        self.second_term_sum += m_second_term
         self.delta_w_sum += m_delta_w
         self.x_tar_sum_se += x_tar_se.mean()
         self.x_tar_sum_ee += x_tar_ee.mean()
@@ -96,8 +99,6 @@ class TrainTracker:
             print(f"Mean I syn ex: {mean_I_syn_ex}")
             print(f"Mean I syn ih: {mean_I_syn_ih}")
             print(f"Mean a ex: {mean_a_ex}")
-            print(f"Mean x_tar se: {mean_x_tar_se}")
-            print(f"Mean x_tar ex: {mean_x_tar_ee}")
             # print(f"Mean a ih: {mean_a_ih}")
             print(f"Mean spike threshold ex: {mean_spike_threshold_ex}")
             # print(f"Mean spike threshold ih: {mean_spike_threshold_ih}")
@@ -150,15 +151,15 @@ class TrainTracker:
             )
         if track_weights:
             # calculate mean
-            self.x_pre_mean = self.x_pre_mean / self.x_tar_count
-            self.first_term_sum += self.m_first_term
-            self.delta_w_sum += self.m_delta_w
-            self.x_tar_sum_se += self.x_tar_se.mean()
-            self.x_tar_sum_ee += self.x_tar_ee.mean()
-            mean_x_tar_se = self.x_tar_sum_se / max(1, self.x_tar_count)
-            mean_x_tar_ee = self.x_tar_sum_ee / max(1, self.x_tar_count)
-            print(f"Mean x_pre: {self.x_pre_sum/x}")
-            print(f"Mean x_pre: {self.mean_x_pre}")
-            print(f"Mean first_term: {self.mean_first_term}")
-            print(f"Mean second_term: {self.mean_second_term}")
-            print(f"Mean delta_w: {self.mean_delta_w}")
+            x_pre_mean = self.x_pre_mean / self.x_tar_count
+            first_term_sum = self.m_first_term / self.x_tar_count
+            second_term_mean = self.m_second_term / self.x_tar_count
+            delta_w_sum = self.m_delta_w / self.x_tar_count
+            x_tar_mean_se = self.x_tar_se / self.x_tar_count
+            x_tar_mean_ee = self.x_tar_ee / self.x_tar_count
+            print(f"Mean x_pre: {x_pre_mean}")
+            print(f"Mean first_term: {first_term_sum}")
+            print(f"Mean second_term: {second_term_mean}")
+            print(f"Mean delta_w: {delta_w_sum}")
+            print(f"Mean x_tar se: {x_tar_mean_se}")
+            print(f"Mean x_tar ee: {x_tar_mean_ee}")

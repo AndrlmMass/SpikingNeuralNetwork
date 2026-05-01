@@ -29,8 +29,6 @@ class Trainer:
     min_mp: float
     w_max: float
     w_target: float
-    max_sum_exc: int
-    max_sum_inh: int
     dt: int | float
     run: str
     A_plus: float
@@ -178,7 +176,7 @@ class Trainer:
                 nz_cols=self.nz_cols_ee,
             )
 
-    def run(
+    def step(
         self,
         weights,
         mp,
