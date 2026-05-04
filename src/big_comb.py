@@ -1975,7 +1975,7 @@ class snn_sleepy:
                     spikes=spikes_train,
                     spike_labels=labels_train,
                     spike_trace=spike_trace,
-                    training_mode=training_mode,
+                    training_mode="train",
                     spike_threshold=spike_threshold,
                     I_syn_exc=I_syn_exc,
                     I_syn_inh=I_syn_inh,
@@ -2320,7 +2320,6 @@ class snn_sleepy:
 
         if gif_spikes_plot and heatmap_plot:
             from plot import GenerateGif
-            from datetime import datetime
 
             output_filename = "evolution.gif"
             directory = os.path.join(
@@ -2392,7 +2391,6 @@ class snn_sleepy:
                 spike_trace=spike_trace_te,
                 training_mode="test",
                 spike_threshold=spike_threshold_test.copy(),
-                track_weights=False,
                 I_syn_exc=I_syn_exc_test.copy(),
                 I_syn_inh=I_syn_inh_test.copy(),
                 a=a_test.copy(),

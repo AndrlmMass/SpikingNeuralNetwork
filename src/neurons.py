@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 
 
-@njit(parallel=True, cache=True)
+@njit(cache=True)
 def update_membrane_potential(
     mp,
     mp_new,
@@ -45,7 +45,7 @@ def update_membrane_potential(
     nonzero_exc_src = np.where(spikes[st:ex] != 0)[0] + st  # exc spiking → inh targets
 
     # --- Excitatory population ---
-    for i in prange(N_exc):
+    for i in range(N_exc):
         drive = 0.0
         for j in nonzero_all:  # only active pre-synaptic neurons
             drive += weights_exc[i, j]
@@ -66,7 +66,7 @@ def update_membrane_potential(
             delta_I_syn_ex[i] = d_I
 
     # --- Inhibitory population ---
-    for i in prange(N_inh):
+    for i in range(N_inh):
         ih_id = i + N_exc
         drive = 0.0
         for j in nonzero_exc_src:  # only spiking exc neurons
@@ -98,7 +98,7 @@ def update_membrane_potential(
     )
 
 
-@njit(parallel=True, cache=True)
+@njit(cache=True)
 def update_spikes(
     st,
     ih,
@@ -116,12 +116,11 @@ def update_spikes(
     spike_threshold,
     spike_threshold_default,
     reset_potential,
-    tau_trace,
+    decay,
 ):
-    decay = np.exp(-dt / tau_trace)
     n_total = ih - st
 
-    for j in prange(n_total):
+    for j in range(n_total):
         if mp[j] < min_mp:
             mp[j] = min_mp
         elif mp[j] > max_mp:
@@ -137,7 +136,7 @@ def update_spikes(
                 a[j] += delta_adaption
             spike_threshold[j] = spike_threshold_default + a[j]
 
-    for j in prange(N_exc + st):
+    for j in range(N_exc + st):
         idx = j
         if spikes[idx] == 1:
             spike_trace[idx] = spike_trace[idx] * decay + 1.0
@@ -176,8 +175,10 @@ class NeuronState:
     reset_potential: float | int
     tau_trace: float
 
-    def step(self, mp, a, spike_trace, spikes, spike_threshold):
+    def __post_init__(self):
+        self.decay = np.exp(-self.dt / self.tau_trace)
 
+    def step(self, mp, a, spike_trace, spikes, spike_threshold):
         return update_spikes(
             st=self.st,
             ih=self.ih,
@@ -195,7 +196,7 @@ class NeuronState:
             spike_threshold=spike_threshold,
             spike_threshold_default=self.spike_threshold_default,
             reset_potential=self.reset_potential,
-            tau_trace=self.tau_trace,
+            decay=self.decay,
         )
 
 

@@ -83,8 +83,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 5000, 500, 2000
-        b_tr, b_va, b_te = 1000, 500, 1000
+        img_tr, img_va, img_te = 100, 100, 100
+        b_tr, b_va, b_te = 100, 100, 100
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -334,7 +334,7 @@ def main():
     parser.add_argument(
         "--profile",
         action="store_true",
-        default=False,
+        default=True,
         help="enable cProfile around training to find hotspots",
     )
     parser.add_argument(

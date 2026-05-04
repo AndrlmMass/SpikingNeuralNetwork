@@ -193,6 +193,12 @@ class Trainer:
         a,
         x_tar_se,
         x_tar_ee,
+        num=0,
+        sleep_remaining=0,
+        _track_stats=False,
+        normalize_now=False,
+        update_weights_now=False,
+        noisy_potential_now=False,
     ):
         # define desc and stat-collection
         if training_mode == "train":
@@ -204,18 +210,12 @@ class Trainer:
             desc = "Validating network"
             track_weights = False
             track_stats = False
-        else:
+        elif training_mode == "test":
             desc = "Testing network:"
             track_weights = False
             track_stats = False
-
-        # reset guards
-        num = 0
-        sleep_remaining = 0
-        _track_stats = False
-        normalize_now = False
-        update_weights_now = False
-        noisy_potential_now = False
+        else:
+            raise ValueError("training_mode must be 'train', 'val', or 'test'.")
 
         # set variables
         plot_threads = []
@@ -239,7 +239,7 @@ class Trainer:
         # run training for T iterations
         for t in pbar:
             if training_mode == "train":
-                if t % self.update_weight_freq == 0:
+                if t % self.update_weights_freq == 0:
                     update_weights_now = True
                 if t % self.reg_frequency == 0:
                     if self.normalize_weights:
@@ -389,6 +389,7 @@ class Trainer:
                     spikes=spikes_prev,
                     x_tar_se=x_tar_se,
                     x_tar_ee=x_tar_ee,
+                    track_weights=track_weights,
                 )
                 # regularize weights
                 if self.normalize_weights and normalize_now:

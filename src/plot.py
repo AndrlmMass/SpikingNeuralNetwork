@@ -1086,9 +1086,14 @@ class GenerateGif:
         # Find all JPG or PNG files in the specified folder
         # Adjust the extension if your files have a different format (e.g., '*.png')
         files = glob.glob(f"{frame_folder}/*.png")
-        files_sorted = sorted(files, key=lambda f: int(f.split("\\")[-1].split(".")[0]))
-        frames = [Image.open(image) for image in files_sorted]
+        if len(files) > 1:
+            files_sorted = sorted(
+                files, key=lambda f: int(f.split("\\")[-1].split(".")[0])
+            )
+        else:
+            return
 
+        frames = [Image.open(image) for image in files_sorted]
         if not frames:
             print(f"No images found in {frame_folder}")
             return
@@ -1132,7 +1137,13 @@ class PCAScatterDisplay:
         for c in np.unique(Y).astype(int):
             mask = Y == c
             self.ax_.scatter(X[mask, 0], X[mask, 1], alpha=0.5, s=20, c=self.colors_[c])
-            self.ax_.scatter(X[mask, 0].mean(), X[mask, 1].mean(), s=100, marker="x", c=self.colors_[c])
+            self.ax_.scatter(
+                X[mask, 0].mean(),
+                X[mask, 1].mean(),
+                s=100,
+                marker="x",
+                c=self.colors_[c],
+            )
 
         self.ax_.legend()
         title = f"Batch {epoch}"
