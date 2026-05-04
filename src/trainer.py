@@ -178,6 +178,8 @@ class Trainer:
                 nz_rows=self.nz_rows_ee,
                 nz_cols=self.nz_cols_ee,
             )
+        # define empty spikes array for napping
+        self.empty_spikes = np.zeros(self.ih, dtype=np.int8)
 
     def step(
         self,
@@ -276,7 +278,7 @@ class Trainer:
             # Activate napping babyyy
             while sleep_remaining > 0:
                 # remove inputs
-                spikes_buf[:] = spikes_prev
+                spikes_buf = spikes_prev.copy()
                 spikes_buf[: self.st] = 0
 
                 # update membrane potential
@@ -322,6 +324,7 @@ class Trainer:
                     spike_trace=spike_trace,
                     weights=weights,
                     spikes=spikes_buf,
+                    track_weights=True,
                     x_tar_se=x_tar_se,
                     x_tar_ee=x_tar_ee,
                 )

@@ -182,22 +182,6 @@ def main():
         "--no-train", action="store_true", default=False, help="disable training"
     )
     parser.add_argument(
-        "--sleep-rate",
-        type=float,
-        nargs="+",
-        default=[0.1],
-        help=(
-            "sleep rate(s) during training "
-            "(can specify multiple, e.g., --sleep-rate 0.5 0.6 0.7)"
-        ),
-    )
-    parser.add_argument(
-        "--sleep-max-iters",
-        type=int,
-        default=10000,
-        help="maximum number of iterations to sleep",
-    )
-    parser.add_argument(
         "--on_timeout", type=str, default="give_up", help="action to take on timeout"
     )
     parser.add_argument(
@@ -209,13 +193,13 @@ def main():
     parser.add_argument(
         "--no-sleep",
         action="store_true",
-        default=True,
+        default=False,
         help="disable sleep during training (default: sleep enabled)",
     )
     parser.add_argument(
         "--no_normalize-weights",
         action="store_true",
-        default=False,
+        default=True,
         help="enable per-group weight-sum normalization (may slow training)",
     )
     parser.add_argument(

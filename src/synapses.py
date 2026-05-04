@@ -30,7 +30,7 @@ def clip_weights(
     return weights
 
 
-@njit(parallel=True, cache=True)
+@njit(parallel=False, cache=True)
 def trace_STDP(
     learning_rate,
     spike_trace,
@@ -80,7 +80,7 @@ def trace_STDP(
         )
     else:
         # Parallel path for production
-        for i in prange(N_x, n_neurons):
+        for i in range(N_x, n_neurons):
             pre_indices = nonzero_pre_idx[i - N_x]
             for j in pre_indices:
                 if j == -1:
