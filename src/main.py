@@ -83,7 +83,7 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 100, 100, 100
+        img_tr, img_va, img_te = 400, 400, 400
         b_tr, b_va, b_te = 100, 100, 100
         force_recreate_flag = False
     snn_N.prepare_data(
@@ -140,7 +140,7 @@ def run_once(
         tau_syn_inh=tau_syn_inh,
         tau_m_exc=tau_m_exc,
         tau_m_inh=tau_m_inh,
-        reg_mode="static",
+        reg_mode="post",
         use_phi=True,
         w_target=1.0,
         clip_weights=True,

@@ -71,7 +71,6 @@ class Sleep:
 
     def __post_init__(self):
         self.sleep_lambda = 1.0 / self.duration
-        self.scale = np.ones(self.nz_rows.size, dtype=np.float64)
         self.w_target_pow = self.w_target**self.sleep_lambda
         self.sleep_lambda_complement = 1.0 - self.sleep_lambda
         if self.mode == "post" and np.ndim(self.initial_sums) == 0:
@@ -85,15 +84,15 @@ class Sleep:
         """Call once when sleep begins — precomputes scale from current weights"""
         if self.mode == "layer":
             rho = self.initial_sums / (weights[self.nz_rows, self.nz_cols].sum() + 1e-8)
-            self.scale[:] = rho**self.sleep_lambda
+            self.scale = rho**self.sleep_lambda
         elif self.mode == "post":
             current_sum = np.bincount(
                 self.nz_cols,
                 weights[self.nz_rows, self.nz_cols],
                 minlength=weights.shape[1],
             )
-            rho = self.initial_sums / (current_sum[self.nz_cols] + 1e-8)
-            self.scale[:] = rho**self.sleep_lambda
+            rho = self.initial_sums / (current_sum + 1e-8)
+            self.scale = rho**self.sleep_lambda
 
     def step(self, weights):
         """Call each sleep timestep — pure dispatch to @njit"""

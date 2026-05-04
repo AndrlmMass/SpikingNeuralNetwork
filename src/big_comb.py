@@ -1671,8 +1671,19 @@ class snn_sleepy:
         ]  # Remove self reference to avoid issues with JSON serialization
 
         # prepare variables for training
-        initial_sums_se = self.weights[: self.st, self.st : self.ex].sum()
-        initial_sums_ee = self.weights[self.st : self.ex, self.st : self.ex].sum()
+        if reg_mode == "static":
+            initial_sums_se = np.zeros(1)
+            initial_sums_ee = np.zeros(1)
+        if reg_mode == "post":
+            initial_sums_se = self.weights[: self.st, self.st : self.ex].sum(axis=0)
+            initial_sums_ee = self.weights[self.st : self.ex, self.st : self.ex].sum(
+                axis=0
+            )
+            pass
+        elif reg_mode == "layer":
+            initial_sums_se = self.weights[: self.st, self.st : self.ex].sum()
+            initial_sums_ee = self.weights[self.st : self.ex, self.st : self.ex].sum()
+
         mp_new = np.zeros(
             (self.ih - self.st)
         )  # Create generic mp_new for all uses (train, val and test)
