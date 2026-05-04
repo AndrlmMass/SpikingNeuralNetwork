@@ -1,8 +1,9 @@
+import numpy as np
 from numba import njit, prange
 from dataclasses import dataclass
 
 
-@njit(cache=True, parallel=True)
+@njit(cache=True)
 def clip_weights(
     weights,
     nz_cols_exc,
@@ -55,6 +56,8 @@ def trace_STDP(
             if spikes[i] == 1:
                 pre_indices = nonzero_pre_idx[i - N_x]
                 for j in pre_indices:
+                    if j == -1:
+                        continue  # Skip padding
                     if j < N_x:
                         first_trm = spike_trace[j] - x_tar_se
                     else:
@@ -80,6 +83,8 @@ def trace_STDP(
         for i in prange(N_x, n_neurons):
             pre_indices = nonzero_pre_idx[i - N_x]
             for j in pre_indices:
+                if j == -1:
+                    continue  # Skip padding
                 if j < N_x:
                     first_trm = spike_trace[j] - x_tar_se
                 else:
@@ -100,19 +105,28 @@ class Learner:
     w_max: float
     mu_weight: float
 
+    def __post_init__(self):
+        # In Learner.__post_init__, pad to fixed width:
+        max_len = max(len(x) for x in self.nonzero_pre_idx)
+        self.pre_idx_arr = np.full(
+            (len(self.nonzero_pre_idx), max_len), -1, dtype=np.int64
+        )
+        for i, idx in enumerate(self.nonzero_pre_idx):
+            self.pre_idx_arr[i, : len(idx)] = idx
+
     def step(self, weights, spikes, spike_trace, x_tar_se, x_tar_ee, track_weights):
         return trace_STDP(
-            learning_rate=self.learning_rate,
-            spike_trace=spike_trace,
-            weights=weights,
-            N_x=self.N_x,
-            spikes=spikes,
-            nonzero_pre_idx=self.nonzero_pre_idx,
-            x_tar_se=x_tar_se,
-            x_tar_ee=x_tar_ee,
-            track_weights=track_weights,
-            w_max=self.w_max,
-            mu_weight=self.mu_weight,
+            self.learning_rate,
+            spike_trace,
+            weights,
+            self.N_x,
+            spikes,
+            self.pre_idx_arr,
+            x_tar_se,
+            x_tar_ee,
+            track_weights,
+            self.w_max,
+            self.mu_weight,
         )
 
 
@@ -130,12 +144,12 @@ class Clipper:
     def step(self, weights):
         return clip_weights(
             weights,
-            nz_cols_exc=self.nz_cols_exc,
-            nz_cols_inh=self.nz_cols_inh,
-            nz_rows_exc=self.nz_rows_exc,
-            nz_rows_inh=self.nz_rows_inh,
-            min_weight_exc=self.min_weight_exc,
-            max_weight_exc=self.max_weight_exc,
-            min_weight_inh=self.min_weight_inh,
-            max_weight_inh=self.max_weight_inh,
+            self.nz_cols_exc,
+            self.nz_cols_inh,
+            self.nz_rows_exc,
+            self.nz_rows_inh,
+            self.min_weight_exc,
+            self.max_weight_exc,
+            self.min_weight_inh,
+            self.max_weight_inh,
         )

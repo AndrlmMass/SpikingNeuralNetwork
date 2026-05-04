@@ -218,7 +218,6 @@ class Trainer:
             raise ValueError("training_mode must be 'train', 'val', or 'test'.")
 
         # set variables
-        plot_threads = []
         mp_prev = mp.copy()
         spikes_prev = spikes[0].copy()
         weights_exc = np.ascontiguousarray(weights[:, self.st : self.ex].T)
@@ -256,7 +255,7 @@ class Trainer:
                 if track_stats:
                     _track_stats = True
                 if self.save_plots:
-                    num, thread = spawn_plot_thread(
+                    num, _ = spawn_plot_thread(
                         t,
                         spikes,
                         spike_trace,
@@ -264,12 +263,15 @@ class Trainer:
                         weights,
                         x_tar_se,
                         x_tar_ee,
-                        self.num,
+                        num,
                         self.plot_iterations,
+                        self.st,
+                        self.ex,
+                        self.ih,
+                        self.dataset,
+                        self.run,
+                        self.save_plots,
                     )
-                    plot_threads.append(thread)
-                    # update num
-                    num += 1
 
             # Activate napping babyyy
             while sleep_remaining > 0:
@@ -433,10 +435,6 @@ class Trainer:
             # Update maintained previous-step state for next iteration
             mp_prev = mp
             spikes_prev = spikes[t]
-
-        # After the loop, before return:
-        for pt in plot_threads:
-            pt.join(timeout=0)  # don't block, daemon threads finish on their own
 
         # print final stats - might add if-statement clause for this. Bit annoying for long runs.
         self.tracker.print(

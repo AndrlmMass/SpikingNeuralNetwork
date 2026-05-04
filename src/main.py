@@ -38,7 +38,7 @@ def run_once(
         num_input = 784
         use_validation_data = True
         w_dense_se = 0.05  # original: 0.05
-        w_dense_ee = 0.1  # original: 0.05
+        w_dense_ee = 0.05  # original: 0.05
         w_dense_ei = 0.05  # original: 0.05
         w_dense_ie = 0.05  # original: 0.05
         se_weights = 1.0  # original: 1.0
@@ -280,7 +280,7 @@ def main():
     parser.add_argument(
         "--heatmap-plot",
         action="store_true",
-        default=True,
+        default=False,
         help="plot the heatmap of the weights",
     )
     parser.add_argument(

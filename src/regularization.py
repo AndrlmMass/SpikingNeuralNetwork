@@ -1,23 +1,23 @@
-import numpy as np
 from dataclasses import dataclass
-from numba import njit, prange
+from numba import njit
+import numpy as np
 
 
-@njit(cache=True, parallel=True)
+@njit(cache=True)
 def static_norm(weights, target, nz_rows, nz_cols):
-    for i in prange(nz_rows.size):
+    for i in range(nz_rows.size):
         weights[nz_rows[i], nz_cols[i]] = target
     return weights
 
 
-@njit(cache=True, parallel=True)
+@njit(cache=True)
 def dynamic(weights, scale, nz_rows, nz_cols):
-    for i in prange(nz_rows.size):
+    for i in range(nz_rows.size):
         weights[nz_rows[i], nz_cols[i]] *= scale[i]
     return weights
 
 
-@njit(parallel=True, cache=True)
+@njit(cache=True)
 def static_sleep(
     weights,
     w_target,
@@ -26,7 +26,7 @@ def static_sleep(
     nz_cols,
 ):
     # Apply decay to columns [N_x, N_post] (excitatory weights)
-    for i in prange(nz_rows.size):
+    for i in range(nz_rows.size):
         w = weights[nz_rows[i], nz_cols[i]]
         weights[nz_rows[i], nz_cols[i]] = w * (w_target / w) ** sleep_lambda
     return weights
@@ -37,8 +37,11 @@ class Normalizer:
     mode: str
     initial_sum: np.ndarray
     target: float
-    nz_rows: list
-    nz_cols: list
+    nz_rows: np.ndarray
+    nz_cols: np.ndarray
+
+    def __post_init__(self):
+        self.scale = np.ones(self.nz_rows.size, dtype=np.float64)
 
     def step(self, weights):
         if self.mode == "static":
@@ -46,16 +49,14 @@ class Normalizer:
 
         elif self.mode == "layer":
             current_sum = weights[self.nz_rows, self.nz_cols].sum()
-            self.scale = np.full(
-                self.nz_rows.size, self.initial_sum.sum() / current_sum
-            )
+            self.scale[:] = self.initial_sum.sum() / current_sum
         elif self.mode == "post":
             current_sum = np.bincount(
                 self.nz_cols,
                 weights[self.nz_rows, self.nz_cols],
                 minlength=weights.shape[1],
             )
-            self.scale = self.initial_sum / (current_sum[self.nz_cols] + 1e-8)
+            self.scale[:] = self.initial_sum.sum() / current_sum
         return dynamic(weights, self.scale, self.nz_rows, self.nz_cols)
 
 

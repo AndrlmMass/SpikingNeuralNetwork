@@ -16,6 +16,7 @@ from plot import (
     PCAScatterDisplay,
 )
 from evaluation import Evaluator
+from performance import start_plot_worker, stop_plot_worker
 from create_network import create_weights, create_arrays
 import matplotlib.pyplot as plt
 
@@ -1610,7 +1611,7 @@ class snn_sleepy:
         pca_variance=0.95,
         mean_noise=0,
         max_mp=40,
-        heatmap_plot=True,
+        heatmap_plot=False,
         get_giffed=False,
         mu_weight=0.6,
         tau_syn_exc=30,
@@ -1956,6 +1957,8 @@ class snn_sleepy:
 
                     profiler = cProfile.Profile()
                     profiler.enable()
+                if heatmap_plot:
+                    start_plot_worker()
                 # train network
                 (
                     self.weights,
@@ -1983,6 +1986,8 @@ class snn_sleepy:
                     x_tar_se=x_tar_se,
                     x_tar_ee=x_tar_ee,
                 )
+                if heatmap_plot:
+                    stop_plot_worker()
 
                 if profile:
                     profiler.disable()
