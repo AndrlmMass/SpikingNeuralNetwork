@@ -1630,8 +1630,8 @@ class snn_sleepy:
         gif_pca_plot=True,
         gif_spikes_plot=True,
         profile=False,
-        reg_frequency=10000,  # need to ensure that this is divisible by the number of samples so that regularization doesnt split batches
-        sleep_duration=1000,
+        reg_frequency=1000,  # need to ensure that this is divisible by the number of samples so that regularization doesnt split batches
+        sleep_duration=300,
         stat_tracking_frequency=1000,
         update_weights_freq=100,
         save_training_plots=False,
@@ -1674,12 +1674,11 @@ class snn_sleepy:
         if reg_mode == "static":
             initial_sums_se = np.zeros(1)
             initial_sums_ee = np.zeros(1)
-        if reg_mode == "post":
+        elif reg_mode == "post":
             initial_sums_se = self.weights[: self.st, self.st : self.ex].sum(axis=0)
             initial_sums_ee = self.weights[self.st : self.ex, self.st : self.ex].sum(
                 axis=0
             )
-            pass
         elif reg_mode == "layer":
             initial_sums_se = self.weights[: self.st, self.st : self.ex].sum()
             initial_sums_ee = self.weights[self.st : self.ex, self.st : self.ex].sum()

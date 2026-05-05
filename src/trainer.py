@@ -67,7 +67,6 @@ class Trainer:
     reg_frequency: int
     sleep_duration: int
     track_weights: bool
-    track_stats: bool
     stat_tracking_frequency: int
     reg_mode: str
     nz_rows_exc: list  # why do we have so many of these?
@@ -80,6 +79,14 @@ class Trainer:
     nz_rows_ee: list  # why do we have so many of these?
 
     def __post_init__(self):
+        # convert bools to numpy bools
+        self.track_stats = np.uint8(self.track_stats)
+        self.track_weights = np.uint8(self.track_weights)
+        self.spike_adaption = np.uint8(self.spike_adaption)
+        self.clip_weights = np.uint8(self.clip_weights)
+        self.sleep = np.uint8(self.sleep)
+        self.normalize_weights = np.uint8(self.normalize_weights)
+        self.clip_weights = np.uint8(self.clip_weights)
         # initiate neuron class
         self.neuron = NeuronState(
             st=self.st,
@@ -170,6 +177,7 @@ class Trainer:
                 target=self.w_target,
                 nz_rows=self.nz_rows_se,
                 nz_cols=self.nz_cols_se,
+                weight_cols=self.N_exc,
             )
             self.norm_ee = Normalizer(
                 mode=self.reg_mode,
@@ -177,7 +185,7 @@ class Trainer:
                 target=self.w_target,
                 nz_rows=self.nz_rows_ee,
                 nz_cols=self.nz_cols_ee,
-                weight_cols=self.weights.shape[1],
+                weight_cols=self.N_exc,
             )
         # define empty spikes array for napping
         self.empty_spikes = np.zeros(self.ih, dtype=np.int8)
@@ -198,10 +206,10 @@ class Trainer:
         x_tar_ee,
         num=0,
         sleep_remaining=0,
-        _track_stats=False,
-        normalize_now=False,
-        update_weights_now=False,
-        noisy_potential_now=False,
+        _track_stats=np.uint8(0),
+        normalize_now=np.uint8(0),
+        update_weights_now=np.uint8(0),
+        noisy_potential_now=np.uint8(0),
     ):
         # define desc and stat-collection
         if training_mode == "train":
@@ -211,12 +219,12 @@ class Trainer:
             self.tracker.reset()
         elif training_mode == "val":
             desc = "Validating network"
-            track_weights = False
-            track_stats = False
+            track_weights = np.uint8(0)
+            track_stats = np.uint8(0)
         elif training_mode == "test":
             desc = "Testing network:"
-            track_weights = False
-            track_stats = False
+            track_weights = np.uint8(0)
+            track_stats = np.uint8(0)
         else:
             raise ValueError("training_mode must be 'train', 'val', or 'test'.")
 
@@ -242,12 +250,12 @@ class Trainer:
         for t in pbar:
             if training_mode == "train":
                 if t % self.update_weights_freq == 0:
-                    update_weights_now = True
+                    update_weights_now = np.uint8(1)
                 if t % self.reg_frequency == 0:
                     if self.normalize_weights:
-                        normalize_now = True
+                        normalize_now = np.uint8(1)
                     elif self.sleep:
-                        noisy_potential_now = True
+                        noisy_potential_now = np.uint8(1)
                         sleep_remaining = self.sleep_duration
                         self.sleep_se.onset(weights[: self.st, self.st : self.ex])
                         self.sleep_ee.onset(
@@ -256,7 +264,7 @@ class Trainer:
 
             if t % self.stat_tracking_frequency == 0:
                 if track_stats:
-                    _track_stats = True
+                    _track_stats = np.uint8(1)
                 if self.save_plots:
                     num, _ = spawn_plot_thread(
                         t,
@@ -325,7 +333,7 @@ class Trainer:
                     spike_trace=spike_trace,
                     weights=weights,
                     spikes=spikes_buf,
-                    track_weights=True,
+                    track_weights=np.uint8(1),
                     x_tar_se=x_tar_se,
                     x_tar_ee=x_tar_ee,
                 )
@@ -348,7 +356,7 @@ class Trainer:
                 sleep_remaining -= 1
 
                 if sleep_remaining <= 0:
-                    noisy_potential_now = False
+                    noisy_potential_now = np.uint8(0)
             # WAKE UP!
             (
                 mp,
@@ -419,8 +427,8 @@ class Trainer:
                 np.copyto(weights_exc, weights[:, self.st : self.ex].T)
                 np.copyto(weights_inh, weights[:, self.ex : self.ih].T)
 
-                update_weights_now = False
-                normalize_now = False
+                update_weights_now = np.uint8(0)
+                normalize_now = np.uint8(0)
 
             if _track_stats:
                 self.tracker.track_neuron(
@@ -435,6 +443,7 @@ class Trainer:
                     spike_threshold=spike_threshold,
                     spike_trace=spike_trace,
                 )
+                _track_stats = np.uint8(0)
 
             # Update maintained previous-step state for next iteration
             mp_prev = mp

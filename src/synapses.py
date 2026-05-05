@@ -113,6 +113,7 @@ class Learner:
         )
         for i, idx in enumerate(self.nonzero_pre_idx):
             self.pre_idx_arr[i, : len(idx)] = idx
+        del self.nonzero_pre_idx  # remove list entirely
 
     def step(self, weights, spikes, spike_trace, x_tar_se, x_tar_ee, track_weights):
         return trace_STDP(

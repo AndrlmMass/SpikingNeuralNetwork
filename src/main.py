@@ -61,8 +61,8 @@ def run_once(
         mu_weight = 0.6  # original: 0.6
         pca_variance = 15  # original: 15
         reg_mode = "layer"
-        sleep = True
-        norm = False
+        sleep = False
+        norm = True
 
     ts_spec = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -86,8 +86,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 10000, 1000, 1000
-        b_tr, b_va, b_te = 1000, 1000, 500
+        img_tr, img_va, img_te = 30000, 1000, 10000
+        b_tr, b_va, b_te = 1000, 1000, 1000
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -322,7 +322,7 @@ def main():
     parser.add_argument(
         "--profile",
         action="store_true",
-        default=True,
+        default=False,
         help="enable cProfile around training to find hotspots",
     )
     parser.add_argument(
