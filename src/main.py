@@ -38,10 +38,10 @@ def run_once(
         num_input = 784
         use_validation_data = True
         w_dense_se = 0.05  # original: 0.05
-        w_dense_ee = 0.05  # original: 0.05
+        w_dense_ee = 0.1  # original: 0.05
         w_dense_ei = 0.05  # original: 0.05
         w_dense_ie = 0.05  # original: 0.05
-        se_weights = 1.0  # original: 1.0
+        se_weights = 0.5  # original: 1.0
         ee_weights = 0.5  # original: 0.7
         ei_weights = 4.0  # original: 0.7
         ie_weights = -0.7  # original: -0.5
@@ -60,6 +60,9 @@ def run_once(
         num_steps = 350  # original: 350
         mu_weight = 0.6  # original: 0.6
         pca_variance = 15  # original: 15
+        reg_mode = "layer"
+        sleep = True
+        norm = False
 
     ts_spec = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -83,8 +86,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 400, 400, 400
-        b_tr, b_va, b_te = 100, 100, 100
+        img_tr, img_va, img_te = 10000, 1000, 1000
+        b_tr, b_va, b_te = 1000, 1000, 500
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -140,7 +143,7 @@ def run_once(
         tau_syn_inh=tau_syn_inh,
         tau_m_exc=tau_m_exc,
         tau_m_inh=tau_m_inh,
-        reg_mode="post",
+        reg_mode=reg_mode,
         use_phi=True,
         w_target=1.0,
         clip_weights=True,
@@ -155,12 +158,13 @@ def run_once(
         use_validation_data=False,
         var_noise=args.noise_level,
         track_weights=args.track_weights,
-        sleep=not args.no_sleep,
+        sleep=sleep,
         track_stats=args.track_stats,
         A_minus=0.95,
         A_plus=1.0,
         tau_LTD=20,
         tau_LTP=20,
+        sleep_duration=200,
         tau_adaption=tau_adaption,
         w_max=w_max,
         learning_rate=learning_rate,
@@ -169,7 +173,7 @@ def run_once(
         use_LR=True,
         early_stopping=args.early_stopping,
         early_stopping_patience_pct=0.1,
-        normalize_weights=not args.no_normalize_weights,
+        normalize_weights=norm,
         profile=args.profile,
         pca_variance=pca_variance,
     )
@@ -191,13 +195,13 @@ def main():
         help="enable early stopping",
     )
     parser.add_argument(
-        "--no-sleep",
+        "--sleep",
         action="store_true",
         default=False,
         help="disable sleep during training (default: sleep enabled)",
     )
     parser.add_argument(
-        "--no_normalize-weights",
+        "--normalize",
         action="store_true",
         default=True,
         help="enable per-group weight-sum normalization (may slow training)",

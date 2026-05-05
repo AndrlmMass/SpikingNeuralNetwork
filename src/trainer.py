@@ -177,6 +177,7 @@ class Trainer:
                 target=self.w_target,
                 nz_rows=self.nz_rows_ee,
                 nz_cols=self.nz_cols_ee,
+                weight_cols=self.weights.shape[1],
             )
         # define empty spikes array for napping
         self.empty_spikes = np.zeros(self.ih, dtype=np.int8)

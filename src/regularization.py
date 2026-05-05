@@ -11,9 +11,28 @@ def static_norm(weights, target, nz_rows, nz_cols):
 
 
 @njit(cache=True)
-def dynamic(weights, scale, nz_rows, nz_cols):
+def post_sleep(weights, scale, nz_rows, nz_cols):
     for i in range(nz_rows.size):
         weights[nz_rows[i], nz_cols[i]] *= scale[i]
+    return weights
+
+
+@njit(cache=True)
+def post_norm(weights, initial_sum_nz, nz_rows, nz_cols, n_post):
+    current_sum = np.zeros(n_post)
+    for i in range(nz_rows.size):
+        current_sum[nz_cols[i]] += weights[nz_rows[i], nz_cols[i]]
+    for i in range(nz_rows.size):
+        weights[nz_rows[i], nz_cols[i]] *= initial_sum_nz[i] / (
+            current_sum[nz_cols[i]] + 1e-8
+        )
+    return weights
+
+
+@njit(cache=True)
+def dynamic_layer(weights, scale, nz_rows, nz_cols):
+    for i in range(nz_rows.size):
+        weights[nz_rows[i], nz_cols[i]] *= scale
     return weights
 
 
@@ -39,9 +58,12 @@ class Normalizer:
     target: float
     nz_rows: np.ndarray
     nz_cols: np.ndarray
+    weight_cols: int
 
     def __post_init__(self):
         self.scale = np.ones(self.nz_rows.size, dtype=np.float64)
+        if self.mode == "post":
+            self.initial_sum_nz = self.initial_sum[self.nz_cols]  # (nnz,)
 
     def step(self, weights):
         if self.mode == "static":
@@ -49,15 +71,16 @@ class Normalizer:
 
         elif self.mode == "layer":
             current_sum = weights[self.nz_rows, self.nz_cols].sum()
-            self.scale[:] = self.initial_sum.sum() / current_sum
+            self.scale = self.initial_sum / current_sum
+            return dynamic_layer(weights, self.scale, self.nz_rows, self.nz_cols)
         elif self.mode == "post":
-            current_sum = np.bincount(
+            return post_norm(
+                weights,
+                self.initial_sum_nz,
+                self.nz_rows,
                 self.nz_cols,
-                weights[self.nz_rows, self.nz_cols],
-                minlength=weights.shape[1],
+                self.weight_cols,
             )
-            self.scale[:] = self.initial_sum.sum() / current_sum
-        return dynamic(weights, self.scale, self.nz_rows, self.nz_cols)
 
 
 @dataclass
@@ -92,7 +115,7 @@ class Sleep:
                 minlength=weights.shape[1],
             )
             rho = self.initial_sums / (current_sum + 1e-8)
-            self.scale = rho**self.sleep_lambda
+            self.scale = rho[self.nz_cols] ** self.sleep_lambda
 
     def step(self, weights):
         """Call each sleep timestep — pure dispatch to @njit"""
@@ -104,5 +127,7 @@ class Sleep:
                 self.nz_rows,
                 self.nz_cols,
             )
+        elif self.mode == "layer":
+            return dynamic_layer(weights, self.scale, self.nz_rows, self.nz_cols)
         else:
-            return dynamic(weights, self.scale, self.nz_rows, self.nz_cols)
+            return post_sleep(weights, self.scale, self.nz_rows, self.nz_cols)
