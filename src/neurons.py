@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 
 
-# @njit(cache=True)
+@njit(cache=True)
 def update_membrane_potential(
     mp,
     mp_new,
@@ -76,6 +76,8 @@ def update_membrane_potential(
         drive = 0.0
         for j in nonzero_exc_src:
             drive += weights_inh[i, j]
+            # if drive < 0.0:
+            #     print(f"drive is negative: {drive}")
 
         d_I = (-I_syn_inh[i] + drive) * dt / tau_syn_inh
         I_syn_inh[i] += d_I

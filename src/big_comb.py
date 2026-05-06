@@ -1698,9 +1698,6 @@ class snn_sleepy:
         nz_rows_exc, nz_cols_exc = np.nonzero(
             self.weights[: self.ex, self.st : self.ex]
         )
-        nz_cols_se += self.st  # → global
-        nz_cols_ee += self.st  # → global
-        nz_rows_ee += self.st  # → global
         nz_cols_exc += self.st  # → global
 
         # initiate the evaluator
