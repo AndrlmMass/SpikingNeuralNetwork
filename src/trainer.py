@@ -53,6 +53,7 @@ class Trainer:
     mean_noise: int | float
     var_noise: int | float
     mu_weight: int | float
+    plot_iterations: int
     st: int
     ex: int
     ih: int
@@ -69,6 +70,7 @@ class Trainer:
     track_weights: bool
     stat_tracking_frequency: int
     reg_mode: str
+    train_weights: bool
     nz_rows_exc: list  # why do we have so many of these?
     nz_cols_exc: list  # why do we have so many of these?
     nz_rows_inh: list  # why do we have so many of these?
@@ -85,6 +87,7 @@ class Trainer:
         self.spike_adaption = np.uint8(self.spike_adaption)
         self.clip_weights = np.uint8(self.clip_weights)
         self.sleep = np.uint8(self.sleep)
+        self.train_weights = np.uint8(self.train_weights)
         self.normalize_weights = np.uint8(self.normalize_weights)
         self.clip_weights = np.uint8(self.clip_weights)
         # initiate neuron class
@@ -216,15 +219,21 @@ class Trainer:
             desc = "Training network:"
             track_stats = self.track_stats
             track_weights = self.track_weights
+            save_plots = self.save_plots
+            train_weights = self.train_weights
             self.tracker.reset()
         elif training_mode == "val":
             desc = "Validating network"
             track_weights = np.uint8(0)
             track_stats = np.uint8(0)
+            save_plots = False
+            train_weights = np.uint8(0)
         elif training_mode == "test":
             desc = "Testing network:"
             track_weights = np.uint8(0)
             track_stats = np.uint8(0)
+            train_weights = np.uint8(0)
+            save_plots = False
         else:
             raise ValueError("training_mode must be 'train', 'val', or 'test'.")
 
@@ -232,7 +241,9 @@ class Trainer:
         mp_prev = mp.copy()
         spikes_prev = spikes[0].copy()
         weights_exc = np.ascontiguousarray(weights[:, self.st : self.ex].T)
-        weights_inh = np.ascontiguousarray(weights[:, self.ex : self.ih].T)
+        weights_inh = np.ascontiguousarray(
+            weights[self.st : self.ex, self.ex : self.ih].T
+        )
 
         # prepare progress bar
         pbar = tqdm(range(1, spikes.shape[0]), desc=desc, leave=False, mininterval=1.0)
@@ -265,7 +276,7 @@ class Trainer:
             if t % self.stat_tracking_frequency == 0:
                 if track_stats:
                     _track_stats = np.uint8(1)
-                if self.save_plots:
+                if save_plots:
                     num, _ = spawn_plot_thread(
                         t,
                         spikes,
@@ -285,7 +296,7 @@ class Trainer:
                     )
 
             # Activate napping babyyy
-            while sleep_remaining > 0:
+            while sleep_remaining > 0 and train_weights:
                 # remove inputs
                 spikes_buf = spikes_prev.copy()
                 spikes_buf[: self.st] = 0
@@ -351,7 +362,7 @@ class Trainer:
                 )
 
                 np.copyto(weights_exc, weights[:, self.st : self.ex].T)
-                np.copyto(weights_inh, weights[:, self.ex : self.ih].T)
+                np.copyto(weights_inh, weights[self.st : self.ex, self.ex : self.ih].T)
 
                 sleep_remaining -= 1
 
@@ -392,7 +403,7 @@ class Trainer:
             )
 
             # synapse updates
-            if update_weights_now:
+            if update_weights_now and train_weights:
                 if self.clip_weights:
                     # clip weights
                     weights = self.clipper.step(weights=weights)
@@ -425,7 +436,7 @@ class Trainer:
                     )
 
                 np.copyto(weights_exc, weights[:, self.st : self.ex].T)
-                np.copyto(weights_inh, weights[:, self.ex : self.ih].T)
+                np.copyto(weights_inh, weights[self.st : self.ex, self.ex : self.ih].T)
 
                 update_weights_now = np.uint8(0)
                 normalize_now = np.uint8(0)
@@ -433,12 +444,12 @@ class Trainer:
             if _track_stats:
                 self.tracker.track_neuron(
                     mp=mp,
-                    delta_mp_ex=delta_mp_ex_,
-                    delta_mp_ih=delta_mp_ih_,
+                    delta_mp_ex_=delta_mp_ex_,
+                    delta_mp_ih_=delta_mp_ih_,
                     I_syn_exc=I_syn_exc,
                     I_syn_inh=I_syn_inh,
                     delta_I_syn_ex_=delta_I_syn_ex_,
-                    delta_I_syn_ih=delta_I_syn_ih_,
+                    delta_I_syn_ih_=delta_I_syn_ih_,
                     a=a,
                     spike_threshold=spike_threshold,
                     spike_trace=spike_trace,

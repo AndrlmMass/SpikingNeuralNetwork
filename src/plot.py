@@ -1076,6 +1076,7 @@ class GenerateGif:
 
     def create(self, frame_folder=None, output_filename=None):
         import glob
+        import os
         from PIL import Image
 
         if frame_folder is None:
@@ -1088,7 +1089,7 @@ class GenerateGif:
         files = glob.glob(f"{frame_folder}/*.png")
         if len(files) > 1:
             files_sorted = sorted(
-                files, key=lambda f: int(f.split("\\")[-1].split(".")[0])
+                files, key=lambda f: int(os.path.splitext(os.path.basename(f))[0])
             )
         else:
             return

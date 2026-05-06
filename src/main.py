@@ -41,7 +41,7 @@ def run_once(
         w_dense_ee = 0.1  # original: 0.05
         w_dense_ei = 0.05  # original: 0.05
         w_dense_ie = 0.05  # original: 0.05
-        se_weights = 0.5  # original: 1.0
+        se_weights = 2.0  # original: 1.0
         ee_weights = 0.5  # original: 0.7
         ei_weights = 4.0  # original: 0.7
         ie_weights = -0.7  # original: -0.5
@@ -86,8 +86,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 60000, 1000, 10000
-        b_tr, b_va, b_te = 1000, 1000, 1000
+        img_tr, img_va, img_te = 500, 100, 100
+        b_tr, b_va, b_te = 100, 100, 100
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -138,7 +138,7 @@ def run_once(
     )
 
     snn_N.train_network(
-        train_weights=not args.no_train,
+        train_weights=True,
         tau_syn_exc=tau_syn_exc,
         tau_syn_inh=tau_syn_inh,
         tau_m_exc=tau_m_exc,
@@ -268,7 +268,7 @@ def main():
     parser.add_argument(
         "--heatmap-plot",
         action="store_true",
-        default=False,
+        default=True,
         help="plot the heatmap of the weights",
     )
     parser.add_argument(
@@ -371,7 +371,7 @@ def main():
     parser.add_argument(
         "--track-stats",
         action="store_true",
-        default=False,
+        default=True,
         help="track statistics during training",
     )
     parser.add_argument(

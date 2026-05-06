@@ -1688,7 +1688,7 @@ class snn_sleepy:
         )  # Create generic mp_new for all uses (train, val and test)
         nonzero_pre_idx = []
         for i in range(self.st, self.ex):  # loop over postsynapses that receive STDP
-            nonzero_pre_idx.append(np.nonzero(self.weights[:, i])[0])
+            nonzero_pre_idx.append(np.nonzero(self.weights[: self.ex, i])[0])
         x_tar_se = np.zeros(self.N_x)
         x_tar_ee = np.zeros(self.N_exc)
         nz_rows_se, nz_cols_se = np.nonzero(self.weights[: self.st, self.st : self.ex])
@@ -1696,11 +1696,14 @@ class snn_sleepy:
             self.weights[self.st : self.ex, self.st : self.ex]
         )
         nz_rows_exc, nz_cols_exc = np.nonzero(
-            self.weights[: self.ex, : self.ex]
+            self.weights[: self.ex, self.st : self.ex]
         )  # maybe it should be st:ex for the second dim?
         nz_rows_inh, nz_cols_inh = np.nonzero(
             self.weights[self.st : self.ex, self.ex : self.ih]
         )
+        nz_cols_exc += self.st  # → global
+        nz_rows_inh += self.st  # → global
+        nz_cols_inh += self.ex  # → global
 
         # initiate the evaluator
         eval = Evaluator(
@@ -1725,6 +1728,7 @@ class snn_sleepy:
             max_weight_exc=max_weight_exc,
             min_weight_inh=min_weight_inh,
             max_weight_inh=max_weight_inh,
+            train_weights=train_weights,
             N_x=self.N_x,
             N_inh=self.N_inh,
             N_exc=self.N_exc,
@@ -1747,11 +1751,12 @@ class snn_sleepy:
             tau_adaption=tau_adaption,
             delta_adaption=delta_adaption,
             spike_threshold_default=spike_threshold_default,
-            save_plots=save_training_plots,
+            save_plots=heatmap_plot,
             reset_potential=reset_potential,
             initial_sums_se=initial_sums_se,
             initial_sums_ee=initial_sums_ee,
             dataset=self.image_dataset,
+            plot_iterations=self.num_steps,
             tau_trace=tau_trace,
             tau_syn_exc=tau_syn_exc,
             tau_syn_inh=tau_syn_inh,

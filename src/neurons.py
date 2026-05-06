@@ -1,9 +1,9 @@
-from numba import njit, prange
+from numba import njit
 from dataclasses import dataclass
 import numpy as np
 
 
-@njit(cache=True)
+# @njit(cache=True)
 def update_membrane_potential(
     mp,
     mp_new,
@@ -42,7 +42,12 @@ def update_membrane_potential(
 
     # --- Sparse presynaptic indices (computed once, shared across prange) ---
     nonzero_all = np.where(spikes != 0)[0]  # all spiking → exc targets
-    nonzero_exc_src = np.where(spikes[st:ex] != 0)[0] + st  # exc spiking → inh targets
+    nonzero_exc_src = np.where(spikes[st:ex] != 0)[0]  # exc spiking → inh targets
+    # if nonzero_exc_src.size != 0:
+    #     print(f"here is the list {nonzero_exc_src}")
+
+    # np.copyto(weights_exc, weights[:, self.st : self.ex].T)
+    # np.copyto(weights_inh, weights[:, self.ex : self.ih].T)
 
     # --- Excitatory population ---
     for i in range(N_exc):
@@ -69,8 +74,12 @@ def update_membrane_potential(
     for i in range(N_inh):
         ih_id = i + N_exc
         drive = 0.0
-        for j in nonzero_exc_src:  # only spiking exc neurons
-            drive += weights_inh[i, j]
+        for j in nonzero_exc_src:
+            if weights_inh[i, j] != 0:  # only spiking exc neurons
+                drive += weights_inh[i, j]
+                print("drive: ", drive)
+
+            # weights[self.ex : self.ih, :]
 
         d_I = (-I_syn_inh[i] + drive) * dt / tau_syn_inh
         I_syn_inh[i] += d_I
