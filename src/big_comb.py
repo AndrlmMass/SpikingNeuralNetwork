@@ -1697,13 +1697,11 @@ class snn_sleepy:
         )
         nz_rows_exc, nz_cols_exc = np.nonzero(
             self.weights[: self.ex, self.st : self.ex]
-        )  # maybe it should be st:ex for the second dim?
-        nz_rows_inh, nz_cols_inh = np.nonzero(
-            self.weights[self.st : self.ex, self.ex : self.ih]
         )
+        nz_cols_se += self.st  # → global
+        nz_cols_ee += self.st  # → global
+        nz_rows_ee += self.st  # → global
         nz_cols_exc += self.st  # → global
-        nz_rows_inh += self.st  # → global
-        nz_cols_inh += self.ex  # → global
 
         # initiate the evaluator
         eval = Evaluator(
@@ -1773,14 +1771,12 @@ class snn_sleepy:
             x_tar_se=x_tar_se,
             x_tar_ee=x_tar_ee,
             reg_mode=reg_mode,
-            nz_rows_exc=nz_rows_exc,
-            nz_cols_exc=nz_cols_exc,
-            nz_rows_inh=nz_rows_inh,
-            nz_cols_inh=nz_cols_inh,
             nz_rows_se=nz_rows_se,
             nz_cols_se=nz_cols_se,
             nz_rows_ee=nz_rows_ee,
             nz_cols_ee=nz_cols_ee,
+            nz_cols_exc=nz_cols_exc,
+            nz_rows_exc=nz_rows_exc,
         )
 
         # Always attempt to load a matching model if not forcing a fresh run,

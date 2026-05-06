@@ -75,11 +75,7 @@ def update_membrane_potential(
         ih_id = i + N_exc
         drive = 0.0
         for j in nonzero_exc_src:
-            if weights_inh[i, j] != 0:  # only spiking exc neurons
-                drive += weights_inh[i, j]
-                print("drive: ", drive)
-
-            # weights[self.ex : self.ih, :]
+            drive += weights_inh[i, j]
 
         d_I = (-I_syn_inh[i] + drive) * dt / tau_syn_inh
         I_syn_inh[i] += d_I

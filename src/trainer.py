@@ -71,14 +71,12 @@ class Trainer:
     stat_tracking_frequency: int
     reg_mode: str
     train_weights: bool
-    nz_rows_exc: list  # why do we have so many of these?
-    nz_cols_exc: list  # why do we have so many of these?
-    nz_rows_inh: list  # why do we have so many of these?
-    nz_cols_inh: list  # why do we have so many of these?
-    nz_cols_se: list  # why do we have so many of these?
-    nz_rows_se: list  # why do we have so many of these?
-    nz_cols_ee: list  # why do we have so many of these?
-    nz_rows_ee: list  # why do we have so many of these?
+    nz_cols_se: list
+    nz_rows_se: list
+    nz_cols_ee: list
+    nz_rows_ee: list
+    nz_cols_exc: list
+    nz_rows_exc: list
 
     def __post_init__(self):
         # convert bools to numpy bools
@@ -90,6 +88,7 @@ class Trainer:
         self.train_weights = np.uint8(self.train_weights)
         self.normalize_weights = np.uint8(self.normalize_weights)
         self.clip_weights = np.uint8(self.clip_weights)
+
         # initiate neuron class
         self.neuron = NeuronState(
             st=self.st,
@@ -134,14 +133,10 @@ class Trainer:
         )
         # initiate clipper
         self.clipper = Clipper(
-            nz_cols_exc=self.nz_cols_exc,
-            nz_cols_inh=self.nz_cols_inh,
-            nz_rows_exc=self.nz_rows_exc,
-            nz_rows_inh=self.nz_rows_inh,
+            nz_cols=self.nz_cols_exc,
+            nz_rows=self.nz_rows_exc,
             min_weight_exc=self.min_weight_exc,
             max_weight_exc=self.max_weight_exc,
-            min_weight_inh=self.min_weight_inh,
-            max_weight_inh=self.max_weight_inh,
         )
         # initiate tracker
         self.tracker = TrainTracker(

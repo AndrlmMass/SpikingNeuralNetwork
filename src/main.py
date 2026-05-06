@@ -41,7 +41,7 @@ def run_once(
         w_dense_ee = 0.1  # original: 0.05
         w_dense_ei = 0.05  # original: 0.05
         w_dense_ie = 0.05  # original: 0.05
-        se_weights = 2.0  # original: 1.0
+        se_weights = 1.0  # original: 1.0
         ee_weights = 0.5  # original: 0.7
         ei_weights = 4.0  # original: 0.7
         ie_weights = -0.7  # original: -0.5

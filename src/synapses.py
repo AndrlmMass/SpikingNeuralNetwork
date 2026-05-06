@@ -6,27 +6,17 @@ from dataclasses import dataclass
 @njit(cache=True)
 def clip_weights(
     weights,
-    nz_cols_exc,
-    nz_cols_inh,
-    nz_rows_exc,
-    nz_rows_inh,
-    min_weight_exc,
-    max_weight_exc,
-    min_weight_inh,
-    max_weight_inh,
+    nz_cols,
+    nz_rows,
+    min_weight,
+    max_weight,
 ):
-    for i_ in range(nz_rows_exc.shape[0]):
-        i, j = nz_rows_exc[i_], nz_cols_exc[i_]
-        if weights[i, j] < min_weight_exc:
-            weights[i, j] = min_weight_exc
-        elif weights[i, j] > max_weight_exc:
-            weights[i, j] = max_weight_exc
-    for i_ in range(nz_rows_inh.shape[0]):
-        i, j = nz_rows_inh[i_], nz_cols_inh[i_]
-        if weights[i, j] < min_weight_inh:
-            weights[i, j] = min_weight_inh
-        elif weights[i, j] > max_weight_inh:
-            weights[i, j] = max_weight_inh
+    for i_ in range(nz_rows.shape[0]):
+        i, j = nz_rows[i_], nz_cols[i_]
+        if weights[i, j] < min_weight:
+            weights[i, j] = min_weight
+        elif weights[i, j] > max_weight:
+            weights[i, j] = max_weight
     return weights
 
 
@@ -133,24 +123,16 @@ class Learner:
 
 @dataclass
 class Clipper:
-    nz_cols_exc: list
-    nz_cols_inh: list
-    nz_rows_exc: list
-    nz_rows_inh: list
+    nz_cols: list
+    nz_rows: list
     min_weight_exc: float
     max_weight_exc: float
-    min_weight_inh: float
-    max_weight_inh: float
 
     def step(self, weights):
         return clip_weights(
             weights,
-            self.nz_cols_exc,
-            self.nz_cols_inh,
-            self.nz_rows_exc,
-            self.nz_rows_inh,
+            self.nz_cols,
+            self.nz_rows,
             self.min_weight_exc,
             self.max_weight_exc,
-            self.min_weight_inh,
-            self.max_weight_inh,
         )
