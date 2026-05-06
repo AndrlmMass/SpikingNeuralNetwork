@@ -86,7 +86,7 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 30000, 1000, 10000
+        img_tr, img_va, img_te = 60000, 1000, 10000
         b_tr, b_va, b_te = 1000, 1000, 1000
         force_recreate_flag = False
     snn_N.prepare_data(
