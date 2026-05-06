@@ -86,8 +86,8 @@ def run_once(
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 500, 100, 100
-        b_tr, b_va, b_te = 100, 100, 100
+        img_tr, img_va, img_te = 10000, 1000, 2000
+        b_tr, b_va, b_te = 1000, 1000, 1000
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -195,18 +195,6 @@ def main():
         help="enable early stopping",
     )
     parser.add_argument(
-        "--sleep",
-        action="store_true",
-        default=False,
-        help="disable sleep during training (default: sleep enabled)",
-    )
-    parser.add_argument(
-        "--normalize",
-        action="store_true",
-        default=True,
-        help="enable per-group weight-sum normalization (may slow training)",
-    )
-    parser.add_argument(
         "--noise-level",
         type=float,
         nargs="+",
@@ -251,24 +239,9 @@ def main():
         help="dataset to use (image-only or geomfig)",
     )
     parser.add_argument(
-        "--image-dataset",
-        type=str,
-        choices=[
-            "mnist",
-            "kmnist",
-            "fmnist",
-            "fashionmnist",
-            "fashion",
-            "notmnist",
-            "fcx1",
-        ],
-        default="mnist",
-        help="image dataset to use for image-only or multimodal modes",
-    )
-    parser.add_argument(
         "--heatmap-plot",
         action="store_true",
-        default=True,
+        default=False,
         help="plot the heatmap of the weights",
     )
     parser.add_argument(
@@ -365,13 +338,13 @@ def main():
     parser.add_argument(
         "--random-weights",
         action="store_true",
-        default=True,
+        default=False,
         help="use random weights (0.01 for ee, 0.05 for se, 0.05 for ei, 0.05 for ie)",
     )
     parser.add_argument(
         "--track-stats",
         action="store_true",
-        default=True,
+        default=False,
         help="track statistics during training",
     )
     parser.add_argument(
