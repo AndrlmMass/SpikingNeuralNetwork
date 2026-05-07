@@ -774,10 +774,6 @@ class snn_sleepy:
         all_images_val=1000,
         batch_image_val=100,
         image_dataset="mnist",
-        geom_noise_var=0.02,
-        geom_noise_mean=0.0,
-        geom_jitter=False,
-        geom_jitter_amount=0.05,
         geom_workers=None,
     ):
         # Save current parameters
@@ -1581,7 +1577,6 @@ class snn_sleepy:
         train_weights=False,
         tau_trace=25,
         learning_rate=0.0008,
-        w_target=0.01,
         var_noise=1,
         min_weight_inh=-25,
         track_weights=False,
@@ -1630,7 +1625,7 @@ class snn_sleepy:
         gif_pca_plot=True,
         gif_spikes_plot=True,
         profile=False,
-        reg_frequency=1000,  # need to ensure that this is divisible by the number of samples so that regularization doesnt split batches
+        reg_frequency=1050,  # need to ensure that this is divisible by the number of samples so that regularization doesnt split batches
         sleep_duration=300,
         stat_tracking_frequency=1000,
         update_weights_freq=100,
@@ -1731,9 +1726,10 @@ class snn_sleepy:
             tau_LTD=tau_LTD,
             max_mp=max_mp,
             min_mp=min_mp,
+            w_target_se=self.se_weights,
+            w_target_ee=self.ee_weights,
             w_max=w_max,
             clip_weights=clip_weights,
-            w_target=w_target,
             dt=self.dt,
             run=self.ts_spec,
             A_plus=A_plus,

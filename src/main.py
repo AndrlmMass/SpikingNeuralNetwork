@@ -60,9 +60,12 @@ def run_once(
         num_steps = 350  # original: 350
         mu_weight = 0.6  # original: 0.6
         pca_variance = 15  # original: 15
+        reg_frequency = 1050
+        sleep_duration = 100
+        update_weights_freq = 100
         stat_tracking_frequency = 10500
-        reg_mode = "layer"
-        w_target = 0.3
+        reg_mode = "static"
+        noise_level = 1.0
         sleep = False
         norm = True
 
@@ -110,18 +113,13 @@ def run_once(
         force_recreate=force_recreate_flag,
         noisy_data=False,
         gain=gain_for_dataset,
-        noise_level=0.0,
+        noise_level=noise_level,
         max_rate_hz=max_rate_hz,
         audioMNIST=False,
         imageMNIST=True,
         create_data=False,
         plot_spectrograms=False,
         image_dataset=args.dataset,
-        geom_noise_var=args.geom_noise_var,
-        geom_noise_mean=args.geom_noise_mean,
-        geom_jitter=args.geom_jitter,
-        geom_jitter_amount=args.geom_jitter_amount,
-        geom_workers=args.geom_workers,
     )
 
     # set up network for training
@@ -147,7 +145,6 @@ def run_once(
         tau_m_inh=tau_m_inh,
         reg_mode=reg_mode,
         use_phi=True,
-        w_target=w_target,
         clip_weights=True,
         membrane_resistance_exc=Rm_exc,
         membrane_resistance_inh=Rm_inh,
@@ -167,13 +164,15 @@ def run_once(
         A_plus=1.0,
         tau_LTD=20,
         tau_LTP=20,
-        sleep_duration=200,
         tau_adaption=tau_adaption,
         w_max=w_max,
         learning_rate=learning_rate,
         accuracy_method="pca_lr",
         use_QDA=False,
         use_LR=True,
+        reg_frequency=reg_frequency,
+        sleep_duration=sleep_duration,
+        update_weights_freq=update_weights_freq,
         early_stopping=args.early_stopping,
         early_stopping_patience_pct=0.1,
         normalize_weights=norm,

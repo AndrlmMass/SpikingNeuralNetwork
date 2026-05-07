@@ -28,7 +28,8 @@ class Trainer:
     max_mp: float
     min_mp: float
     w_max: float
-    w_target: float
+    w_target_se: float
+    w_target_ee: float
     dt: int | float
     run: str
     A_plus: float
@@ -155,7 +156,7 @@ class Trainer:
             self.sleep_se = Sleep(
                 mode=self.reg_mode,
                 duration=self.sleep_duration,
-                w_target=self.w_target,
+                w_target=self.w_target_se,
                 initial_sums=self.initial_sums_se,
                 nz_rows=self.nz_rows_se,
                 nz_cols=self.nz_cols_se,
@@ -163,7 +164,7 @@ class Trainer:
             self.sleep_ee = Sleep(
                 mode=self.reg_mode,
                 duration=self.sleep_duration,
-                w_target=self.w_target,
+                w_target=self.w_target_ee,
                 initial_sums=self.initial_sums_ee,
                 nz_rows=self.nz_rows_ee,
                 nz_cols=self.nz_cols_ee,
@@ -172,7 +173,7 @@ class Trainer:
             self.norm_se = Normalizer(
                 mode=self.reg_mode,
                 initial_sum=self.initial_sums_se,
-                target=self.w_target,
+                target=self.w_target_se,
                 nz_rows=self.nz_rows_se,
                 nz_cols=self.nz_cols_se,
                 weight_cols=self.N_exc,
@@ -180,7 +181,7 @@ class Trainer:
             self.norm_ee = Normalizer(
                 mode=self.reg_mode,
                 initial_sum=self.initial_sums_ee,
-                target=self.w_target,
+                target=self.w_target_ee,
                 nz_rows=self.nz_rows_ee,
                 nz_cols=self.nz_cols_ee,
                 weight_cols=self.N_exc,

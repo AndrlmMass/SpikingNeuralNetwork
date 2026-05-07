@@ -23,9 +23,16 @@ def post_norm(weights, initial_sum_nz, nz_rows, nz_cols, n_post):
 
 
 @njit(cache=True)
-def static_or_layer(weights, scale, nz_rows, nz_cols):
+def layer(weights, scale, nz_rows, nz_cols):
     for i in range(nz_rows.size):
         weights[nz_rows[i], nz_cols[i]] *= scale
+    return weights
+
+
+@njit(cache=True)
+def static(weights, target, nz_rows, nz_cols):
+    for i in range(nz_rows.size):
+        weights[nz_rows[i], nz_cols[i]] = target
     return weights
 
 
@@ -48,12 +55,12 @@ class Normalizer:
 
     def step(self, weights):
         if self.mode == "static":
-            return static_or_layer(weights, self.scale, self.nz_rows, self.nz_cols)
+            return static(weights, self.scale, self.nz_rows, self.nz_cols)
 
         elif self.mode == "layer":
             current_sum = weights[self.nz_rows, self.nz_cols].sum()
             self.scale = self.initial_sum / current_sum
-            return static_or_layer(weights, self.scale, self.nz_rows, self.nz_cols)
+            return layer(weights, self.scale, self.nz_rows, self.nz_cols)
 
         else:
             return post_norm(
@@ -97,8 +104,15 @@ class Sleep:
         """Call each sleep timestep — pure dispatch to @njit"""
         if self.mode == "post":
             return post_sleep(weights, self.scale, self.nz_rows, self.nz_cols)
+        elif self.mode == "layer":
+            return layer(
+                weights,
+                self.scale,
+                self.nz_rows,
+                self.nz_cols,
+            )
         else:
-            return static_or_layer(
+            return static(
                 weights,
                 self.scale,
                 self.nz_rows,
