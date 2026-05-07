@@ -4,13 +4,6 @@ import numpy as np
 
 
 @njit(cache=True)
-def static_norm(weights, target, nz_rows, nz_cols):
-    for i in range(nz_rows.size):
-        weights[nz_rows[i], nz_cols[i]] = target
-    return weights
-
-
-@njit(cache=True)
 def post_sleep(weights, scale, nz_rows, nz_cols):
     for i in range(nz_rows.size):
         weights[nz_rows[i], nz_cols[i]] *= scale[i]
@@ -30,24 +23,9 @@ def post_norm(weights, initial_sum_nz, nz_rows, nz_cols, n_post):
 
 
 @njit(cache=True)
-def dynamic_layer(weights, scale, nz_rows, nz_cols):
+def static_or_layer(weights, scale, nz_rows, nz_cols):
     for i in range(nz_rows.size):
         weights[nz_rows[i], nz_cols[i]] *= scale
-    return weights
-
-
-@njit(cache=True)
-def static_sleep(
-    weights,
-    w_target_pow,
-    sleep_lambda_complement,
-    nz_rows,
-    nz_cols,
-):
-    # Apply decay to columns [N_x, N_post] (excitatory weights)
-    for i in range(nz_rows.size):
-        w = weights[nz_rows[i], nz_cols[i]]
-        weights[nz_rows[i], nz_cols[i]] = w_target_pow * w**sleep_lambda_complement
     return weights
 
 
@@ -61,19 +39,23 @@ class Normalizer:
     weight_cols: int
 
     def __post_init__(self):
-        self.scale = np.ones(self.nz_rows.size, dtype=np.float64)
+        if self.mode == "static":
+            self.scale = self.target
+        else:
+            self.scale = np.ones(self.nz_rows.size, dtype=np.float64)
         if self.mode == "post":
             self.initial_sum_nz = self.initial_sum[self.nz_cols]  # (nnz,)
 
     def step(self, weights):
         if self.mode == "static":
-            return static_norm(weights, self.target, self.nz_rows, self.nz_cols)
+            return static_or_layer(weights, self.scale, self.nz_rows, self.nz_cols)
 
         elif self.mode == "layer":
             current_sum = weights[self.nz_rows, self.nz_cols].sum()
             self.scale = self.initial_sum / current_sum
-            return dynamic_layer(weights, self.scale, self.nz_rows, self.nz_cols)
-        elif self.mode == "post":
+            return static_or_layer(weights, self.scale, self.nz_rows, self.nz_cols)
+
+        else:
             return post_norm(
                 weights,
                 self.initial_sum_nz,
@@ -94,14 +76,8 @@ class Sleep:
 
     def __post_init__(self):
         self.sleep_lambda = 1.0 / self.duration
-        self.w_target_pow = self.w_target**self.sleep_lambda
-        self.sleep_lambda_complement = 1.0 - self.sleep_lambda
-        if self.mode == "post" and np.ndim(self.initial_sums) == 0:
-            raise ValueError(
-                "post mode requires initial_sums to be a per-neuron vector"
-            )
-        if self.mode == "layer" and np.ndim(self.initial_sums) != 0:
-            raise ValueError("layer mode requires initial_sums to be a scalar")
+        if self.mode == "static":
+            self.scale = self.w_target**self.sleep_lambda
 
     def onset(self, weights):
         """Call once when sleep begins — precomputes scale from current weights"""
@@ -119,15 +95,12 @@ class Sleep:
 
     def step(self, weights):
         """Call each sleep timestep — pure dispatch to @njit"""
-        if self.mode == "static":
-            return static_sleep(
+        if self.mode == "post":
+            return post_sleep(weights, self.scale, self.nz_rows, self.nz_cols)
+        else:
+            return static_or_layer(
                 weights,
-                self.w_target_pow,
-                self.sleep_lambda_complement,
+                self.scale,
                 self.nz_rows,
                 self.nz_cols,
             )
-        elif self.mode == "layer":
-            return dynamic_layer(weights, self.scale, self.nz_rows, self.nz_cols)
-        else:
-            return post_sleep(weights, self.scale, self.nz_rows, self.nz_cols)

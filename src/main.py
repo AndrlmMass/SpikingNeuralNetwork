@@ -60,7 +60,9 @@ def run_once(
         num_steps = 350  # original: 350
         mu_weight = 0.6  # original: 0.6
         pca_variance = 15  # original: 15
+        stat_tracking_frequency = 10500
         reg_mode = "layer"
+        w_target = 0.3
         sleep = False
         norm = True
 
@@ -145,7 +147,7 @@ def run_once(
         tau_m_inh=tau_m_inh,
         reg_mode=reg_mode,
         use_phi=True,
-        w_target=1.0,
+        w_target=w_target,
         clip_weights=True,
         membrane_resistance_exc=Rm_exc,
         membrane_resistance_inh=Rm_inh,
@@ -158,6 +160,7 @@ def run_once(
         use_validation_data=False,
         var_noise=args.noise_level,
         track_weights=args.track_weights,
+        stat_tracking_frequency=stat_tracking_frequency,
         sleep=sleep,
         track_stats=args.track_stats,
         A_minus=0.95,
