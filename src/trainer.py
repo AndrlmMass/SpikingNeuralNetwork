@@ -252,7 +252,6 @@ class Trainer:
             spike_trace=spike_trace,
             N_x=self.N_x,
         )
-
         # run training for T iterations
         for t in pbar:
             if training_mode == "train":
@@ -333,32 +332,30 @@ class Trainer:
 
                 # synapse updates
                 # clip weights
-                if self.clip_weights:
-                    weights = self.clipper.step(weights=weights)
-                # perform learning
-                weights, m_x_pre, m_first_term, m_delta_w = self.learner.step(
-                    spike_trace=spike_trace,
-                    weights=weights,
-                    spikes=spikes_buf,
-                    track_weights=np.uint8(1),
-                    x_tar_se=x_tar_se,
-                    x_tar_ee=x_tar_ee,
-                )
-                # regularize weights
-                weights[: self.st, self.st : self.ex] = self.sleep_se.step(
-                    weights[: self.st, self.st : self.ex]
-                )
-                weights[self.st : self.ex, self.st : self.ex] = self.sleep_ee.step(
-                    weights[self.st : self.ex, self.st : self.ex]
-                )
-                # update x_tar
-                x_tar_se, x_tar_ee = update_x_tar(
-                    spike_trace=spike_trace,
-                    N_x=self.N_x,
-                )
+                if sleep_remaining % 10 == 0:
+                    if self.clip_weights:
+                        weights = self.clipper.step(weights=weights)
+                    # perform learning
+                    weights, m_x_pre, m_first_term, m_delta_w = self.learner.step(
+                        spike_trace=spike_trace,
+                        weights=weights,
+                        spikes=spikes_buf,
+                        track_weights=np.uint8(0),
+                        x_tar_se=x_tar_se,
+                        x_tar_ee=x_tar_ee,
+                    )
+                    # regularize weights
+                    weights[: self.st, self.st : self.ex] = self.sleep_se.step(
+                        weights[: self.st, self.st : self.ex]
+                    )
+                    weights[self.st : self.ex, self.st : self.ex] = self.sleep_ee.step(
+                        weights[self.st : self.ex, self.st : self.ex]
+                    )
 
-                np.copyto(weights_exc, weights[:, self.st : self.ex].T)
-                np.copyto(weights_inh, weights[self.st : self.ex, self.ex : self.ih].T)
+                    np.copyto(weights_exc, weights[:, self.st : self.ex].T)
+                    np.copyto(
+                        weights_inh, weights[self.st : self.ex, self.ex : self.ih].T
+                    )
 
                 sleep_remaining -= 1
 

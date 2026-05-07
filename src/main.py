@@ -65,9 +65,9 @@ def run_once(
         update_weights_freq = 100
         stat_tracking_frequency = 10500
         reg_mode = "static"
-        noise_level = 1.0
-        sleep = False
-        norm = True
+        noise_level = 4.0
+        sleep = True
+        norm = False
 
     ts_spec = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -92,7 +92,7 @@ def run_once(
         force_recreate_flag = True
     else:
         img_tr, img_va, img_te = 10000, 1000, 2000
-        b_tr, b_va, b_te = 1000, 1000, 1000
+        b_tr, b_va, b_te = 100, 1000, 1000
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -297,7 +297,7 @@ def main():
     parser.add_argument(
         "--profile",
         action="store_true",
-        default=False,
+        default=True,
         help="enable cProfile around training to find hotspots",
     )
     parser.add_argument(

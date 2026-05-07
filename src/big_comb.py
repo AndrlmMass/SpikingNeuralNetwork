@@ -2443,6 +2443,21 @@ class snn_sleepy:
                 acc_te_sum += acc
                 phi_te_sum += phi
 
+            # Clean up final test arrays and variables
+            del spikes_test, spikes_te_out, labels_te_out, labels_test
+            del (
+                weights_te_out,
+                mp_te_out,
+                spike_threshold_te_out,
+                I_syn_exc_te_out,
+                I_syn_inh_te_out,
+                a_te_out,
+                spike_trace_te_out,
+                x_tar_se_te_out,
+                x_tar_ee_te_out,
+            )
+            gc.collect()
+
         # estimate the mean accuracy and phi
         if accuracy_method == "pca_lr":
             final_acc_LR = acc_te_sum / max(1, total_num_tests)
@@ -2461,18 +2476,3 @@ class snn_sleepy:
                 )
             if final_phi is not None:
                 self._record_phi("test", final_phi, epoch=e + 1)
-
-        # Clean up final test arrays and variables
-        del spikes_test, spikes_te_out, labels_te_out, labels_test
-        del (
-            weights_te_out,
-            mp_te_out,
-            spike_threshold_te_out,
-            I_syn_exc_te_out,
-            I_syn_inh_te_out,
-            a_te_out,
-            spike_trace_te_out,
-            x_tar_se_te_out,
-            x_tar_ee_te_out,
-        )
-        gc.collect()
