@@ -1634,7 +1634,6 @@ class snn_sleepy:
         sleep_duration=300,
         stat_tracking_frequency=1000,
         update_weights_freq=100,
-        save_training_plots=False,
     ):
         self.dt = dt
         self.pca_variance = pca_variance
@@ -1951,15 +1950,17 @@ class snn_sleepy:
                     self._arrays_pre_allocated = True
                     print("inside!")
                 else:
+                    # add input data to array
+                    spikes_train = np.zeros((self.T_train, self.N), dtype=np.int8)
+                    spikes_train[:, : self.N_x] = data_train
                     if mp_train is None:
                         # Reuse pre-allocated arrays
                         mp_train = np.zeros(self.N - self.N_x)
                         mp_train[:] = self.resting_potential
-                    # add input data to array
-                    spikes_train = np.zeros((self.T_train, self.N), dtype=np.int8)
-                    spikes_train[:, : self.N_x] = data_train
                     if spike_trace is None:
                         spike_trace = np.zeros(self.N - self.N_inh)
+                del data_train
+                gc.collect()  # Force garbage collection to free memory
                 if profile:
                     import cProfile
 
@@ -1970,10 +1971,10 @@ class snn_sleepy:
                 # train network
                 (
                     self.weights,
-                    spikes_tr_out,
+                    spikes_tr_out,  # delete after
                     mp_train,
                     thresh_tr,
-                    labels_tr_out,
+                    labels_tr_out,  # delete after
                     I_syn_exc,
                     I_syn_inh,
                     a,
@@ -2148,6 +2149,11 @@ class snn_sleepy:
 
                     print(f"{'-'*50}")
 
+                    # Rinse memory
+                # Clean up training data
+                del labels_train
+                del spikes_tr_out, labels_tr_out, spikes_train
+
                 total_num_vals = (
                     self.all_val // self.batch_val
                 )  # Use test dataset size for validation batching
@@ -2155,11 +2161,11 @@ class snn_sleepy:
                 phi_val_sum = 0.0
 
                 # Predefine variables used in the test loop so cleanup never fails
-                data_test = None
-                labels_test = None
-                mp_test = None
-                spikes_te_out = None
-                labels_te_out = None
+                data_val = None
+                labels_val = None
+                mp_val = None
+                spikes_val_out = None
+                labels_val_out = None
                 x_tar_se_val = np.zeros(self.N_x)
                 x_tar_ee_val = np.zeros(self.N_exc)
 
@@ -2168,7 +2174,7 @@ class snn_sleepy:
                     from get_data import load_image_batch
 
                     val_start_idx = val_batch_idx * self.batch_val
-                    data_test, labels_test = load_image_batch(
+                    data_val, labels_val = load_image_batch(
                         self.image_streamer,
                         val_start_idx,
                         self.batch_val,
@@ -2176,53 +2182,54 @@ class snn_sleepy:
                         int(np.sqrt(self.N_x)) ** 2,  # Image-only mode uses full N_x
                         partition="val",  # Use validation data
                     )
-                    if data_test is None:
+                    if data_val is None:
                         print(f"No more validation image data available")
                         break
 
                     # Update T_test for this batch
                     # Ensure test data width matches expected N_x
-                    if data_test is not None:
-                        data_test = data_test[:, : self.st]
-                    T_val_batch = data_test.shape[0]
+                    data_val = data_val[:, : self.st]
+                    T_val_batch = data_val.shape[0]
 
-                    mp_test = np.zeros((self.N - self.st))
-                    mp_test[:] = self.resting_potential
+                    mp_val = np.zeros((self.N - self.st))
+                    mp_val[:] = self.resting_potential
 
-                    spikes_test = np.zeros((T_val_batch, self.N), dtype=np.int8)
-                    spikes_test[:, : self.st] = data_test
+                    spikes_val = np.zeros((T_val_batch, self.N), dtype=np.int8)
+                    spikes_val[:, : self.st] = data_val
+                    del data_val
+                    gc.collect()
                     spike_trace_val = np.zeros(self.N - self.N_inh)
-                    a_test = np.zeros(self.N_exc + self.N_inh)
-                    I_syn_exc_test = np.zeros(self.N_exc)
-                    I_syn_inh_test = np.zeros(self.N_inh)
-                    spike_threshold_test = np.full(
+                    a_val = np.zeros(self.N_exc + self.N_inh)
+                    I_syn_exc_val = np.zeros(self.N_exc)
+                    I_syn_inh_val = np.zeros(self.N_inh)
+                    spike_threshold_val = np.full(
                         self.N_exc + self.N_inh, fill_value=spike_threshold_default
                     )
 
                     # run validation of network
                     (
-                        __,
-                        spikes_val_out,
-                        __,
-                        __,
-                        labels_val_out,
-                        __,
-                        __,
-                        __,
-                        __,
-                        __,
-                        __,
+                        weights_val_out,  # delete after
+                        spikes_val_out,  # delete after
+                        mp_val_out,  # delete after
+                        spike_threshold_val_out,  # delete after
+                        labels_val_out,  # delete after
+                        I_syn_exc_val_out,  # delete after
+                        I_syn_inh_val_out,  # delete after
+                        a_val_out,  # delete after
+                        spike_trace_val_out,  # delete after
+                        x_tar_se_val_out,  # delete after
+                        x_tar_ee_val_out,  # delete after
                     ) = trainer.step(
-                        weights=self.weights.copy(),
-                        mp=mp_test.copy(),
-                        spikes=spikes_test.copy(),
-                        spike_labels=labels_test.copy(),
+                        weights=self.weights,
+                        mp=mp_val,
+                        spikes=spikes_val,
+                        spike_labels=labels_val,
                         spike_trace=spike_trace_val,
                         training_mode="val",
-                        spike_threshold=spike_threshold_test,
-                        I_syn_exc=I_syn_exc_test,
-                        I_syn_inh=I_syn_inh_test,
-                        a=a_test,
+                        spike_threshold=spike_threshold_val,
+                        I_syn_exc=I_syn_exc_val,
+                        I_syn_inh=I_syn_inh_val,
+                        a=a_val,
                         x_tar_se=x_tar_se_val,
                         x_tar_ee=x_tar_ee_val,
                     )
@@ -2291,13 +2298,20 @@ class snn_sleepy:
                     final_acc_LR = None
                     final_val_phi = None
 
-                # Rinse memory
-                if e != self.batches - 1:
-                    # Clean up training data
-                    del data_train, labels_train
-                    # Clean up training results
-                    del spikes_tr_out, labels_tr_out
-
+                # Rinse val memory
+                if total_num_vals > 0:
+                    del spikes_val, spikes_val_out, labels_val_out, labels_val
+                    del (
+                        weights_val_out,
+                        mp_val_out,
+                        spike_threshold_val_out,
+                        I_syn_exc_val_out,
+                        I_syn_inh_val_out,
+                        a_val_out,
+                        spike_trace_val_out,
+                        x_tar_se_val_out,
+                        x_tar_ee_val_out,
+                    )
                     gc.collect()
 
                 pbar.set_description(f"Epoch {e+1}/{self.batches}")
@@ -2310,15 +2324,15 @@ class snn_sleepy:
 
             # Clean up main training loop variables
             del (
+                mp_train,
                 I_syn_exc,
                 I_syn_inh,
                 a,
                 spike_threshold,
+                spike_trace,
+                x_tar_se,
+                x_tar_ee,
             )
-            try:
-                del download, data_dir
-            except:
-                pass
             gc.collect()
 
         # create gif if wanted after finishing training THIS CAN BE DONE SEPARATELY WITHOUT INCLUDING IN THE CURRENT LOOP
@@ -2377,6 +2391,8 @@ class snn_sleepy:
             mp_test[:] = self.resting_potential
             spikes_test = np.zeros((T_test_batch, self.N), dtype=np.int8)
             spikes_test[:, : self.st] = data_test
+            del data_test
+            gc.collect()
             a_test = np.zeros(self.N_exc + self.N_inh)
             I_syn_exc_test = np.zeros(self.N_exc)
             I_syn_inh_test = np.zeros(self.N_inh)
@@ -2388,27 +2404,31 @@ class snn_sleepy:
             x_tar_ee_test = np.zeros(self.N_exc)
 
             # Build common args locally in case outer scope wasn't initialized in this path
-
             (
-                __,
+                weights_te_out,
                 spikes_te_out,
-                __,
-                __,
+                mp_te_out,
+                spike_threshold_te_out,
                 labels_te_out,
-                *unused,
+                I_syn_exc_te_out,
+                I_syn_inh_te_out,
+                a_te_out,
+                spike_trace_te_out,
+                x_tar_se_te_out,
+                x_tar_ee_te_out,
             ) = trainer.step(
-                weights=self.weights.copy(),
-                mp=mp_test.copy(),
-                spikes=spikes_test.copy(),
-                spike_labels=labels_test.copy(),
+                weights=self.weights,
+                mp=mp_test,
+                spikes=spikes_test,
+                spike_labels=labels_test,
                 spike_trace=spike_trace_te,
                 training_mode="test",
-                spike_threshold=spike_threshold_test.copy(),
-                I_syn_exc=I_syn_exc_test.copy(),
-                I_syn_inh=I_syn_inh_test.copy(),
-                a=a_test.copy(),
-                x_tar_se=x_tar_se_test.copy(),
-                x_tar_ee=x_tar_ee_test.copy(),
+                spike_threshold=spike_threshold_test,
+                I_syn_exc=I_syn_exc_test,
+                I_syn_inh=I_syn_inh_test,
+                a=a_test,
+                x_tar_se=x_tar_se_test,
+                x_tar_ee=x_tar_ee_test,
             )
 
             # Increase sample index
@@ -2447,4 +2467,16 @@ class snn_sleepy:
                 self._record_phi("test", final_phi, epoch=e + 1)
 
         # Clean up final test arrays and variables
-        del test_sample_count
+        del spikes_test, spikes_te_out, labels_te_out, labels_test
+        del (
+            weights_te_out,
+            mp_te_out,
+            spike_threshold_te_out,
+            I_syn_exc_te_out,
+            I_syn_inh_te_out,
+            a_te_out,
+            spike_trace_te_out,
+            x_tar_se_te_out,
+            x_tar_ee_te_out,
+        )
+        gc.collect()

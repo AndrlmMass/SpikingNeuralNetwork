@@ -38,20 +38,20 @@ def run_once(
         num_input = 784
         use_validation_data = True
         w_dense_se = 0.05  # original: 0.05
-        w_dense_ee = 0.1  # original: 0.05
+        w_dense_ee = 0.05  # original: 0.05
         w_dense_ei = 0.05  # original: 0.05
         w_dense_ie = 0.05  # original: 0.05
         se_weights = 1.0  # original: 1.0
         ee_weights = 0.5  # original: 0.7
-        ei_weights = 4.0  # original: 0.7
+        ei_weights = 1.0  # original: 0.7
         ie_weights = -0.7  # original: -0.5
         tau_syn_exc = 10  # original: 10
         tau_syn_inh = 9  # original: 9
         learning_rate = 0.0004  # original: 0.0004
         tau_m_exc = 20  # original: 20
         tau_m_inh = 15  # original: 15
-        Rm_exc = 17  # original: 17
-        Rm_inh = 19  # original: 19
+        Rm_exc = 15  # original: 17
+        Rm_inh = 15  # original: 19
         max_rate_hz = 90.0  # original: 250.0
         delta_adaption = 0.5  # original: 0.5
         tau_trace = 20  # original: 20
@@ -338,7 +338,7 @@ def main():
     parser.add_argument(
         "--random-weights",
         action="store_true",
-        default=False,
+        default=True,
         help="use random weights (0.01 for ee, 0.05 for se, 0.05 for ei, 0.05 for ie)",
     )
     parser.add_argument(
