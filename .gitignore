@@ -1,12 +1,20 @@
-# Ignore all data and model files
-data/
+# Generated outputs (runtime only)
 model/
-plot_files/
-sdata/
-src/pycache/
-*.pkl
-*.pyc
 plots/
 results/
 figures/
 profile/
+
+# Data
+data/
+sdata/
+plot_files/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Compiled extensions
+*.so
+*.egg-info/
