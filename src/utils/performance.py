@@ -2,7 +2,7 @@ import threading
 import queue
 import psutil
 import os
-from plot import heatmap_spike_response
+from src.plot.plot import heatmap_spike_response
 
 _plot_queue = queue.Queue()
 _plot_worker = None

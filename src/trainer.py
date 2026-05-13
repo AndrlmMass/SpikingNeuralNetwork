@@ -4,11 +4,11 @@ from tqdm import tqdm
 import numpy as np
 
 # import internal packages
-from regularization import Sleep, Normalizer
-from neurons import NeuronState, MembranePotential, update_x_tar
-from performance import report_RAM_usage, spawn_plot_thread
-from synapses import Learner, Clipper
-from trackers import TrainTracker
+from src.core.regularization import Sleep, Normalizer
+from src.core.neurons import NeuronState, MembranePotential, update_x_tar
+from src.utils.performance import report_RAM_usage, spawn_plot_thread
+from src.core.synapses import Learner, Clipper
+from src.core.trackers import TrainTracker
 
 
 @dataclass

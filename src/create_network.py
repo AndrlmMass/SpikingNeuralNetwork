@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import numpy as np
 import matplotlib
 
-from plot import (
+from src.plot.plot import (
     create_3D_weights_plot,
     plot_weights_individual,
     plot_single_neuron_weights,

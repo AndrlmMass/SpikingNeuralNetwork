@@ -1,4 +1,4 @@
-from big_comb import snn_sleepy
+from src.network.big_comb import snn_sleepy
 import argparse
 import numpy as np
 import random

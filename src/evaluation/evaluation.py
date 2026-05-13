@@ -115,3 +115,67 @@ class Evaluator:
             phi_score = None
 
         return acc, phi_score
+
+
+# old code for getting elite nodes
+def get_elite_nodes_wta(spikes, labels, num_classes, min_total_spikes=10):
+    import numpy as np
+
+    mask = (labels >= 0) & (labels < num_classes)
+    spikes = spikes[mask]
+    labels = labels[mask]
+
+    N = spikes.shape[1]
+    # top_k = int(N * narrow_top)
+
+    responses = np.zeros((N, num_classes), dtype=float)
+    for c in range(num_classes):
+        idx = np.where(labels == c)[0]
+        if idx.size > 0:
+            responses[:, c] = spikes[idx].sum(axis=0)
+
+    total = responses.sum(axis=1)
+    score = np.full_like(responses, -np.inf)
+    valid = total >= min_total_spikes
+    score[valid] = responses[valid] / total[valid, None]
+
+    pref = np.full(N, -1, dtype=int)
+    pref[valid] = np.argmax(score[valid], axis=1)
+
+    return pref, score
+
+
+#### same here ####
+def zscore_vote(
+    spikes, pref, baseline_mu, baseline_sigma, num_classes, eps=1e-8, mu_min=1e-3
+):
+    import numpy as np
+
+    """
+    spikes: (B, N) block-reduced spikes
+    pref: (N,) neuron->class assignment
+    baseline_mu: (N,) mean firing from fit snippet
+    baseline_sigma: (N,) std firing from fit snip    # 4) class activations
+    acts = np.zeros((B, num_classes), dtype=float)pet
+    """
+    valid_neurons = baseline_mu >= mu_min
+
+    # Avoid divide-by-zero
+    sigma = np.maximum(baseline_sigma, eps)
+
+    z = np.zeros_like(spikes, dtype=float)
+    z[:, valid_neurons] = (spikes[:, valid_neurons] - baseline_mu[valid_neurons]) / (
+        sigma[valid_neurons] + eps
+    )
+    z = np.maximum(z, 0.0)
+
+    # 4) class activations
+    acts = np.zeros((spikes.shape[0], num_classes), dtype=float)
+
+    for c in range(num_classes):
+        idx = np.where((pref == c) & valid_neurons)[0]
+        if idx.size:
+            acts[:, c] = z[:, idx].mean(axis=1)
+
+    pred = np.argmax(acts, axis=1)
+    return pred, acts

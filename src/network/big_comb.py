@@ -4,21 +4,16 @@ import gc
 from tqdm import tqdm
 import json
 from datetime import datetime
-from trainer import Trainer
-from get_data import (
-    GeomfigDataStreamer,
-)
-from plot import (
-    spike_plot,
-    heat_map,
+from src.core.trainer import Trainer
+from src.plot.plot import (
     WTA_accuracy,
     gif_spike_rate_by_label,
     PCAScatterDisplay,
 )
-from evaluation import Evaluator
-from performance import start_plot_worker, stop_plot_worker
-from create_network import create_weights, create_arrays
-import matplotlib.pyplot as plt
+from src.evaluation.evaluation import Evaluator
+from src.utils.performance import start_plot_worker, stop_plot_worker
+from src.network.create_network import create_weights, create_arrays
+from src.plot.plot import plot_accuracy
 
 
 class snn_sleepy:
@@ -35,7 +30,7 @@ class snn_sleepy:
         self.N_inh = N_inh
         self.N_x = N_x
         self.pixel_size = int(np.sqrt(N_x))
-        self.rng = np.random.default_rng(self.random_state)
+        self.rng = np.random.default_rng(random_state)
         self.N_classes = len(classes)
         self.classes = classes
         self.st = N_x  # stimulation
@@ -52,106 +47,6 @@ class snn_sleepy:
         self.ts_spec = ts_spec
         self.ts = datetime.now().strftime("%Y.%m.%d")
 
-    def _ensure_acc_logger(self):
-        if self._acc_log_file is None:
-            from datetime import datetime
-
-            self.image_dataset = getattr(self, "image_dataset", "unknown")
-            date = datetime.now().strftime("%Y.%m.%d")
-            try:
-                self._acc_log_dir = os.path.join(
-                    "results",
-                    "acc_history",
-                    f"{self.image_dataset}",
-                    f"{date}",
-                    f"acc_{self.ts_spec}",
-                )
-                os.makedirs(self._acc_log_dir, exist_ok=True)
-            except Exception:
-                pass
-            self._acc_log_file = os.path.join(
-                self._acc_log_dir, f"acc_{self.ts_spec}.jsonl"
-            )
-
-    def _record_accuracy(
-        self, split: str, value, epoch: int | None = None, method: str | None = None
-    ):
-        try:
-            acc_val = float(value) if value is not None else None
-        except Exception:
-            acc_val = None
-        # Append to in-memory history if numeric
-        try:
-            if acc_val is not None:
-                # Use method as key, or "default" if no method specified (for backward compatibility)
-                method_key = method if method is not None else "default"
-                if split not in self.acc_history:
-                    self.acc_history[split] = {}
-                if method_key not in self.acc_history[split]:
-                    self.acc_history[split][method_key] = []
-                self.acc_history[split][method_key].append(acc_val)
-        except Exception:
-            pass
-        # Persist incrementally
-        try:
-            self._ensure_acc_logger()
-            rec = {
-                "timestamp": datetime.now().isoformat(),
-                "split": str(split),
-                "epoch": int(epoch) if epoch is not None else None,
-                "accuracy": acc_val,
-            }
-            if method is not None:
-                rec["method"] = method
-            with open(self._acc_log_file, "a", encoding="utf-8") as f:
-                f.write(json.dumps(rec) + "\n")
-                f.flush()
-        except Exception as e:
-            # Non-fatal: continue training even if logging fails
-            print(f"Warning: failed to persist accuracy record ({e})")
-
-    def _record_phi(self, split: str, phi_value, epoch: int | None = None):
-        try:
-            phi_val = float(phi_value) if phi_value is not None else None
-        except Exception:
-            phi_val = None
-        # Persist to JSONL file
-        try:
-            self._ensure_acc_logger()
-            rec = {
-                "timestamp": datetime.now().isoformat(),
-                "split": str(split),
-                "epoch": int(epoch) if epoch is not None else None,
-                "phi": phi_val,
-            }
-            with open(self._acc_log_file, "a", encoding="utf-8") as f:
-                f.write(json.dumps(rec) + "\n")
-                f.flush()
-        except Exception as e:
-            # Non-fatal: continue even if logging fails
-            print(f"Warning: failed to persist phi record ({e})")
-
-    def _record_mcc(self, split: str, mcc_value, epoch: int | None = None):
-        try:
-            mcc_val = float(mcc_value) if mcc_value is not None else None
-        except Exception:
-            mcc_val = None
-        # Persist to JSONL file
-        try:
-            self._ensure_acc_logger()
-            rec = {
-                "timestamp": datetime.now().isoformat(),
-                "split": str(split),
-                "epoch": int(epoch) if epoch is not None else None,
-                "mcc": mcc_val,
-            }
-            with open(self._acc_log_file, "a", encoding="utf-8") as f:
-                f.write(json.dumps(rec) + "\n")
-                f.flush()
-        except Exception as e:
-            # Non-fatal: continue even if logging fails
-            print(f"Warning: failed to persist mcc record ({e})")
-
     def spikes_per_item(self, spikes, labels):
         T = spikes.shape[0]
         t = self.num_steps
@@ -159,16 +54,6 @@ class snn_sleepy:
         spikes = spikes.reshape(T // t, t, N).mean(axis=1)
         labels = labels.reshape(T // t, t).mean(axis=1).astype(int)
         return spikes, labels
-
-    def _read_jsonl(self, path):
-        records = []
-        with open(path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                records.append(json.loads(line))
-        return records
 
     def pad_to_match(self, a, b, pad_value=0):
         len_a, len_b = len(a), len(b)
@@ -179,368 +64,6 @@ class snn_sleepy:
             b = np.pad(b, (0, len_a - len_b), constant_values=pad_value)
 
         return a, b
-
-    def _plot_accuracy(self, wta, mcc, phi, pca):
-        import pandas as pd
-
-        """Plot train/val accuracy (left axis) and val phi (right axis) from JSONL log."""
-        if not getattr(self, "_acc_log_file", None) or not os.path.exists(
-            self._acc_log_file
-        ):
-            return
-
-        records = self._read_jsonl(self._acc_log_file)
-
-        # Collect series keyed by epoch and method (JSONL may have multiple lines per epoch)
-        if pca:
-            train_acc_pca = {}
-            val_acc_pca = {}
-        if wta:
-            train_acc_top = {}
-            val_acc_top = {}
-        if phi:
-            val_phi = {}
-            train_phi = {}
-        if mcc:
-            train_mcc = {}
-            val_mcc = {}
-
-        for r in records:
-            epoch = r.get("epoch")
-            if epoch is None:
-                continue
-
-            split = r.get("split")
-            method = r.get("method")
-
-            if "accuracy" in r and r["accuracy"] is not None:
-                acc_val = float(r["accuracy"])
-                if split == "train":
-                    if method == "pca_lr" and pca:
-                        train_acc_pca[int(epoch)] = acc_val
-                    elif method == "top" and wta:
-                        train_acc_top[int(epoch)] = acc_val
-                elif split == "val":
-                    if method == "pca_lr" and pca:
-                        val_acc_pca[int(epoch)] = acc_val
-                    elif method == "top" and wta:
-                        val_acc_top[int(epoch)] = acc_val
-
-            if "phi" in r and r["phi"] is not None:
-                # Based on your log format: phi is recorded under split="val"
-                if split == "val" and phi:
-                    val_phi[int(epoch)] = float(r["phi"])
-                if split == "train" and phi:
-                    train_phi[int(epoch)] = float(r["phi"])
-
-            if "mcc" in r and r["mcc"] is not None:
-                # Based on your log format: mcc is recorded under split="val"
-                if split == "val" and mcc:
-                    val_mcc[int(epoch)] = float(r["mcc"])
-                if split == "train" and mcc:
-                    train_mcc[int(epoch)] = float(r["mcc"])
-
-        fig, (ax, ax2) = plt.subplots(2, 1)
-
-        handles = []
-        labels = []
-        labels2 = []
-        handles2 = []
-
-        # if train_acc_pca:
-        #     xs = sorted(train_acc_pca)
-        #     train_acc = np.asarray([train_acc_pca[e] for e in xs])
-        #     line = ax.plot(
-        #         xs,
-        #         train_acc,
-        #         label="train acc (pca_lr)",
-        #         linestyle="-",
-        #         marker="o",
-        #         markersize=3,
-        #         color="gray",
-        #     )
-        #     handles.append(line[0])
-        #     labels.append("Train accuracy")
-        if pca:
-            xs = sorted(val_acc_pca)
-            val_acc = np.asarray([val_acc_pca[e] for e in xs])
-            line = ax.plot(
-                xs,
-                val_acc,
-                linestyle="none",
-                marker="o",
-                markersize=1.0,
-                color="indianred",
-            )
-            window = max(1, val_acc.shape[0] // 5)
-            val_acc_roll_mean = (
-                pd.Series(val_acc).rolling(window=window, min_periods=1).mean()
-            )
-            line2 = ax.plot(
-                xs,
-                val_acc_roll_mean,
-                color="indianred",
-                linewidth=1.5,
-            )
-            handles.append(line2[0])
-            labels.append("Val accuracy")
-            train_acc = np.asarray([train_acc_pca[e] for e in xs])
-            line = ax.plot(
-                xs,
-                train_acc,
-                linestyle="none",
-                marker="o",
-                markersize=1.0,
-                color="lightcoral",
-            )
-            window = max(1, train_acc.shape[0] // 5)
-            train_acc_roll_mean = (
-                pd.Series(train_acc).rolling(window=window, min_periods=1).mean()
-            )
-            line2 = ax.plot(
-                xs,
-                train_acc_roll_mean,
-                color="lightcoral",
-                linewidth=1.5,
-            )
-            handles.append(line2[0])
-            labels.append("Train accuracy")
-        if wta:
-            xs = sorted(train_acc_top)
-            line = ax.plot(
-                xs,
-                [train_acc_top[e] for e in xs],
-                label="train acc (top)",
-                linestyle="none",
-                marker="s",
-                markersize=3,
-                color="red",
-            )
-            handles2.append(line[0])
-            labels2.append("Train accuracy")
-            xs = sorted(val_acc_top)
-            line = ax.plot(
-                xs,
-                [val_acc_top[e] for e in xs],
-                label="val acc (top)",
-                linestyle="none",
-                marker="s",
-                markersize=3,
-                color="orange",
-            )
-            handles2.append(line[0])
-            labels2.append("Val accuracy")
-
-        # mcc (right axis)
-        if mcc:
-            xs = sorted(val_mcc)
-            mcc_line = ax.plot(
-                xs,
-                [val_mcc[e] for e in xs],
-                linestyle="solid",
-                label="MCC",
-                color="blue",
-                marker="s",
-                markersize=3,
-                linewidth=1.5,
-            )
-            handles.append(mcc_line[0])
-            labels.append("MCC")
-            xs = sorted(train_mcc)
-            mcc_line = ax.plot(
-                xs,
-                [train_mcc[e] for e in xs],
-                linestyle="dashed",
-                label="train mcc",
-                color="blue",
-                marker="s",
-                markersize=3,
-                linewidth=1.5,
-            )
-            handles.append(mcc_line[0])
-            labels.append("train mcc")
-
-        # add mean line from the first position
-        if pca:
-            import pandas as pd
-
-            y_line = val_acc[0]
-            # # window = max(1, val_acc.shape[0] // 5)
-            # # y_line_current = pd.Series(val_acc).rolling(window=window, min_periods=1).mean()
-            l1 = ax.axhline(
-                y=y_line,
-                linestyle="dashed",
-                linewidth=0.5,
-                color="grey",
-                label="baseline val acc",
-            )
-            # l2 = ax.axhline(
-            #     y=y_line_current,
-            #     linestyle="solid",
-            #     linewidth=0.5,
-            #     color="red",
-            #     label="average val acc",
-            # )
-            handles.append(l1)
-            # handles.append(l2)
-            labels.append("baseline val acc")
-            # labels.append("average val acc")
-
-        ax.set_ylabel("Accuracy")
-        ax2.set_ylabel("Clustering")
-        fig.supxlabel("Batches")
-        ax.set_ylim(bottom=val_acc.min(), top=train_acc.max())
-
-        # Phi (right axis)
-        if phi:
-            xs = sorted(val_phi)
-            val_phi_arr = np.asarray([val_phi[e] for e in xs])
-            train_phi_arr = np.asarray([train_phi[e] for e in xs])
-            ax2.plot(
-                xs,
-                val_phi_arr,
-                linestyle="none",
-                color="skyblue",
-                marker="p",
-                markersize=1.0,
-            )
-            window = max(1, val_phi_arr.shape[0] // 5)
-            val_phi_roll_mean = (
-                pd.Series(val_phi_arr).rolling(window=window, min_periods=1).mean()
-            )
-            phi_line_val2 = ax2.plot(
-                xs,
-                val_phi_roll_mean,
-                color="skyblue",
-                linewidth=1.5,
-            )
-            ax2.plot(
-                xs,
-                train_phi_arr,
-                linestyle="none",
-                color="deepskyblue",
-                marker="p",
-                markersize=1.0,
-            )
-            train_phi_roll_mean = (
-                pd.Series(train_phi_arr).rolling(window=window, min_periods=1).mean()
-            )
-            phi_line_train2 = ax2.plot(
-                xs,
-                train_phi_roll_mean,
-                color="deepskyblue",
-                linewidth=1.5,
-            )
-            ax2.set_ylabel("Clustering")
-            handles2.append(phi_line_val2[0])
-            labels2.append("Phi val")
-            handles2.append(phi_line_train2[0])
-            labels2.append("Phi train")
-
-        # Create legend with white background, box, and smaller font
-        if handles:
-            ax.legend(handles, labels, loc="lower left", framealpha=1.0, fontsize=5)
-        else:
-            ax.legend(loc="lower left", framealpha=1.0, fontsize=5)
-
-        if handles2:
-            ax2.legend(handles2, labels2, loc="lower left", framealpha=1.0, fontsize=5)
-        else:
-            ax2.legend(loc="lower left", framealpha=1.0, fontsize=5)
-
-        out_path = self._acc_log_file.replace(".jsonl", ".png")
-        fig.savefig(out_path, dpi=200, bbox_inches="tight")
-        plt.close(fig)
-
-    def preview_loaded_data(
-        self, num_image_samples: int = 9, save_path: str | None = None
-    ):
-        """
-        Plot a small grid of images from the loaded dataset once so the user can
-        verify that the expected dataset is being used.
-        """
-        if getattr(self, "_image_preview_done", False):
-            return
-        # Special handling for geomfig: show N examples per class (0..3)
-        if getattr(self, "image_dataset", "").lower() == "geomfig":
-            try:
-                import matplotlib.pyplot as plt
-                from get_data import _geomfig_generate_one  # type: ignore
-            except Exception as exc:
-                print(f"Dataset preview skipped ({exc})")
-                self._image_preview_done = True
-                return
-            try:
-                classes = [0, 1, 2, 3]
-                per_class = max(1, int(num_image_samples))
-                # Special case: if 1 per class and 4 classes, arrange as 2x2 instead of 4x1
-                if per_class == 1 and len(classes) == 4:
-                    rows, cols = 2, 2
-                    fig, axes = plt.subplots(rows, cols, figsize=(4.0, 4.0))
-                    axes = axes.flatten()
-                    titles = ["Triangle (0)", "Circle (1)", "Square (2)", "X (3)"]
-                    for idx, cls in enumerate(classes):
-                        img = _geomfig_generate_one(
-                            cls_id=cls,
-                            pixel_size=self.pixel_size,
-                            noise_var=getattr(self, "geom_noise_var", 0.02),
-                            jitter=getattr(self, "geom_jitter", False),
-                            jitter_amount=getattr(self, "geom_jitter_amount", 0.05),
-                        )
-                        ax = axes[idx]
-                        ax.imshow(img, cmap="gray")
-                        ax.set_title(titles[idx], fontsize=10)
-                        ax.axis("off")
-                else:
-                    fig, axes = plt.subplots(
-                        len(classes),
-                        per_class,
-                        figsize=(2.0 * per_class, 2.0 * len(classes)),
-                    )
-                    if per_class == 1:
-                        axes = np.atleast_2d(axes).reshape(len(classes), 1)
-                    titles = ["Triangle (0)", "Circle (1)", "Square (2)", "X (3)"]
-                    for r, cls in enumerate(classes):
-                        for c in range(per_class):
-                            img = _geomfig_generate_one(
-                                cls_id=cls,
-                                pixel_size=self.pixel_size,
-                                noise_var=getattr(self, "geom_noise_var", 0.02),
-                                jitter=getattr(self, "geom_jitter", False),
-                                jitter_amount=getattr(self, "geom_jitter_amount", 0.05),
-                            )
-                            ax = axes[r, c]
-                            ax.imshow(img, cmap="gray")
-                            if c == 0:
-                                ax.set_title(titles[r], fontsize=10)
-                            ax.axis("off")
-                plt.tight_layout()
-                try:
-                    if save_path is None:
-                        os.makedirs("plots", exist_ok=True)
-                        save_path = os.path.join("plots", "geomfig_preview.png")
-                    fig.savefig(save_path)
-                    print(f"Dataset preview saved to {save_path}")
-                except Exception as exc:
-                    print(f"Failed to save dataset preview ({exc})")
-                plt.show()
-                plt.close(fig)
-            except Exception as exc:
-                print(f"Dataset preview skipped ({exc})")
-            finally:
-                self._image_preview_done = True
-            return
-        # Default: use image streamer preview if available
-        if not hasattr(self, "image_streamer") or self.image_streamer is None:
-            return
-        try:
-            self.image_streamer.show_preview(
-                num_samples=num_image_samples, save_path=save_path
-            )
-        except Exception as exc:  # pragma: no cover - visualization fallback
-            print(f"Dataset preview skipped ({exc})")
-        finally:
-            self._image_preview_done = True
 
     def process(
         self,
@@ -1200,7 +723,7 @@ class snn_sleepy:
 
                 if self.image_streamer is not None:
                     # Image only streaming mode (missing branch)
-                    from get_data import load_image_batch
+                    from data.get_data import load_image_batch
 
                     train_start_idx = self.current_train_idx
                     data_train, labels_train = load_image_batch(
@@ -1488,7 +1011,7 @@ class snn_sleepy:
 
                 for val_batch_idx in range(total_num_vals):
                     # Image only streaming mode
-                    from get_data import load_image_batch
+                    from data.get_data import load_image_batch
 
                     val_start_idx = val_batch_idx * self.batch_val
                     data_val, labels_val = load_image_batch(
@@ -1610,7 +1133,7 @@ class snn_sleepy:
                         self._record_phi("val", final_val_phi, epoch=e + 1)
 
                     # plot validation and training accuracy progress
-                    self._plot_accuracy(mcc=False, pca=True, wta=False, phi=True)
+                    plot_accuracy(mcc=False, pca=True, wta=False, phi=True)
                 else:
                     final_acc_LR = None
                     final_val_phi = None
@@ -1654,7 +1177,7 @@ class snn_sleepy:
 
         # create gif if wanted after finishing training THIS CAN BE DONE SEPARATELY WITHOUT INCLUDING IN THE CURRENT LOOP
         if gif_pca_plot and PCA_plot:
-            from plot import GenerateGif
+            from src.plot.plot import GenerateGif
 
             output_filename = f"{self.ts_spec}.gif"
             gif = GenerateGif(
@@ -1663,7 +1186,7 @@ class snn_sleepy:
             gif.create()
 
         if gif_spikes_plot and heatmap_plot:
-            from plot import GenerateGif
+            from src.plot.plot import GenerateGif
 
             output_filename = "evolution.gif"
             directory = os.path.join(
@@ -1676,7 +1199,7 @@ class snn_sleepy:
             gif.create()
 
         # Final test pass even if early-stopped (evaluate on test partition)
-        from get_data import load_image_batch
+        from data.get_data import load_image_batch
 
         ################## THIS IS WHERE WE TEST THE MODEL ######################
         # Reset test pointers:

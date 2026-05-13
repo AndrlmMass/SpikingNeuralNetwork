@@ -1,5 +1,5 @@
 from torchvision import datasets, transforms
-from plot import plot_floats_and_spikes
+from src.plot.plot import plot_floats_and_spikes
 import torch.nn.functional as F
 from snntorch import spikegen
 import librosa
@@ -11,7 +11,7 @@ import torch
 import os
 import json
 from PIL import Image
-from gen_symbol import gen_triangle, gen_circle, gen_square, gen_x
+from src.data.gen_symbol import gen_triangle, gen_circle, gen_square, gen_x
 import hashlib
 
 os.environ["TQDM_DISABLE"] = "True"
