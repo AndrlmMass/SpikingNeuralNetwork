@@ -602,7 +602,7 @@ class PCAScatterDisplay:
         if self.figure_ is None:
             self.figure_, self.ax_ = plt.subplots()
         if self.colors_ is None:
-            self.colors_ = plt.cm.tab10(np.linspace(0, 1, len(np.unique(Y))))
+            self.colors_ = plt.cm.tab10(np.linspace(0, 1, int(np.max(Y)) + 1))
         self.ax_.clear()
         for c in np.unique(Y).astype(int):
             mask = Y == c

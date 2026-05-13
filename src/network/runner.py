@@ -290,8 +290,16 @@ class Runner:
                 if final_val_acc is not None:
                     self.logger._record_accuracy("val", final_val_acc, epoch=b + 1, method="pca_lr")
                     self.logger._record_phi("val", final_val_phi, epoch=b + 1)
-                    if accuracy_method == "pca_lr":
-                        plot_accuracy(mcc=False, pca=True, wta=False, phi=True)
+                    if accuracy_method == "pca_lr" and self.logger._acc_log_file:
+                        plot_accuracy(
+                            self.logger,
+                            wta=False,
+                            mcc=False,
+                            phi=True,
+                            pca=True,
+                            acc_log_file=self.logger._acc_log_file,
+                            read_jsonl=self.logger._read_jsonl,
+                        )
 
                     if final_val_acc > best_val:
                         best_val = final_val_acc

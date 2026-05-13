@@ -55,7 +55,7 @@ class Evaluator:
     ):
         from sklearn.decomposition import PCA
         from sklearn.preprocessing import StandardScaler
-        from sklearn.linear_model import LogisticRegressionCV
+        from sklearn.linear_model import LogisticRegression
 
         self.fig = None
         self.ax = None
@@ -68,8 +68,8 @@ class Evaluator:
             else None
         )
         self.clf = (
-            LogisticRegressionCV(
-                penalty="l1", solver="saga", max_iter=max_iter, cv=cv, n_jobs=n_jobs
+            LogisticRegression(
+                penalty="l1", solver="saga", max_iter=max_iter, n_jobs=n_jobs
             )
             if do_LR
             else None
@@ -77,11 +77,21 @@ class Evaluator:
         self.phi = Phi(num_classes=num_classes) if do_phi else None
 
     def fit(self, X, Y):
+        import numpy as np
         # scale input
         X = self.scaler.fit_transform(X)
+        X = np.nan_to_num(X, nan=0.0)
 
         # reduce dimensionality if do_pca
         if self.pca:
+            max_comps = min(X.shape[0], X.shape[1])
+            if self.pca.n_components > max_comps:
+                from sklearn.decomposition import PCA
+                self.pca = PCA(
+                    n_components=max_comps,
+                    svd_solver=self.pca.svd_solver,
+                    whiten=self.pca.whiten,
+                )
             X = self.pca.fit_transform(X)
 
         # estimate clustering ability of the network
@@ -93,14 +103,17 @@ class Evaluator:
             self.clf.fit(X, Y)
 
     def score(self, X, Y):
+        import numpy as np
         from sklearn.metrics import accuracy_score
 
         # scale input
         X = self.scaler.transform(X)
+        X = np.nan_to_num(X, nan=0.0)
 
         # reduce dimensionality
         if self.pca:
             X = self.pca.transform(X)
+            X = np.nan_to_num(X, nan=0.0)
 
         # compute accuracy
         if self.clf:
