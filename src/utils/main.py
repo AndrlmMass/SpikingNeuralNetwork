@@ -1,10 +1,10 @@
-import argparse
-import os
+# import external libraries
 import random
+import argparse
+import numpy as np
 from datetime import datetime
 
-import numpy as np
-
+# import internal modules
 from src.network.model import SNNModel
 from src.network.io import CheckpointManager
 from src.network.runner import Runner
@@ -20,17 +20,11 @@ def run_once(args, epoch):
         classes = [0, 1, 2, 3]
         num_input = 225
         w_dense_se = 0.1
-        tau_m = 30
-        tau_syn = 30
-        Rm = 30
         max_rate_hz = 67.0
     elif args.dataset.lower() == "fcx1":
         classes = [0, 1]
         num_input = 100
         w_dense_se = 0.5
-        tau_m = 1
-        tau_syn = 1
-        Rm = 30
         max_rate_hz = 67.0
     else:
         classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -63,7 +57,6 @@ def run_once(args, epoch):
         update_weights_freq = 100
         stat_tracking_frequency = 10500
         reg_mode = "static"
-        noise_level = 4.0
         sleep = True
         norm = False
 
@@ -98,7 +91,7 @@ def run_once(args, epoch):
         gain=args.geom_gain,
     )
 
-    model.prepare(
+    model.prepare_weights(
         plot_weights=False,
         w_dense_ee=w_dense_ee,
         w_dense_se=w_dense_se,
@@ -168,24 +161,29 @@ def main():
     parser.add_argument(
         "--dataset",
         type=str,
-        choices=["mnist", "kmnist", "fmnist", "fashionmnist", "fashion", "notmnist", "geomfig", "fcx1"],
+        choices=[
+            "mnist",
+            "kmnist",
+            "fmnist",
+            "fashionmnist",
+            "fashion",
+            "notmnist",
+            "geomfig",
+            "fcx1",
+        ],
         default="mnist",
     )
     parser.add_argument("--heatmap-plot", action="store_true", default=False)
     parser.add_argument("--plot-PCA", action="store_true", default=True)
     parser.add_argument("--get-giffed", action="store_true", default=False)
-    parser.add_argument("--geom-noise-var", type=float, default=0.02)
-    parser.add_argument("--geom-noise-mean", type=float, default=0.0)
-    parser.add_argument("--geom-jitter", action="store_true", default=False)
-    parser.add_argument("--geom-jitter-amount", type=float, default=0.05)
-    parser.add_argument("--geom-gain", type=float, default=0.5)
-    parser.add_argument("--geom-workers", type=int, default=max(1, (os.cpu_count() or 2) - 1))
     parser.add_argument("--profile", action="store_true", default=True)
     parser.add_argument("--plot-acc-history", action="store_true", default=False)
     parser.add_argument("--plot-weights-per-epoch", action="store_true", default=False)
     parser.add_argument("--save-model", action="store_true", default=True)
     parser.add_argument("--plot-spikes-per-epoch", action="store_true", default=False)
-    parser.add_argument("--sleep-mode", type=str, choices=["static", "group", "post"], default="static")
+    parser.add_argument(
+        "--sleep-mode", type=str, choices=["static", "group", "post"], default="static"
+    )
     parser.add_argument("--track-excel", action="store_true", default=False)
     parser.add_argument("--random-weights", action="store_true", default=True)
     parser.add_argument("--track-stats", action="store_true", default=False)

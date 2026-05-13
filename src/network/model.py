@@ -81,7 +81,7 @@ class SNNModel:
             dataset=image_dataset,
         )
 
-    def prepare(
+    def prepare_weights(
         self,
         w_dense_ee: float = 0.01,
         w_dense_se: float = 0.05,
