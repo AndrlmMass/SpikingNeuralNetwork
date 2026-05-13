@@ -412,6 +412,26 @@ def spike_threshold_plot(spike_threshold, N_exc):
     plt.show()
 
 
+def plot_spikes(self):
+    label_for_plotting = input("Which label should we plot? ")
+    while label_for_plotting != "stop":
+        if label_for_plotting == "all":
+            frame_folder = (
+                f"plots\\spikes\\{self.image_dataset}\\all\\{self.ts}\\{self.ts_spec}"
+            )
+            output_filename = f"plots\\spikes\\{self.image_dataset}\\all\\{self.ts}\\{self.ts_spec}\\evolution.gif"
+        else:
+            frame_folder = f"plots\\spikes\\{self.image_dataset}\\{label_for_plotting}\\{self.ts}\\{self.ts_spec}"
+            output_filename = f"plots\\spikes\\{self.image_dataset}\\{label_for_plotting}\\{self.ts}\\{self.ts_spec}\\evolution.gif"
+        gif_spike_rate_by_label(
+            frame_folder=frame_folder,
+            output_filename=output_filename,
+            duration=100,
+            loop=0,
+        )
+        label_for_plotting = input("Which label should we plot? ")
+
+
 class GenerateGif:
     def __init__(self, frame_folder, output_filename, duration=100, loop=0):
         self.frame_folder = frame_folder
