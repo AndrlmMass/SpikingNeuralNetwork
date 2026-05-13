@@ -5,6 +5,9 @@ results/
 figures/
 profile/
 
+# Settings
+.vscode/
+
 # Data
 data/
 sdata/

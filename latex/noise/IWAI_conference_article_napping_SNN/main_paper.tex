@@ -1,0 +1,111 @@
+% This is samplepaper.tex, a sample chapter demonstrating the
+% LLNCS macro package for Springer Computer Science proceedings;
+% Version 2.21 of 2022/01/12
+%
+\documentclass[runningheads]{llncs}
+%
+\usepackage[T1]{fontenc}
+% T1 fonts will be used to generate the final print and online PDFs,
+% so please use T1 fonts in your manuscript whenever possible.
+% Other font encondings may result in incorrect characters.
+%
+\usepackage{amsmath}
+\usepackage{graphicx}
+% Used for displaying a sample figure. If possible, figure files should
+% be included in EPS format.
+%
+% If you use the hyperref package, please uncomment the following two lines
+% to display URLs in blue roman font according to Springer's eBook style:
+%\usepackage{color}
+%\renewcommand\UrlFont{\color{blue}\rmfamily}
+%\urlstyle{rm}
+%
+\begin{document}
+%
+\title{Benchmarking micro-sleep paradigm for\newline Spiking Neural Networks}
+%
+%\titlerunning{Abbreviated paper title}
+% If the paper title is too long for the running head, you can set
+% an abbreviated paper title here
+%
+\author{Andreas Massey\inst{1}\orcidID{0009-0002-5300-9642} \and
+Solve Sæbø\inst{1}\orcidID{0000-0001-8699-4592} \and
+Stefano Nichele\inst{2}\orcidID{0000-0003-4696-9872} \and
+Aliaksandr Hubin\inst{1}\orcidID{0000-0002-3244-6571}
+}
+%
+\authorrunning{A. Massey et al.}
+% First names are abbreviated in the running head.
+% If there are more than two authors, 'et al.' is used.
+%
+\institute{The Norwegian University of Life Sciences, Elizabeth Stephansens v. 15, 1433 Ås, Norway \and
+Østfold University of Applied Sciences, B R A Veien 4, 1757 Halden, Norway}
+%\email{lncs@springer.com}\\
+%\url{http://www.springer.com/gp/computer-science/lncs} \and
+%ABC Institute, Rupert-Karls-University Heidelberg, Heidelberg, Germany\\
+%\email{\{abc,lncs\}@uni-heidelberg.de}}
+%
+\maketitle              % typeset the header of the contribution
+%
+\begin{abstract}
+Spike-timing-dependent plasticity (STDP) provides a biologically plausible Hebbian learning mechanism for Spiking Neural Networks (SNNs), yet recurrent architectures trained this way suffer from pathological weight dynamics: unbounded growth, catastrophic forgetting, and loss of representational diversity. The dominant remedy is weight normalization, which rescales synaptic weights at regular intervals to prevent runaway growth. We build upon an alternative approach inspired by the synaptic homeostasis hypothesis (SHy) — which posits that biological organisms normalize their synapses during sleep — leveraging this as a homeostatic mechanism for SNNs. In prior work, sleep phases withhold input, decay weights exponentially toward a preset target, and inject noisy spontaneous activity to induce spurious learning. While this stabilizes growth, exponential decay toward a fixed target destroys the relative structure of the weight distribution.
+We address both limitations through "napping": more frequent, briefer sleep episodes in which weights are \textit{scaled proportionally}, preserving their relative magnitudes while preventing runaway growth. Stochastic activity and learning continue throughout — with input feeds turned off — similar to previous work.
+We evaluate regularization across a 2×3 design: two mechanisms (normalization and napping), each under three target levels — static, layer-wise, and neuron-wise. Static scaling decays all weights exponentially toward a fixed target. Layer-wise scaling computes the ratio of actual to target weight mass per layer and rescales accordingly. Neuron scaling applies the same logic to each post-synaptic neuron's incoming weights. All six conditions are evaluated on MNIST, Fashion-MNIST, and NotMNIST.
+Having identified napping as a competitive alternative, we optimize it via ablation over sleep rate and noise level, yielding stable weight dynamics and reliable clustering across all benchmarks.
+%The abstract should briefly summarize the contents of the paper in
+%150--250 words.
+
+\keywords{Spiking Neural Networks \and Regularization \and Normalization \and Sleep \and Napping.}
+\end{abstract}
+%
+%
+%
+\section{Introduction}
+Spiking neural networks (SNNs) employ event-encoded information enabling efficient performance on neuromorphic hardware \cite{su_deep_2023}. This temporal sparsity yields orders-of-magnitude reductions in power consumption compared to dense, continuous-valued architectures \cite{isik_accelerating_2024}. However, the most widely deployed learning mechanisms for SNNs either fails to leverage the sparsity of the event-driven information processing or leverages local, unstable rules that scale poorly \cite{stratton_making_2022}. In particular, the surrogate gradient (SG) method explored in \cite{massey_sleep-based_2026} yields impressive performance, but remains difficult to utilise with neuromorphic hardware, thereby dwarfing the potential gains compared to artificial neural networks (ANNs). The most easily adaptable local learning rule, STDP, is plagued by issues of homeostatic instability, especially in recurrent SNNs where weights can grow unbounded leading to strong attractor states that fail to adapt or learn reliably.    
+
+\subsection{The problem with learning}
+Spike-timing-dependent plasticity (STDP) emerges naturally as the canonical local learning rule for SNNs \cite{song_competitive_2000}. Weight modifications depend solely on millisecond-scale timing differences between pre- and postsynaptic spikes: when presynaptic activity temporally precedes postsynaptic firing, weights strengthen; when the order reverses, weights weaken. This causality-respecting update rule is biologically faithful and theoretically motivated, implementing credit assignment through temporal adjacency and spike coincidence detection \cite{jayabal_experience_2024,chauhan_emergence_2018}. However, STDP is memory intensive — spike timings must be stored and weights updated multiple times within brief windows. Furthermore, in sparsely connected SNNs, postsynaptic neurons tend to be less active than presynaptic ones, meaning the presynaptic neuron will more often fire \textit{after} the postsynaptic neuron — systematically biasing updates toward depression.
+
+\begin{equation}[!H]
+    \Delta w = \begin{cases}
+        &A_+ \exp\left(\dfrac{-\Delta t}{\tau_+}\right), \Delta t > 0 \\[12pt]
+        -&A_- \exp\left(\dfrac{-\Delta t}{\tau_-}\right), \Delta t < 0
+    \end{cases}
+\end{equation}
+
+In recurrent architectures essential for temporal processing and internal state maintenance, these issues compound severely. Recurrent connectivity amplifies initial weight perturbations through positive-feedback loops, driving three intertwined failure modes: (i) \textbf{weight saturation}, where unrestricted Hebbian potentiation drives weights toward unbounded values or clipping limits \cite{gilson_stdp_2010} — the former causing catastrophic instability, the latter eliminating further learning capacity; (ii) \textbf{representational collapse}, where weight coupling induces spurious correlations that erode discriminative structure \cite{akil_synaptic_2020}; and (iii) \textbf{catastrophic forgetting}, where sequential learning overwrites previously learned representations \cite{tadros_sleep-like_2022}. 
+
+\subsection{Approaches to homeostasis}
+The field has pursued various approaches to address weight instability in SNNs, the most common being \textit{weight normalization}: rescaling synaptic weights at regular intervals toward a target magnitude — either globally, per-layer, or per-neuron — to prevent runaway growth \cite{carlson_biologically_2013}. While effective, normalization operates externally to the learning process and applies uniform rescaling that treats all weights equally regardless of their learned relevance (\textbf{SOURCE}).
+
+We pursue an alternative approach grounded in the synaptic homeostasis hypothesis (SHy), which posits that sleep performs activity-weighted synaptic renormalization to maintain stability and consolidate learning \cite{tononi_sleep_2014}. Like normalization, sleep-based homeostasis drives weights toward a target magnitude — but crucially, it does so gradually and noisily: inputs are suppressed, spontaneous activity drives continued STDP, and weights decay toward the target over the duration of the sleep phase rather than being rescaled instantaneously. This noisy, gradual descent\footnote{Notice that this is \textit{not} gradient descent.} is both the biological motivation and the key mechanistic distinction. Building on a prior sleep model \cite{massey_sleep-based_2026}, we identify a further limitation: exponential decay toward a fixed target destroys the relative structure of the weight distribution, regardless of which weights were task-relevant.
+
+We address this through \textit{napping}: proportional weight scaling embedded within sleep dynamics, preserving relative magnitudes while bounding absolute growth. Our \textbf{2×3} experimental design — normalization and napping each under static, layer-wise, and neuron-wise target granularities — is constructed to disentangle three distinct questions: (1) whether learning from noise \textit{during} downscaling improves weight stability or representational quality compared to instantaneous rescaling; (2) whether proportional scaling (napping) yields better representational preservation than absolute decay (static sleep) — employed by \cite{massey_sleep-based_2026}; and (3) how the granularity of the scaling target — network-wide, per-layer, or per-neuron — affects regularization quality across both mechanisms.
+
+
+
+\section{Methods}
+\subsection{Neuron model}
+\subsection{Network architecture}
+\subsection{Learning}
+\subsection{Regularization}
+\subsection{Data}
+\subsection{Evaluation}
+\subsection{Design}
+
+\section{Results}
+\subsection{Normalization and Sleep}
+\subsubsection{Static target}
+\subsubsection{Layer-wise target}
+\subsubsection{Neuron-wise target}
+\subsection{Sleep and Noise}
+
+\section{Discussion}
+\subsection{Main findings}
+\subsection{Limitations}
+\subsection{Future work}
+
+\bibliographystyle{splncs04}
+\bibliography{references}
+
+\end{document}

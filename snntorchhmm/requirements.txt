@@ -1,9 +1,0 @@
-torch>=1.9.0
-torchvision
-torchaudio
-matplotlib
-numpy
-pandas
-snntorch
-tqdm
-openpyxl
