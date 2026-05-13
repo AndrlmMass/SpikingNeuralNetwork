@@ -5,15 +5,14 @@ from tqdm import tqdm
 import json
 from datetime import datetime
 from src.core.trainer import Trainer
-from src.plot.plot import (
-    WTA_accuracy,
+from src.plot.spikes import (
     gif_spike_rate_by_label,
-    PCAScatterDisplay,
 )
+from src.plot.training import PCAScatterDisplay, plot_accuracy
 from src.evaluation.evaluation import Evaluator
 from src.utils.performance import start_plot_worker, stop_plot_worker
 from src.network.create_network import create_weights, create_arrays
-from src.plot.plot import plot_accuracy
+from src.plot.training import plot_accuracy
 
 
 class snn_sleepy:
@@ -856,24 +855,7 @@ class snn_sleepy:
                         f"\n--- Epoch {e+1} Training Accuracy ({accuracy_method.upper()}) ---"
                     )
 
-                    if accuracy_method == "top":
-                        # Use top-responders method for training accuracy
-                        train_acc_batch, __, __ = WTA_accuracy(
-                            spikes=spikes_tr_out[:, self.st : self.ex],
-                            labels=labels_tr_out,
-                            num_classes=self.N_classes,
-                            smoothening=self.num_steps,
-                            split="train",
-                        )
-                        print(f"Training Accuracy (TOP): {train_acc_batch:.4f}")
-                        try:
-                            self._record_accuracy(
-                                "train", train_acc_batch, epoch=e + 1, method="top"
-                            )
-                        except Exception:
-                            pass
-
-                    elif accuracy_method == "pca_lr":
+                    if accuracy_method == "pca_lr":
                         # Debug: Check network activity
                         input_spikes = spikes_tr_out[:, : self.st]
                         exc_spikes = spikes_tr_out[:, self.st : self.ex]
@@ -1177,7 +1159,7 @@ class snn_sleepy:
 
         # create gif if wanted after finishing training THIS CAN BE DONE SEPARATELY WITHOUT INCLUDING IN THE CURRENT LOOP
         if gif_pca_plot and PCA_plot:
-            from src.plot.plot import GenerateGif
+            from src.plot.spikes import GenerateGif
 
             output_filename = f"{self.ts_spec}.gif"
             gif = GenerateGif(
@@ -1186,7 +1168,7 @@ class snn_sleepy:
             gif.create()
 
         if gif_spikes_plot and heatmap_plot:
-            from src.plot.plot import GenerateGif
+            from src.plot.spikes import GenerateGif
 
             output_filename = "evolution.gif"
             directory = os.path.join(

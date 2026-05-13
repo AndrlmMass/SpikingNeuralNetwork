@@ -354,7 +354,7 @@ def plot_accuracy(self, wta, mcc, phi, pca, acc_log_file, read_jsonl):
     plt.close(fig)
 
 
-def plot_phi_acc(all_scores):
+def plot_phi_acc(all_scores, epoch):
     import shutil
     from matplotlib.lines import Line2D
 
