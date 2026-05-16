@@ -21,6 +21,7 @@ class SNNModel:
         self.N_inh = N_inh
         self.N_x = N_x
         self.pixel_size = int(np.sqrt(N_x))
+        self.random_state = random_state
         self.rng = np.random.default_rng(random_state)
         self.N_classes = len(classes)
         self.classes = classes
@@ -77,6 +78,7 @@ class SNNModel:
             val_count=all_images_val,
             test_count=all_images_test,
             dataset=image_dataset,
+            random_seed=self.random_state,
         )
 
     def prepare_weights(

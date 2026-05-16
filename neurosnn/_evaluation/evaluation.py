@@ -48,6 +48,7 @@ class Evaluator:
         do_phi: bool = True,
         do_LR: bool = True,
         do_pca: bool = True,
+        seed: int = 0,
     ):
         from sklearn.decomposition import PCA
         from sklearn.preprocessing import StandardScaler
@@ -65,7 +66,8 @@ class Evaluator:
         )
         self.clf = (
             LogisticRegression(
-                penalty="l1", solver="saga", max_iter=max_iter, n_jobs=n_jobs
+                penalty="l1", solver="saga", max_iter=max_iter, n_jobs=n_jobs,
+                random_state=seed,
             )
             if do_LR
             else None

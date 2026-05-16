@@ -7,6 +7,7 @@ import numpy as np
 from tqdm import tqdm
 
 from neurosnn.results import EvalResult, TrainResult
+from neurosnn._core.neurons import seed_numba_rng
 from neurosnn._core.trainer import Trainer
 from neurosnn._evaluation.evaluation import Evaluator
 from neurosnn._network.io import CheckpointManager
@@ -115,6 +116,11 @@ class Runner:
         if accuracy_method != "pca_lr" and PCA_plot:
             raise ValueError("PCA_plot requires accuracy_method='pca_lr'")
 
+        # Seed Numba's internal per-thread RNG so membrane noise is reproducible.
+        # This must be called inside a Python function before any @njit code runs;
+        # it is separate from numpy's global RNG and model.rng.
+        seed_numba_rng(self.model.random_state)
+
         model = self.model
         sparse = model.sparse_indices()
         initial_sums_se, initial_sums_ee = model.initial_sums(reg_mode)
@@ -205,6 +211,7 @@ class Runner:
             do_phi=use_phi,
             do_LR=use_LR,
             do_pca=use_pca,
+            seed=model.random_state,
         )
 
         self.logger.log_config(dict(

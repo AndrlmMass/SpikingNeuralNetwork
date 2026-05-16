@@ -276,7 +276,9 @@ class ImageDataStreamer:
 
         if self.dataset != "fcx1":
             # Shuffle indices for random access over the combined (train+test) space
-            np.random.shuffle(self.indices)
+            # Use a seeded RNG so the train/val/test split is reproducible
+            _split_rng = np.random.default_rng(random_seed)
+            _split_rng.shuffle(self.indices)
 
             # Partition indices for train/val/test if counts provided
             total = len(self.indices)

@@ -4,6 +4,16 @@ import numpy as np
 
 
 @njit(cache=True)
+def seed_numba_rng(seed: int):
+    """Seed Numba's internal per-thread RNG.
+
+    Numba maintains its own RNG state separate from NumPy's global state.
+    Call this once before training begins to make membrane noise reproducible.
+    """
+    np.random.seed(seed)
+
+
+@njit(cache=True)
 def update_membrane_potential(
     mp,
     mp_new,
