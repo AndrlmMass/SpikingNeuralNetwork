@@ -61,6 +61,7 @@ class Runner:
     def train(
         self,
         epochs: int = 1,
+        return_spikes: bool = False,
         train_weights: bool = False,
         tau_trace: int = 25,
         learning_rate: float = 0.0008,
@@ -253,12 +254,12 @@ class Runner:
 
                 for b in range(n_train if train_weights else 1):
                     data_train, labels_train = model.image_streamer.get_batch(
-                        model.batch_train, "train"
+                        0, model.batch_train, "train"
                     )
                     if data_train is None:
                         model.image_streamer.reset_partition("train")
                         data_train, labels_train = model.image_streamer.get_batch(
-                            model.batch_train, "train"
+                            0, model.batch_train, "train"
                         )
                     if data_train is None:
                         break
@@ -285,6 +286,7 @@ class Runner:
                         self._state["spike_trace"],
                         self._x_tar_se,
                         self._x_tar_ee,
+                        batch_stats,
                     ) = self._trainer.step(
                         weights=model.weights,
                         mp=self._state["mp"],
@@ -311,6 +313,7 @@ class Runner:
                     del spikes_train, labels_train
 
                     tr_accuracy = tr_phi = None
+                    tr_spikes = None
                     if accuracy_method == "pca_lr" and spikes_tr_out is not None:
                         X_tr, y_tr = model.spikes_per_item(
                             spikes_tr_out[:, model.st : model.ex], labels_tr_out
@@ -334,6 +337,8 @@ class Runner:
                             self.logger._record_phi(
                                 "train", tr_phi, epoch=self._global_batch + 1
                             )
+                            if return_spikes:
+                                tr_spikes = X_tr
 
                     del spikes_tr_out, labels_tr_out
                     gc.collect()
@@ -352,6 +357,8 @@ class Runner:
                         weights=model.weights,
                         accuracy=tr_accuracy,
                         phi=tr_phi,
+                        spikes=tr_spikes,
+                        stats=batch_stats,
                     )
 
         finally:
@@ -364,13 +371,13 @@ class Runner:
                 )
                 gif.create()
 
-    def validate(self) -> EvalResult:
+    def validate(self, return_spikes: bool = False) -> EvalResult:
         if self._trainer is None:
             raise RuntimeError("call train() before validate()")
         if not self._evaluator_fitted:
             return EvalResult(accuracy=None, phi=None, split="val")
 
-        acc, phi = self._validate(
+        acc, phi, val_spikes = self._validate(
             trainer=self._trainer,
             evaluator=self._evaluator,
             pca_plotter=self._pca_plotter if self._PCA_plot else None,
@@ -380,6 +387,7 @@ class Runner:
             accuracy_method=self._accuracy_method,
             PCA_plot=self._PCA_plot,
             validate_call_idx=self._validate_call_count,
+            return_spikes=return_spikes,
         )
         self._validate_call_count += 1
 
@@ -402,21 +410,22 @@ class Runner:
                 self._best_val = acc
                 self.checkpoint.save_model(self.model.weights, {}, run_id=self.model.ts_spec)
 
-        return EvalResult(accuracy=acc, phi=phi, split="val")
+        return EvalResult(accuracy=acc, phi=phi, split="val", spikes=val_spikes)
 
-    def test(self) -> EvalResult:
+    def test(self, return_spikes: bool = False) -> EvalResult:
         if self._trainer is None:
             raise RuntimeError("call train() before test()")
 
-        acc, phi = self._test(
+        acc, phi, te_spikes = self._test(
             trainer=self._trainer,
             evaluator=self._evaluator,
             spike_threshold_default=self._spike_threshold_default,
             x_tar_se=self._x_tar_se,
             x_tar_ee=self._x_tar_ee,
             accuracy_method=self._accuracy_method,
+            return_spikes=return_spikes,
         )
-        return EvalResult(accuracy=acc, phi=phi, split="test")
+        return EvalResult(accuracy=acc, phi=phi, split="test", spikes=te_spikes)
 
     def _init_state(self, spike_threshold_default: float) -> dict:
         m = self.model
@@ -441,16 +450,18 @@ class Runner:
         accuracy_method: str,
         PCA_plot: bool,
         validate_call_idx: int = 0,
+        return_spikes: bool = False,
     ):
         model = self.model
         acc_sum = phi_sum = 0.0
         count = 0
+        spikes_out_all = []
 
         model.image_streamer.reset_partition("val")
 
         for _ in range(model.n_val_batches):
             data_val, labels_val = model.image_streamer.get_batch(
-                model.batch_val, "val"
+                0, model.batch_val, "val"
             )
             if data_val is None:
                 break
@@ -477,6 +488,7 @@ class Runner:
                 _,
                 _,
                 labels_val_out,
+                _,
                 _,
                 _,
                 _,
@@ -518,13 +530,16 @@ class Runner:
                     acc_sum += acc
                     phi_sum += phi
                     count += 1
+                    if return_spikes:
+                        spikes_out_all.append(X_val)
 
             del spikes_val_out, labels_val_out
             gc.collect()
 
         if count == 0:
-            return None, None
-        return acc_sum / count, phi_sum / count
+            return None, None, None
+        collected = np.concatenate(spikes_out_all, axis=0) if return_spikes and spikes_out_all else None
+        return acc_sum / count, phi_sum / count, collected
 
     def _test(
         self,
@@ -534,15 +549,17 @@ class Runner:
         x_tar_se: np.ndarray,
         x_tar_ee: np.ndarray,
         accuracy_method: str,
+        return_spikes: bool = False,
     ):
         model = self.model
         model.image_streamer.reset_partition("test")
         acc_sum = phi_sum = 0.0
         count = 0
+        spikes_out_all = []
 
         for _ in range(model.n_test_batches):
             data_test, labels_test = model.image_streamer.get_batch(
-                model.batch_test, "test"
+                0, model.batch_test, "test"
             )
             if data_test is None:
                 break
@@ -569,6 +586,7 @@ class Runner:
                 _,
                 _,
                 labels_te_out,
+                _,
                 _,
                 _,
                 _,
@@ -602,12 +620,14 @@ class Runner:
                     acc_sum += acc
                     phi_sum += phi
                     count += 1
+                    if return_spikes:
+                        spikes_out_all.append(X_te)
 
             del spikes_te_out, labels_te_out
             gc.collect()
 
         if count == 0:
-            return None, None
+            return None, None, None
 
         final_acc = acc_sum / count
         final_phi = phi_sum / count
@@ -615,4 +635,5 @@ class Runner:
         print(f"Test phi: {final_phi:.4f}")
         self.logger._record_accuracy("test", final_acc, epoch=None, method="pca_lr")
         self.logger._record_phi("test", final_phi, epoch=None)
-        return final_acc, final_phi
+        collected = np.concatenate(spikes_out_all, axis=0) if return_spikes and spikes_out_all else None
+        return final_acc, final_phi, collected

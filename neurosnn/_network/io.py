@@ -15,7 +15,7 @@ class CheckpointManager:
         np.save(os.path.join(model_dir, "weights.npy"), weights)
         with open(os.path.join(model_dir, "model_parameters.json"), "w") as f:
             json.dump(parameters, f)
-        print(f"\rmodel saved → {model_dir}", end="")
+        print(f"\rmodel saved -> {model_dir}", end="")
         return model_dir
 
     def load_model(self, parameters, base_dir="model"):

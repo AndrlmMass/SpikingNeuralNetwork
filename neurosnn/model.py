@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Generator, List, Optional
 
 from neurosnn.layer import Layer
+from neurosnn.learner import TraceSTDP
 from neurosnn.results import EvalResult, TrainResult
 from neurosnn._network.io import CheckpointManager
 from neurosnn._network.model import SNNModel
@@ -65,6 +66,8 @@ class Model:
     def train(
         self,
         layers: List[Layer],
+        learner: TraceSTDP = None,
+        regularizer=None,
         epochs: int = 1,
         train_weights: bool = True,
         save_model: bool = True,
@@ -73,26 +76,7 @@ class Model:
         use_phi: bool = True,
         use_pca: bool = True,
         pca_variance: float = 0.95,
-        learning_rate: float = 0.0008,
-        tau_trace: int = 25,
-        A_plus: float = 0.5,
-        A_minus: float = 0.5,
-        tau_LTP: float = 10.0,
-        tau_LTD: float = 10.0,
-        w_max: float = 10.0,
-        mu_weight: float = 0.6,
         dt: float = 1.0,
-        min_weight_exc: float = 0.01,
-        max_weight_exc: float = 25.0,
-        min_weight_inh: float = -25.0,
-        max_weight_inh: float = -0.01,
-        clip_weights: bool = False,
-        normalize_weights: bool = False,
-        sleep: bool = False,
-        reg_mode: str = "static",
-        reg_frequency: int = 1050,
-        sleep_duration: int = 300,
-        update_weights_freq: int = 100,
         track_stats: bool = False,
         track_weights: bool = False,
         stat_tracking_frequency: int = 1000,
@@ -100,12 +84,13 @@ class Model:
         PCA_plot: bool = False,
         gif_pca_plot: bool = False,
         heatmap_plot: bool = False,
+        return_spikes: bool = False,
     ) -> Generator[TrainResult, None, None]:
         """Build the network from layer specs and return a training generator.
 
-        All membrane dynamics parameters (tau, resistance, thresholds, noise,
-        adaptation) are read directly from the Layer spec and do not need to
-        be repeated here.
+        Membrane dynamics are read from the Layer spec.  Learning rule and
+        regularization are configured via the learner and regularizer objects.
+        If omitted, TraceSTDP and no regularization are used as defaults.
 
         Only a single Layer is currently supported.
         """
@@ -142,6 +127,19 @@ class Model:
             **layer.weights._to_factory_kwargs(),
         )
 
+        if learner is None:
+            learner = TraceSTDP()
+        if regularizer is None:
+            reg_kwargs = dict(
+                sleep=False,
+                normalize_weights=False,
+                sleep_duration=0,
+                reg_frequency=1050,
+                reg_mode="static",
+            )
+        else:
+            reg_kwargs = regularizer._to_runner_kwargs()
+
         checkpoint = CheckpointManager()
         logger = HistoryTracker(
             ts_spec=self.ts_spec,
@@ -151,6 +149,7 @@ class Model:
 
         return self._runner.train(
             epochs=epochs,
+            return_spikes=return_spikes,
             tau_m_exc=mem.tau_m_exc,
             tau_m_inh=mem.tau_m_inh,
             membrane_resistance_exc=mem.membrane_resistance_exc,
@@ -173,26 +172,7 @@ class Model:
             use_phi=use_phi,
             use_pca=use_pca,
             pca_variance=pca_variance,
-            learning_rate=learning_rate,
-            tau_trace=tau_trace,
-            A_plus=A_plus,
-            A_minus=A_minus,
-            tau_LTP=tau_LTP,
-            tau_LTD=tau_LTD,
-            w_max=w_max,
-            mu_weight=mu_weight,
             dt=dt,
-            min_weight_exc=min_weight_exc,
-            max_weight_exc=max_weight_exc,
-            min_weight_inh=min_weight_inh,
-            max_weight_inh=max_weight_inh,
-            clip_weights=clip_weights,
-            normalize_weights=normalize_weights,
-            sleep=sleep,
-            reg_mode=reg_mode,
-            reg_frequency=reg_frequency,
-            sleep_duration=sleep_duration,
-            update_weights_freq=update_weights_freq,
             track_stats=track_stats,
             track_weights=track_weights,
             stat_tracking_frequency=stat_tracking_frequency,
@@ -200,16 +180,18 @@ class Model:
             PCA_plot=PCA_plot,
             gif_pca_plot=gif_pca_plot,
             heatmap_plot=heatmap_plot,
+            **learner._to_runner_kwargs(),
+            **reg_kwargs,
         )
 
-    def validate(self) -> EvalResult:
+    def validate(self, return_spikes: bool = False) -> EvalResult:
         """Validate using the current weights. Call from inside the train() loop."""
         if self._runner is None:
             raise RuntimeError("call train() before validate()")
-        return self._runner.validate()
+        return self._runner.validate(return_spikes=return_spikes)
 
-    def test(self) -> EvalResult:
+    def test(self, return_spikes: bool = False) -> EvalResult:
         """Run the test partition. Call after training is complete."""
         if self._runner is None:
             raise RuntimeError("call train() before test()")
-        return self._runner.test()
+        return self._runner.test(return_spikes=return_spikes)

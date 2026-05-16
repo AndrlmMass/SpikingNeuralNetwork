@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
@@ -22,7 +23,6 @@ class TrainTracker:
         self.track_count = self.x_tar_count = 0
         self.x_tar_sum_se = self.x_tar_sum_ee = 0.0
         self.first_term_sum = self.delta_w_sum = self.x_pre_sum = 0.0
-        self.second_term_sum = 0.0
 
     def track_neuron(
         self,
@@ -50,96 +50,78 @@ class TrainTracker:
         self.spike_trace_ex += spike_trace.mean()
         self.track_count += 1
 
-    def track_synapse(
-        self,
-        m_x_pre,
-        m_first_term,
-        m_second_term,
-        m_delta_w,
-        x_tar_se,
-        x_tar_ee,
-    ):
+    def track_synapse(self, m_x_pre, m_first_term, m_delta_w, x_tar_se, x_tar_ee):
         self.x_pre_sum += m_x_pre
         self.first_term_sum += m_first_term
-        self.second_term_sum += m_second_term
         self.delta_w_sum += m_delta_w
         self.x_tar_sum_se += x_tar_se.mean()
         self.x_tar_sum_ee += x_tar_ee.mean()
         self.x_tar_count += 1
 
+    def to_dict(self) -> Optional[dict]:
+        if self.track_count == 0 and self.x_tar_count == 0:
+            return None
+        n = max(1, self.track_count)
+        nx = max(1, self.x_tar_count)
+        return {
+            "mean_mp_exc": self.mp_ex / n,
+            "mean_mp_inh": self.mp_ih / n,
+            "mean_delta_mp_exc": self.delta_mp_ex / n,
+            "mean_delta_mp_inh": self.delta_mp_ih / n,
+            "mean_I_syn_exc": self.I_syn_ex / n,
+            "mean_I_syn_inh": self.I_syn_ih / n,
+            "mean_delta_I_syn_exc": self.delta_I_syn_ex / n,
+            "mean_delta_I_syn_inh": self.delta_I_syn_ih / n,
+            "mean_adaptation": self.a_ex / n,
+            "mean_spike_threshold": self.spike_threshold_ex / n,
+            "mean_spike_trace": self.spike_trace_ex / n,
+            "mean_x_pre": self.x_pre_sum / nx,
+            "mean_first_term": self.first_term_sum / nx,
+            "mean_delta_w": self.delta_w_sum / nx,
+            "mean_x_tar_se": self.x_tar_sum_se / nx,
+            "mean_x_tar_ee": self.x_tar_sum_ee / nx,
+        }
+
     def print(self, weights, spikes, track_weights, track_stats):
-        if not (self.track_stats or self.track_weights):
+        if not (track_stats or track_weights):
             return
 
-        mean_delta_mp_ex = self.delta_mp_ex / max(1, self.track_count)
-        mean_delta_mp_ih = self.delta_mp_ih / max(1, self.track_count)
-        mean_mp_ex = self.mp_ex / max(1, self.track_count)
-        mean_mp_ih = self.mp_ih / max(1, self.track_count)
-        mean_delta_I_syn_ex = self.delta_I_syn_ex / max(1, self.track_count)
-        mean_delta_I_syn_ih = self.delta_I_syn_ih / max(1, self.track_count)
-        mean_I_syn_ex = self.I_syn_ex / max(1, self.track_count)
-        mean_I_syn_ih = self.I_syn_ih / max(1, self.track_count)
-        mean_a_ex = self.a_ex / max(1, self.track_count)
-        mean_spike_threshold_ex = self.spike_threshold_ex / max(1, self.track_count)
-        mean_spike_trace_ex = self.spike_trace_ex / max(1, self.track_count)
+        d = self.to_dict()
+        if d is None:
+            return
+
         spikes_st = spikes[:, : self.st].mean(axis=0)
         spikes_ex = spikes[:, self.st : self.ex].mean(axis=0)
         spikes_ih = spikes[:, self.ex : self.ih].mean(axis=0)
 
         if track_stats:
-            print(f"Mean delta mp ex: {mean_delta_mp_ex}")
-            print(f"Mean delta mp ih: {mean_delta_mp_ih}")
-            print(f"Mean delta I syn ex: {mean_delta_I_syn_ex}")
-            print(f"Mean delta I syn ih: {mean_delta_I_syn_ih}")
-            print(f"Mean membrane potential ex: {mean_mp_ex}")
-            print(f"Mean membrane potential ih: {mean_mp_ih}")
-            print(f"Mean I syn ex: {mean_I_syn_ex}")
-            print(f"Mean I syn ih: {mean_I_syn_ih}")
-            print(f"Mean a ex: {mean_a_ex}")
-            print(f"Mean spike threshold ex: {mean_spike_threshold_ex}")
-            print(f"Mean spikes st: {spikes_st.mean()}")
-            print(f"Mean spikes ih: {spikes_ih.mean()}")
-            print(f"Mean spikes ex: {spikes_ex.mean()}")
-            print(f"Mean spike trace ex: {mean_spike_trace_ex}")
-            print(
-                f"weights st->ex: ",
-                weights[: self.st, self.st : self.ex][
-                    weights[: self.st, self.st : self.ex] != 0
-                ].mean(),
-            )
-            print(
-                f"weights ex->ex: ",
-                weights[self.st : self.ex, self.st : self.ex][
-                    weights[self.st : self.ex, self.st : self.ex] != 0
-                ].mean(),
-            )
-            print(
-                f"weights ex->ih: ",
-                weights[self.st : self.ex, self.ex : self.ih][
-                    weights[self.st : self.ex, self.ex : self.ih] != 0
-                ].mean(),
-            )
-            print(
-                f"weights ih->ex: ",
-                weights[self.ex : self.ih, self.st : self.ex][
-                    weights[self.ex : self.ih, self.st : self.ex] != 0
-                ].mean(),
-            )
-            print(
-                "std ex->ih:",
-                weights[self.st : self.ex, self.ex : self.ih][
-                    weights[self.st : self.ex, self.ex : self.ih] != 0
-                ].std(),
-            )
-            print(
-                "std ex->ex:",
-                weights[self.st : self.ex, self.st : self.ex][
-                    weights[self.st : self.ex, self.st : self.ex] != 0
-                ].std(),
-            )
-            print(
-                "std st->ex:",
-                weights[: self.st, self.st : self.ex][
-                    weights[: self.st, self.st : self.ex] != 0
-                ].std(),
-            )
+            print(f"Mean delta mp exc:        {d['mean_delta_mp_exc']:.5f}")
+            print(f"Mean delta mp inh:        {d['mean_delta_mp_inh']:.5f}")
+            print(f"Mean delta I syn exc:     {d['mean_delta_I_syn_exc']:.5f}")
+            print(f"Mean delta I syn inh:     {d['mean_delta_I_syn_inh']:.5f}")
+            print(f"Mean membrane pot exc:    {d['mean_mp_exc']:.5f}")
+            print(f"Mean membrane pot inh:    {d['mean_mp_inh']:.5f}")
+            print(f"Mean I syn exc:           {d['mean_I_syn_exc']:.5f}")
+            print(f"Mean I syn inh:           {d['mean_I_syn_inh']:.5f}")
+            print(f"Mean adaptation:          {d['mean_adaptation']:.5f}")
+            print(f"Mean spike threshold:     {d['mean_spike_threshold']:.5f}")
+            print(f"Mean spike trace:         {d['mean_spike_trace']:.5f}")
+            print(f"Mean spikes input:        {spikes_st.mean():.5f}")
+            print(f"Mean spikes exc:          {spikes_ex.mean():.5f}")
+            print(f"Mean spikes inh:          {spikes_ih.mean():.5f}")
+
+        if track_weights:
+            nz = lambda block: block[block != 0]
+            print(f"Mean x_pre:               {d['mean_x_pre']:.5f}")
+            print(f"Mean first term:          {d['mean_first_term']:.5f}")
+            print(f"Mean delta_w:             {d['mean_delta_w']:.5f}")
+            print(f"Mean x_tar SE:            {d['mean_x_tar_se']:.5f}")
+            print(f"Mean x_tar EE:            {d['mean_x_tar_ee']:.5f}")
+            w = weights
+            print(f"Weights ST->EX mean:      {nz(w[:self.st, self.st:self.ex]).mean():.5f}")
+            print(f"Weights EX->EX mean:      {nz(w[self.st:self.ex, self.st:self.ex]).mean():.5f}")
+            print(f"Weights EX->IH mean:      {nz(w[self.st:self.ex, self.ex:self.ih]).mean():.5f}")
+            print(f"Weights IH->EX mean:      {nz(w[self.ex:self.ih, self.st:self.ex]).mean():.5f}")
+            print(f"Weights ST->EX std:       {nz(w[:self.st, self.st:self.ex]).std():.5f}")
+            print(f"Weights EX->EX std:       {nz(w[self.st:self.ex, self.st:self.ex]).std():.5f}")
+            print(f"Weights EX->IH std:       {nz(w[self.st:self.ex, self.ex:self.ih]).std():.5f}")

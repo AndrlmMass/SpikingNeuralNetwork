@@ -394,7 +394,7 @@ class Trainer:
                 )
                 if track_weights:
                     self.tracker.track_synapse(
-                        m_x_pre, m_first_term, m_delta_w, x_tar_se, x_tar_ee
+                        m_x_pre, m_first_term, m_delta_w, x_tar_se, x_tar_ee,
                     )
 
                 np.copyto(weights_exc, weights[:, self.st : self.ex].T)
@@ -440,4 +440,5 @@ class Trainer:
             spike_trace,
             x_tar_se,
             x_tar_ee,
+            self.tracker.to_dict(),
         )
