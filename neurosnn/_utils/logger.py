@@ -33,6 +33,15 @@ class HistoryTracker:
                 self._acc_log_dir, f"acc_{self.ts_spec}.jsonl"
             )
 
+    def log_config(self, config: dict):
+        self._ensure_acc_logger()
+        path = os.path.join(self._acc_log_dir, "config.json")
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=2)
+        except Exception as e:
+            print(f"Warning: failed to write config ({e})")
+
     def _record_accuracy(
         self, split: str, value, epoch: int | None = None, method: str | None = None
     ):

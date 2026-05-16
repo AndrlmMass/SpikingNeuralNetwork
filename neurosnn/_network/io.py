@@ -5,13 +5,12 @@ import numpy as np
 
 
 class CheckpointManager:
-    def save_model(self, weights, parameters, base_dir="model") -> str:
+    def save_model(self, weights, parameters, base_dir="model", run_id: str = None) -> str:
         os.makedirs(base_dir, exist_ok=True)
-        rng = np.random.default_rng()
-        tag = str(rng.integers(10000, 99999))
-        while tag in os.listdir(base_dir):
-            tag = str(rng.integers(10000, 99999))
-        model_dir = os.path.join(base_dir, tag)
+        if run_id is None:
+            rng = np.random.default_rng()
+            run_id = str(rng.integers(10000, 99999))
+        model_dir = os.path.join(base_dir, run_id)
         os.makedirs(model_dir, exist_ok=True)
         np.save(os.path.join(model_dir, "weights.npy"), weights)
         with open(os.path.join(model_dir, "model_parameters.json"), "w") as f:

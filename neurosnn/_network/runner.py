@@ -206,6 +206,34 @@ class Runner:
             do_pca=use_pca,
         )
 
+        self.logger.log_config(dict(
+            ts_spec=model.ts_spec,
+            dataset=model.image_dataset,
+            epochs=epochs,
+            train_weights=train_weights,
+            sleep=sleep,
+            sleep_duration=sleep_duration,
+            reg_mode=reg_mode,
+            reg_frequency=reg_frequency,
+            var_noise=var_noise,
+            mean_noise=mean_noise,
+            learning_rate=learning_rate,
+            A_plus=A_plus,
+            A_minus=A_minus,
+            tau_LTP=tau_LTP,
+            tau_LTD=tau_LTD,
+            tau_m_exc=tau_m_exc,
+            tau_m_inh=tau_m_inh,
+            spike_threshold_default=spike_threshold_default,
+            N_exc=model.N_exc,
+            N_inh=model.N_inh,
+            N_x=model.N_x,
+            num_steps=model.num_steps,
+            all_images_train=model.all_train,
+            all_images_val=model.all_val,
+            all_images_test=model.all_test,
+        ))
+
         if self._state is None:
             self._state = self._init_state(spike_threshold_default)
 
@@ -225,12 +253,12 @@ class Runner:
 
                 for b in range(n_train if train_weights else 1):
                     data_train, labels_train = model.image_streamer.get_batch(
-                        0, model.batch_train, "train"
+                        model.batch_train, "train"
                     )
                     if data_train is None:
                         model.image_streamer.reset_partition("train")
                         data_train, labels_train = model.image_streamer.get_batch(
-                            0, model.batch_train, "train"
+                            model.batch_train, "train"
                         )
                     if data_train is None:
                         break
@@ -372,7 +400,7 @@ class Runner:
                 )
             if self._save_model and acc > self._best_val:
                 self._best_val = acc
-                self.checkpoint.save_model(self.model.weights, {})
+                self.checkpoint.save_model(self.model.weights, {}, run_id=self.model.ts_spec)
 
         return EvalResult(accuracy=acc, phi=phi, split="val")
 
@@ -422,7 +450,7 @@ class Runner:
 
         for _ in range(model.n_val_batches):
             data_val, labels_val = model.image_streamer.get_batch(
-                0, model.batch_val, "val"
+                model.batch_val, "val"
             )
             if data_val is None:
                 break
@@ -514,7 +542,7 @@ class Runner:
 
         for _ in range(model.n_test_batches):
             data_test, labels_test = model.image_streamer.get_batch(
-                0, model.batch_test, "test"
+                model.batch_test, "test"
             )
             if data_test is None:
                 break
