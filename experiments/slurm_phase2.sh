@@ -16,6 +16,7 @@
 #   BEST_REG_TYPE=normalize BEST_REG_MODE=adaptive bash experiments/submit_phase2.sh
 #
 #SBATCH --job-name=snn_p2
+#SBATCH --array=0-319%20
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
@@ -26,7 +27,7 @@
 
 set -euo pipefail
 
-PROJECT_ROOT=~/projects/src
+PROJECT_ROOT=/mnt/users/andreama/projects/biosnn
 cd "${PROJECT_ROOT}"
 
 # ---- parameter grid -------------------------------------------------------

@@ -16,6 +16,7 @@
 # only the regularizer type/mode varies.
 #
 #SBATCH --job-name=snn_p1
+#SBATCH --array=0-24
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
@@ -26,7 +27,7 @@
 
 set -euo pipefail
 
-PROJECT_ROOT=~/projects/src
+PROJECT_ROOT=/mnt/users/andreama/projects/biosnn
 cd "${PROJECT_ROOT}"
 
 # ---- decode array task id -------------------------------------------------

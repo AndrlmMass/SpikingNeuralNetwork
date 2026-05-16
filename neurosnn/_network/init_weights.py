@@ -84,7 +84,7 @@ class WeightFactory:
         )
 
     def initial_sums(self, weights: np.ndarray, reg_mode: str) -> tuple:
-        if reg_mode == "static":
+        if reg_mode in ("static", "adaptive"):
             return np.zeros(1), np.zeros(1)
         elif reg_mode == "post":
             return (
