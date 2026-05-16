@@ -50,7 +50,7 @@ class Normalizer:
             self.scale = self.target
         else:
             self.scale = np.ones(self.nz_rows.size, dtype=np.float64)
-        if self.mode == "post":
+        if self.mode in ("post", "adaptive"):
             self.initial_sum_nz = self.initial_sum[self.nz_cols]
 
     def step(self, weights):
@@ -60,7 +60,7 @@ class Normalizer:
             current_sum = weights[self.nz_rows, self.nz_cols].sum()
             self.scale = self.initial_sum / current_sum
             return layer(weights, self.scale, self.nz_rows, self.nz_cols)
-        else:
+        else:  # post or adaptive
             return post_norm(
                 weights,
                 self.initial_sum_nz,
@@ -83,12 +83,14 @@ class Sleep:
         self.sleep_lambda = 1.0 / self.duration
         if self.mode == "static":
             self.scale = self.w_target**self.sleep_lambda
+        else:
+            self.scale = np.ones(self.nz_rows.size, dtype=np.float64)
 
     def onset(self, weights):
         if self.mode == "layer":
             rho = self.initial_sums / (weights[self.nz_rows, self.nz_cols].sum() + 1e-8)
             self.scale = rho**self.sleep_lambda
-        elif self.mode == "post":
+        elif self.mode in ("post", "adaptive"):
             current_sum = np.bincount(
                 self.nz_cols,
                 weights[self.nz_rows, self.nz_cols],
@@ -98,7 +100,7 @@ class Sleep:
             self.scale = rho[self.nz_cols] ** self.sleep_lambda
 
     def step(self, weights):
-        if self.mode == "post":
+        if self.mode in ("post", "adaptive"):
             return post_sleep(weights, self.scale, self.nz_rows, self.nz_cols)
         elif self.mode == "layer":
             return layer(weights, self.scale, self.nz_rows, self.nz_cols)
