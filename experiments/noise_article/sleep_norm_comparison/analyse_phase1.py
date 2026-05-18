@@ -166,7 +166,7 @@ def plot_results(df: pd.DataFrame, out_path: str):
         positions = []
 
         for i, rt in enumerate(types_here):
-            vals = sub[sub["reg_type"] == rt]["test_acc"].tolist()
+            vals = [v * 100 for v in sub[sub["reg_type"] == rt]["test_acc"].tolist()]
             boxes_data.append(vals)
             box_colors.append(COLORS[rt])
             box_labels.append(LABELS[rt])
@@ -198,8 +198,13 @@ def plot_results(df: pd.DataFrame, out_path: str):
 
         # Significance test between sleep and normalize (if both present)
         if "sleep" in types_here and "normalize" in types_here:
-            v_sleep = sub[sub["reg_type"] == "sleep"]["test_acc"].tolist()
-            v_norm = sub[sub["reg_type"] == "normalize"]["test_acc"].tolist()
+            v_sleep = [
+                v * 100 for v in sub[sub["reg_type"] == "sleep"]["test_acc"].tolist()
+            ]
+            v_norm = [
+                v * 100
+                for v in sub[sub["reg_type"] == "normalize"]["test_acc"].tolist()
+            ]
             _, p = mannwhitneyu(v_sleep, v_norm, alternative="two-sided")
             label = sig_label(p)
 
@@ -220,15 +225,16 @@ def plot_results(df: pd.DataFrame, out_path: str):
                 label,
                 ha="center",
                 va="bottom",
-                fontsize=13,
+                fontsize=18,
             )
 
-        ax.set_title(MODE_DISPLAY.get(mode, mode), fontsize=12)
+        ax.set_title(MODE_DISPLAY.get(mode, mode), fontsize=24)
         ax.set_xticks(positions)
-        ax.set_xticklabels(box_labels, fontsize=11)
+        ax.tick_params(axis="y", labelsize=16)
+        ax.set_xticklabels(box_labels, fontsize=22)
         if mode == reg_modes[0]:
-            ax.set_ylabel("Test accuracy", fontsize=11)
-        ax.set_ylim(0, 1.05)
+            ax.set_ylabel("Accuracy (%)", fontsize=22)
+        ax.set_ylim(0, 105)
         ax.yaxis.grid(True, linestyle="--", alpha=0.5)
         ax.set_axisbelow(True)
 
@@ -239,10 +245,11 @@ def plot_results(df: pd.DataFrame, out_path: str):
     ]
     fig.legend(
         handles=patches,
-        loc="upper right",
-        fontsize=10,
+        loc=("lower right"),
+        bbox_to_anchor=(0.9, 0.2),
+        fontsize=16,
         title="Reg type",
-        title_fontsize=10,
+        title_fontsize=18,
     )
 
     plt.tight_layout()
@@ -278,7 +285,7 @@ def main():
     print(f"\nXLSX saved -> {xlsx_path}")
 
     # Plot
-    png_path = os.path.join(OUT_DIR, "phase1_boxplot.svg")
+    png_path = os.path.join(OUT_DIR, "phase1_boxplot.pdf")
     plot_results(df, png_path)
 
 

@@ -1,31 +1,29 @@
 #!/bin/bash
-# Phase 2 — sleep duration × membrane noise grid.
+# Phase 2 — sleep duration × membrane noise × reg-mode grid.
 #
-# 8 durations × 8 noise levels × 5 seeds = 320 independent runs.
+# 8 durations × 8 noise levels × 3 reg-modes = 192 independent runs (seed fixed to 0).
 # Submit with:
 #   bash experiments/submit_phase2.sh
 #
-# Encoding:
-#   grid_idx  = TASK_ID // 5          (0-63)
-#   seed      = TASK_ID %  5          (0-4)
-#   dur_idx   = grid_idx // 8         (0-7)
-#   noise_idx = grid_idx %  8         (0-7)
+# Encoding (TASK_ID = 0-191):
+#   mode_idx  = TASK_ID %  3          (0-2)
+#   cell_idx  = TASK_ID // 3          (0-63)
+#   dur_idx   = cell_idx // 8         (0-7)
+#   noise_idx = cell_idx %  8         (0-7)
 #
-# Regularizer is fixed to sleep/static (best condition from Phase 1).
-# Override BEST_REG_TYPE / BEST_REG_MODE via environment if needed:
-#   BEST_REG_TYPE=normalize BEST_REG_MODE=adaptive bash experiments/submit_phase2.sh
+# Regularizer type is fixed to sleep; mode varies across static/layer/neuron.
 #
 #SBATCH --job-name=snn_p2
-#SBATCH --array=0-319%20
+#SBATCH --array=0-191%20
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
-#SBATCH --time=06:00:00
+#SBATCH --time=10:00:00
 #SBATCH --partition=orion
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=andreas.lie.massey@nmbu.no
 
-set -euo pipefail
+set -uo pipefail
 
 PROJECT_ROOT=/mnt/users/andreama/projects/biosnn
 cd "${PROJECT_ROOT}"
@@ -33,22 +31,24 @@ cd "${PROJECT_ROOT}"
 # ---- parameter grid -------------------------------------------------------
 SLEEP_DURATIONS=(50 100 150 200 300 400 500 600)
 VAR_NOISES=(0.0 0.1 0.5 1.0 2.0 4.0 6.0 8.0)
+REG_MODES=(static layer neuron)
 
-# Regularizer fixed (override after Phase 1 results are in)
-REG_TYPE=${BEST_REG_TYPE:-sleep}
-REG_MODE=${BEST_REG_MODE:-static}
+# Regularizer type is fixed to sleep for all Phase 2 runs
+REG_TYPE=sleep
 
 # ---- decode array task id -------------------------------------------------
 TASK_ID=${SLURM_ARRAY_TASK_ID}
-GRID_IDX=$(( TASK_ID / 5 ))
-SEED=$(( TASK_ID % 5 ))
-DUR_IDX=$(( GRID_IDX / 8 ))
-NOISE_IDX=$(( GRID_IDX % 8 ))
+SEED=0
+MODE_IDX=$(( TASK_ID % 3 ))
+CELL_IDX=$(( TASK_ID / 3 ))
+DUR_IDX=$(( CELL_IDX / 8 ))
+NOISE_IDX=$(( CELL_IDX % 8 ))
 
 SLEEP_DURATION=${SLEEP_DURATIONS[$DUR_IDX]}
 VAR_NOISE=${VAR_NOISES[$NOISE_IDX]}
+REG_MODE=${REG_MODES[$MODE_IDX]}
 
-OUTPUT_DIR="${PROJECT_ROOT}/experiments/results/phase2/sd${SLEEP_DURATION}_vn${VAR_NOISE}_s${SEED}"
+OUTPUT_DIR="${PROJECT_ROOT}/experiments/results/phase2/${REG_MODE}_sd${SLEEP_DURATION}_vn${VAR_NOISE}_s${SEED}"
 mkdir -p "${OUTPUT_DIR}"
 
 # ---- log header -----------------------------------------------------------
@@ -56,7 +56,7 @@ exec > >(tee -a "${OUTPUT_DIR}/job.log") 2>&1
 echo "========================================"
 echo "Job  : ${SLURM_JOB_ID}  Task : ${TASK_ID}"
 echo "Node : $(hostname)  Started : $(date)"
-echo "grid_idx=${GRID_IDX}  dur_idx=${DUR_IDX}  noise_idx=${NOISE_IDX}"
+echo "cell_idx=${CELL_IDX}  dur_idx=${DUR_IDX}  noise_idx=${NOISE_IDX}  mode_idx=${MODE_IDX}"
 echo "sleep_dur=${SLEEP_DURATION}  var_noise=${VAR_NOISE}  seed=${SEED}"
 echo "reg=${REG_TYPE}/${REG_MODE}"
 echo "output -> ${OUTPUT_DIR}"
