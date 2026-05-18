@@ -12,7 +12,7 @@ python experiments/run_experiment.py
 
 # Phase 1 — regularizer comparison (fixed noise, vary reg type/mode)
 python experiments/run_experiment.py --reg-type sleep --reg-mode static --seed 0
-python experiments/run_experiment.py --reg-type normalize --reg-mode adaptive --seed 1
+python experiments/run_experiment.py --reg-type normalize --reg-mode neuron --seed 1
 python experiments/run_experiment.py --reg-type none --seed 2
 
 # Phase 2 — sleep/noise grid
@@ -44,7 +44,7 @@ def parse_args():
                         choices=["sleep", "normalize", "none"],
                         help="Regularization type (default: sleep)")
     parser.add_argument("--reg-mode", type=str, default="static",
-                        choices=["static", "adaptive"],
+                        choices=["static", "layer", "neuron"],
                         help="Regularization schedule mode (default: static)")
     parser.add_argument("--seed", type=int, default=0,
                         help="Random seed for full reproducibility (default: 0)")

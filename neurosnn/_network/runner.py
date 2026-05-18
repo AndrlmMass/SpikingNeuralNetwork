@@ -216,10 +216,12 @@ class Runner:
 
         self.logger.log_config(dict(
             ts_spec=model.ts_spec,
+            seed=model.random_state,
             dataset=model.image_dataset,
             epochs=epochs,
             train_weights=train_weights,
             sleep=sleep,
+            normalize_weights=normalize_weights,
             sleep_duration=sleep_duration,
             reg_mode=reg_mode,
             reg_frequency=reg_frequency,

@@ -50,7 +50,7 @@ class Normalizer:
             self.scale = self.target
         else:
             self.scale = np.ones(self.nz_rows.size, dtype=np.float64)
-        if self.mode in ("post", "adaptive"):
+        if self.mode == "neuron":
             self.initial_sum_nz = self.initial_sum[self.nz_cols]
 
     def step(self, weights):
@@ -60,7 +60,7 @@ class Normalizer:
             current_sum = weights[self.nz_rows, self.nz_cols].sum()
             self.scale = self.initial_sum / current_sum
             return layer(weights, self.scale, self.nz_rows, self.nz_cols)
-        else:  # post or adaptive
+        else:  # neuron
             return post_norm(
                 weights,
                 self.initial_sum_nz,
@@ -90,7 +90,7 @@ class Sleep:
         if self.mode == "layer":
             rho = self.initial_sums / (weights[self.nz_rows, self.nz_cols].sum() + 1e-8)
             self.scale = rho**self.sleep_lambda
-        elif self.mode in ("post", "adaptive"):
+        elif self.mode == "neuron":
             current_sum = np.bincount(
                 self.nz_cols,
                 weights[self.nz_rows, self.nz_cols],
@@ -100,7 +100,7 @@ class Sleep:
             self.scale = rho[self.nz_cols] ** self.sleep_lambda
 
     def step(self, weights):
-        if self.mode in ("post", "adaptive"):
+        if self.mode == "neuron":
             return post_sleep(weights, self.scale, self.nz_rows, self.nz_cols)
         elif self.mode == "layer":
             return layer(weights, self.scale, self.nz_rows, self.nz_cols)

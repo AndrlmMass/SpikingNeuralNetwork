@@ -25,7 +25,7 @@ class Sleep:
         ``'layer'``   — the total synaptic drive across the whole layer is
         restored to its value at the start of training.
 
-        ``'post'``    — each postsynaptic neuron's incoming weight sum is
+        ``'neuron'``  — each postsynaptic neuron's incoming weight sum is
         individually restored to its initial value (most local form).
     """
 
@@ -57,7 +57,7 @@ class Normalize:
     frequency : int
         Number of awake timesteps between normalization steps.
     mode : str
-        Same three options as Sleep: ``'static'``, ``'layer'``, ``'post'``.
+        Same three options as Sleep: ``'static'``, ``'layer'``, ``'neuron'``.
     """
 
     frequency: int = 1050
