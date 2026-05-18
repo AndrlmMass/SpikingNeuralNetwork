@@ -18,7 +18,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
-#SBATCH --time=10:00:00
+#SBATCH --time=24:00:00
 #SBATCH --partition=orion
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=andreas.lie.massey@nmbu.no
@@ -48,7 +48,7 @@ SLEEP_DURATION=${SLEEP_DURATIONS[$DUR_IDX]}
 VAR_NOISE=${VAR_NOISES[$NOISE_IDX]}
 REG_MODE=${REG_MODES[$MODE_IDX]}
 
-OUTPUT_DIR="${PROJECT_ROOT}/experiments/results/phase2/${REG_MODE}_sd${SLEEP_DURATION}_vn${VAR_NOISE}_s${SEED}"
+OUTPUT_DIR="${PROJECT_ROOT}/experiments/noise_article/sleep_noise_optimization/results/phase2/${REG_MODE}_sd${SLEEP_DURATION}_vn${VAR_NOISE}_s${SEED}"
 mkdir -p "${OUTPUT_DIR}"
 
 # ---- log header -----------------------------------------------------------
@@ -70,7 +70,7 @@ fi
 
 # ---- run ------------------------------------------------------------------
 singularity exec noise_env.sif conda run -n noise_env python \
-    experiments/run_experiment.py \
+    experiments/noise_article/sleep_noise_optimization/run_sleep_tuning.py \
     --reg-type       "${REG_TYPE}" \
     --reg-mode       "${REG_MODE}" \
     --sleep-duration "${SLEEP_DURATION}" \

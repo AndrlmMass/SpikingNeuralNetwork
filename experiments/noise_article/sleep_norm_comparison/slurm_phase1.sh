@@ -68,7 +68,7 @@ fi
 
 # ---- run ------------------------------------------------------------------
 singularity exec noise_env.sif conda run -n noise_env python \
-    experiments/run_experiment.py \
+    experiments/noise_article/sleep_norm_comparison/run_experiment.py \
     --reg-type       "${REG_TYPE}" \
     --reg-mode       "${REG_MODE}" \
     --sleep-duration "${SLEEP_DURATION}" \

@@ -21,7 +21,7 @@ from scipy.stats import mannwhitneyu
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 SLURM_DIR = os.path.join(
     REPO_ROOT, "results", "acc_history", "mnist", "2026.05.16", "17"
 )
