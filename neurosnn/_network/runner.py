@@ -112,6 +112,10 @@ class Runner:
         sleep_duration: int = 300,
         stat_tracking_frequency: int = 1000,
         update_weights_freq: int = 100,
+        record_fn_se: "callable | None" = None,
+        record_fn_ee: "callable | None" = None,
+        record_fn_awake_se: "callable | None" = None,
+        record_fn_awake_ee: "callable | None" = None,
     ) -> Generator[TrainResult, None, None]:
         if accuracy_method != "pca_lr" and PCA_plot:
             raise ValueError("PCA_plot requires accuracy_method='pca_lr'")
@@ -203,6 +207,10 @@ class Runner:
             nz_rows_exc=sparse["nz_rows_exc"],
             x_tar_se=self._x_tar_se,
             x_tar_ee=self._x_tar_ee,
+            record_fn_se=record_fn_se,
+            record_fn_ee=record_fn_ee,
+            record_fn_awake_se=record_fn_awake_se,
+            record_fn_awake_ee=record_fn_awake_ee,
         )
 
         self._evaluator = Evaluator(

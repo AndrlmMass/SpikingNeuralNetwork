@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -32,6 +32,8 @@ class Sleep:
     duration: int = 300
     frequency: int = 1050
     mode: str = "static"
+    record_fn_se: "callable | None" = field(default=None, repr=False)
+    record_fn_ee: "callable | None" = field(default=None, repr=False)
 
     def _to_runner_kwargs(self) -> dict:
         return dict(
@@ -40,6 +42,8 @@ class Sleep:
             sleep_duration=self.duration,
             reg_frequency=self.frequency,
             reg_mode=self.mode,
+            record_fn_se=self.record_fn_se,
+            record_fn_ee=self.record_fn_ee,
         )
 
 
@@ -62,6 +66,8 @@ class Normalize:
 
     frequency: int = 1050
     mode: str = "static"
+    record_fn_se: "callable | None" = field(default=None, repr=False)
+    record_fn_ee: "callable | None" = field(default=None, repr=False)
 
     def _to_runner_kwargs(self) -> dict:
         return dict(
@@ -70,4 +76,6 @@ class Normalize:
             sleep_duration=0,
             reg_frequency=self.frequency,
             reg_mode=self.mode,
+            record_fn_se=self.record_fn_se,
+            record_fn_ee=self.record_fn_ee,
         )

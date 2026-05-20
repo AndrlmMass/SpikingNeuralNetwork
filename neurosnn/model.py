@@ -85,6 +85,8 @@ class Model:
         gif_pca_plot: bool = False,
         heatmap_plot: bool = False,
         return_spikes: bool = False,
+        record_fn_awake_se: "callable | None" = None,
+        record_fn_awake_ee: "callable | None" = None,
     ) -> Generator[TrainResult, None, None]:
         """Build the network from layer specs and return a training generator.
 
@@ -182,6 +184,8 @@ class Model:
             heatmap_plot=heatmap_plot,
             **learner._to_runner_kwargs(),
             **reg_kwargs,
+            record_fn_awake_se=record_fn_awake_se,
+            record_fn_awake_ee=record_fn_awake_ee,
         )
 
     def validate(self, return_spikes: bool = False) -> EvalResult:

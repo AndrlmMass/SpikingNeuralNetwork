@@ -76,6 +76,10 @@ class Trainer:
     nz_rows_ee: list
     nz_cols_exc: list
     nz_rows_exc: list
+    record_fn_se: "callable | None" = None
+    record_fn_ee: "callable | None" = None
+    record_fn_awake_se: "callable | None" = None
+    record_fn_awake_ee: "callable | None" = None
 
     def __post_init__(self):
         self.track_stats = np.uint8(self.track_stats)
@@ -151,6 +155,7 @@ class Trainer:
                 initial_sums=self.initial_sums_se,
                 nz_rows=self.nz_rows_se,
                 nz_cols=self.nz_cols_se,
+                record_fn=self.record_fn_se,
             )
             self.sleep_ee = Sleep(
                 mode=self.reg_mode,
@@ -159,6 +164,7 @@ class Trainer:
                 initial_sums=self.initial_sums_ee,
                 nz_rows=self.nz_rows_ee,
                 nz_cols=self.nz_cols_ee,
+                record_fn=self.record_fn_ee,
             )
         elif self.normalize_weights:
             self.norm_se = Normalizer(
@@ -168,6 +174,7 @@ class Trainer:
                 nz_rows=self.nz_rows_se,
                 nz_cols=self.nz_cols_se,
                 weight_cols=self.N_exc,
+                record_fn=self.record_fn_se,
             )
             self.norm_ee = Normalizer(
                 mode=self.reg_mode,
@@ -176,6 +183,7 @@ class Trainer:
                 nz_rows=self.nz_rows_ee,
                 nz_cols=self.nz_cols_ee,
                 weight_cols=self.N_exc,
+                record_fn=self.record_fn_ee,
             )
         self.empty_spikes = np.zeros(self.ih, dtype=np.int8)
 
@@ -322,10 +330,10 @@ class Trainer:
                         x_tar_ee=x_tar_ee,
                     )
                     weights[: self.st, self.st : self.ex] = self.sleep_se.step(
-                        weights[: self.st, self.st : self.ex]
+                        weights[: self.st, self.st : self.ex], t
                     )
                     weights[self.st : self.ex, self.st : self.ex] = self.sleep_ee.step(
-                        weights[self.st : self.ex, self.st : self.ex]
+                        weights[self.st : self.ex, self.st : self.ex], t
                     )
 
                     np.copyto(weights_exc, weights[:, self.st : self.ex].T)
@@ -383,10 +391,10 @@ class Trainer:
                 )
                 if self.normalize_weights and normalize_now:
                     weights[: self.st, self.st : self.ex] = self.norm_se.step(
-                        weights[: self.st, self.st : self.ex]
+                        weights[: self.st, self.st : self.ex], t
                     )
                     weights[self.st : self.ex, self.st : self.ex] = self.norm_ee.step(
-                        weights[self.st : self.ex, self.st : self.ex]
+                        weights[self.st : self.ex, self.st : self.ex], t
                     )
                 x_tar_se, x_tar_ee = update_x_tar(
                     spike_trace=spike_trace,
@@ -399,6 +407,11 @@ class Trainer:
 
                 np.copyto(weights_exc, weights[:, self.st : self.ex].T)
                 np.copyto(weights_inh, weights[self.st : self.ex, self.ex : self.ih].T)
+
+                if self.record_fn_awake_se is not None:
+                    self.record_fn_awake_se(weights[: self.st, self.st : self.ex], t)
+                if self.record_fn_awake_ee is not None:
+                    self.record_fn_awake_ee(weights[self.st : self.ex, self.st : self.ex], t)
 
                 update_weights_now = np.uint8(0)
                 normalize_now = np.uint8(0)

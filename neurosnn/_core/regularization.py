@@ -44,6 +44,7 @@ class Normalizer:
     nz_rows: np.ndarray
     nz_cols: np.ndarray
     weight_cols: int
+    record_fn: "callable | None" = None
 
     def __post_init__(self):
         if self.mode == "static":
@@ -53,21 +54,24 @@ class Normalizer:
         if self.mode == "neuron":
             self.initial_sum_nz = self.initial_sum[self.nz_cols]
 
-    def step(self, weights):
+    def step(self, weights, t=None):
         if self.mode == "static":
-            return static(weights, self.scale, self.nz_rows, self.nz_cols)
+            weights = static(weights, self.scale, self.nz_rows, self.nz_cols)
         elif self.mode == "layer":
             current_sum = weights[self.nz_rows, self.nz_cols].sum()
             self.scale = self.initial_sum / current_sum
-            return layer(weights, self.scale, self.nz_rows, self.nz_cols)
+            weights = layer(weights, self.scale, self.nz_rows, self.nz_cols)
         else:  # neuron
-            return post_norm(
+            weights = post_norm(
                 weights,
                 self.initial_sum_nz,
                 self.nz_rows,
                 self.nz_cols,
                 self.weight_cols,
             )
+        if self.record_fn is not None:
+            self.record_fn(weights, t)
+        return weights
 
 
 @dataclass
@@ -78,6 +82,7 @@ class Sleep:
     initial_sums: np.ndarray
     nz_rows: np.ndarray
     nz_cols: np.ndarray
+    record_fn: "callable | None" = None
 
     def __post_init__(self):
         self.sleep_lambda = 1.0 / self.duration
@@ -99,10 +104,13 @@ class Sleep:
             rho = self.initial_sums / (current_sum + 1e-8)
             self.scale = rho[self.nz_cols] ** self.sleep_lambda
 
-    def step(self, weights):
+    def step(self, weights, t=None):
         if self.mode == "neuron":
-            return post_sleep(weights, self.scale, self.nz_rows, self.nz_cols)
+            weights = post_sleep(weights, self.scale, self.nz_rows, self.nz_cols)
         elif self.mode == "layer":
-            return layer(weights, self.scale, self.nz_rows, self.nz_cols)
+            weights = layer(weights, self.scale, self.nz_rows, self.nz_cols)
         else:
-            return static(weights, self.scale, self.nz_rows, self.nz_cols)
+            weights = static(weights, self.scale, self.nz_rows, self.nz_cols)
+        if self.record_fn is not None:
+            self.record_fn(weights, t)
+        return weights

@@ -292,3 +292,134 @@ def weights_plot(weights_exc, weights_inh):
     axs[1].set_xlabel("Time Step")
     axs[1].set_ylabel("Synaptic Weight")
     plt.show()
+
+
+def _reg_episodes(t_reg: list, gap_threshold: int = 200):
+    """Cluster consecutive reg timesteps into (start, end) episode pairs.
+
+    Two adjacent reg events belong to the same episode when the gap between
+    them is ≤ gap_threshold timesteps.  For a single normalise event the
+    episode spans just that one timestep.
+    """
+    if not t_reg:
+        return []
+    # Filter out None entries (should not happen in normal usage)
+    ts = [v for v in t_reg if v is not None]
+    if not ts:
+        return []
+    episodes = []
+    start = ts[0]
+    for i in range(1, len(ts)):
+        if ts[i] - ts[i - 1] > gap_threshold:
+            episodes.append((start, ts[i - 1]))
+            start = ts[i]
+    episodes.append((start, ts[-1]))
+    return episodes
+
+
+def plot_weight_sample_trajectories(
+    sampler, config_label: str, output_path: str, x_max: "int | None" = None
+) -> None:
+    """
+    Interleaved timeline plot: true simulation timestep on the x-axis.
+
+    Awake (STDP) and regularisation events are placed at the timesteps where
+    they actually occurred.  Sleep / normalise episodes are highlighted with
+    thin vertical lines.  Only w_ee (excitatory-to-excitatory) is shown.
+    """
+    has_awake = bool(sampler.awake_ee)
+    has_reg = bool(sampler.reg_ee)
+    if not has_awake and not has_reg:
+        return
+
+    color_ee = "#d6604d"
+
+    def _to_arr(lst):
+        return np.array(lst) if lst else np.empty((0, 0))
+
+    aw_ee = _to_arr(sampler.awake_ee)   # (n_awake, n_ee)
+    rg_ee = _to_arr(sampler.reg_ee)     # (n_reg,  n_ee)
+
+    # Build x-axis arrays from recorded timesteps; fall back to index if None
+    def _t_axis(t_list, n):
+        if not t_list or all(v is None for v in t_list):
+            return np.arange(n, dtype=float)
+        return np.array([v if v is not None else i
+                         for i, v in enumerate(t_list)], dtype=float)
+
+    x_aw = _t_axis(sampler.t_awake, aw_ee.shape[0]) if has_awake else np.empty(0)
+    x_rg = _t_axis(sampler.t_reg,   rg_ee.shape[0]) if has_reg   else np.empty(0)
+
+    # Determine gap_threshold for episode clustering.
+    # Use half the smallest *positive* inter-event gap so that:
+    #   - Sleep sub-steps sharing the same outer t (gap=0) stay merged.
+    #   - Consecutive independent episodes (gap=reg_frequency) always split.
+    gap_threshold = 5  # safe fallback (handles None-only t_reg)
+    if has_reg and len(sampler.t_reg) >= 2:
+        valid_ts = [v for v in sampler.t_reg if v is not None]
+        if len(valid_ts) >= 2:
+            diffs = np.diff(valid_ts)
+            positive_diffs = diffs[diffs > 0]
+            if positive_diffs.size:
+                gap_threshold = int(positive_diffs.min()) // 2
+
+    episodes = _reg_episodes(sampler.t_reg, gap_threshold)
+
+    fig, ax = plt.subplots(figsize=(12, 4))
+
+    # Mark each reg episode with a thin vertical line (works cleanly for
+    # both sleep — many sub-steps at one t — and normalize — one event per t).
+    for (t_start, t_end) in episodes:
+        mid = (t_start + t_end) / 2
+        ax.axvline(mid, color="#9999cc", linewidth=0.8, alpha=0.4, zorder=0)
+
+    # Collect all values that will be visible within the x window for y scaling
+    _y_vals = []
+
+    def _plot(arr, x, color):
+        if arr.size == 0 or x.size == 0:
+            return
+        mk = "." if len(x) == 1 else None
+        # Mask to x window for y-range calculation
+        x_lo, x_hi = 0, (x_max if x_max is not None else np.inf)
+        mask = (x >= x_lo) & (x <= x_hi)
+        if mask.any():
+            _y_vals.append(arr[mask])
+        for i in range(arr.shape[1]):
+            ax.plot(x, arr[:, i], color=color, alpha=0.55, linewidth=0.9,
+                    linestyle="-", marker=mk)
+
+    # Awake phase
+    _plot(aw_ee, x_aw, color_ee)
+
+    # Reg phase — plotted on the same x-axis at their true positions
+    _plot(rg_ee, x_rg, color_ee)
+
+    # Y-axis: scale to the visible data range with a small margin
+    if _y_vals:
+        all_vals = np.concatenate([v.ravel() for v in _y_vals])
+        v_min, v_max = all_vals.min(), all_vals.max()
+        margin = (v_max - v_min) * 0.05 or 0.05
+        ax.set_ylim(v_min - margin, v_max + margin)
+
+    # Legend
+    from matplotlib.lines import Line2D
+    legend_handles = [
+        Line2D([0], [0], color=color_ee, linewidth=1.5, alpha=0.7, label="w_ee"),
+    ]
+    if episodes:
+        legend_handles.append(
+            Line2D([0], [0], color="#9999cc", linewidth=1.5, alpha=0.6,
+                   label="reg episode")
+        )
+    ax.legend(handles=legend_handles, frameon=False, fontsize=9)
+
+    ax.set_xlim(left=0, right=x_max if x_max is not None else None)
+
+    ax.set_xlabel("Time (ms)")
+    ax.set_ylabel("Synaptic weight")
+    ax.set_title(config_label)
+
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    fig.savefig(output_path, bbox_inches="tight", dpi=300)
+    plt.close(fig)
