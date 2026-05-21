@@ -29,8 +29,8 @@ PROJECT_ROOT=/mnt/users/andreama/projects/biosnn
 cd "${PROJECT_ROOT}"
 
 # ---- parameter grid -------------------------------------------------------
-SLEEP_DURATIONS=(50 100 150 200 300 400 500 600)
-VAR_NOISES=(0.0 0.1 0.5 1.0 2.0 4.0 6.0 8.0)
+SLEEP_DURATIONS=(5 10 25 50 100 150 200 400)
+VAR_NOISES=(0.0 0.5 1.0 5.0 10.0 25.0 50.0 100.0)
 REG_MODES=(static layer neuron)
 
 # Regularizer type is fixed to sleep for all Phase 2 runs

@@ -182,7 +182,7 @@ def main():
         regularizer=regularizer,
         epochs=args.epochs,
         train_weights=True,
-        save_model=True,
+        save_model=False,
         accuracy_method="pca_lr",
         use_LR=True,
         use_phi=True,

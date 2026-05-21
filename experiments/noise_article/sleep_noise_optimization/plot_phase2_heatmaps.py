@@ -26,10 +26,11 @@ RE_CONFIG = re.compile(
     r"Config.*reg: sleep/(\w+) \| sleep_dur: (\d+) \| var_noise: ([\d.]+)"
 )
 RE_ACC = re.compile(r"Test accuracy\s*(?:\([^)]*\))?\s*:\s*([\d.]+)")
+RE_PHI = re.compile(r"Test phi\s*:\s*([\d.]+)")
 
 
 def parse_slurm_file(path: str):
-    reg_mode = sleep_dur = var_noise = test_acc = None
+    reg_mode = sleep_dur = var_noise = test_acc = test_phi = None
     with open(path, "r", encoding="utf-8", errors="replace") as fh:
         for line in fh:
             if reg_mode is None:
@@ -42,10 +43,14 @@ def parse_slurm_file(path: str):
                 m = RE_ACC.search(line)
                 if m:
                     test_acc = float(m.group(1))
-            if reg_mode is not None and test_acc is not None:
+            if test_phi is None:
+                m = RE_PHI.search(line)
+                if m:
+                    test_phi = float(m.group(1))
+            if reg_mode is not None and test_acc is not None and test_phi is not None:
                 break
     if reg_mode is not None and test_acc is not None:
-        return reg_mode, sleep_dur, var_noise, test_acc
+        return reg_mode, sleep_dur, var_noise, test_acc, test_phi
     return None
 
 
@@ -60,13 +65,14 @@ def load_results(results_dir: str) -> pd.DataFrame:
         if result is None:
             skipped += 1
             continue
-        reg_mode, sleep_dur, var_noise, test_acc = result
+        reg_mode, sleep_dur, var_noise, test_acc, test_phi = result
         rows.append(
             {
                 "reg_mode": reg_mode,
                 "sleep_duration": sleep_dur,
                 "var_noise": var_noise,
                 "test_acc": test_acc,
+                "test_phi": test_phi,
             }
         )
 
@@ -80,27 +86,34 @@ def load_results(results_dir: str) -> pd.DataFrame:
     return df
 
 
-def build_pivot(df: pd.DataFrame, reg_mode: str) -> pd.DataFrame:
+def build_pivot(df: pd.DataFrame, reg_mode: str, value_col: str = "test_acc") -> pd.DataFrame:
     sub = df[df["reg_mode"] == reg_mode]
-    pivot = sub.pivot(index="sleep_duration", columns="var_noise", values="test_acc")
+    pivot = sub.pivot(index="sleep_duration", columns="var_noise", values=value_col)
     pivot.index = pivot.index.astype(int)
     pivot = pivot.sort_index()
     pivot = pivot.reindex(sorted(pivot.columns), axis=1)
     return pivot
 
 
-def plot_heatmaps(df: pd.DataFrame, out_path: str) -> None:
+def plot_heatmaps(
+    df: pd.DataFrame,
+    out_path: str,
+    value_col: str = "test_acc",
+    cbar_label: str = "Accuracy (%)",
+    scale100: bool = True,
+) -> None:
     modes = ["static", "layer", "neuron"]
     df = df.copy()
-    df["test_acc"] = df["test_acc"] * 100
-    pivots = {m: build_pivot(df, m) for m in modes if m in df["reg_mode"].values}
+    if scale100:
+        df[value_col] = df[value_col] * 100
+    pivots = {m: build_pivot(df, m, value_col) for m in modes if m in df["reg_mode"].values}
 
     if not pivots:
         print("No data to plot.")
         return
 
-    vmin = df["test_acc"].min()
-    vmax = df["test_acc"].max()
+    vmin = df[value_col].min()
+    vmax = df[value_col].max()
 
     fig, axes = plt.subplots(
         1, len(modes), figsize=(6 * len(modes), 5), constrained_layout=True
@@ -140,7 +153,7 @@ def plot_heatmaps(df: pd.DataFrame, out_path: str) -> None:
     sm = plt.cm.ScalarMappable(cmap="viridis", norm=plt.Normalize(vmin=vmin, vmax=vmax))
     cbar = fig.colorbar(sm, ax=axes, fraction=0.02, pad=0.02)
     cbar.ax.tick_params(labelsize=20)
-    cbar.set_label("Accuracy (%)", fontsize=30)
+    cbar.set_label(cbar_label, fontsize=30)
 
     fig.savefig(out_path, dpi=150)
     print(f"Saved → {out_path}")
@@ -174,7 +187,10 @@ def main():
         sys.exit("No completed runs found.")
 
     out_path = os.path.join(results_dir, "heatmaps_test_acc.pdf")
-    plot_heatmaps(df, out_path)
+    plot_heatmaps(df, out_path, value_col="test_acc", cbar_label="Accuracy (%)", scale100=True)
+
+    out_path_phi = os.path.join(results_dir, "heatmaps_test_phi.pdf")
+    plot_heatmaps(df, out_path_phi, value_col="test_phi", cbar_label="Clustering score (φ)", scale100=False)
 
 
 if __name__ == "__main__":

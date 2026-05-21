@@ -85,6 +85,7 @@ def load_results() -> pd.DataFrame:
                     reg_mode=reg_mode,
                     seed=seed,
                     test_acc=None,
+                    test_phi=None,
                     cancelled=False,
                 )
             )
@@ -100,6 +101,9 @@ def load_results() -> pd.DataFrame:
         )
         test_acc = float(matches[-1]) if matches else None
 
+        phi_matches = re.findall(r"Test phi\s*:\s*([\d.]+)", content)
+        test_phi = float(phi_matches[-1]) if phi_matches else None
+
         rows.append(
             dict(
                 task_id=task_id,
@@ -107,6 +111,7 @@ def load_results() -> pd.DataFrame:
                 reg_mode=reg_mode,
                 seed=seed,
                 test_acc=test_acc,
+                test_phi=test_phi,
                 cancelled=cancelled,
             )
         )
@@ -141,9 +146,15 @@ MODE_ORDER = ["static", "layer", "neuron"]
 MODE_DISPLAY = {"static": "Static", "layer": "Layer-wise", "neuron": "Neuron-wise"}
 
 
-def plot_results(df: pd.DataFrame, out_path: str):
-    # Only rows with valid test accuracy
-    df_valid = df[df["test_acc"].notna()].copy()
+def plot_results(
+    df: pd.DataFrame,
+    out_path: str,
+    value_col: str = "test_acc",
+    ylabel: str = "Accuracy (%)",
+    scale100: bool = True,
+):
+    # Only rows with a valid value for the requested column
+    df_valid = df[df[value_col].notna()].copy()
 
     reg_modes = [m for m in MODE_ORDER if m in df_valid["reg_mode"].values]
     reg_types_present = [
@@ -166,7 +177,8 @@ def plot_results(df: pd.DataFrame, out_path: str):
         positions = []
 
         for i, rt in enumerate(types_here):
-            vals = [v * 100 for v in sub[sub["reg_type"] == rt]["test_acc"].tolist()]
+            raw = sub[sub["reg_type"] == rt][value_col].tolist()
+            vals = [v * 100 for v in raw] if scale100 else raw
             boxes_data.append(vals)
             box_colors.append(COLORS[rt])
             box_labels.append(LABELS[rt])
@@ -198,13 +210,10 @@ def plot_results(df: pd.DataFrame, out_path: str):
 
         # Significance test between sleep and normalize (if both present)
         if "sleep" in types_here and "normalize" in types_here:
-            v_sleep = [
-                v * 100 for v in sub[sub["reg_type"] == "sleep"]["test_acc"].tolist()
-            ]
-            v_norm = [
-                v * 100
-                for v in sub[sub["reg_type"] == "normalize"]["test_acc"].tolist()
-            ]
+            raw_sleep = sub[sub["reg_type"] == "sleep"][value_col].tolist()
+            raw_norm = sub[sub["reg_type"] == "normalize"][value_col].tolist()
+            v_sleep = [v * 100 for v in raw_sleep] if scale100 else raw_sleep
+            v_norm = [v * 100 for v in raw_norm] if scale100 else raw_norm
             _, p = mannwhitneyu(v_sleep, v_norm, alternative="two-sided")
             label = sig_label(p)
 
@@ -233,8 +242,9 @@ def plot_results(df: pd.DataFrame, out_path: str):
         ax.tick_params(axis="y", labelsize=16)
         ax.set_xticklabels(box_labels, fontsize=22)
         if mode == reg_modes[0]:
-            ax.set_ylabel("Accuracy (%)", fontsize=22)
-        ax.set_ylim(0, 105)
+            ax.set_ylabel(ylabel, fontsize=22)
+        if scale100:
+            ax.set_ylim(0, 105)
         ax.yaxis.grid(True, linestyle="--", alpha=0.5)
         ax.set_axisbelow(True)
 
@@ -284,9 +294,13 @@ def main():
         summary.to_excel(writer, sheet_name="summary", index=False)
     print(f"\nXLSX saved -> {xlsx_path}")
 
-    # Plot
+    # Accuracy boxplot
     png_path = os.path.join(OUT_DIR, "phase1_boxplot.pdf")
-    plot_results(df, png_path)
+    plot_results(df, png_path, value_col="test_acc", ylabel="Accuracy (%)", scale100=True)
+
+    # Clustering score (phi) boxplot
+    phi_path = os.path.join(OUT_DIR, "phase1_boxplot_phi.pdf")
+    plot_results(df, phi_path, value_col="test_phi", ylabel="Clustering score (φ)", scale100=False)
 
 
 if __name__ == "__main__":
