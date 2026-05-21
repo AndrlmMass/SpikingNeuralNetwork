@@ -394,6 +394,69 @@ class ImageDataStreamer:
         plt.show()
         plt.close(fig)
 
+    def preview_pipeline(self, digit_idx: int = 0, out_dir: str | None = None) -> None:
+        """Save three separate PDFs showing one digit at each pipeline stage."""
+        if self.dataset == "fcx1":
+            print("preview_pipeline is not available for fcx1")
+            return
+
+        import matplotlib.pyplot as plt
+
+        if out_dir is None:
+            out_dir = os.path.join("results", "data", "MNIST")
+        os.makedirs(out_dir, exist_ok=True)
+
+        img_tensor = self.train_images[digit_idx]  # (1, H, W)
+        img_batch = img_tensor.unsqueeze(0)  # (1, 1, H, W)
+
+        def _save_image(arr, fname, cmap, vmin=None, vmax=None):
+            fig, ax = plt.subplots(figsize=(3, 3))
+            ax.imshow(arr, cmap=cmap, vmin=vmin, vmax=vmax, interpolation="nearest")
+            ax.axis("off")
+            ax.set_xlabel("Time (ms)", fontsize=8, color="white")
+            ax.set_ylabel("Neuron", fontsize=8, color="white")
+            fig.subplots_adjust(left=0.08, bottom=0.08, right=0.99, top=0.99)
+            path = os.path.join(out_dir, fname)
+            fig.savefig(path, dpi=150)
+            plt.close(fig)
+            print(f"Saved → {path}")
+
+        # 1 — raw
+        _save_image(img_tensor.squeeze().numpy(), "1_raw.pdf", "gray", 0, 1)
+
+        # 2 — gabor
+        with torch.no_grad():
+            gabor = self.gabor_pack_quadrants(img_batch)
+        _save_image(gabor[0, 0].numpy(), "2_gabor.pdf", "gray", 0, 1)
+
+        # 3 — spike raster
+        torch.manual_seed(0)
+        with torch.no_grad():
+            p = (gabor * self.max_rate_hz * (1.0 / 1000.0)).clamp(0.0, 1.0)
+            spikes = (torch.rand((self.num_steps,) + p.shape) < p).float()
+            spikes = spikes.squeeze(2).squeeze(1)  # (T, H, W)
+            spike_matrix = spikes.view(self.num_steps, -1).numpy()  # (T, N_pixels)
+
+        fig, ax = plt.subplots(figsize=(3, 3))
+        ax.imshow(
+            spike_matrix.T,
+            aspect="auto",
+            cmap="binary_r",
+            interpolation="nearest",
+            vmin=0,
+            vmax=1,
+        )
+        ax.set_xlabel("Time (ms)", fontsize=16)
+        ax.set_ylabel("Neuron", fontsize=16)
+        ax.tick_params(
+            axis="both", which="both", length=0, labelbottom=False, labelleft=False
+        )
+        fig.subplots_adjust(left=0.08, bottom=0.08, right=0.99, top=0.99)
+        path = os.path.join(out_dir, "3_spikes.pdf")
+        fig.savefig(path, dpi=150)
+        plt.close(fig)
+        print(f"Saved → {path}")
+
     def get_batch(self, start_idx, num_samples, partition="train"):
         """
         Load a batch of image samples from the specified partition.
@@ -498,13 +561,6 @@ class ImageDataStreamer:
         spikes = spikes_flat.transpose(0, 1).reshape(
             spikes_flat.shape[1] * spikes_flat.shape[0], spikes_flat.shape[2]
         )
-
-        # import matplotlib.pyplot as plt
-
-        # fig, ax = plt.subplots(figsize=(10, 10))
-        # ax.imshow(images[0].cpu().numpy().squeeze(0))
-        # plt.show()
-        # plt.close(fig)
 
         return spikes.cpu().numpy()
 
