@@ -45,6 +45,7 @@ class Model:
         image_dataset: str = "mnist",
         max_rate_hz: float = 90.0,
         gain: float = 1.0,
+        gabor: bool = False,
     ):
         self.input_size = input_size
         self.classes = classes if classes is not None else list(range(10))
@@ -60,7 +61,7 @@ class Model:
         self.image_dataset = image_dataset
         self.max_rate_hz = max_rate_hz
         self.gain = gain
-
+        self.gabor = gabor
         self._runner: Optional[Runner] = None
 
     def train(
@@ -123,6 +124,7 @@ class Model:
             image_dataset=self.image_dataset,
             max_rate_hz=self.max_rate_hz,
             gain=self.gain,
+            gabor=self.gabor,
         )
         snn.prepare_weights(
             resting_membrane=mem.resting_potential,

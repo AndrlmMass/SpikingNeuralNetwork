@@ -148,6 +148,7 @@ class ImageDataStreamer:
         batch_size=100,
         pixel_size=15,
         num_steps=100,
+        gabor=False,
         gain=1.0,
         offset=0,
         first_spike_time=0,
@@ -165,6 +166,7 @@ class ImageDataStreamer:
         self.num_steps = num_steps
         self.gain = gain
         self.offset = offset
+        self.gabor = gabor
         self.first_spike_time = first_spike_time
         self.time_var_input = time_var_input
         self.dataset = (dataset or "mnist").lower()
@@ -538,7 +540,8 @@ class ImageDataStreamer:
         Assumes input intensities in range [0, 1].
         """
         # apply gabor filters
-        images = self.gabor_pack_quadrants(images)
+        if self.gabor:
+            images = self.gabor_pack_quadrants(images)
 
         # Compute spike probability per timestep
         # r_max = 67 Hz
