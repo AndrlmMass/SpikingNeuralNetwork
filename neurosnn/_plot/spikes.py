@@ -184,7 +184,7 @@ def gif_spike_rate_by_label(frame_folder, output_filename="my_awesome.gif", dura
     from PIL import Image
 
     files = glob.glob(f"{frame_folder}/*.png")
-    files_sorted = sorted(files, key=lambda f: int(f.split("\\")[-1].split(".")[0]))
+    files_sorted = sorted(files, key=os.path.basename)
     frames = [Image.open(image) for image in files_sorted]
 
     if not frames:

@@ -36,8 +36,8 @@ def parse_args():
     parser.add_argument(
         "--weight-type",
         type=str,
-        default="random",
-        choices=["rf", "random"],
+        default="oriented_rf",
+        choices=["rf", "random", "oriented_rf"],
         help="Weight initialisation type (default: random)",
     )
 
@@ -109,6 +109,36 @@ def parse_args():
         default=None,
         help="Where to write results.json (default: experiments/generic_testing/results/<tag>)",
     )
+    parser.add_argument(
+        "--plot-rfs",
+        action="store_true",
+        default=False,
+        help="Save an oriented RF summary plot after weight initialisation (oriented_rf only)",
+    )
+    parser.add_argument(
+        "--plot-spikes",
+        action="store_true",
+        default=False,
+        help="Save heatmap spike/weight plots during training (written to plots/spikes/)",
+    )
+    parser.add_argument(
+        "--plot-weights",
+        action="store_true",
+        default=False,
+        help="Save full weight matrix heatmap and print E/I balance stats after init",
+    )
+    parser.add_argument(
+        "--plot-pca",
+        action="store_true",
+        default=False,
+        help="Save PCA scatter frames during training",
+    )
+    parser.add_argument(
+        "--gif-pca",
+        action="store_true",
+        default=False,
+        help="Assemble PCA scatter frames into a GIF after training (requires --plot-pca)",
+    )
 
     return parser.parse_args()
 
@@ -150,6 +180,8 @@ def main():
     )
     if args.weight_type == "rf":
         weights = snn.weights.receptive_fields(**weight_kwargs)
+    elif args.weight_type == "oriented_rf":
+        weights = snn.weights.oriented_receptive_fields(**weight_kwargs)
     else:
         weights = snn.weights.random(**weight_kwargs)
 
@@ -228,7 +260,8 @@ def main():
     val_history = []
     t_start = time.time()
 
-    for result in model.train(
+    # Capture generator so weights are built before we start iterating
+    train_gen = model.train(
         layers=[layer],
         learner=learner,
         regularizer=regularizer,
@@ -241,7 +274,25 @@ def main():
         use_pca=True,
         pca_variance=15,
         stat_tracking_frequency=10500,
-    ):
+        heatmap_plot=args.plot_spikes,
+        PCA_plot=args.plot_pca,
+        gif_pca_plot=args.gif_pca,
+    )
+
+    # Weights are built at this point — plot initial RF structure before training
+    if args.plot_rfs:
+        from neurosnn._plot.weights import plot_oriented_rf_summary
+
+        snn_model = model._runner.model
+        W_se = snn_model.weights[: snn_model.st, snn_model.st : snn_model.ex]
+        plot_oriented_rf_summary(
+            W_se=W_se,
+            input_size=snn_model.pixel_size,
+            n_orientations=4,
+            out_path=os.path.join(output_dir, "oriented_rf_summary.pdf"),
+        )
+
+    for result in train_gen:
         if result.accuracy is None:
             continue
 

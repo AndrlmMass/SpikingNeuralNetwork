@@ -38,7 +38,7 @@ def parse_args():
         "--weight-type",
         type=str,
         default="rf",
-        choices=["rf", "random"],
+        choices=["rf", "random", "oriented_rf"],
         help="Weight initialisation type (default: rf)",
     )
     parser.add_argument(
@@ -118,6 +118,8 @@ def main():
     )
     if args.weight_type == "rf":
         weights = snn.weights.receptive_fields(**weight_kwargs)
+    elif args.weight_type == "oriented_rf":
+        weights = snn.weights.oriented_receptive_fields(**weight_kwargs)
     else:
         weights = snn.weights.random(**weight_kwargs)
 

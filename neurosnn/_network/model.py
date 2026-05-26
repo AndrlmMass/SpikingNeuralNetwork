@@ -114,6 +114,7 @@ class SNNModel:
             ei_weights=ei_weights,
             ie_weights=ie_weights,
             random_weights=random_weights,
+            **kwargs,
         )
         self.weights = self._factory.build()
         self.w_dense_ee = w_dense_ee
