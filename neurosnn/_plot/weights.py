@@ -360,17 +360,26 @@ def plot_oriented_rf_summary(
     import matplotlib.gridspec as gridspec
 
     _, N_exc = W_se.shape
+    n_side = int(np.ceil(np.sqrt(N_exc)))
 
     # Compute side so that side² ≤ min(n_show, N_exc)
     side = int(np.floor(np.sqrt(min(n_show, N_exc))))
     n_show = side * side
     quota = n_show // n_orientations  # neurons per orientation group in tile
 
-    # Select neurons: equal quota per orientation, in construction order
+    # Group neurons by actual orientation assignment: (gx + gy) % n_orientations
+    groups = [[] for _ in range(n_orientations)]
+    for idx in range(N_exc):
+        gx_i = idx // n_side
+        gy_i = idx % n_side
+        groups[(gx_i + gy_i) % n_orientations].append(idx)
+
+    # Select quota neurons evenly spaced from each group (covers full grid)
     selected = []
     for g in range(n_orientations):
-        indices = [i for i in range(N_exc) if i % n_orientations == g]
-        selected.extend(indices[:quota])
+        indices = groups[g]
+        step = max(1, len(indices) // quota)
+        selected.extend(indices[::step][:quota])
 
     # Compute elongation for every neuron
     all_elongations = np.array([
@@ -381,8 +390,7 @@ def plot_oriented_rf_summary(
     # Mean elongation per orientation group
     group_elongation = []
     for g in range(n_orientations):
-        idx = [i for i in range(N_exc) if i % n_orientations == g]
-        group_elongation.append(float(np.mean(all_elongations[idx])))
+        group_elongation.append(float(np.mean(all_elongations[groups[g]])))
 
     # ---- Build tile canvas (side × side patches) ----
     canvas = np.zeros((side * input_size, side * input_size), dtype=np.float32)

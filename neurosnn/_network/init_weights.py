@@ -575,6 +575,7 @@ def oriented_gaussian_se_weights(
 
         dx = px - cx
         dy = py - cy
+        dist = np.sqrt(dx**2 + dy**2)
 
         ct, st = np.cos(theta), np.sin(theta)
         x_t = dx * ct + dy * st
@@ -583,8 +584,8 @@ def oriented_gaussian_se_weights(
         w = np.exp(-(x_t**2 / (2 * sx**2) + y_t**2 / (2 * sy**2)))
         # Elliptical cutoff in the rotated frame: cuts at r_cut_factor sigma
         # in each axis independently, matching the Gaussian footprint.
-        ellipse_dist = np.sqrt((x_t / sx) ** 2 + (y_t / sy) ** 2)
-        w[ellipse_dist > r_cut_factor] = 0.0
+        # ellipse_dist = np.sqrt((x_t / sx) ** 2 + (y_t / sy) ** 2)
+        w[dist > r_cut_factor] = 0.0
 
         s = w.sum()
         if s > 0:
