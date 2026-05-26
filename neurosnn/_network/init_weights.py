@@ -587,6 +587,7 @@ def oriented_gaussian_se_weights(
         # ellipse_dist = np.sqrt((x_t / sx) ** 2 + (y_t / sy) ** 2)
         w[dist > r_cut_factor] = 0.0
 
+        # maybe remove this? idk if it works as intended with weight_compliance
         s = w.sum()
         if s > 0:
             w = (w / s) * peak
