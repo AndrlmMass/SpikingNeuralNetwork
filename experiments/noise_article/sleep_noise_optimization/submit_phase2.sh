@@ -1,7 +1,7 @@
 #!/bin/bash
 # Submit all Phase 2 jobs (sleep duration x noise x reg-mode grid).
 #
-# 8 durations x 8 noise levels x 3 reg-modes = 192 jobs (seed fixed to 0).
+# 6 durations x 6 noise levels x 3 reg-modes x 5 seeds = 540 jobs.
 # Each job writes to experiments/noise_article/sleep_noise_optimization/results/phase2/
 #
 # Usage (run from repo root on the login node):
@@ -23,7 +23,7 @@ JOB_ID=$(sbatch \
     | awk '{print $NF}')
 
 echo "Phase 2 submitted — job array ID: ${JOB_ID}"
-echo "192 jobs (tasks 0-191, 8 durations x 8 noise levels x 3 reg-modes, seed=0)"
+echo "540 jobs (tasks 0-539, 6 durations x 6 noise levels x 3 reg-modes x 5 epochs)"
 echo ""
 echo "Conditions:"
 echo "  mode_idx 0 = static"

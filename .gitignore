@@ -1,9 +1,9 @@
 # Generated outputs (runtime only)
 model/
-plots/
 results/
 figures/
 profile/
+plots/
 
 # Settings
 .vscode/

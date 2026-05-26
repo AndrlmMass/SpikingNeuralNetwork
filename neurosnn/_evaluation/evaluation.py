@@ -77,6 +77,8 @@ class Evaluator:
     def fit(self, X, Y):
         import numpy as np
 
+        self._fit_ok = False
+
         X = self.scaler.fit_transform(X)
         X = np.nan_to_num(X, nan=0.0)
 
@@ -89,7 +91,11 @@ class Evaluator:
                     svd_solver=self.pca.svd_solver,
                     whiten=self.pca.whiten,
                 )
-            X = self.pca.fit_transform(X)
+            try:
+                X = self.pca.fit_transform(X)
+            except Exception as e:
+                print(f"[Evaluator] PCA fit failed ({type(e).__name__}: {e}) — skipping this evaluation step.")
+                return
 
         if self.phi:
             self.phi.fit(X, Y)
@@ -97,9 +103,14 @@ class Evaluator:
         if self.clf:
             self.clf.fit(X, Y)
 
+        self._fit_ok = True
+
     def score(self, X, Y):
         import numpy as np
         from sklearn.metrics import accuracy_score
+
+        if not getattr(self, "_fit_ok", False):
+            return None, None
 
         X = self.scaler.transform(X)
         X = np.nan_to_num(X, nan=0.0)

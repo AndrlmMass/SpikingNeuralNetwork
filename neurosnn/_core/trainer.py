@@ -61,8 +61,6 @@ class Trainer:
     normalize_weights: bool
     nonzero_pre_idx: list
     track_stats: bool
-    x_tar_se: np.ndarray
-    x_tar_ee: np.ndarray
     update_weights_freq: int
     reg_frequency: int
     sleep_duration: int
@@ -89,7 +87,6 @@ class Trainer:
         self.sleep = np.uint8(self.sleep)
         self.train_weights = np.uint8(self.train_weights)
         self.normalize_weights = np.uint8(self.normalize_weights)
-        self.clip_weights = np.uint8(self.clip_weights)
 
         self.neuron = NeuronState(
             st=self.st,
@@ -185,7 +182,6 @@ class Trainer:
                 weight_cols=self.N_exc,
                 record_fn=self.record_fn_ee,
             )
-        self.empty_spikes = np.zeros(self.ih, dtype=np.int8)
 
     def step(
         self,
@@ -199,8 +195,6 @@ class Trainer:
         I_syn_exc,
         I_syn_inh,
         a,
-        x_tar_se,
-        x_tar_ee,
         num=0,
         sleep_remaining=0,
         _track_stats=np.uint8(0),
@@ -282,10 +276,12 @@ class Trainer:
                         self.save_plots,
                     )
 
-            while sleep_remaining > 0 and train_weights:
+            if sleep_remaining > 0:
                 spikes_buf = spikes_prev.copy()
                 spikes_buf[: self.st] = 0
+                current_spikes = np.zeros(self.ih, dtype=np.int8)
 
+            while sleep_remaining > 0 and train_weights:
                 (
                     mp,
                     I_syn_exc,
@@ -304,6 +300,7 @@ class Trainer:
                     noisy_potential_now=noisy_potential_now,
                 )
 
+                current_spikes[:] = 0
                 (
                     mp,
                     spikes_buf,
@@ -313,7 +310,7 @@ class Trainer:
                 ) = self.neuron.step(
                     mp=mp,
                     a=a,
-                    spikes=self.empty_spikes,
+                    spikes=current_spikes,
                     spike_trace=spike_trace,
                     spike_threshold=spike_threshold,
                 )
@@ -329,19 +326,20 @@ class Trainer:
                         x_tar_se=x_tar_se,
                         x_tar_ee=x_tar_ee,
                     )
-                    weights[: self.st, self.st : self.ex] = self.sleep_se.step(
-                        weights[: self.st, self.st : self.ex], t
-                    )
-                    weights[self.st : self.ex, self.st : self.ex] = self.sleep_ee.step(
-                        weights[self.st : self.ex, self.st : self.ex], t
-                    )
-
                     np.copyto(weights_exc, weights[:, self.st : self.ex].T)
                     np.copyto(
                         weights_inh, weights[self.st : self.ex, self.ex : self.ih].T
                     )
 
+                weights[: self.st, self.st : self.ex] = self.sleep_se.step(
+                    weights[: self.st, self.st : self.ex], t
+                )
+                weights[self.st : self.ex, self.st : self.ex] = self.sleep_ee.step(
+                    weights[self.st : self.ex, self.st : self.ex], t
+                )
+
                 sleep_remaining -= 1
+                mp_prev = mp
 
                 if sleep_remaining <= 0:
                     noisy_potential_now = np.uint8(0)
@@ -402,7 +400,11 @@ class Trainer:
                 )
                 if track_weights:
                     self.tracker.track_synapse(
-                        m_x_pre, m_first_term, m_delta_w, x_tar_se, x_tar_ee,
+                        m_x_pre,
+                        m_first_term,
+                        m_delta_w,
+                        x_tar_se,
+                        x_tar_ee,
                     )
 
                 np.copyto(weights_exc, weights[:, self.st : self.ex].T)
@@ -411,7 +413,9 @@ class Trainer:
                 if self.record_fn_awake_se is not None:
                     self.record_fn_awake_se(weights[: self.st, self.st : self.ex], t)
                 if self.record_fn_awake_ee is not None:
-                    self.record_fn_awake_ee(weights[self.st : self.ex, self.st : self.ex], t)
+                    self.record_fn_awake_ee(
+                        weights[self.st : self.ex, self.st : self.ex], t
+                    )
 
                 update_weights_now = np.uint8(0)
                 normalize_now = np.uint8(0)
@@ -451,7 +455,5 @@ class Trainer:
             I_syn_inh,
             a,
             spike_trace,
-            x_tar_se,
-            x_tar_ee,
             self.tracker.to_dict(),
         )

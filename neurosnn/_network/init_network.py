@@ -35,9 +35,6 @@ class Network:
             dtype=float,
         )
 
-        x_tar_se = np.zeros(self.N_x)
-        x_tar_ee = np.zeros(self.N_exc)
-
         return (
             membrane_potential,
             spikes,
@@ -46,6 +43,4 @@ class Network:
             I_syn_inh,
             a,
             spike_threshold,
-            x_tar_se,
-            x_tar_ee,
         )

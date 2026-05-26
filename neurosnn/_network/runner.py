@@ -46,8 +46,6 @@ class Runner:
 
         self._trainer: Optional[Trainer] = None
         self._evaluator: Optional[Evaluator] = None
-        self._x_tar_se: Optional[np.ndarray] = None
-        self._x_tar_ee: Optional[np.ndarray] = None
         self._evaluator_fitted: bool = False
 
         self._accuracy_method: Optional[str] = None
@@ -129,8 +127,6 @@ class Runner:
         sparse = model.sparse_indices()
         initial_sums_se, initial_sums_ee = model.initial_sums(reg_mode)
 
-        self._x_tar_se = np.zeros(model.N_x)
-        self._x_tar_ee = np.zeros(model.N_exc)
         self._accuracy_method = accuracy_method
         self._spike_threshold_default = spike_threshold_default
         self._PCA_plot = PCA_plot
@@ -205,8 +201,6 @@ class Runner:
             nz_cols_ee=sparse["nz_cols_ee"],
             nz_cols_exc=sparse["nz_cols_exc"],
             nz_rows_exc=sparse["nz_rows_exc"],
-            x_tar_se=self._x_tar_se,
-            x_tar_ee=self._x_tar_ee,
             record_fn_se=record_fn_se,
             record_fn_ee=record_fn_ee,
             record_fn_awake_se=record_fn_awake_se,
@@ -301,8 +295,6 @@ class Runner:
                         self._state["I_syn_inh"],
                         self._state["a"],
                         self._state["spike_trace"],
-                        self._x_tar_se,
-                        self._x_tar_ee,
                         batch_stats,
                     ) = self._trainer.step(
                         weights=model.weights,
@@ -315,8 +307,6 @@ class Runner:
                         I_syn_exc=self._state["I_syn_exc"],
                         I_syn_inh=self._state["I_syn_inh"],
                         a=self._state["a"],
-                        x_tar_se=self._x_tar_se,
-                        x_tar_ee=self._x_tar_ee,
                     )
 
                     if profile:
@@ -399,8 +389,6 @@ class Runner:
             evaluator=self._evaluator,
             pca_plotter=self._pca_plotter if self._PCA_plot else None,
             spike_threshold_default=self._spike_threshold_default,
-            x_tar_se=self._x_tar_se,
-            x_tar_ee=self._x_tar_ee,
             accuracy_method=self._accuracy_method,
             PCA_plot=self._PCA_plot,
             validate_call_idx=self._validate_call_count,
@@ -437,8 +425,6 @@ class Runner:
             trainer=self._trainer,
             evaluator=self._evaluator,
             spike_threshold_default=self._spike_threshold_default,
-            x_tar_se=self._x_tar_se,
-            x_tar_ee=self._x_tar_ee,
             accuracy_method=self._accuracy_method,
             return_spikes=return_spikes,
         )
@@ -462,8 +448,6 @@ class Runner:
         evaluator: Evaluator,
         pca_plotter,
         spike_threshold_default: float,
-        x_tar_se: np.ndarray,
-        x_tar_ee: np.ndarray,
         accuracy_method: str,
         PCA_plot: bool,
         validate_call_idx: int = 0,
@@ -496,17 +480,12 @@ class Runner:
             spike_threshold_val = np.full(
                 model.N_exc + model.N_inh, spike_threshold_default, dtype=float
             )
-            x_tar_se_val = np.zeros(model.N_x)
-            x_tar_ee_val = np.zeros(model.N_exc)
-
             (
                 _,
                 spikes_val_out,
                 _,
                 _,
                 labels_val_out,
-                _,
-                _,
                 _,
                 _,
                 _,
@@ -523,8 +502,6 @@ class Runner:
                 I_syn_exc=I_syn_exc_val,
                 I_syn_inh=I_syn_inh_val,
                 a=a_val,
-                x_tar_se=x_tar_se_val,
-                x_tar_ee=x_tar_ee_val,
             )
 
             del spikes_val, labels_val
@@ -563,8 +540,6 @@ class Runner:
         trainer: Trainer,
         evaluator: Evaluator,
         spike_threshold_default: float,
-        x_tar_se: np.ndarray,
-        x_tar_ee: np.ndarray,
         accuracy_method: str,
         return_spikes: bool = False,
     ):
@@ -594,17 +569,12 @@ class Runner:
                 model.N_exc + model.N_inh, spike_threshold_default, dtype=float
             )
             spike_trace_te = np.zeros(model.N - model.N_inh)
-            x_tar_se_test = np.zeros(model.N_x)
-            x_tar_ee_test = np.zeros(model.N_exc)
-
             (
                 _,
                 spikes_te_out,
                 _,
                 _,
                 labels_te_out,
-                _,
-                _,
                 _,
                 _,
                 _,
@@ -621,8 +591,6 @@ class Runner:
                 I_syn_exc=I_syn_exc_test,
                 I_syn_inh=I_syn_inh_test,
                 a=a_test,
-                x_tar_se=x_tar_se_test,
-                x_tar_ee=x_tar_ee_test,
             )
 
             del spikes_test, labels_test

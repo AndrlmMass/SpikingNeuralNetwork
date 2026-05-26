@@ -3,14 +3,14 @@ from numba import njit
 import numpy as np
 
 
-@njit(cache=True)
+@njit
 def post_sleep(weights, scale, nz_rows, nz_cols):
     for i in range(nz_rows.size):
         weights[nz_rows[i], nz_cols[i]] *= scale[i]
     return weights
 
 
-@njit(cache=True)
+@njit
 def post_norm(weights, initial_sum_nz, nz_rows, nz_cols, n_post):
     current_sum = np.zeros(n_post)
     for i in range(nz_rows.size):
@@ -22,14 +22,14 @@ def post_norm(weights, initial_sum_nz, nz_rows, nz_cols, n_post):
     return weights
 
 
-@njit(cache=True)
+@njit
 def layer(weights, scale, nz_rows, nz_cols):
     for i in range(nz_rows.size):
         weights[nz_rows[i], nz_cols[i]] *= scale
     return weights
 
 
-@njit(cache=True)
+@njit
 def static(weights, target, nz_rows, nz_cols):
     for i in range(nz_rows.size):
         weights[nz_rows[i], nz_cols[i]] = target
@@ -48,7 +48,7 @@ class Normalizer:
 
     def __post_init__(self):
         if self.mode == "static":
-            self.scale = self.target
+            self.scale = float(np.sum(self.initial_sum)) / max(self.nz_rows.size, 1)
         else:
             self.scale = np.ones(self.nz_rows.size, dtype=np.float64)
         if self.mode == "neuron":
@@ -86,13 +86,15 @@ class Sleep:
 
     def __post_init__(self):
         self.sleep_lambda = 1.0 / self.duration
+        self.scale = np.ones(self.nz_rows.size, dtype=np.float64)
         if self.mode == "static":
-            self.scale = self.w_target**self.sleep_lambda
-        else:
-            self.scale = np.ones(self.nz_rows.size, dtype=np.float64)
+            self.w_target = float(np.sum(self.initial_sums)) / max(self.nz_rows.size, 1)
 
     def onset(self, weights):
-        if self.mode == "layer":
+        if self.mode == "static":
+            current_w = weights[self.nz_rows, self.nz_cols]
+            self.scale = (self.w_target / (current_w + 1e-8)) ** self.sleep_lambda
+        elif self.mode == "layer":
             rho = self.initial_sums / (weights[self.nz_rows, self.nz_cols].sum() + 1e-8)
             self.scale = rho**self.sleep_lambda
         elif self.mode == "neuron":
@@ -105,12 +107,10 @@ class Sleep:
             self.scale = rho[self.nz_cols] ** self.sleep_lambda
 
     def step(self, weights, t=None):
-        if self.mode == "neuron":
-            weights = post_sleep(weights, self.scale, self.nz_rows, self.nz_cols)
-        elif self.mode == "layer":
+        if self.mode == "layer":
             weights = layer(weights, self.scale, self.nz_rows, self.nz_cols)
-        else:
-            weights = static(weights, self.scale, self.nz_rows, self.nz_cols)
+        else:  # neuron and static both use per-weight multiplicative scaling
+            weights = post_sleep(weights, self.scale, self.nz_rows, self.nz_cols)
         if self.record_fn is not None:
             self.record_fn(weights, t)
         return weights

@@ -120,5 +120,8 @@ class HistoryTracker:
                 line = line.strip()
                 if not line:
                     continue
-                records.append(json.loads(line))
+                try:
+                    records.append(json.loads(line))
+                except json.JSONDecodeError:
+                    pass  # skip truncated/corrupted lines from concurrent writes
         return records

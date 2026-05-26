@@ -5,90 +5,45 @@ three test-accuracy heatmaps (one per reg_mode: static, layer, neuron).
 Usage
 -----
     python experiments/noise_article/sleep_noise_optimization/plot_phase2_heatmaps.py \
-        --results-dir results/acc_history/mnist/2026.05.20/18
+        --results-dir results/acc_history/mnist/2026.05.23/20_1
 """
 
 import argparse
-import glob
 import os
-import re
 import sys
 
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import seaborn as sns
 
-RE_CONFIG = re.compile(
-    r"Config.*reg: sleep/(\w+) \| sleep_dur: (\d+) \| var_noise: ([\d.]+)"
-)
-RE_ACC = re.compile(r"Test accuracy\s*(?:\([^)]*\))?\s*:\s*([\d.]+)")
-RE_PHI = re.compile(r"Test phi\s*:\s*([\d.]+)")
-
-
-def parse_slurm_file(path: str):
-    reg_mode = sleep_dur = var_noise = test_acc = test_phi = None
-    with open(path, "r", encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            if reg_mode is None:
-                m = RE_CONFIG.search(line)
-                if m:
-                    reg_mode = m.group(1)
-                    sleep_dur = int(m.group(2))
-                    var_noise = float(m.group(3))
-            if test_acc is None:
-                m = RE_ACC.search(line)
-                if m:
-                    test_acc = float(m.group(1))
-            if test_phi is None:
-                m = RE_PHI.search(line)
-                if m:
-                    test_phi = float(m.group(1))
-            if reg_mode is not None and test_acc is not None and test_phi is not None:
-                break
-    if reg_mode is not None and test_acc is not None:
-        return reg_mode, sleep_dur, var_noise, test_acc, test_phi
-    return None
-
 
 def load_results(results_dir: str) -> pd.DataFrame:
-    pattern = os.path.join(results_dir, "slurm-*.out")
-    files = glob.glob(pattern)
-    print(f"  Found {len(files)} slurm-*.out files")
-    rows = []
-    skipped = 0
-    for f in files:
-        result = parse_slurm_file(f)
-        if result is None:
-            skipped += 1
-            continue
-        reg_mode, sleep_dur, var_noise, test_acc, test_phi = result
-        rows.append(
-            {
-                "reg_mode": reg_mode,
-                "sleep_duration": sleep_dur,
-                "var_noise": var_noise,
-                "test_acc": test_acc,
-                "test_phi": test_phi,
-            }
+    xlsx_path = os.path.join(results_dir, "Results_phase2.xlsx")
+    if not os.path.isfile(xlsx_path):
+        sys.exit(
+            f"Results file not found: {xlsx_path}\n"
+            "Run aggregate_phase2.py first."
         )
-
-    df = pd.DataFrame(rows)
-    total = len(files)
-    found = len(rows)
-    print(f"{found}/{total} runs parsed  ({skipped} incomplete/skipped)")
-    if found:
-        for mode, grp in df.groupby("reg_mode"):
-            print(f"  {mode}: {len(grp)} runs")
+    df = pd.read_excel(xlsx_path, engine="openpyxl")
+    print(f"  Loaded {len(df)} rows from {xlsx_path}")
+    for mode, grp in df.groupby("reg_mode"):
+        print(f"  {mode}: {len(grp)} runs")
     return df
 
 
-def build_pivot(df: pd.DataFrame, reg_mode: str, value_col: str = "test_acc") -> pd.DataFrame:
+def build_pivot(
+    df: pd.DataFrame, reg_mode: str, value_col: str = "test_acc"
+) -> pd.DataFrame:
     sub = df[df["reg_mode"] == reg_mode]
-    pivot = sub.pivot(index="sleep_duration", columns="var_noise", values=value_col)
+    pivot = sub.pivot_table(
+        index="sleep_duration",
+        columns="var_noise",
+        values=value_col,
+        aggfunc="mean",
+    )
     pivot.index = pivot.index.astype(int)
     pivot = pivot.sort_index()
     pivot = pivot.reindex(sorted(pivot.columns), axis=1)
@@ -106,14 +61,13 @@ def plot_heatmaps(
     df = df.copy()
     if scale100:
         df[value_col] = df[value_col] * 100
-    pivots = {m: build_pivot(df, m, value_col) for m in modes if m in df["reg_mode"].values}
+    pivots = {
+        m: build_pivot(df, m, value_col) for m in modes if m in df["reg_mode"].values
+    }
 
     if not pivots:
         print("No data to plot.")
         return
-
-    vmin = df[value_col].min()
-    vmax = df[value_col].max()
 
     fig, axes = plt.subplots(
         1, len(modes), figsize=(6 * len(modes), 5), constrained_layout=True
@@ -133,13 +87,15 @@ def plot_heatmaps(
             mask=mask,
             annot=False,
             cmap="viridis",
-            vmin=vmin,
-            vmax=vmax,
             linewidths=0,
             rasterized=True,
-            cbar=False,
+            cbar=True,
+            cbar_kws={"label": cbar_label},
             yticklabels=True,
         )
+        cbar = ax.collections[0].colorbar
+        cbar.ax.tick_params(labelsize=20)
+        cbar.set_label(cbar_label, fontsize=30)
         ax.set_title(mode.capitalize(), fontsize=35)
         ax.set_xlabel("Noise variance", fontsize=30)
         ax.set_ylabel("Sleep duration" if i == 0 else "", fontsize=30)
@@ -149,11 +105,6 @@ def plot_heatmaps(
         else:
             ax.set_yticklabels([])
             ax.tick_params(axis="y", length=0)
-
-    sm = plt.cm.ScalarMappable(cmap="viridis", norm=plt.Normalize(vmin=vmin, vmax=vmax))
-    cbar = fig.colorbar(sm, ax=axes, fraction=0.02, pad=0.02)
-    cbar.ax.tick_params(labelsize=20)
-    cbar.set_label(cbar_label, fontsize=30)
 
     fig.savefig(out_path, dpi=150)
     print(f"Saved → {out_path}")
@@ -171,8 +122,8 @@ def main():
             "results",
             "acc_history",
             "mnist",
-            "2026.05.20",
-            "18",
+            "2026.05.23",
+            "20_2",
         ),
     )
     args = parser.parse_args()
@@ -187,10 +138,18 @@ def main():
         sys.exit("No completed runs found.")
 
     out_path = os.path.join(results_dir, "heatmaps_test_acc.pdf")
-    plot_heatmaps(df, out_path, value_col="test_acc", cbar_label="Accuracy (%)", scale100=True)
+    plot_heatmaps(
+        df, out_path, value_col="test_acc", cbar_label="Accuracy (%)", scale100=True
+    )
 
     out_path_phi = os.path.join(results_dir, "heatmaps_test_phi.pdf")
-    plot_heatmaps(df, out_path_phi, value_col="test_phi", cbar_label="Clustering score (φ)", scale100=False)
+    plot_heatmaps(
+        df,
+        out_path_phi,
+        value_col="test_phi",
+        cbar_label="Clustering score (φ)",
+        scale100=False,
+    )
 
 
 if __name__ == "__main__":

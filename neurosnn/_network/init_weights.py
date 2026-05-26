@@ -85,7 +85,10 @@ class WeightFactory:
 
     def initial_sums(self, weights: np.ndarray, reg_mode: str) -> tuple:
         if reg_mode == "static":
-            return np.zeros(1), np.zeros(1)
+            return (
+                weights[: self.st, self.st : self.ex].sum(),
+                weights[self.st : self.ex, self.st : self.ex].sum(),
+            )
         elif reg_mode == "neuron":
             return (
                 weights[: self.st, self.st : self.ex].sum(axis=0),
