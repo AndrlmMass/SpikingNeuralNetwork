@@ -70,7 +70,7 @@ model2 <- glmmTMB(
 )
 
 model3 <- glmmTMB(
-  test_acc ~ reg * (sleep_duration * var_noise + reg_target) + (1 | seed),
+  test_acc ~ reg * (sleep_duration + var_noise + reg_target) + (1 | seed),
   data=full_data,
   family=beta_family()
 )
