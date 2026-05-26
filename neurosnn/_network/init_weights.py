@@ -30,6 +30,12 @@ class WeightFactory:
     ie_weights: float
     random_weights: bool
     rf_scale: float = 1.0
+    oriented_rf: bool = False
+    sigma_x: float = 3.0
+    gamma: float = 0.4
+    n_orientations: int = 4
+    r_cut_factor: float = 3.0
+    sigma_x_lognormal_std: float = 0.0
 
     def __post_init__(self):
         self.H = int(np.sqrt(self.N_x))
@@ -101,19 +107,34 @@ class WeightFactory:
             )
 
     def _fill_receptive_fields(self):
-        W_se = gaussian_se_weights(
-            self.N_x,
-            self.N_exc,
-            self.H,
-            self.W,
-            self.H_e,
-            self.W_e,
-            rng=self.rng,
-            sigma=self.rf_scale * self._fse * self.ref_x,
-            peak=self.se_weights,
-            fraction=self.w_dense_se,
-            torus=True,
-        )
+        if self.oriented_rf:
+            W_se = oriented_gaussian_se_weights(
+                N_x=self.N_x,
+                N_exc=self.N_exc,
+                input_size=self.H,
+                sigma_x=self.sigma_x,
+                gamma=self.gamma,
+                n_orientations=self.n_orientations,
+                r_cut_factor=self.r_cut_factor,
+                sigma_x_lognormal_std=self.sigma_x_lognormal_std,
+                peak=self.se_weights,
+                fraction=self.w_dense_se,
+                rng=self.rng,
+            )
+        else:
+            W_se = gaussian_se_weights(
+                self.N_x,
+                self.N_exc,
+                self.H,
+                self.W,
+                self.H_e,
+                self.W_e,
+                rng=self.rng,
+                sigma=self.rf_scale * self._fse * self.ref_x,
+                peak=self.se_weights,
+                fraction=self.w_dense_se,
+                torus=True,
+            )
         self.weights[: self.st, self.st : self.ex] = W_se
 
         W_ee = gaussian_ee_weights(
@@ -491,6 +512,96 @@ def gaussian_se_weights(
     )
 
     return W_se
+
+
+def oriented_gaussian_se_weights(
+    N_x: int,
+    N_exc: int,
+    input_size: int,
+    sigma_x: float = 3.0,
+    gamma: float = 0.4,
+    n_orientations: int = 4,
+    r_cut_factor: float = 3.0,
+    sigma_x_lognormal_std: float = 0.0,
+    peak: float = 1.0,
+    fraction: float = 0.05,
+    rng=None,
+) -> np.ndarray:
+    """Oriented elliptical Gaussian W_se, shape (N_x, N_exc).
+
+    Each E neuron gets an elongated RF whose preferred orientation cycles
+    through n_orientations evenly across the population (V1-like).
+    sigma_y = gamma * sigma_x (short axis); hard cutoff at r_cut_factor * sigma_x.
+
+    When sigma_x_lognormal_std > 0, per-neuron sigma_x is drawn from a
+    log-normal distribution (mean=sigma_x), giving V1-like size diversity.
+    """
+    if rng is None:
+        rng = np.random.default_rng(0)
+
+    W = np.zeros((N_exc, N_x), dtype=np.float32)
+
+    n_side = int(np.ceil(np.sqrt(N_exc)))
+    neuron_xs = np.linspace(0, input_size - 1, n_side)
+    neuron_ys = np.linspace(0, input_size - 1, n_side)
+
+    px, py = np.meshgrid(np.arange(input_size), np.arange(input_size), indexing="ij")
+    px = px.ravel().astype(np.float32)
+    py = py.ravel().astype(np.float32)
+
+    orientations = [np.pi * k / n_orientations for k in range(n_orientations)]
+
+    if sigma_x_lognormal_std > 0.0:
+        sigma_x_arr = rng.lognormal(
+            mean=np.log(sigma_x),
+            sigma=sigma_x_lognormal_std / sigma_x,
+            size=N_exc,
+        ).astype(np.float32)
+        sigma_x_arr = np.clip(sigma_x_arr, 0.5, None)
+    else:
+        sigma_x_arr = np.full(N_exc, sigma_x, dtype=np.float32)
+
+    for i in range(N_exc):
+        gx = i // n_side
+        gy = i % n_side
+        if gx >= len(neuron_xs) or gy >= len(neuron_ys):
+            continue
+
+        cx = neuron_xs[gx]
+        cy = neuron_ys[gy]
+        theta = orientations[i % n_orientations]
+        sx = sigma_x_arr[i]
+        sy = gamma * sx
+
+        dx = px - cx
+        dy = py - cy
+        dist = np.sqrt(dx**2 + dy**2)
+
+        ct, st = np.cos(theta), np.sin(theta)
+        x_t = dx * ct + dy * st
+        y_t = -dx * st + dy * ct
+
+        w = np.exp(-(x_t**2 / (2 * sx**2) + y_t**2 / (2 * sy**2)))
+        # Elliptical cutoff in the rotated frame: cuts at r_cut_factor sigma
+        # in each axis independently, matching the Gaussian footprint.
+        # ellipse_dist = np.sqrt((x_t / sx) ** 2 + (y_t / sy) ** 2)
+        w[dist > r_cut_factor] = 0.0
+
+        # maybe remove this? idk if it works as intended with weight_compliance
+        s = w.sum()
+        if s > 0:
+            w = (w / s) * peak
+        W[i] = w
+
+    # Column-wise compliance: scale each E neuron's total incoming weight to
+    # fraction * N_x * peak, matching the drive level of the isotropic path.
+    # Row-wise compliance (used by gaussian_se_weights) would destroy oriented
+    # structure by massively inflating pixels that fall in few RFs.
+    W = weight_compliance(
+        frac=fraction, N=N_x, weights=W, peak=peak, type="W_se_oriented"
+    )
+
+    return W.T  # (N_x, N_exc) — matches gaussian_se_weights convention
 
 
 def grid_shape(n):

@@ -14,6 +14,7 @@ from neurosnn._network.io import CheckpointManager
 from neurosnn._network.model import SNNModel
 from neurosnn._plot.training import PCAScatterDisplay, plot_accuracy
 from neurosnn._utils.logger import HistoryTracker
+from neurosnn._utils.performance import start_plot_worker, stop_plot_worker
 
 
 class Runner:
@@ -259,6 +260,9 @@ class Runner:
             bar_format="{desc} [{bar}] ETA: {remaining} |{postfix}",
         )
 
+        if heatmap_plot:
+            start_plot_worker()
+
         try:
             for epoch in range(epochs):
                 model.image_streamer.reset_partition("train")
@@ -370,6 +374,16 @@ class Runner:
 
         finally:
             pbar.close()
+            if heatmap_plot:
+                stop_plot_worker()
+                from datetime import datetime
+                from neurosnn._plot.spikes import gif_spike_rate_by_label
+                ts = datetime.now().strftime("%Y.%m.%d")
+                frame_folder = os.path.join(
+                    "plots", "spikes", model.image_dataset, "all", ts, str(model.ts_spec)
+                )
+                gif_out = os.path.join(frame_folder, "evolution.gif")
+                gif_spike_rate_by_label(frame_folder, output_filename=gif_out)
             if gif_pca_plot and PCA_plot and self._pca_plotter is not None:
                 from neurosnn._plot.spikes import GenerateGif
                 gif = GenerateGif(

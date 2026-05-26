@@ -317,6 +317,144 @@ def _reg_episodes(t_reg: list, gap_threshold: int = 200):
     return episodes
 
 
+def _rf_elongation(patch: np.ndarray) -> float:
+    """Eigenvalue ratio λ1/λ2 of the RF's spatial weight covariance.
+
+    Returns 1.0 for a circular/degenerate RF, higher values for elongated ones.
+    """
+    w = patch.ravel().astype(np.float64)
+    total = w.sum()
+    if total < 1e-10:
+        return 1.0
+    w = w / total
+    H, W = patch.shape
+    py, px = np.mgrid[0:H, 0:W]
+    coords = np.stack([px.ravel().astype(np.float64), py.ravel().astype(np.float64)], axis=1)
+    mu = (w[:, None] * coords).sum(axis=0)
+    diffs = coords - mu
+    cov = (w[:, None] * diffs).T @ diffs
+    lam = np.linalg.eigvalsh(cov)  # ascending order
+    return float(lam[1] / lam[0]) if lam[0] > 1e-10 else 1.0
+
+
+def plot_oriented_rf_summary(
+    W_se: np.ndarray,
+    input_size: int,
+    n_orientations: int,
+    out_path: str,
+    n_show: int = 256,
+) -> None:
+    """Diagnostic figure for oriented elliptical RF weights.
+
+    Panel 1: tiled RF patches sorted by orientation group.
+    Panel 2: polar rose diagram of mean elongation (λ1/λ2) per group.
+
+    Parameters
+    ----------
+    W_se          Weight matrix slice, shape (N_x, N_exc).
+    input_size    Square root of N_x (input image side length in pixels).
+    n_orientations  Number of orientation bins used during construction.
+    out_path      Save path (.pdf or .png).
+    n_show        Target number of RFs to tile; rounded to side² ≤ N_exc.
+    """
+    import matplotlib.gridspec as gridspec
+
+    _, N_exc = W_se.shape
+    n_side = int(np.ceil(np.sqrt(N_exc)))
+
+    # Compute side so that side² ≤ min(n_show, N_exc)
+    side = int(np.floor(np.sqrt(min(n_show, N_exc))))
+    n_show = side * side
+    quota = n_show // n_orientations  # neurons per orientation group in tile
+
+    # Group neurons by actual orientation assignment: (gx + gy) % n_orientations
+    groups = [[] for _ in range(n_orientations)]
+    for idx in range(N_exc):
+        gx_i = idx // n_side
+        gy_i = idx % n_side
+        groups[(gx_i + gy_i) % n_orientations].append(idx)
+
+    # Select quota neurons evenly spaced from each group (covers full grid)
+    selected = []
+    for g in range(n_orientations):
+        indices = groups[g]
+        step = max(1, len(indices) // quota)
+        selected.extend(indices[::step][:quota])
+
+    # Compute elongation for every neuron
+    all_elongations = np.array([
+        _rf_elongation(W_se[:, i].reshape(input_size, input_size))
+        for i in range(N_exc)
+    ])
+
+    # Mean elongation per orientation group
+    group_elongation = []
+    for g in range(n_orientations):
+        group_elongation.append(float(np.mean(all_elongations[groups[g]])))
+
+    # ---- Build tile canvas (side × side patches) ----
+    canvas = np.zeros((side * input_size, side * input_size), dtype=np.float32)
+    for pos, neuron_idx in enumerate(selected):
+        r = (pos // side) * input_size
+        c = (pos % side) * input_size
+        canvas[r:r + input_size, c:c + input_size] = W_se[:, neuron_idx].reshape(
+            input_size, input_size
+        )
+
+    rows_per_group = max(1, quota // side)
+    orientations_deg = [f"{int(round(180 * g / n_orientations))}°" for g in range(n_orientations)]
+
+    # ---- Figure ----
+    fig = plt.figure(figsize=(13, 6))
+    gs = gridspec.GridSpec(1, 2, width_ratios=[2, 1], figure=fig, wspace=0.3)
+    ax_tiles = fig.add_subplot(gs[0])
+    ax_polar = fig.add_subplot(gs[1], projection="polar")
+
+    # Panel 1: tile grid
+    vmax = float(np.percentile(canvas[canvas > 0], 99)) if (canvas > 0).any() else 1.0
+    ax_tiles.imshow(canvas, cmap="viridis", vmin=0, vmax=vmax,
+                    aspect="auto", interpolation="nearest")
+    ax_tiles.set_title("W_se receptive fields (sorted by orientation group)", fontsize=12)
+    ax_tiles.set_xlabel(f"{quota} neurons per group  →", fontsize=10)
+
+    # Thin per-neuron grid lines (one box per RF patch)
+    for i in range(1, side):
+        ax_tiles.axvline(i * input_size - 0.5, color="white", linewidth=0.4, alpha=0.4)
+        ax_tiles.axhline(i * input_size - 0.5, color="white", linewidth=0.4, alpha=0.4)
+
+    # Thicker separator lines between orientation groups (on top of per-neuron grid)
+    for g in range(1, n_orientations):
+        y = g * rows_per_group * input_size - 0.5
+        ax_tiles.axhline(y, color="white", linewidth=1.5, alpha=0.9)
+
+    # Y-tick at group centres
+    ytick_pos = [(g * rows_per_group + rows_per_group // 2) * input_size
+                 for g in range(n_orientations)]
+    ax_tiles.set_yticks(ytick_pos)
+    ax_tiles.set_yticklabels(orientations_deg, fontsize=9)
+    ax_tiles.tick_params(axis="x", bottom=False, labelbottom=False)
+
+    # Panel 2: polar rose diagram
+    angles = [np.pi * g / n_orientations for g in range(n_orientations)]
+    bar_width = np.pi / n_orientations * 0.85
+    colors = plt.cm.plasma(np.linspace(0.15, 0.85, n_orientations))
+    ax_polar.bar(angles, group_elongation, width=bar_width,
+                 color=colors, alpha=0.85, edgecolor="white", linewidth=0.8)
+    ax_polar.set_theta_zero_location("E")
+    ax_polar.set_theta_direction(1)
+    ax_polar.set_xticks(angles)
+    ax_polar.set_xticklabels(orientations_deg, fontsize=9)
+    ax_polar.set_title("Mean RF elongation\n(λ₁/λ₂ per orientation group)",
+                       fontsize=11, pad=15)
+    ax_polar.set_rlabel_position(90)
+    ax_polar.tick_params(axis="y", labelsize=8)
+
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"RF summary plot saved -> {out_path}")
+
+
 def plot_weight_sample_trajectories(
     sampler, config_label: str, output_path: str, x_max: "int | None" = None
 ) -> None:

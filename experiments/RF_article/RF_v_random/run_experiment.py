@@ -23,7 +23,9 @@ import os
 import sys
 import time
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+)
 
 import neurosnn as snn
 
@@ -36,7 +38,7 @@ def parse_args():
         "--weight-type",
         type=str,
         default="rf",
-        choices=["rf", "random"],
+        choices=["rf", "random", "oriented_rf"],
         help="Weight initialisation type (default: rf)",
     )
     parser.add_argument(
@@ -51,7 +53,15 @@ def parse_args():
         "--dataset",
         type=str,
         default="mnist",
-        choices=["mnist", "kmnist", "fmnist", "fashionmnist", "notmnist", "geomfig", "fcx1"],
+        choices=[
+            "mnist",
+            "kmnist",
+            "fmnist",
+            "fashionmnist",
+            "notmnist",
+            "geomfig",
+            "fcx1",
+        ],
     )
     parser.add_argument(
         "--epochs", type=int, default=5, help="Training epochs (default: 5)"
@@ -108,6 +118,8 @@ def main():
     )
     if args.weight_type == "rf":
         weights = snn.weights.receptive_fields(**weight_kwargs)
+    elif args.weight_type == "oriented_rf":
+        weights = snn.weights.oriented_receptive_fields(**weight_kwargs)
     else:
         weights = snn.weights.random(**weight_kwargs)
 
@@ -176,6 +188,7 @@ def main():
         image_dataset=args.dataset,
         max_rate_hz=90.0,
         gain=1.0,
+        gabor=False,
     )
 
     config = dict(
