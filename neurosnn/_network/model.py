@@ -55,6 +55,7 @@ class SNNModel:
         image_dataset: str = "mnist",
         max_rate_hz: float = 90.0,
         gain: float = 1.0,
+        gabor: bool = False,
         **kwargs,
     ):
         self.num_steps = num_steps
@@ -77,6 +78,7 @@ class SNNModel:
             train_count=all_images_train,
             val_count=all_images_val,
             test_count=all_images_test,
+            gabor=gabor,
             dataset=image_dataset,
             random_seed=self.random_state,
         )
