@@ -40,7 +40,7 @@ def plot_weights_individual(weights, H_, W_, N, title, dir):
                 break
 
 
-def plot_single_neuron_weights(weights, st, ex, H, W, H_e, W_e, id_=None):
+def plot_single_neuron_weights(weights, st, ex, H, W, H_e, W_e, id_=None, out_path=None):
     for i in range(st, ex):
         if id_ is not None:
             id = id_ + i - st
@@ -67,6 +67,12 @@ def plot_single_neuron_weights(weights, st, ex, H, W, H_e, W_e, id_=None):
         ax2.set_title("Excitatory to Excitatory")
         ax3.set_title("Excitatory to Inhibitory")
         ax4.set_title("Inhibitory to Excitatory")
+
+        if out_path is not None:
+            fig.savefig(out_path, bbox_inches="tight")
+            plt.close(fig)
+            return
+
         plt.show()
 
         id = None
@@ -367,12 +373,12 @@ def plot_oriented_rf_summary(
     n_show = side * side
     quota = n_show // n_orientations  # neurons per orientation group in tile
 
-    # Group neurons by actual orientation assignment: (gx + gy) % n_orientations
+    # Group neurons by actual orientation assignment: horizontal stripes (gx // block_size)
+    block_size = max(1, n_side // n_orientations)
     groups = [[] for _ in range(n_orientations)]
     for idx in range(N_exc):
         gx_i = idx // n_side
-        gy_i = idx % n_side
-        groups[(gx_i + gy_i) % n_orientations].append(idx)
+        groups[min(gx_i // block_size, n_orientations - 1)].append(idx)
 
     # Select quota neurons evenly spaced from each group (covers full grid)
     selected = []

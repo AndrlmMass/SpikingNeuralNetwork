@@ -87,6 +87,32 @@ def parse_args():
         help="Directory for results.json (default: auto-generated)",
     )
 
+    # Log-normal RF size diversity (Phase 2 sweep parameters)
+    parser.add_argument(
+        "--lognorm-se-mean",
+        type=float,
+        default=3.0,
+        help="Mean RF size (pixels) for oriented W_se log-normal distribution (default: 3.0 = sigma_x default)",
+    )
+    parser.add_argument(
+        "--lognorm-se-std",
+        type=float,
+        default=0.0,
+        help="Std of RF sizes for W_se log-normal (0 = disabled, try 1.5)",
+    )
+    parser.add_argument(
+        "--lognorm-ee-mean",
+        type=float,
+        default=1.0,
+        help="Mean RF size (E-grid pixels) for W_ee log-normal distribution (default: 1.0 = auto sigma_ee)",
+    )
+    parser.add_argument(
+        "--lognorm-ee-std",
+        type=float,
+        default=0.0,
+        help="Std of RF sizes for W_ee log-normal (0 = disabled, try 0.5)",
+    )
+
     return parser.parse_args()
 
 
@@ -108,8 +134,8 @@ def main():
     # ------------------------------------------------------------------
     weight_kwargs = dict(
         density_se=0.05,
-        density_ee=0.05,
-        density_ei=0.05,
+        density_ee=0.02,
+        density_ei=0.03,
         density_ie=0.05,
         peak_se=1.0,
         peak_ee=0.5,
@@ -117,9 +143,19 @@ def main():
         peak_ie=-0.7,
     )
     if args.weight_type == "rf":
-        weights = snn.weights.receptive_fields(**weight_kwargs)
+        weights = snn.weights.receptive_fields(
+            **weight_kwargs,
+            sigma_ee_mean=args.lognorm_ee_mean,
+            sigma_ee_lognormal_std=args.lognorm_ee_std,
+        )
     elif args.weight_type == "oriented_rf":
-        weights = snn.weights.oriented_receptive_fields(**weight_kwargs)
+        weights = snn.weights.oriented_receptive_fields(
+            **weight_kwargs,
+            sigma_x=args.lognorm_se_mean,
+            sigma_x_lognormal_std=args.lognorm_se_std,
+            sigma_ee_mean=args.lognorm_ee_mean,
+            sigma_ee_lognormal_std=args.lognorm_ee_std,
+        )
     else:
         weights = snn.weights.random(**weight_kwargs)
 
@@ -197,6 +233,10 @@ def main():
         seed=args.seed,
         epochs=args.epochs,
         val_every=args.val_every,
+        lognorm_se_mean=args.lognorm_se_mean,
+        lognorm_se_std=args.lognorm_se_std,
+        lognorm_ee_mean=args.lognorm_ee_mean,
+        lognorm_ee_std=args.lognorm_ee_std,
     )
     print(
         f"\nConfig — dataset: {args.dataset} | weight_type: {args.weight_type}"
