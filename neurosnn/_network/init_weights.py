@@ -36,6 +36,8 @@ class WeightFactory:
     n_orientations: int = 4
     r_cut_factor: float = 3.0
     sigma_x_lognormal_std: float = 0.0
+    sigma_x_lognormal_max: float = 0.0   # 0 = no upper clip
+    orientation_mode: str = "block"      # "block" or "interleaved"
     sigma_ee_mean: float = 0.0          # 0 = auto-compute from rf_scale
     sigma_ee_lognormal_std: float = 0.0  # 0 = disabled (fixed sigma_ee)
 
@@ -119,6 +121,8 @@ class WeightFactory:
                 n_orientations=self.n_orientations,
                 r_cut_factor=self.r_cut_factor,
                 sigma_x_lognormal_std=self.sigma_x_lognormal_std,
+                sigma_x_lognormal_max=self.sigma_x_lognormal_max,
+                orientation_mode=self.orientation_mode,
                 peak=self.se_weights,
                 fraction=self.w_dense_se,
                 rng=self.rng,
@@ -532,6 +536,8 @@ def oriented_gaussian_se_weights(
     n_orientations: int = 4,
     r_cut_factor: float = 3.0,
     sigma_x_lognormal_std: float = 0.0,
+    sigma_x_lognormal_max: float = 0.0,
+    orientation_mode: str = "block",
     peak: float = 1.0,
     fraction: float = 0.05,
     rng=None,
@@ -566,7 +572,8 @@ def oriented_gaussian_se_weights(
             sigma=sigma_x_lognormal_std / sigma_x,
             size=N_exc,
         ).astype(np.float32)
-        sigma_x_arr = np.clip(sigma_x_arr, 0.5, None)
+        upper = sigma_x_lognormal_max if sigma_x_lognormal_max > 0.0 else None
+        sigma_x_arr = np.clip(sigma_x_arr, 0.5, upper)
     else:
         sigma_x_arr = np.full(N_exc, sigma_x, dtype=np.float32)
 
@@ -578,8 +585,11 @@ def oriented_gaussian_se_weights(
 
         cx = neuron_xs[gx]
         cy = neuron_ys[gy]
-        block_size = max(1, n_side // n_orientations)
-        theta = orientations[min(gx // block_size, n_orientations - 1)]
+        if orientation_mode == "interleaved":
+            theta = orientations[gy % n_orientations]
+        else:
+            block_size = max(1, n_side // n_orientations)
+            theta = orientations[min(gx // block_size, n_orientations - 1)]
         sx = sigma_x_arr[i]
         sy = gamma * sx
 
