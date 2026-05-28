@@ -25,6 +25,8 @@ class WeightsSpec:
     n_orientations: int = 4
     r_cut_factor: float = 3.0
     sigma_x_lognormal_std: float = 0.0
+    sigma_x_lognormal_max: float = 0.0   # 0 = no upper clip
+    orientation_mode: str = "block"      # "block" or "interleaved"
 
     sigma_ee_mean: float = 0.0          # 0 = auto-compute from rf_scale
     sigma_ee_lognormal_std: float = 0.0  # 0 = disabled (fixed sigma_ee)
@@ -47,6 +49,8 @@ class WeightsSpec:
             n_orientations=self.n_orientations,
             r_cut_factor=self.r_cut_factor,
             sigma_x_lognormal_std=self.sigma_x_lognormal_std,
+            sigma_x_lognormal_max=self.sigma_x_lognormal_max,
+            orientation_mode=self.orientation_mode,
             sigma_ee_mean=self.sigma_ee_mean,
             sigma_ee_lognormal_std=self.sigma_ee_lognormal_std,
         )
@@ -97,6 +101,8 @@ def oriented_receptive_fields(
     n_orientations: int = 4,
     r_cut_factor: float = 3.0,
     sigma_x_lognormal_std: float = 0.0,
+    sigma_x_lognormal_max: float = 0.0,
+    orientation_mode: str = "block",
     sigma_ee_mean: float = 0.0,
     sigma_ee_lognormal_std: float = 0.0,
 ) -> WeightsSpec:
@@ -118,6 +124,8 @@ def oriented_receptive_fields(
         n_orientations=n_orientations,
         r_cut_factor=r_cut_factor,
         sigma_x_lognormal_std=sigma_x_lognormal_std,
+        sigma_x_lognormal_max=sigma_x_lognormal_max,
+        orientation_mode=orientation_mode,
         sigma_ee_mean=sigma_ee_mean,
         sigma_ee_lognormal_std=sigma_ee_lognormal_std,
     )
