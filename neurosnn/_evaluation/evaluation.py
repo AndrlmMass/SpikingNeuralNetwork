@@ -15,24 +15,41 @@ class Phi:
             self.centroids[c] = X[Y == c].mean(axis=0)
 
     def score(self, X, Y):
+        """Return eta-squared (eta²) = BCSS / (BCSS + WCSS).
+
+        eta² is the fraction of total representational variance explained by
+        class structure.  It is bounded in [0, 1] and, crucially, independent
+        of sample size — unlike the Calinski-Harabasz F-statistic that was
+        used previously, which grows O(n) and caused test-set phi to be ~10×
+        larger than val-set phi simply because the test set is 10× bigger.
+
+        Centroids are always recomputed from the data passed to this call so
+        that the metric is fully self-contained and does not depend on which
+        training batch happened to be used for the last fit().
+        """
         import numpy as np
 
-        assert self.centroids is not None, "Call fit() before score()"
-        n = X.shape[0]
         present = np.unique(Y).astype(int)
-        k = present.size
 
-        wcss = sum(np.sum((X[Y == c] - self.centroids[c]) ** 2) for c in present)
+        # Recompute centroids from the current data so the metric is
+        # self-contained and does not inherit scale artefacts from a
+        # differently-sized fitting batch.
+        centroids = np.zeros_like(self.centroids)
+        for c in present:
+            centroids[c] = X[Y == c].mean(axis=0)
+
+        wcss = sum(np.sum((X[Y == c] - centroids[c]) ** 2) for c in present)
 
         overall_mean = X.mean(axis=0)
         bcss = sum(
-            np.sum(Y == c) * np.sum((self.centroids[c] - overall_mean) ** 2)
+            np.sum(Y == c) * np.sum((centroids[c] - overall_mean) ** 2)
             for c in present
         )
 
-        if wcss <= self.eps:
+        total_ss = bcss + wcss
+        if total_ss <= self.eps:
             return 0.0
-        return (bcss / max(self.eps, k - 1)) / (wcss / max(self.eps, n - k))
+        return bcss / total_ss
 
 
 class Evaluator:
