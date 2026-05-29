@@ -40,6 +40,8 @@ class WeightFactory:
     orientation_mode: str = "block"      # "block" or "interleaved"
     sigma_ee_mean: float = 0.0          # 0 = auto-compute from rf_scale
     sigma_ee_lognormal_std: float = 0.0  # 0 = disabled (fixed sigma_ee)
+    sigma_se_mean: float = 0.0          # 0 = auto-compute from rf_scale
+    sigma_se_lognormal_std: float = 0.0  # 0 = disabled (fixed sigma_se)
 
     def __post_init__(self):
         self.H = int(np.sqrt(self.N_x))
@@ -128,6 +130,11 @@ class WeightFactory:
                 rng=self.rng,
             )
         else:
+            sigma_se = (
+                self.sigma_se_mean
+                if self.sigma_se_mean > 0.0
+                else self.rf_scale * self._fse * self.ref_x
+            )
             W_se = gaussian_se_weights(
                 self.N_x,
                 self.N_exc,
@@ -136,10 +143,11 @@ class WeightFactory:
                 self.H_e,
                 self.W_e,
                 rng=self.rng,
-                sigma=self.rf_scale * self._fse * self.ref_x,
+                sigma=sigma_se,
                 peak=self.se_weights,
                 fraction=self.w_dense_se,
                 torus=True,
+                sigma_se_lognormal_std=self.sigma_se_lognormal_std,
             )
         self.weights[: self.st, self.st : self.ex] = W_se
 
@@ -494,6 +502,7 @@ def gaussian_se_weights(
     fraction=0.1,
     torus=True,
     jitter=0.25,
+    sigma_se_lognormal_std=0.0,
 ):
     assert H * W == N_x
     assert H_e * W_e == N_exc
@@ -515,8 +524,16 @@ def gaussian_se_weights(
     else:
         d2 = ((centers[:, None, :] - inp_coords[None, :, :]) ** 2).sum(axis=2)
 
-    sigmas = rng.normal(loc=sigma, scale=0.3, size=(N_exc, 1))
-    sigmas = np.clip(sigmas, 1.0, None)
+    if sigma_se_lognormal_std > 0.0:
+        sigmas = rng.lognormal(
+            mean=np.log(sigma),
+            sigma=sigma_se_lognormal_std / sigma,
+            size=(N_exc, 1),
+        )
+        sigmas = np.clip(sigmas, 0.5, None)
+    else:
+        sigmas = rng.normal(loc=sigma, scale=0.3, size=(N_exc, 1))
+        sigmas = np.clip(sigmas, 1.0, None)
     G = np.exp(-d2 / (2 * sigmas**2))
     W_se = G.T
     W_se[W_se < 0.01] = 0.0
