@@ -74,6 +74,12 @@ def parse_args():
         default=False,
         help="Whether to use Gabor filters for RF weights (default: False)",
     )
+    parser.add_argument(
+        "--on-off",
+        action="store_true",
+        default=False,
+        help="Decompose input into ON/OFF channels: two 20x20 grids = 800 input neurons (default: False)",
+    )
 
     # --- Log-normal RF size diversity ---
     parser.add_argument(
@@ -118,6 +124,34 @@ def parse_args():
         type=float,
         default=0.0,
         help="Std of RF sizes for W_ee log-normal (0 = disabled, try 0.5)",
+    )
+
+    # --- Evaluation ---
+    parser.add_argument(
+        "--pca-variance",
+        type=float,
+        default=0.95,
+        help="PCA readout: float 0-1 = explained variance fraction, int >1 = fixed n_components (default: 0.95)",
+    )
+
+    # --- STDP / learning rule ---
+    parser.add_argument(
+        "--learning-rate",
+        type=float,
+        default=0.0004,
+        help="STDP learning rate (default: 0.0004)",
+    )
+    parser.add_argument(
+        "--mu-weight",
+        type=float,
+        default=0.6,
+        help="BCM soft-bound exponent: (w_max - w)^mu scales LTP (default: 0.6, try 0.3)",
+    )
+    parser.add_argument(
+        "--w-max",
+        type=float,
+        default=10.0,
+        help="Soft weight upper bound for STDP (default: 10.0, try 15.0)",
     )
 
     # --- Reproducibility ---
@@ -245,11 +279,11 @@ def main():
     # --- Weights ---
     weight_kwargs = dict(
         density_se=0.01,
-        density_ee=0.03,
+        density_ee=0.01,
         density_ei=0.03,
         density_ie=0.05,
-        peak_se=2.0,
-        peak_ee=0.5,
+        peak_se=4.0,  # changed from 2.0
+        peak_ee=1.0,
         peak_ei=1.0,
         peak_ie=-0.7,
     )
@@ -300,10 +334,10 @@ def main():
 
     # --- Learner ---
     learner = snn.learner.TraceSTDP(
-        learning_rate=0.0004,
+        learning_rate=args.learning_rate,
         tau_trace=20,
-        w_max=10.0,
-        mu_weight=0.6,
+        w_max=args.w_max,
+        mu_weight=args.mu_weight,
         update_freq=100,
         clip_weights=True,
         min_weight_exc=0.01,
@@ -326,7 +360,7 @@ def main():
 
     # --- Model ---
     model = snn.Model(
-        input_size=784,
+        input_size=800 if args.on_off else 784,
         classes=list(range(10)),
         random_state=args.seed,
         num_steps=350,
@@ -340,6 +374,7 @@ def main():
         max_rate_hz=args.max_rate_hz,
         gain=1.0,
         gabor=args.gabor,
+        on_off=args.on_off,
     )
 
     # --- Training ---
@@ -361,7 +396,7 @@ def main():
         use_LR=True,
         use_phi=True,
         use_pca=True,
-        pca_variance=15,
+        pca_variance=args.pca_variance,
         track_stats=args.track_stats,
         stat_tracking_frequency=args.stat_freq,
         heatmap_plot=args.plot_spikes,
