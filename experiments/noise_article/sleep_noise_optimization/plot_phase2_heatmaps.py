@@ -24,8 +24,7 @@ def load_results(results_dir: str) -> pd.DataFrame:
     xlsx_path = os.path.join(results_dir, "Results_phase2.xlsx")
     if not os.path.isfile(xlsx_path):
         sys.exit(
-            f"Results file not found: {xlsx_path}\n"
-            "Run aggregate_phase2.py first."
+            f"Results file not found: {xlsx_path}\n" "Run aggregate_phase2.py first."
         )
     df = pd.read_excel(xlsx_path, engine="openpyxl")
     print(f"  Loaded {len(df)} rows from {xlsx_path}")
@@ -57,7 +56,7 @@ def plot_heatmaps(
     cbar_label: str = "Accuracy (%)",
     scale100: bool = True,
 ) -> None:
-    modes = ["static", "layer", "neuron"]
+    modes = ["layer", "neuron", "static"]
     df = df.copy()
     if scale100:
         df[value_col] = df[value_col] * 100
@@ -110,6 +109,120 @@ def plot_heatmaps(
     print(f"Saved → {out_path}")
 
 
+def plot_heatmaps_combined(
+    df: pd.DataFrame,
+    out_path: str,
+) -> None:
+    """2-row × 3-col heatmap: accuracy on top row, phi on bottom row."""
+    METRICS = [
+        ("test_acc", "Accuracy", True, "viridis"),
+        ("test_phi", "Clustering", False, "plasma"),
+    ]
+    modes = ["layer", "neuron", "static"]
+    mode_labels = {"static": "Static", "layer": "Layer", "neuron": "Neuron"}
+
+    fig, axes = plt.subplots(
+        2,
+        3,
+        figsize=(7, 4),
+        gridspec_kw={"hspace": 0.05, "wspace": 0.2},
+    )
+
+    for row_idx, (value_col, cbar_label, scale100, cmap) in enumerate(METRICS):
+        df_row = df.copy()
+        if scale100:
+            df_row[value_col] = df_row[value_col] * 100
+
+        pivots = {
+            m: build_pivot(df_row, m, value_col)
+            for m in modes
+            if m in df_row["reg_mode"].values
+        }
+
+        for col_idx, mode in enumerate(modes):
+            ax = axes[row_idx][col_idx]
+
+            if mode not in pivots:
+                ax.set_visible(False)
+                continue
+
+            pivot = pivots[mode]
+            mask = pivot.isna()
+
+            # Each panel gets its own colorbar — no repeated label on each bar
+            sns.heatmap(
+                pivot,
+                ax=ax,
+                mask=mask,
+                annot=False,
+                cmap=cmap,
+                linewidths=0,
+                rasterized=True,
+                cbar=True,
+                cbar_kws={"label": ""},
+            )
+
+            cbar = ax.collections[0].colorbar
+            cbar.ax.tick_params(labelsize=12)
+            # 3 integer ticks; positions inset from edges so labels don't clip
+            vmin = float(pivot.min().min())
+            vmax = float(pivot.max().max())
+            vmid = (vmin + vmax) / 2
+            inset = (vmax - vmin) * 0.08
+            tick_pos = [vmin + inset, vmid, vmax - inset]
+            labels = [
+                str(int(round(vmin))),
+                str(int(round(vmid))),
+                str(int(round(vmax))),
+            ]
+            cbar.set_ticks(tick_pos)
+            cbar.set_ticklabels(labels)
+
+            # Title only on top row
+            if row_idx == 0:
+                ax.set_title(mode_labels[mode], fontsize=24)
+
+            # x-axis tick labels only on bottom row
+            ax.set_xlabel("")
+            if row_idx == len(METRICS) - 1:
+                plt.setp(
+                    ax.get_xticklabels(),
+                    rotation=-45,
+                    ha="left",
+                    va="top",
+                    rotation_mode="anchor",
+                    fontsize=12,
+                )
+            else:
+                ax.set_xticklabels([])
+
+            # y-axis tick labels only on left column
+            ax.set_ylabel("")
+            if col_idx == 0:
+                ax.set_yticklabels(ax.get_yticklabels(), fontsize=12, rotation=0)
+            else:
+                ax.set_yticklabels([])
+                ax.tick_params(axis="y", length=0)
+
+        # Single metric label on the right side of each row
+        fig.text(
+            0.925,
+            axes[row_idx][2].get_position().y0
+            + axes[row_idx][2].get_position().height / 2,
+            cbar_label,
+            va="center",
+            ha="left",
+            fontsize=20,
+            rotation=90,
+        )
+
+    fig.supylabel("Sleep duration", fontsize=20)
+    fig.supxlabel("Noise variance", fontsize=20, y=-0.08)
+
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    print(f"Saved → {out_path}")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -122,8 +235,8 @@ def main():
             "results",
             "acc_history",
             "mnist",
-            "2026.05.23",
-            "20_2",
+            "2026.05.24",
+            "21",
         ),
     )
     args = parser.parse_args()
@@ -147,9 +260,12 @@ def main():
         df,
         out_path_phi,
         value_col="test_phi",
-        cbar_label="Clustering score (φ)",
+        cbar_label="Clustering (φ)",
         scale100=False,
     )
+
+    out_path_combined = os.path.join(results_dir, "heatmaps_combined.pdf")
+    plot_heatmaps_combined(df, out_path_combined)
 
 
 if __name__ == "__main__":

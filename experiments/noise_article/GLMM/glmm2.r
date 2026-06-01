@@ -64,7 +64,7 @@ model1 <- glmmTMB(
 )
 
 model2 <- glmmTMB(
-  test_acc ~ sleep_duration * var_noise + reg_target + (1 | seed),
+  test_acc ~ reg_target*sleep_duration * var_noise + (1 | seed),
   data = log_data,
   family = beta_family()
 )
@@ -73,6 +73,15 @@ model3 <- glmmTMB(
   test_acc ~ reg * (sleep_duration + var_noise + reg_target) + (1 | seed),
   data=full_data,
   family=beta_family()
+)
+
+log_data$test_phi_norm <- (log_data$test_phi - min(log_data$test_phi)) / 
+  (max(log_data$test_phi) - min(log_data$test_phi))
+
+model4 <- glmmTMB(
+  test_phi ~ reg_target * sleep_duration * var_noise + (1 | seed),
+  data = log_data,
+  family = Gamma(link="log")
 )
 
 # Print model summary
@@ -93,7 +102,7 @@ pred_grid <- expand.grid(
 )
 
 # Population-level predictions (re.form = NA ignores the random seed effect)
-pred_grid$fit <- predict(model2, newdata = pred_grid,
+pred_grid$fit <- predict(model4, newdata = pred_grid,
                          type = "response", re.form = NA,
                          allow.new.levels = TRUE)
 
@@ -109,15 +118,15 @@ ggplot(pred_grid, aes(x = factor(sleep_orig), y = fit,
   facet_wrap(~ reg_target) +
   scale_colour_viridis_d(name = "Noise variance") +
   labs(x = "Sleep duration (timesteps)",
-       y = "Predicted accuracy",
-       title = "GLMM predicted accuracy") +
+       y = "Predicted clustering",
+       title = "GLMM predicted clustering") +
   theme_bw()
 
-ggsave("C:\\Users\\Andreas\\Documents\\Github\\SNN_paper_repo\\results\\acc_history\\mnist\\2026.05.24\\21\\glmm_predictions.pdf",
+ggsave("C:\\Users\\Andreas\\Documents\\Github\\SNN_paper_repo\\results\\acc_history\\mnist\\2026.05.24\\21\\glmm_predictions_clust2.pdf",
        width = 10, height = 4)
 
 # ---- export to Excel --------------------------------------------------------
 write_xlsx(
   pred_grid[, c("reg_target", "sleep_orig", "noise_orig", "fit")],
-  "C:\\Users\\Andreas\\Documents\\Github\\SNN_paper_repo\\results\\acc_history\\mnist\\2026.05.24\\21\\GLMM_predictions.xlsx"
+  "C:\\Users\\Andreas\\Documents\\Github\\SNN_paper_repo\\results\\acc_history\\mnist\\2026.05.24\\21\\GLMM_predictions_clust2.xlsx"
 )
