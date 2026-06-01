@@ -10,6 +10,7 @@ import glob
 import os
 import re
 import matplotlib.colors as mcolors
+import matplotlib.gridspec as mgridspec
 import pandas as pd
 import matplotlib
 
@@ -163,8 +164,8 @@ def sig_label(p: float) -> str:
 MODE_ORDER = ["layer", "neuron", "static"]
 MODE_DISPLAY = {"static": "Static", "layer": "Layer", "neuron": "Neuron"}
 
-_BROKEN_TOP = (68, 107)   # layer / neuron accuracy range (×100) + bracket headroom
-_BROKEN_BOT = (0,  28)    # static accuracy range (×100)
+_BROKEN_TOP = (68, 107)  # layer / neuron accuracy range (×100) + bracket headroom
+_BROKEN_BOT = (0, 28)  # static accuracy range (×100)
 
 
 def _break_marks(ax_top, d: float = 0.03, sep: float = 0.022, y_center: float = -0.04):
@@ -176,7 +177,10 @@ def _break_marks(ax_top, d: float = 0.03, sep: float = 0.022, y_center: float = 
             ax_top.plot(
                 [x0 - d, x0 + d],
                 [y_center - d * slope + dy, y_center + d * slope + dy],
-                transform=tr, color="k", lw=1.4, clip_on=False,
+                transform=tr,
+                color="k",
+                lw=1.4,
+                clip_on=False,
             )
 
 
@@ -198,8 +202,14 @@ def plot_results(
 
     # Shared: load no-reg baseline
     import os as _os
+
     _path = _os.path.join(
-        _os.getcwd(), "results", "acc_history", "mnist", "2026.05.24", "21",
+        _os.getcwd(),
+        "results",
+        "acc_history",
+        "mnist",
+        "2026.05.24",
+        "21",
         "Results_phase2 EXT.xlsx",
     )
     _df2 = pd.read_excel(_path)
@@ -214,15 +224,19 @@ def plot_results(
     # BROKEN-AXIS PATH                                                     #
     # ------------------------------------------------------------------ #
     if broken_axis:
-        from matplotlib.gridspec import GridSpec
         _top_span = _BROKEN_TOP[1] - _BROKEN_TOP[0]
         _bot_span = _BROKEN_BOT[1] - _BROKEN_BOT[0]
         fig = plt.figure(figsize=(4 * len(reg_modes), 6))
-        gs = GridSpec(
-            2, len(reg_modes),
+        gs = mgridspec.GridSpec(
+            2,
+            len(reg_modes),
             height_ratios=[_top_span, _bot_span],
-            hspace=0.06, wspace=0.25,
-            left=0.1, right=0.88, top=0.91, bottom=0.1,
+            hspace=0.06,
+            wspace=0.25,
+            left=0.1,
+            right=0.88,
+            top=0.91,
+            bottom=0.1,
         )
         top_axes = [fig.add_subplot(gs[0, c]) for c in range(len(reg_modes))]
         bot_axes = [fig.add_subplot(gs[1, c]) for c in range(len(reg_modes))]
@@ -231,7 +245,9 @@ def plot_results(
             ax_top = top_axes[col]
             ax_bot = bot_axes[col]
             sub = df_valid[df_valid["reg_mode"] == mode]
-            types_here = [t for t in ["sleep", "normalize"] if t in sub["reg_type"].values]
+            types_here = [
+                t for t in ["sleep", "normalize"] if t in sub["reg_type"].values
+            ]
 
             boxes_data, box_colors_list, box_labels, positions = [], [], [], []
             for rt in types_here:
@@ -245,7 +261,9 @@ def plot_results(
             # Draw boxplots on both axes — clipping handles visibility
             for ax in (ax_top, ax_bot):
                 bp = ax.boxplot(
-                    boxes_data, positions=positions, widths=BOX_WIDTH,
+                    boxes_data,
+                    positions=positions,
+                    widths=BOX_WIDTH,
                     patch_artist=True,
                     medianprops=dict(linewidth=2),
                     whiskerprops=dict(linewidth=0.8),
@@ -254,18 +272,26 @@ def plot_results(
                 )
                 for i, (patch, color) in enumerate(zip(bp["boxes"], box_colors_list)):
                     dark = darken(color)
-                    patch.set_facecolor(color); patch.set_alpha(0.75)
+                    patch.set_facecolor(color)
+                    patch.set_alpha(0.75)
                     patch.set_edgecolor(dark)
                     bp["medians"][i].set_color(dark)
-                    bp["whiskers"][2*i].set_color(dark); bp["whiskers"][2*i+1].set_color(dark)
-                    bp["caps"][2*i].set_color(dark); bp["caps"][2*i+1].set_color(dark)
+                    bp["whiskers"][2 * i].set_color(dark)
+                    bp["whiskers"][2 * i + 1].set_color(dark)
+                    bp["caps"][2 * i].set_color(dark)
+                    bp["caps"][2 * i + 1].set_color(dark)
                     bp["fliers"][i].set_markerfacecolor(color)
                     bp["fliers"][i].set_markeredgecolor(dark)
 
             # Baseline on both (visible only in the row where value falls)
             for ax in (ax_top, ax_bot):
-                ax.axhline(no_reg_mean, color=COLORS["none"], linewidth=1.5,
-                           linestyle="--", zorder=3)
+                ax.axhline(
+                    no_reg_mean,
+                    color=COLORS["none"],
+                    linewidth=1.5,
+                    linestyle="--",
+                    zorder=3,
+                )
 
             ax_top.set_ylim(*_BROKEN_TOP)
             ax_bot.set_ylim(*_BROKEN_BOT)
@@ -295,19 +321,29 @@ def plot_results(
                 raw_sleep = sub[sub["reg_type"] == "sleep"][value_col].tolist()
                 raw_norm = sub[sub["reg_type"] == "normalize"][value_col].tolist()
                 v_sleep = [v * 100 for v in raw_sleep] if scale100 else raw_sleep
-                v_norm  = [v * 100 for v in raw_norm]  if scale100 else raw_norm
+                v_norm = [v * 100 for v in raw_norm] if scale100 else raw_norm
                 _, p = mannwhitneyu(v_sleep, v_norm, alternative="two-sided")
                 lbl = sig_label(p)
                 i_sleep = FIXED_POSITIONS["sleep"]
-                i_norm  = FIXED_POSITIONS["normalize"]
-                ylim_span = (sig_ax.get_ylim()[1] - sig_ax.get_ylim()[0])
+                i_norm = FIXED_POSITIONS["normalize"]
+                ylim_span = sig_ax.get_ylim()[1] - sig_ax.get_ylim()[0]
                 y_legs = max(max(v_sleep), max(v_norm)) + ylim_span * 0.03
-                y_bar  = y_legs + ylim_span * 0.02
-                sig_ax.plot([i_sleep, i_sleep, i_norm, i_norm],
-                            [y_legs, y_bar, y_bar, y_legs], color="black", linewidth=1)
-                sig_ax.annotate(lbl, xy=((i_sleep + i_norm) / 2, y_bar),
-                                xytext=(0, -5), textcoords="offset points",
-                                ha="center", va="bottom", fontsize=18)
+                y_bar = y_legs + ylim_span * 0.02
+                sig_ax.plot(
+                    [i_sleep, i_sleep, i_norm, i_norm],
+                    [y_legs, y_bar, y_bar, y_legs],
+                    color="black",
+                    linewidth=1,
+                )
+                sig_ax.annotate(
+                    lbl,
+                    xy=((i_sleep + i_norm) / 2, y_bar),
+                    xytext=(0, -5),
+                    textcoords="offset points",
+                    ha="center",
+                    va="bottom",
+                    fontsize=18,
+                )
 
             ax_top.set_title(MODE_DISPLAY.get(mode, mode), fontsize=26)
 
@@ -318,14 +354,29 @@ def plot_results(
         fig.supylabel(ylabel, fontsize=20, x=0.02)
 
         # Legend on middle top panel
-        patches = [mpatches.Patch(color=COLORS[rt], alpha=0.75, label=LABELS[rt])
-                   for rt in reg_types_present]
+        patches = [
+            mpatches.Patch(color=COLORS[rt], alpha=0.75, label=LABELS[rt])
+            for rt in reg_types_present
+        ]
         from matplotlib.lines import Line2D
-        patches.append(Line2D([0], [0], color=COLORS["none"], linewidth=1.5,
-                               linestyle="--", label="No reg (baseline)"))
+
+        patches.append(
+            Line2D(
+                [0],
+                [0],
+                color=COLORS["none"],
+                linewidth=1.5,
+                linestyle="--",
+                label="No reg (baseline)",
+            )
+        )
         top_axes[len(reg_modes) // 2].legend(
-            handles=patches, loc="upper left", bbox_to_anchor=(0.05, 0.98),
-            fontsize=14, title="Reg type", title_fontsize=16,
+            handles=patches,
+            loc="upper left",
+            bbox_to_anchor=(0.05, 0.98),
+            fontsize=14,
+            title="Reg type",
+            title_fontsize=16,
         )
 
         plt.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -489,28 +540,11 @@ def plot_combined(df: pd.DataFrame, no_reg_df: pd.DataFrame, out_path: str):
     ]
     FIXED_POSITIONS = {"sleep": 1, "normalize": 2}
 
-    fig, axes = plt.subplots(
-        2,
-        len(reg_modes),
-        figsize=(3.5 * len(reg_modes), 6),
-        sharex="col",
-        gridspec_kw={"hspace": 0.04, "wspace": 0.08},
-    )
-
-    # --- Significance bracket geometry (TWEAK THESE) ---------------------
+    # --- Significance bracket geometry -----------------------------------
     BRACKET_GAP_FRAC = 0.03
     BRACKET_LEG_FRAC = 0.02
     STAR_PAD_PTS = -5
-    # --------------------------------------------------------------------
-
-    # Pre-compute shared y ceilings per row — same formula for both metrics
-    # so brackets sit at the same relative position in each row
-    y_tops = []
-    for value_col, _, scale100 in METRICS:
-        col_max = df_valid[value_col].max()
-        if scale100:
-            col_max *= 100
-        y_tops.append(col_max * 1.15)
+    # ---------------------------------------------------------------------
 
     # Baseline means
     baselines = {
@@ -518,49 +552,98 @@ def plot_combined(df: pd.DataFrame, no_reg_df: pd.DataFrame, out_path: str):
         "test_phi": no_reg_df["test_phi"].mean(),
     }
 
-    for row_idx, (value_col, ylabel, scale100) in enumerate(METRICS):
-        y_top = y_tops[row_idx]
-        y_span = y_top
+    # --- GridSpec: 3 rows (acc-top, acc-bot, clustering) -----------------
+    _top_span = _BROKEN_TOP[1] - _BROKEN_TOP[0]  # 39
+    _bot_span = _BROKEN_BOT[1] - _BROKEN_BOT[0]  # 28
+    _clust_h = _top_span + _bot_span  # 67
 
-        for col_idx, mode in enumerate(reg_modes):
-            ax = axes[row_idx][col_idx]
-            sub = df_valid[df_valid["reg_mode"] == mode]
-            types_here = [
-                t for t in ["sleep", "normalize"] if t in sub["reg_type"].values
-            ]
+    fig = plt.figure(figsize=(3.5 * len(reg_modes), 6.5))
+    gs = mgridspec.GridSpec(
+        3,
+        len(reg_modes),
+        height_ratios=[_top_span, _bot_span, _clust_h],
+        hspace=0.06,
+        wspace=0.08,
+        left=0.09,
+        right=0.97,
+        top=0.93,
+        bottom=0.09,
+    )
+    acc_top_axes = [fig.add_subplot(gs[0, c]) for c in range(len(reg_modes))]
+    acc_bot_axes = [fig.add_subplot(gs[1, c]) for c in range(len(reg_modes))]
+    clust_axes = [fig.add_subplot(gs[2, c]) for c in range(len(reg_modes))]
 
-            boxes_data, box_colors, box_labels, positions = [], [], [], []
-            for rt in types_here:
-                raw = sub[sub["reg_type"] == rt][value_col].tolist()
-                vals = [v * 100 for v in raw] if scale100 else raw
-                boxes_data.append(vals)
-                box_colors.append(COLORS[rt])
-                box_labels.append(LABELS[rt])
-                positions.append(FIXED_POSITIONS[rt])
+    def _style_bp(bp, box_colors):
+        for i, (patch, color) in enumerate(zip(bp["boxes"], box_colors)):
+            dark = darken(color)
+            patch.set_facecolor(color)
+            patch.set_alpha(0.75)
+            patch.set_edgecolor(dark)
+            bp["medians"][i].set_color(dark)
+            bp["whiskers"][2 * i].set_color(dark)
+            bp["whiskers"][2 * i + 1].set_color(dark)
+            bp["caps"][2 * i].set_color(dark)
+            bp["caps"][2 * i + 1].set_color(dark)
+            bp["fliers"][i].set_markerfacecolor(color)
+            bp["fliers"][i].set_markeredgecolor(dark)
 
-            bp = ax.boxplot(
-                boxes_data,
-                positions=positions,
-                widths=0.5,
-                patch_artist=True,
-                medianprops=dict(linewidth=2),
-                whiskerprops=dict(linewidth=0.8),
-                capprops=dict(linewidth=0.8),
-                flierprops=dict(marker="o", markersize=4, linestyle="none"),
-            )
-            for i, (patch, color) in enumerate(zip(bp["boxes"], box_colors)):
-                dark = darken(color)
-                patch.set_facecolor(color)
-                patch.set_alpha(0.75)
-                patch.set_edgecolor(dark)
-                bp["medians"][i].set_color(dark)
-                bp["whiskers"][2 * i].set_color(dark)
-                bp["whiskers"][2 * i + 1].set_color(dark)
-                bp["caps"][2 * i].set_color(dark)
-                bp["caps"][2 * i + 1].set_color(dark)
-                bp["fliers"][i].set_markerfacecolor(color)
-                bp["fliers"][i].set_markeredgecolor(dark)
+    # ---- ACCURACY ROW (broken axis) -------------------------------------
+    value_col, ylabel_acc, scale100 = METRICS[0]
 
+    # Pre-compute dynamic ylims from actual data so axes hug the data
+    _split_threshold = 40  # below → static (bottom axis), above → layer/neuron (top)
+    _all_acc_top, _all_acc_bot = [], []
+    for _mode in reg_modes:
+        _sub = df_valid[df_valid["reg_mode"] == _mode]
+        for _rt in ["sleep", "normalize"]:
+            if _rt not in _sub["reg_type"].values:
+                continue
+            _raw = _sub[_sub["reg_type"] == _rt][value_col].tolist()
+            _vals = [v * 100 for v in _raw] if scale100 else _raw
+            if max(_vals) > _split_threshold:
+                _all_acc_top.extend(_vals)
+            else:
+                _all_acc_bot.extend(_vals)
+
+    _HEADROOM = 0.22  # fraction of data range reserved above max for bracket + label
+    _dyn_top_min = max(0, min(_all_acc_top) - 1) if _all_acc_top else 60
+    _dyn_top_max = (
+        max(_all_acc_top) + (max(_all_acc_top) - _dyn_top_min) * _HEADROOM
+        if _all_acc_top
+        else 100
+    )
+    _dyn_bot_max = (
+        max(_all_acc_bot) + max(_all_acc_bot) * _HEADROOM if _all_acc_bot else 30
+    )
+    _DYN_TOP = (_dyn_top_min, _dyn_top_max)
+    _DYN_BOT = (0, _dyn_bot_max)
+
+    for col_idx, mode in enumerate(reg_modes):
+        ax_top = acc_top_axes[col_idx]
+        ax_bot = acc_bot_axes[col_idx]
+        sub = df_valid[df_valid["reg_mode"] == mode]
+        types_here = [t for t in ["sleep", "normalize"] if t in sub["reg_type"].values]
+
+        boxes_data, box_colors, box_labels, positions = [], [], [], []
+        for rt in types_here:
+            raw = sub[sub["reg_type"] == rt][value_col].tolist()
+            vals = [v * 100 for v in raw] if scale100 else raw
+            boxes_data.append(vals)
+            box_colors.append(COLORS[rt])
+            box_labels.append(LABELS[rt])
+            positions.append(FIXED_POSITIONS[rt])
+
+        bp_kw = dict(
+            positions=positions,
+            widths=0.5,
+            patch_artist=True,
+            medianprops=dict(linewidth=2),
+            whiskerprops=dict(linewidth=0.8),
+            capprops=dict(linewidth=0.8),
+            flierprops=dict(marker="o", markersize=4, linestyle="none"),
+        )
+        for ax in (ax_top, ax_bot):
+            _style_bp(ax.boxplot(boxes_data, **bp_kw), box_colors)
             ax.axhline(
                 baselines[value_col],
                 color=COLORS["none"],
@@ -568,76 +651,132 @@ def plot_combined(df: pd.DataFrame, no_reg_df: pd.DataFrame, out_path: str):
                 linestyle="--",
                 zorder=3,
             )
-            ax.set_ylim(0, y_top)
-
-            # Significance bracket
-            if "sleep" in types_here and "normalize" in types_here:
-                v_sleep = (
-                    [
-                        v * 100
-                        for v in sub[sub["reg_type"] == "sleep"][value_col].tolist()
-                    ]
-                    if scale100
-                    else sub[sub["reg_type"] == "sleep"][value_col].tolist()
-                )
-                v_norm = (
-                    [
-                        v * 100
-                        for v in sub[sub["reg_type"] == "normalize"][value_col].tolist()
-                    ]
-                    if scale100
-                    else sub[sub["reg_type"] == "normalize"][value_col].tolist()
-                )
-                _, p = mannwhitneyu(v_sleep, v_norm, alternative="two-sided")
-                label = sig_label(p)
-                i_sleep = FIXED_POSITIONS["sleep"]
-                i_norm = FIXED_POSITIONS["normalize"]
-                gap = y_span * BRACKET_GAP_FRAC  # box top -> bracket legs
-                bar_h = y_span * BRACKET_LEG_FRAC  # leg length (same per row)
-                y_legs = max(max(v_sleep), max(v_norm)) + gap
-                y_bar = y_legs + bar_h
-                ax.plot(
-                    [i_sleep, i_sleep, i_norm, i_norm],
-                    [y_legs, y_bar, y_bar, y_legs],
-                    color="black",
-                    linewidth=1,
-                )
-                # Asterisk offset in POINTS (physical units) so the gap above the
-                # bracket is identical for accuracy and phi regardless of scale.
-                ax.annotate(
-                    label,
-                    xy=((i_sleep + i_norm) / 2, y_bar),
-                    xytext=(0, STAR_PAD_PTS),
-                    textcoords="offset points",
-                    ha="center",
-                    va="bottom",
-                    fontsize=18,
-                )
-
-            # Titles only on top row
-            if row_idx == 0:
-                ax.set_title(MODE_DISPLAY.get(mode, mode), fontsize=28)
-
-            # y-label only on left column
-            if col_idx == 0:
-                ax.set_ylabel(ylabel, fontsize=20)
-
-            # x-tick labels only on bottom row
             ax.set_xlim(0.5, 2.5)
             ax.set_xticks([1, 2])
-            if row_idx == len(METRICS) - 1:
-                ax.set_xticklabels(box_labels, fontsize=20)
-            else:
-                ax.set_xticklabels([])
-
-            if col_idx == 0:
-                ax.tick_params(axis="y", labelsize=12)
-            else:
-                ax.tick_params(axis="y", labelsize=12, labelleft=False)
+            ax.set_xticklabels([])
             ax.yaxis.grid(True, linestyle="--", alpha=0.5)
             ax.set_axisbelow(True)
 
-    # Legend inside top-middle panel
+        ax_top.set_ylim(*_DYN_TOP)
+        ax_bot.set_ylim(*_DYN_BOT)
+        ax_top.spines["bottom"].set_visible(False)
+        ax_bot.spines["top"].set_visible(False)
+        ax_top.tick_params(bottom=False, labelbottom=False)
+        ax_bot.tick_params(top=False)
+        _break_marks(ax_top)
+
+        # Significance bracket on the axis where data actually lives
+        if "sleep" in types_here and "normalize" in types_here:
+            v_sleep = [
+                v * 100 for v in sub[sub["reg_type"] == "sleep"][value_col].tolist()
+            ]
+            v_norm = [
+                v * 100 for v in sub[sub["reg_type"] == "normalize"][value_col].tolist()
+            ]
+            _, p = mannwhitneyu(v_sleep, v_norm, alternative="two-sided")
+            lbl = sig_label(p)
+            all_vals = v_sleep + v_norm
+            sig_ax = ax_top if max(all_vals) > _split_threshold else ax_bot
+            ylim_span = sig_ax.get_ylim()[1] - sig_ax.get_ylim()[0]
+            y_legs = max(max(v_sleep), max(v_norm)) + ylim_span * BRACKET_GAP_FRAC
+            y_bar = y_legs + ylim_span * BRACKET_LEG_FRAC
+            i_sleep, i_norm = FIXED_POSITIONS["sleep"], FIXED_POSITIONS["normalize"]
+            sig_ax.plot(
+                [i_sleep, i_sleep, i_norm, i_norm],
+                [y_legs, y_bar, y_bar, y_legs],
+                color="black",
+                linewidth=1,
+            )
+            sig_ax.annotate(
+                lbl,
+                xy=((i_sleep + i_norm) / 2, y_bar),
+                xytext=(0, STAR_PAD_PTS),
+                textcoords="offset points",
+                ha="center",
+                va="bottom",
+                fontsize=18,
+            )
+
+        ax_top.set_title(MODE_DISPLAY.get(mode, mode), fontsize=28)
+        if col_idx == 0:
+            ax_top.tick_params(axis="y", labelsize=11)
+            ax_bot.tick_params(axis="y", labelsize=11)
+        else:
+            ax_top.tick_params(axis="y", labelsize=11, labelleft=False)
+            ax_bot.tick_params(axis="y", labelsize=11, labelleft=False)
+
+    # ---- CLUSTERING ROW (unchanged logic) --------------------------------
+    value_col, ylabel_clust, scale100 = METRICS[1]
+    clust_top = df_valid[value_col].max() * 1.15
+    for col_idx, mode in enumerate(reg_modes):
+        ax = clust_axes[col_idx]
+        sub = df_valid[df_valid["reg_mode"] == mode]
+        types_here = [t for t in ["sleep", "normalize"] if t in sub["reg_type"].values]
+
+        boxes_data, box_colors, box_labels, positions = [], [], [], []
+        for rt in types_here:
+            raw = sub[sub["reg_type"] == rt][value_col].tolist()
+            boxes_data.append(raw)
+            box_colors.append(COLORS[rt])
+            box_labels.append(LABELS[rt])
+            positions.append(FIXED_POSITIONS[rt])
+
+        bp_kw = dict(
+            positions=positions,
+            widths=0.5,
+            patch_artist=True,
+            medianprops=dict(linewidth=2),
+            whiskerprops=dict(linewidth=0.8),
+            capprops=dict(linewidth=0.8),
+            flierprops=dict(marker="o", markersize=4, linestyle="none"),
+        )
+        _style_bp(ax.boxplot(boxes_data, **bp_kw), box_colors)
+        ax.axhline(
+            baselines[value_col],
+            color=COLORS["none"],
+            linewidth=1.5,
+            linestyle="--",
+            zorder=3,
+        )
+        ax.set_ylim(0, clust_top)
+
+        if "sleep" in types_here and "normalize" in types_here:
+            v_sleep = sub[sub["reg_type"] == "sleep"][value_col].tolist()
+            v_norm = sub[sub["reg_type"] == "normalize"][value_col].tolist()
+            _, p = mannwhitneyu(v_sleep, v_norm, alternative="two-sided")
+            lbl = sig_label(p)
+            i_sleep, i_norm = FIXED_POSITIONS["sleep"], FIXED_POSITIONS["normalize"]
+            gap = clust_top * BRACKET_GAP_FRAC
+            bar_h = clust_top * BRACKET_LEG_FRAC
+            y_legs = max(max(v_sleep), max(v_norm)) + gap
+            y_bar = y_legs + bar_h
+            ax.plot(
+                [i_sleep, i_sleep, i_norm, i_norm],
+                [y_legs, y_bar, y_bar, y_legs],
+                color="black",
+                linewidth=1,
+            )
+            ax.annotate(
+                lbl,
+                xy=((i_sleep + i_norm) / 2, y_bar),
+                xytext=(0, STAR_PAD_PTS),
+                textcoords="offset points",
+                ha="center",
+                va="bottom",
+                fontsize=18,
+            )
+
+        ax.set_xlim(0.5, 2.5)
+        ax.set_xticks([1, 2])
+        ax.set_xticklabels(box_labels, fontsize=24)
+        ax.yaxis.grid(True, linestyle="--", alpha=0.5)
+        ax.set_axisbelow(True)
+        if col_idx == 0:
+            ax.tick_params(axis="y", labelsize=16)
+        else:
+            ax.tick_params(axis="y", labelsize=16, labelleft=False)
+
+    # Legend inside middle clustering panel
     from matplotlib.lines import Line2D
 
     legend_handles = [
@@ -654,13 +793,39 @@ def plot_combined(df: pd.DataFrame, no_reg_df: pd.DataFrame, out_path: str):
             label="No reg (baseline)",
         )
     )
-    axes[1][1].legend(
+    clust_axes[len(reg_modes) // 2].legend(
         handles=legend_handles,
         loc="upper left",
-        bbox_to_anchor=(0.07, 0.6),
-        fontsize=12,
+        bbox_to_anchor=(0.06, 0.6),
+        fontsize=14,
         title="Reg type",
-        title_fontsize=14,
+        title_fontsize=16,
+    )
+
+    # Centered row labels using figure coordinates (avoids off-center set_ylabel)
+    acc_top_pos = acc_top_axes[0].get_position()
+    acc_bot_pos = acc_bot_axes[0].get_position()
+    acc_y_center = (acc_top_pos.y1 + acc_bot_pos.y0) / 2
+    clust_pos = clust_axes[0].get_position()
+    clust_y_center = (clust_pos.y0 + clust_pos.y1) / 2
+    x_label = 0.02
+    fig.text(
+        x_label,
+        acc_y_center,
+        ylabel_acc,
+        fontsize=26,
+        ha="center",
+        va="center",
+        rotation=90,
+    )
+    fig.text(
+        x_label,
+        clust_y_center,
+        ylabel_clust,
+        fontsize=26,
+        ha="center",
+        va="center",
+        rotation=90,
     )
 
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -707,7 +872,7 @@ def plot_combined_merged(df: pd.DataFrame, no_reg_df: pd.DataFrame, out_path: st
     }
 
     # Fixed y-limits computed globally so all panels share the same scale
-    ACC_YMAX = 105.0
+    ACC_YMAX = 100.0
     ACC_YMIN = 0.0
     phi_all = df_valid["test_phi"]
     PHI_YMIN = phi_all.min() * 0.85
@@ -970,8 +1135,12 @@ def main():
     # Accuracy boxplot (broken y-axis)
     png_path = os.path.join(OUT_DIR, "phase1_boxplot.pdf")
     plot_results(
-        df, png_path, value_col="test_acc", ylabel="Accuracy (%)",
-        scale100=True, broken_axis=True,
+        df,
+        png_path,
+        value_col="test_acc",
+        ylabel="Accuracy (%)",
+        scale100=True,
+        broken_axis=True,
     )
 
     # Clustering score (phi) boxplot

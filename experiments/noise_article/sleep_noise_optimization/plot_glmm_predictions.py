@@ -56,9 +56,9 @@ def load_data(results_dir: str) -> pd.DataFrame:
     return df
 
 
-def make_colormap(noise_levels):
+def make_colormap(noise_levels, cmap=plt.cm.viridis):
     norm = mcolors.LogNorm(vmin=min(noise_levels), vmax=max(noise_levels))
-    return {n: plt.cm.viridis(norm(n)) for n in noise_levels}
+    return {n: cmap(norm(n)) for n in noise_levels}
 
 
 def _break_marks(ax_top, d: float = 0.03, sep: float = 0.022, y_center: float = -0.04):
@@ -92,7 +92,8 @@ def plot(df: pd.DataFrame, out_prefix: str, ylabel: str = "Predicted accuracy (%
         df["fit"] = df["fit"] * 100
 
     noise_levels = sorted(df["noise_orig"].unique())
-    color_map = make_colormap(noise_levels)
+    cmap = plt.cm.viridis if use_broken else plt.cm.plasma
+    color_map = make_colormap(noise_levels, cmap=cmap)
 
     if use_broken:
         fig = plt.figure(figsize=(13, 6))
