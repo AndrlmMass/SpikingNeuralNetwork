@@ -97,7 +97,7 @@ def plot_heatmaps(
         cbar.set_label(cbar_label, fontsize=30)
         ax.set_title(mode.capitalize(), fontsize=35)
         ax.set_xlabel("Noise variance", fontsize=30)
-        ax.set_ylabel("Sleep duration" if i == 0 else "", fontsize=30)
+        ax.set_ylabel("Nap duration" if i == 0 else "", fontsize=30)
         ax.set_xticklabels(ax.get_xticklabels(), fontsize=20)
         if i == 0:
             ax.set_yticklabels(ax.get_yticklabels(), fontsize=20, rotation=0)
@@ -116,7 +116,7 @@ def plot_heatmaps_combined(
     """2-row × 3-col heatmap: accuracy on top row, phi on bottom row."""
     METRICS = [
         ("test_acc", "Accuracy", True, "viridis"),
-        ("test_phi", "Clustering", False, "plasma"),
+        ("test_phi", "Clustering", False, "viridis"),
     ]
     modes = ["layer", "neuron", "static"]
     mode_labels = {"static": "Static", "layer": "Layer", "neuron": "Neuron"}
@@ -180,7 +180,7 @@ def plot_heatmaps_combined(
 
             # Title only on top row
             if row_idx == 0:
-                ax.set_title(mode_labels[mode], fontsize=24)
+                ax.set_title(mode_labels[mode], fontsize=20)
 
             # x-axis tick labels only on bottom row
             ax.set_xlabel("")
@@ -212,12 +212,12 @@ def plot_heatmaps_combined(
             cbar_label,
             va="center",
             ha="left",
-            fontsize=20,
+            fontsize=18,
             rotation=90,
         )
 
-    fig.supylabel("Sleep duration", fontsize=20)
-    fig.supxlabel("Noise variance", fontsize=20, y=-0.08)
+    fig.supylabel("Napping duration", fontsize=18)
+    fig.supxlabel("Noise variance", fontsize=18, y=-0.08)
 
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     print(f"Saved → {out_path}")
