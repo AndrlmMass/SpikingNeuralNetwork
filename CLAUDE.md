@@ -117,3 +117,32 @@ Model.train()
 
 - `sleep-redeploy` — active development
 - `paper-repo` / `SNN_paper_repo` — reproducible article results; treat as stable baseline
+
+## Project History & Current Status
+
+Condensed from the development diary (Feb–May 2026):
+
+**Feb–Mar:** Months of hyperparameter tuning just to get the network to respond. Key fixes: inhibitory neurons needed much higher `Rm` to spike; normalization was not running per receiving neuron (causing silent weight saturation); sleep was *setting* weights to a target rather than *scaling by* a factor (erasing learning instead of downscaling it).
+
+**April:** Sleep and normalization reimplemented as proper Numba-JIT classes. Sleep runs as a `while`-loop during offline periods with noise-driven activity.
+
+**May 1–14:** Full codebase restructure into the current `neurosnn/` modular package. `train_network` converted to `Trainer` class. Series of nonzero-index bugs fixed that were corrupting inhibitory weights during sleep/normalization.
+
+**May 16–22:** Critical bugs found that invalidated earlier results:
+1. Noise was not being applied correctly to spike inputs
+2. Sleep was only running every 10 timesteps instead of every timestep
+3. Membrane potentials and spike arrays were not being transferred correctly between batches
+
+After fixing, sleep (layer mode, noise=5.0) shows genuinely promising results.
+
+**Current deadlines (as of late May 2026):**
+- Abstract submitted to IWAI conference (May 24) ✓
+- RF poster due May 31
+- IWAI article due June 7 (sleep vs. normalization comparison)
+- RF article due July 31
+- Doctoral thesis due December 31
+
+**Phase 1 experiments** (sleep vs. norm, 5 seeds × 3 reg modes × 2 reg types) running on Orion HPC.
+**Phase 2** (noise levels × sleep durations grid: `[0.0, 0.1, 1.0, 5.0, 10.0, 100.0]` × `[5, 10, 25, 50, 100, 200]` ms, 5 seeds each) being submitted.
+
+GLMM analysis in R (`experiments/GLM/analysis.r`) with normalization as baseline; sleep duration and noise level as continuous predictors.
