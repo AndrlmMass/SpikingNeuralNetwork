@@ -25,6 +25,13 @@ class WeightsSpec:
     n_orientations: int = 4
     r_cut_factor: float = 3.0
     sigma_x_lognormal_std: float = 0.0
+    sigma_x_lognormal_max: float = 0.0   # 0 = no upper clip
+    orientation_mode: str = "block"      # "block" or "interleaved"
+
+    sigma_ee_mean: float = 0.0          # 0 = auto-compute from rf_scale
+    sigma_ee_lognormal_std: float = 0.0  # 0 = disabled (fixed sigma_ee)
+    sigma_se_mean: float = 0.0          # 0 = auto-compute from rf_scale (rf mode only)
+    sigma_se_lognormal_std: float = 0.0  # 0 = disabled (fixed sigma_se, rf mode only)
 
     def _to_factory_kwargs(self) -> dict:
         return dict(
@@ -44,6 +51,12 @@ class WeightsSpec:
             n_orientations=self.n_orientations,
             r_cut_factor=self.r_cut_factor,
             sigma_x_lognormal_std=self.sigma_x_lognormal_std,
+            sigma_x_lognormal_max=self.sigma_x_lognormal_max,
+            orientation_mode=self.orientation_mode,
+            sigma_ee_mean=self.sigma_ee_mean,
+            sigma_ee_lognormal_std=self.sigma_ee_lognormal_std,
+            sigma_se_mean=self.sigma_se_mean,
+            sigma_se_lognormal_std=self.sigma_se_lognormal_std,
         )
 
 
@@ -57,6 +70,10 @@ def receptive_fields(
     peak_ei: float = 0.3,
     peak_ie: float = -0.2,
     rf_scale: float = 1.0,
+    sigma_ee_mean: float = 0.0,
+    sigma_ee_lognormal_std: float = 0.0,
+    sigma_se_mean: float = 0.0,
+    sigma_se_lognormal_std: float = 0.0,
 ) -> WeightsSpec:
     """Gaussian / Mexican-hat structured receptive fields (topographic connectivity)."""
     return WeightsSpec(
@@ -70,6 +87,10 @@ def receptive_fields(
         peak_ie=peak_ie,
         rf_scale=rf_scale,
         _random=False,
+        sigma_ee_mean=sigma_ee_mean,
+        sigma_ee_lognormal_std=sigma_ee_lognormal_std,
+        sigma_se_mean=sigma_se_mean,
+        sigma_se_lognormal_std=sigma_se_lognormal_std,
     )
 
 
@@ -88,6 +109,10 @@ def oriented_receptive_fields(
     n_orientations: int = 4,
     r_cut_factor: float = 3.0,
     sigma_x_lognormal_std: float = 0.0,
+    sigma_x_lognormal_max: float = 0.0,
+    orientation_mode: str = "block",
+    sigma_ee_mean: float = 0.0,
+    sigma_ee_lognormal_std: float = 0.0,
 ) -> WeightsSpec:
     """Oriented elliptical Gaussian RFs for W_se; isotropic Gaussians for W_ee/W_ei/W_ie."""
     return WeightsSpec(
@@ -107,6 +132,10 @@ def oriented_receptive_fields(
         n_orientations=n_orientations,
         r_cut_factor=r_cut_factor,
         sigma_x_lognormal_std=sigma_x_lognormal_std,
+        sigma_x_lognormal_max=sigma_x_lognormal_max,
+        orientation_mode=orientation_mode,
+        sigma_ee_mean=sigma_ee_mean,
+        sigma_ee_lognormal_std=sigma_ee_lognormal_std,
     )
 
 

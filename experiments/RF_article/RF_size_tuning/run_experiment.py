@@ -1,20 +1,24 @@
 """
-Single-run experiment script: receptive fields vs random weights.
+RF size tuning sweep: mean and log-normal variance of SE and EE receptive fields.
 
-The regulariser is fixed to neuron-wise normalisation. The only free
-parameters are weight initialisation type and random seed.
+Weight type is fixed to "rf" (isotropic Gaussian). The free parameters are the
+shared RF size mean and log-normal std applied equally to both SE (input→excitatory)
+and EE (excitatory→excitatory) connections, plus random seed.
 
 Usage
 -----
 # Local smoke-test
-python experiments/RF_article/run_experiment.py --weight-type rf --seed 0 --epochs 1 --dataset geomfig
+python experiments/RF_article/RF_size_tuning/run_experiment.py \
+    --rf-mean 1.0 --rf-lognorm-std 0.0 --seed 0 --epochs 1 --dataset geomfig
 
 # Full MNIST run
-python experiments/RF_article/run_experiment.py --weight-type rf --seed 0
-python experiments/RF_article/run_experiment.py --weight-type random --seed 0
+python experiments/RF_article/RF_size_tuning/run_experiment.py \
+    --rf-mean 2.0 --rf-lognorm-std 1.0 --seed 0
 
 # Custom output location (used by SLURM job arrays)
-python experiments/RF_article/run_experiment.py --weight-type rf --seed 3 --output-dir results/rf_s3
+python experiments/RF_article/RF_size_tuning/run_experiment.py \
+    --rf-mean 2.0 --rf-lognorm-std 1.0 --seed 3 \
+    --output-dir results/mean2.0_std1.0_s3
 """
 
 import argparse
@@ -31,15 +35,22 @@ import neurosnn as snn
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="SNN RF vs random weight experiment")
+    parser = argparse.ArgumentParser(
+        description="SNN RF size tuning sweep (shared mean and log-normal std for SE and EE)"
+    )
 
     # Sweep parameters
     parser.add_argument(
-        "--weight-type",
-        type=str,
-        default="rf",
-        choices=["rf", "random", "oriented_rf"],
-        help="Weight initialisation type (default: rf)",
+        "--rf-mean",
+        type=float,
+        default=1.0,
+        help="Mean RF size (pixels) applied to both SE and EE connections (default: 1.0)",
+    )
+    parser.add_argument(
+        "--rf-lognorm-std",
+        type=float,
+        default=0.0,
+        help="Log-normal std for RF size diversity, applied to both SE and EE (0 = fixed size)",
     )
     parser.add_argument(
         "--seed",
@@ -53,18 +64,10 @@ def parse_args():
         "--dataset",
         type=str,
         default="mnist",
-        choices=[
-            "mnist",
-            "kmnist",
-            "fmnist",
-            "fashionmnist",
-            "notmnist",
-            "geomfig",
-            "fcx1",
-        ],
+        choices=["mnist", "kmnist", "fmnist", "fashionmnist", "notmnist", "geomfig", "fcx1"],
     )
     parser.add_argument(
-        "--epochs", type=int, default=5, help="Training epochs (default: 5)"
+        "--epochs", type=int, default=1, help="Training epochs (default: 1)"
     )
     parser.add_argument(
         "--val-every",
@@ -87,32 +90,6 @@ def parse_args():
         help="Directory for results.json (default: auto-generated)",
     )
 
-    # Log-normal RF size diversity (Phase 2 sweep parameters)
-    parser.add_argument(
-        "--lognorm-se-mean",
-        type=float,
-        default=3.0,
-        help="Mean RF size (pixels) for oriented W_se log-normal distribution (default: 3.0 = sigma_x default)",
-    )
-    parser.add_argument(
-        "--lognorm-se-std",
-        type=float,
-        default=0.0,
-        help="Std of RF sizes for W_se log-normal (0 = disabled, try 1.5)",
-    )
-    parser.add_argument(
-        "--lognorm-ee-mean",
-        type=float,
-        default=1.0,
-        help="Mean RF size (E-grid pixels) for W_ee log-normal distribution (default: 1.0 = auto sigma_ee)",
-    )
-    parser.add_argument(
-        "--lognorm-ee-std",
-        type=float,
-        default=0.0,
-        help="Std of RF sizes for W_ee log-normal (0 = disabled, try 0.5)",
-    )
-
     return parser.parse_args()
 
 
@@ -120,7 +97,7 @@ def build_output_dir(args) -> str:
     if args.output_dir is not None:
         return args.output_dir
     base = os.path.join(os.path.dirname(__file__), "results")
-    tag = f"{args.weight_type}_s{args.seed}"
+    tag = f"mean{args.rf_mean}_std{args.rf_lognorm_std}_s{args.seed}"
     return os.path.join(base, tag)
 
 
@@ -130,9 +107,9 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
 
     # ------------------------------------------------------------------
-    # Weight initialisation — the experimental variable
+    # Weight initialisation — rf with shared mean and log-normal std
     # ------------------------------------------------------------------
-    weight_kwargs = dict(
+    weights = snn.weights.receptive_fields(
         density_se=0.05,
         density_ee=0.02,
         density_ei=0.03,
@@ -141,23 +118,11 @@ def main():
         peak_ee=0.5,
         peak_ei=1.0,
         peak_ie=-0.7,
+        sigma_se_mean=args.rf_mean,
+        sigma_se_lognormal_std=args.rf_lognorm_std,
+        sigma_ee_mean=args.rf_mean,
+        sigma_ee_lognormal_std=args.rf_lognorm_std,
     )
-    if args.weight_type == "rf":
-        weights = snn.weights.receptive_fields(
-            **weight_kwargs,
-            sigma_ee_mean=args.lognorm_ee_mean,
-            sigma_ee_lognormal_std=args.lognorm_ee_std,
-        )
-    elif args.weight_type == "oriented_rf":
-        weights = snn.weights.oriented_receptive_fields(
-            **weight_kwargs,
-            sigma_x=args.lognorm_se_mean,
-            sigma_x_lognormal_std=args.lognorm_se_std,
-            sigma_ee_mean=args.lognorm_ee_mean,
-            sigma_ee_lognormal_std=args.lognorm_ee_std,
-        )
-    else:
-        weights = snn.weights.random(**weight_kwargs)
 
     # ------------------------------------------------------------------
     # Layer
@@ -229,17 +194,17 @@ def main():
 
     config = dict(
         dataset=args.dataset,
-        weight_type=args.weight_type,
+        weight_type="rf",
         seed=args.seed,
         epochs=args.epochs,
         val_every=args.val_every,
-        lognorm_se_mean=args.lognorm_se_mean,
-        lognorm_se_std=args.lognorm_se_std,
-        lognorm_ee_mean=args.lognorm_ee_mean,
-        lognorm_ee_std=args.lognorm_ee_std,
+        rf_mean=args.rf_mean,
+        rf_lognorm_std=args.rf_lognorm_std,
     )
     print(
-        f"\nConfig — dataset: {args.dataset} | weight_type: {args.weight_type}"
+        f"\nConfig — dataset: {args.dataset} | weight_type: rf"
+        f" | rf_mean: {args.rf_mean}"
+        f" | rf_lognorm_std: {args.rf_lognorm_std}"
         f" | seed: {args.seed} | epochs: {args.epochs}\n"
     )
 

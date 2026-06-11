@@ -25,12 +25,12 @@ library(readxl)
 library(glmmTMB)
 library(writexl)
 
-setwd("C:/Users/Andreas/Documents/Github/SNN_paper_repo")
+#setwd("C:/Users/Andreas/Documents/Github/SNN_paper_repo")
 
 # --- load data ---------------------------------------------------------------
 cat("Reading Results_phase2 EXT.xlsx ...\n")
 data <- read_excel(
-    "results/acc_history/mnist/2026.05.24/21/Results_phase2 EXT.xlsx"
+    "C:\\Users\\Andreas\\Documents\\Github\\SNN_paper_repo\\results/acc_history/mnist/2026.05.24/21/Results_phase2 EXT.xlsx"
 )
 
 cat(sprintf("Loaded %d rows, columns: %s\n", nrow(data),

@@ -88,8 +88,8 @@ def main():
             "results",
             "acc_history",
             "mnist",
-            "2026.05.23",
-            "20_2",
+            "2026.05.24",
+            "21",
         ),
     )
     args = parser.parse_args()
