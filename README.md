@@ -283,17 +283,6 @@ Standard datasets are downloaded automatically on first use via `torchvision`.
 
 ---
 
-## Citation
-
-If you use `neurosnn` in your work, please cite:
-
-**Baseline model:**
-> Zenke, F., Gerstner, W. & Ganguli, S. (2015). The temporal paradox of Hebbian learning and homeostatic plasticity. *Nature Communications*, 6, 6922. https://doi.org/10.1038/ncomms7922
-
-**Sleep-homeostasis article** *(citation to be added on publication)*
-
----
-
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
