@@ -21,3 +21,7 @@ __pycache__/
 # Compiled extensions
 *.so
 *.egg-info/
+.Rproj.user
+
+# LLM support
+CLAUDE.md

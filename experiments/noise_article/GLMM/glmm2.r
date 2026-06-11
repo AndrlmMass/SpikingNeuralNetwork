@@ -11,6 +11,8 @@
 # Output: pred.xlsx (in current directory, GLM/)
 # =============================================================================
 
+`%||%` <- function(a, b) if (!is.null(a)) a else b
+
 # Load libraries
 library(dplyr)
 library(tidyr)
@@ -22,9 +24,10 @@ library(writexl)
 
 # Read data from current directory (GLM/)
 cat("Reading Results_.xlsx...\n")
-data <- read_excel("C:\\Users\\Andreas\\Documents\\Github\\SNN_paper_repo\\results\\acc_history\\mnist\\2026.05.24\\21\\Results_phase2_norm_incl.xlsx")
+results_dir <- file.path("..", "..", "..", "..", "SpikingNeuralNetwork", "results", "acc_history", "mnist", "2026.05.24", "21")
+data <- read_excel(file.path(results_dir, "Results_phase2_norm_incl.xlsx"))
 log_data <- data
-full_data <- read_excel("C:\\Users\\Andreas\\Documents\\Github\\SNN_paper_repo\\results\\acc_history\\mnist\\2026.05.24\\21\\Results_phase2 EXT.xlsx")
+full_data <- read_excel(file.path(results_dir, "Results_phase2 EXT.xlsx"))
 
 #convert logdata set to log-scale
 log_data$sleep_duration <- log(log_data$sleep_duration)
@@ -119,7 +122,7 @@ acc_grid$upr <- plogis(acc_link$fit + 1.96 * acc_link$se.fit)
 
 write_xlsx(
   acc_grid[, c("reg_target", "sleep_orig", "noise_orig", "fit", "lwr", "upr")],
-  "C:\\Users\\Andreas\\Documents\\Github\\SNN_paper_repo\\results\\acc_history\\mnist\\2026.05.24\\21\\GLMM_predictions.xlsx"
+  file.path(results_dir, "GLMM_predictions.xlsx")
 )
 cat("Saved GLMM_predictions.xlsx\n")
 
@@ -136,7 +139,7 @@ clust_grid$upr <- exp(clust_link$fit + 1.96 * clust_link$se.fit)
 
 write_xlsx(
   clust_grid[, c("reg_target", "sleep_orig", "noise_orig", "fit", "lwr", "upr")],
-  "C:\\Users\\Andreas\\Documents\\Github\\SNN_paper_repo\\results\\acc_history\\mnist\\2026.05.24\\21\\GLMM_predictions_clust2.xlsx"
+  file.path(results_dir, "GLMM_predictions_clust2.xlsx")
 )
 cat("Saved GLMM_predictions_clust2.xlsx\n")
 
@@ -155,5 +158,5 @@ ggplot(acc_grid, aes(x = factor(sleep_orig), y = fit,
        title = "GLMM predicted accuracy (95% CI)") +
   theme_bw()
 
-ggsave("C:\\Users\\Andreas\\Documents\\Github\\SNN_paper_repo\\results\\acc_history\\mnist\\2026.05.24\\21\\glmm_predictions_acc.pdf",
+ggsave(file.path(results_dir, "glmm_predictions_acc.pdf"),
        width = 10, height = 4)

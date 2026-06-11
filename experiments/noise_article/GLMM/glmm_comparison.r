@@ -19,7 +19,7 @@ library(readxl)
 library(glmmTMB)
 library(writexl)
 
-RESULTS_DIR <- "C:/Users/Andreas/Documents/Github/SNN_paper_repo/results/acc_history/mnist/2026.05.24/21"
+RESULTS_DIR <- file.path("..", "..", "..", "..", "SpikingNeuralNetwork", "results", "acc_history", "mnist", "2026.05.24", "21")
 
 # ---------------------------------------------------------------------------
 # Helper: Smithson-Verkuilen squish for beta family (keeps values off 0 and 1)
