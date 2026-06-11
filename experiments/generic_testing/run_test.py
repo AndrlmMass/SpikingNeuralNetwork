@@ -74,6 +74,85 @@ def parse_args():
         default=False,
         help="Whether to use Gabor filters for RF weights (default: False)",
     )
+    parser.add_argument(
+        "--on-off",
+        action="store_true",
+        default=False,
+        help="Decompose input into ON/OFF channels: two 20x20 grids = 800 input neurons (default: False)",
+    )
+
+    # --- Log-normal RF size diversity ---
+    parser.add_argument(
+        "--n-orientations",
+        type=int,
+        default=4,
+        help="Number of orientation groups for oriented_rf (default: 4, try 8 or 16)",
+    )
+    parser.add_argument(
+        "--orientation-mode",
+        type=str,
+        default="block",
+        choices=["block", "interleaved"],
+        help="Orientation assignment: block=large spatial blocks, interleaved=cycling stripes (default: block)",
+    )
+    parser.add_argument(
+        "--lognorm-se-mean",
+        type=float,
+        default=3.0,
+        help="Mean RF size (pixels) for oriented W_se log-normal distribution (default: 3.0 = sigma_x default)",
+    )
+    parser.add_argument(
+        "--lognorm-se-std",
+        type=float,
+        default=0.0,
+        help="Std of RF sizes for W_se log-normal (0 = disabled, try 1.5)",
+    )
+    parser.add_argument(
+        "--max-sigma-x",
+        type=float,
+        default=0.0,
+        help="Upper clip for W_se RF size in pixels (0 = no clip, try 5.0)",
+    )
+    parser.add_argument(
+        "--lognorm-ee-mean",
+        type=float,
+        default=1.0,
+        help="Mean RF size (E-grid pixels) for W_ee log-normal distribution (default: 1.0 = auto sigma_ee)",
+    )
+    parser.add_argument(
+        "--lognorm-ee-std",
+        type=float,
+        default=0.0,
+        help="Std of RF sizes for W_ee log-normal (0 = disabled, try 0.5)",
+    )
+
+    # --- Evaluation ---
+    parser.add_argument(
+        "--pca-variance",
+        type=float,
+        default=0.95,
+        help="PCA readout: float 0-1 = explained variance fraction, int >1 = fixed n_components (default: 0.95)",
+    )
+
+    # --- STDP / learning rule ---
+    parser.add_argument(
+        "--learning-rate",
+        type=float,
+        default=0.0004,
+        help="STDP learning rate (default: 0.0004)",
+    )
+    parser.add_argument(
+        "--mu-weight",
+        type=float,
+        default=0.6,
+        help="BCM soft-bound exponent: (w_max - w)^mu scales LTP (default: 0.6, try 0.3)",
+    )
+    parser.add_argument(
+        "--w-max",
+        type=float,
+        default=10.0,
+        help="Soft weight upper bound for STDP (default: 10.0, try 15.0)",
+    )
 
     # --- Reproducibility ---
     parser.add_argument("--seed", type=int, default=0)
@@ -82,7 +161,7 @@ def parse_args():
     parser.add_argument(
         "--dataset",
         type=str,
-        default="geomfig",
+        default="mnist",
         choices=[
             "mnist",
             "kmnist",
@@ -95,6 +174,12 @@ def parse_args():
     )
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--val-every", type=int, default=10)
+    parser.add_argument(
+        "--max-rate-hz",
+        type=float,
+        default=90.0,
+        help="Peak Poisson firing rate for input encoding in Hz (default: 90.0)",
+    )
     parser.add_argument("--train-all", type=int, default=1000)
     parser.add_argument("--train-batch", type=int, default=1000)
     parser.add_argument("--val-all", type=int, default=200)
@@ -128,6 +213,18 @@ def parse_args():
         help="Save full weight matrix heatmap and print E/I balance stats after init",
     )
     parser.add_argument(
+        "--plot-single-neuron",
+        action="store_true",
+        default=False,
+        help="Save a 2×2 weight plot (SE/EE/EI/IE) for a single excitatory neuron before training",
+    )
+    parser.add_argument(
+        "--neuron-id",
+        type=int,
+        default=512,
+        help="Excitatory neuron index to plot when --plot-single-neuron is set (default: 512)",
+    )
+    parser.add_argument(
         "--plot-pca",
         action="store_true",
         default=False,
@@ -138,6 +235,18 @@ def parse_args():
         action="store_true",
         default=False,
         help="Assemble PCA scatter frames into a GIF after training (requires --plot-pca)",
+    )
+    parser.add_argument(
+        "--track-stats",
+        action="store_true",
+        default=False,
+        help="Enable neuron/synapse stat tracking and print diagnostics each val step",
+    )
+    parser.add_argument(
+        "--stat-freq",
+        type=int,
+        default=10500,
+        help="Stat tracking frequency in simulation timesteps (default: 10500)",
     )
 
     return parser.parse_args()
@@ -150,7 +259,7 @@ def build_output_dir(args) -> str:
     tag = (
         f"{args.dataset}_{args.weight_type}"
         f"_{args.reg_type}_{args.reg_mode}"
-        f"_vn{args.var_noise}_s{args.seed}"
+        f"_vn{args.var_noise}_hz{args.max_rate_hz}_s{args.seed}"
     )
     return os.path.join(base, tag)
 
@@ -169,19 +278,32 @@ def main():
 
     # --- Weights ---
     weight_kwargs = dict(
-        density_se=0.05,
-        density_ee=0.05,
-        density_ei=0.05,
+        density_se=0.01,
+        density_ee=0.01,
+        density_ei=0.03,
         density_ie=0.05,
-        peak_se=1.0,
-        peak_ee=0.5,
+        peak_se=4.0,  # changed from 2.0
+        peak_ee=1.0,
         peak_ei=1.0,
         peak_ie=-0.7,
     )
     if args.weight_type == "rf":
-        weights = snn.weights.receptive_fields(**weight_kwargs)
+        weights = snn.weights.receptive_fields(
+            **weight_kwargs,
+            sigma_ee_mean=args.lognorm_ee_mean,
+            sigma_ee_lognormal_std=args.lognorm_ee_std,
+        )
     elif args.weight_type == "oriented_rf":
-        weights = snn.weights.oriented_receptive_fields(**weight_kwargs)
+        weights = snn.weights.oriented_receptive_fields(
+            **weight_kwargs,
+            sigma_x=args.lognorm_se_mean,
+            sigma_x_lognormal_std=args.lognorm_se_std,
+            sigma_x_lognormal_max=args.max_sigma_x,
+            n_orientations=args.n_orientations,
+            orientation_mode=args.orientation_mode,
+            sigma_ee_mean=args.lognorm_ee_mean,
+            sigma_ee_lognormal_std=args.lognorm_ee_std,
+        )
     else:
         weights = snn.weights.random(**weight_kwargs)
 
@@ -212,10 +334,10 @@ def main():
 
     # --- Learner ---
     learner = snn.learner.TraceSTDP(
-        learning_rate=0.0004,
+        learning_rate=args.learning_rate,
         tau_trace=20,
-        w_max=10.0,
-        mu_weight=0.6,
+        w_max=args.w_max,
+        mu_weight=args.mu_weight,
         update_freq=100,
         clip_weights=True,
         min_weight_exc=0.01,
@@ -238,7 +360,7 @@ def main():
 
     # --- Model ---
     model = snn.Model(
-        input_size=784,
+        input_size=800 if args.on_off else 784,
         classes=list(range(10)),
         random_state=args.seed,
         num_steps=350,
@@ -249,15 +371,17 @@ def main():
         all_images_test=args.test_all,
         batch_image_test=args.test_batch,
         image_dataset=args.dataset,
-        max_rate_hz=90.0,
+        max_rate_hz=args.max_rate_hz,
         gain=1.0,
         gabor=args.gabor,
+        on_off=args.on_off,
     )
 
     # --- Training ---
     best_val_acc = 0.0
     best_val_phi = float("nan")
     val_history = []
+    stats_history = []
     t_start = time.time()
 
     # Capture generator so weights are built before we start iterating
@@ -272,14 +396,30 @@ def main():
         use_LR=True,
         use_phi=True,
         use_pca=True,
-        pca_variance=15,
-        stat_tracking_frequency=10500,
+        pca_variance=args.pca_variance,
+        track_stats=args.track_stats,
+        stat_tracking_frequency=args.stat_freq,
         heatmap_plot=args.plot_spikes,
         PCA_plot=args.plot_pca,
         gif_pca_plot=args.gif_pca,
     )
 
-    # Weights are built at this point — plot initial RF structure before training
+    # Weights are built at this point — plot initial weight structure before training
+    if args.plot_single_neuron:
+        from neurosnn._plot.weights import plot_single_neuron_weights
+        import numpy as np
+
+        snn_model = model._runner.model
+        w = snn_model.weights
+        st, ex = snn_model.st, snn_model.ex
+        H = W = int(np.sqrt(st))
+        H_e = W_e = int(np.sqrt(ex - st))
+        out_path = os.path.join(output_dir, f"single_neuron_{args.neuron_id}.pdf")
+        plot_single_neuron_weights(
+            w, st, ex, H, W, H_e, W_e, id_=args.neuron_id, out_path=out_path
+        )
+        print(f"Single-neuron weight plot saved -> {out_path}")
+
     if args.plot_rfs:
         from neurosnn._plot.weights import plot_oriented_rf_summary
 
@@ -288,7 +428,7 @@ def main():
         plot_oriented_rf_summary(
             W_se=W_se,
             input_size=snn_model.pixel_size,
-            n_orientations=4,
+            n_orientations=args.n_orientations,
             out_path=os.path.join(output_dir, "oriented_rf_summary.pdf"),
         )
 
@@ -305,6 +445,16 @@ def main():
                 f"  train_acc {result.accuracy:.4f}  train_phi {result.phi:.3f}"
                 f"  val_acc {val_acc:.4f}  val_phi {val_phi:.3f}"
             )
+            if args.track_stats and result.stats:
+                s = result.stats
+                print(
+                    f"  mp_exc {s['mean_mp_exc']:.3f}  mp_inh {s['mean_mp_inh']:.3f}"
+                    f"  I_syn_exc {s['mean_I_syn_exc']:.4f}  I_syn_inh {s['mean_I_syn_inh']:.4f}"
+                    f"  adapt {s['mean_adaptation']:.4f}  thr {s['mean_spike_threshold']:.3f}"
+                    f"  delta_w {s['mean_delta_w']:.6f}  x_pre {s['mean_x_pre']:.4f}"
+                    f"  x_tar_se {s['mean_x_tar_se']:.4f}  x_tar_ee {s['mean_x_tar_ee']:.4f}"
+                )
+                stats_history.append({"batch": result.batch, **s})
             val_history.append(
                 {"batch": result.batch, "val_acc": val_acc, "val_phi": val_phi}
             )
@@ -334,6 +484,7 @@ def main():
         "test_phi": test_phi,
         "elapsed_s": round(elapsed, 1),
         "val_history": val_history,
+        "stats_history": stats_history,
     }
     results_path = os.path.join(output_dir, "results.json")
     with open(results_path, "w") as f:

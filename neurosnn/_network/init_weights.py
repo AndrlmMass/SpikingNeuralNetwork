@@ -36,6 +36,12 @@ class WeightFactory:
     n_orientations: int = 4
     r_cut_factor: float = 3.0
     sigma_x_lognormal_std: float = 0.0
+    sigma_x_lognormal_max: float = 0.0   # 0 = no upper clip
+    orientation_mode: str = "block"      # "block" or "interleaved"
+    sigma_ee_mean: float = 0.0          # 0 = auto-compute from rf_scale
+    sigma_ee_lognormal_std: float = 0.0  # 0 = disabled (fixed sigma_ee)
+    sigma_se_mean: float = 0.0          # 0 = auto-compute from rf_scale
+    sigma_se_lognormal_std: float = 0.0  # 0 = disabled (fixed sigma_se)
 
     def __post_init__(self):
         self.H = int(np.sqrt(self.N_x))
@@ -117,11 +123,18 @@ class WeightFactory:
                 n_orientations=self.n_orientations,
                 r_cut_factor=self.r_cut_factor,
                 sigma_x_lognormal_std=self.sigma_x_lognormal_std,
+                sigma_x_lognormal_max=self.sigma_x_lognormal_max,
+                orientation_mode=self.orientation_mode,
                 peak=self.se_weights,
                 fraction=self.w_dense_se,
                 rng=self.rng,
             )
         else:
+            sigma_se = (
+                self.sigma_se_mean
+                if self.sigma_se_mean > 0.0
+                else self.rf_scale * self._fse * self.ref_x
+            )
             W_se = gaussian_se_weights(
                 self.N_x,
                 self.N_exc,
@@ -130,20 +143,28 @@ class WeightFactory:
                 self.H_e,
                 self.W_e,
                 rng=self.rng,
-                sigma=self.rf_scale * self._fse * self.ref_x,
+                sigma=sigma_se,
                 peak=self.se_weights,
                 fraction=self.w_dense_se,
                 torus=True,
+                sigma_se_lognormal_std=self.sigma_se_lognormal_std,
             )
         self.weights[: self.st, self.st : self.ex] = W_se
 
+        sigma_ee = (
+            self.sigma_ee_mean
+            if self.sigma_ee_mean > 0.0
+            else self.rf_scale * self._fee * self.ref_e
+        )
         W_ee = gaussian_ee_weights(
             self.N_exc,
             self.H_e,
             self.W_e,
-            sigma=self.rf_scale * self._fee * self.ref_e,
+            sigma=sigma_ee,
             peak=self.ee_weights,
             frac=self.w_dense_ee,
+            sigma_lognormal_std=self.sigma_ee_lognormal_std,
+            rng=self.rng,
         )
         self.weights[self.st : self.ex, self.st : self.ex] = W_ee
 
@@ -454,7 +475,7 @@ def mexican_hat_ie_far(
     ring = ring * center_suppress
     ring /= ring.max(axis=1, keepdims=True) + 1e-12
     W_ie = peak * ring
-    W_ie[W_ie > -0.01] = 0.0
+    W_ie[np.abs(W_ie) < 0.01] = 0.0
     W_ie = weight_compliance(frac=frac, N=N_exc, weights=W_ie, peak=peak, type="W_ie")
 
     return W_ie
@@ -481,6 +502,7 @@ def gaussian_se_weights(
     fraction=0.1,
     torus=True,
     jitter=0.25,
+    sigma_se_lognormal_std=0.0,
 ):
     assert H * W == N_x
     assert H_e * W_e == N_exc
@@ -502,8 +524,16 @@ def gaussian_se_weights(
     else:
         d2 = ((centers[:, None, :] - inp_coords[None, :, :]) ** 2).sum(axis=2)
 
-    sigmas = rng.normal(loc=sigma, scale=0.3, size=(N_exc, 1))
-    sigmas = np.clip(sigmas, 1.0, None)
+    if sigma_se_lognormal_std > 0.0:
+        sigmas = rng.lognormal(
+            mean=np.log(sigma),
+            sigma=sigma_se_lognormal_std / sigma,
+            size=(N_exc, 1),
+        )
+        sigmas = np.clip(sigmas, 0.5, None)
+    else:
+        sigmas = rng.normal(loc=sigma, scale=0.3, size=(N_exc, 1))
+        sigmas = np.clip(sigmas, 1.0, None)
     G = np.exp(-d2 / (2 * sigmas**2))
     W_se = G.T
     W_se[W_se < 0.01] = 0.0
@@ -523,6 +553,8 @@ def oriented_gaussian_se_weights(
     n_orientations: int = 4,
     r_cut_factor: float = 3.0,
     sigma_x_lognormal_std: float = 0.0,
+    sigma_x_lognormal_max: float = 0.0,
+    orientation_mode: str = "block",
     peak: float = 1.0,
     fraction: float = 0.05,
     rng=None,
@@ -557,7 +589,8 @@ def oriented_gaussian_se_weights(
             sigma=sigma_x_lognormal_std / sigma_x,
             size=N_exc,
         ).astype(np.float32)
-        sigma_x_arr = np.clip(sigma_x_arr, 0.5, None)
+        upper = sigma_x_lognormal_max if sigma_x_lognormal_max > 0.0 else None
+        sigma_x_arr = np.clip(sigma_x_arr, 0.5, upper)
     else:
         sigma_x_arr = np.full(N_exc, sigma_x, dtype=np.float32)
 
@@ -569,13 +602,16 @@ def oriented_gaussian_se_weights(
 
         cx = neuron_xs[gx]
         cy = neuron_ys[gy]
-        theta = orientations[i % n_orientations]
+        if orientation_mode == "interleaved":
+            theta = orientations[gy % n_orientations]
+        else:
+            block_size = max(1, n_side // n_orientations)
+            theta = orientations[min(gx // block_size, n_orientations - 1)]
         sx = sigma_x_arr[i]
         sy = gamma * sx
 
         dx = px - cx
         dy = py - cy
-        dist = np.sqrt(dx**2 + dy**2)
 
         ct, st = np.cos(theta), np.sin(theta)
         x_t = dx * ct + dy * st
@@ -585,11 +621,12 @@ def oriented_gaussian_se_weights(
         # Elliptical cutoff in the rotated frame: cuts at r_cut_factor sigma
         # in each axis independently, matching the Gaussian footprint.
         # ellipse_dist = np.sqrt((x_t / sx) ** 2 + (y_t / sy) ** 2)
-        w[dist > r_cut_factor] = 0.0
-
+        ell = np.sqrt((x_t / sx) ** 2 + (y_t / sy) ** 2)
+        w[ell > r_cut_factor] = 0.0
         s = w.sum()
         if s > 0:
             w = (w / s) * peak
+        # w[w < 0.01] = 0.0
         W[i] = w
 
     # Column-wise compliance: scale each E neuron's total incoming weight to
@@ -638,7 +675,16 @@ def enforce_topk_per_row(W, frac):
 
 
 def gaussian_ee_weights(
-    N_exc, H_e, W_e, sigma=2.0, peak=1.0, frac=None, self_zero=True, torus=True
+    N_exc,
+    H_e,
+    W_e,
+    sigma=2.0,
+    peak=1.0,
+    frac=None,
+    self_zero=True,
+    torus=True,
+    sigma_lognormal_std=0.0,
+    rng=None,
 ):
     assert H_e * W_e == N_exc
 
@@ -649,7 +695,17 @@ def gaussian_ee_weights(
     else:
         d2 = ((coords[:, None, :] - coords[None, :, :]) ** 2).sum(axis=2)
 
-    W = np.exp(-d2 / (2 * sigma**2))
+    if sigma_lognormal_std > 0.0 and rng is not None:
+        sigmas = rng.lognormal(
+            mean=np.log(sigma),
+            sigma=sigma_lognormal_std / sigma,
+            size=N_exc,
+        )
+        sigmas = np.clip(sigmas, 0.3, None)
+    else:
+        sigmas = np.full(N_exc, sigma)
+
+    W = np.exp(-d2 / (2 * sigmas[:, None] ** 2))
     W /= W.max(axis=1, keepdims=True) + 1e-12
     W *= peak
 

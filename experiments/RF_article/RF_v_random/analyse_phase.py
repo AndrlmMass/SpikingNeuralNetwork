@@ -24,7 +24,7 @@ REPO_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
 SLURM_DIR = os.path.join(
-    REPO_ROOT, "results", "acc_history", "mnist", "2026.05.26", "25"
+    REPO_ROOT, "results", "acc_history", "mnist", "2026.05.27", "27"
 )
 OUT_DIR = SLURM_DIR
 

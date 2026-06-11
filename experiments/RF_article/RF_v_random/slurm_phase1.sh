@@ -3,10 +3,10 @@
 #
 # 2 conditions × 10 seeds = 20 independent runs.
 # Submit with:
-#   sbatch experiments/RF_article/slurm_phase1.sh
+#   sbatch experiments/RF_article/RF_v_random/slurm_phase1.sh
 #
 # Conditions (by SLURM_ARRAY_TASK_ID // 10):
-#   0  rf
+#   0  oriented_rf
 #   1  random
 #
 #SBATCH --job-name=snn_rf
@@ -29,7 +29,7 @@ TASK_ID=${SLURM_ARRAY_TASK_ID}
 CONDITION_IDX=$(( TASK_ID / 10 ))
 SEED=$(( TASK_ID % 10 ))
 
-WEIGHT_TYPES=(rf random)
+WEIGHT_TYPES=(oriented_rf random)
 WEIGHT_TYPE=${WEIGHT_TYPES[$CONDITION_IDX]}
 
 OUTPUT_DIR="${PROJECT_ROOT}/experiments/RF_article/results/${WEIGHT_TYPE}_s${SEED}"
@@ -52,7 +52,7 @@ fi
 
 # ---- run ------------------------------------------------------------------
 singularity exec noise_env.sif conda run -n noise_env python \
-    experiments/RF_article/run_experiment.py \
+    experiments/RF_article/RF_v_random/run_experiment.py \
     --weight-type "${WEIGHT_TYPE}" \
     --seed        "${SEED}" \
     --output-dir  "${OUTPUT_DIR}"
