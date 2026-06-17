@@ -63,11 +63,6 @@ model.train(layers=[layer], learner=learner, regularizer=regularizer, epochs=1)
 
 See the [Quickstart](docs/getting-started/quickstart.md) for a fully annotated example.
 
-## Building the docs locally
-
-```bash
-pip install -e ".[docs]"
-mkdocs serve   # http://127.0.0.1:8000
 ```
 
 ---
