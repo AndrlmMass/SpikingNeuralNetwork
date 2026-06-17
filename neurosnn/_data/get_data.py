@@ -12,6 +12,7 @@ os.environ["TQDM_DISABLE"] = "True"
 
 
 def normalize_image(img, target_sum=1.0):
+    # Rescale pixel values so they sum to target_sum (used for rate-coded input normalization)
     current_sum = img.sum()
     return img * (target_sum / current_sum) if current_sum > 0 else img
 
@@ -27,8 +28,10 @@ def _normalize_split_value(split_value):
         return split_value.decode("utf-8").lower()
     if isinstance(split_value, str):
         return split_value.lower()
+    # Deeplake tensors expose .tolist(); recurse to unwrap the scalar
     if hasattr(split_value, "tolist"):
         return _normalize_split_value(split_value.tolist())
+    # tolist() on a 0-d tensor yields a plain scalar wrapped in a list
     if isinstance(split_value, (list, tuple)) and split_value:
         return _normalize_split_value(split_value[0])
     return str(split_value).lower()
@@ -110,7 +113,8 @@ def _load_notmnist_deeplake(transform):
         raise RuntimeError("Failed to load any NotMNIST samples from Deeplake.")
 
     if not test_images:
-        # Dataset may not include a split tensor; perform an internal split.
+        # Deeplake's NotMNIST version may omit the split field entirely;
+        # fall back to a fixed 90/10 train/test split seeded for reproducibility.
         total_samples = len(train_images)
         if total_samples < 2:
             raise RuntimeError(
@@ -277,12 +281,11 @@ class ImageDataStreamer:
         self.indices = np.arange(total)
 
         if self.dataset != "fcx1":
-            # Shuffle indices for random access over the combined (train+test) space
-            # Use a seeded RNG so the train/val/test split is reproducible
+            # Merge torchvision's fixed train/test split so we can define our own partition sizes
             _split_rng = np.random.default_rng(random_seed)
             _split_rng.shuffle(self.indices)
 
-            # Partition indices for train/val/test if counts provided
+            # Carve train/val/test from the shuffled pool; unclaimed samples are ignored
             total = len(self.indices)
             tc = train_count or total
             vc = val_count or 0
@@ -309,31 +312,28 @@ class ImageDataStreamer:
             except Exception:
                 pass
         else:
-            # initate random seed
             rng = np.random.default_rng(random_seed)
 
-            # intiate partition start index and step size
             self.prt_train = 0
             self.prt_test = 0
+            # Each "chunk" is one batch worth of contiguous timesteps
             self.partition_increment = int(self.num_steps * self.batch_size)
 
-            # create arrays of indices
             ind_train = np.arange(self.len_train)
             ind_test = np.arange(self.len_test)
 
-            # define indices
+            # Assign each timestep to its chunk group (integer division)
             train_indices = ind_train // self.partition_increment
             test_indices = ind_test // self.partition_increment
 
-            # get unique groups
             train_uniq = np.unique(train_indices)
             test_uniq = np.unique(test_indices)
 
-            # permutate the unique list
+            # Shuffle chunk order so batches are presented in a random sequence
             perm_train = rng.permutation(train_uniq)
             perm_test = rng.permutation(test_uniq)
 
-            # extend again based on length per sequence variable
+            # Reconstruct a flat index array with chunks reordered
             self.train_indices = np.concatenate(
                 [np.where(train_indices == g)[0] for g in perm_train]
             )
@@ -341,11 +341,86 @@ class ImageDataStreamer:
                 [np.where(test_indices == g)[0] for g in perm_test]
             )
 
-            # shuffle data based on new indices
+            # Apply the reordering to the spike and label arrays in-place
             self.X_train_spikes = self.X_train_spikes[self.train_indices]
             self.y_train_spikes = self.y_train_spikes[self.train_indices]
             self.X_test_spikes = self.X_test_spikes[self.test_indices]
             self.y_test_spikes = self.y_test_spikes[self.test_indices]
+
+    def get_batch(self, start_idx, num_samples, partition="train"):
+        """
+        Load a batch of image samples from the specified partition.
+        Returns (spike_data, labels) or (None, None) if no more data.
+        """
+
+        if self.dataset != "fcx1":
+            if partition == "train":
+                pool = self.train_indices
+                ptr = self.ptr_train
+            elif partition == "val":
+                pool = self.val_indices
+                ptr = self.ptr_val
+            else:
+                pool = self.test_indices
+                ptr = self.ptr_test
+
+            if ptr >= len(pool):
+                return None, None
+
+            end_ptr = min(ptr + num_samples, len(pool))
+            batch_indices = pool[ptr:end_ptr]
+
+            # Pull batch data from cached tensors in RAM
+            images_list = []
+            labels_list = []
+            for gi in batch_indices:
+                if gi < self.len_train:
+                    images_list.append(self.train_images[int(gi)])
+                    labels_list.append(self.train_labels[int(gi)])
+                else:
+                    idx = int(gi - self.len_train)
+                    images_list.append(self.test_images[idx])
+                    labels_list.append(self.test_labels[idx])
+
+            batch_images = torch.stack(images_list)
+            batch_labels = np.asarray(labels_list, dtype=np.int64)
+
+            # Convert to spikes
+            spike_data = self._convert_images_to_spikes(batch_images)
+
+            # Extend labels to match spike data (repeat each label for num_steps)
+            extended_labels = np.repeat(batch_labels, self.num_steps)
+
+            # advance pointer
+            if partition == "train":
+                self.ptr_train = end_ptr
+            elif partition == "val":
+                self.ptr_val = end_ptr
+            else:
+                self.ptr_test = end_ptr
+
+            return spike_data, extended_labels
+        else:
+            # identify desired data
+            if partition == "train":
+                spike_data = self.X_train_spikes
+                extended_labels = self.y_train_spikes
+            else:
+                spike_data = self.X_test_spikes
+                extended_labels = self.y_test_spikes
+
+            # define start and stop
+            start = self.partition_increment
+            stop = start + self.batch_size * self.num_steps
+
+            # fetch partition
+            spike_data = spike_data[start:stop]
+            extended_labels = extended_labels[start:stop]
+
+            # update partition
+            self.partition_increment = stop
+
+            return spike_data, extended_labels
 
     def show_preview(self, num_samples: int = 9, save_path: str | None = None):
         """
@@ -459,108 +534,30 @@ class ImageDataStreamer:
         plt.close(fig)
         print(f"Saved → {path}")
 
-    def get_batch(self, start_idx, num_samples, partition="train"):
-        """
-        Load a batch of image samples from the specified partition.
-        Returns (spike_data, labels) or (None, None) if no more data.
-        """
-
-        if self.dataset != "fcx1":
-            if partition == "train":
-                pool = self.train_indices
-                ptr = self.ptr_train
-            elif partition == "val":
-                pool = self.val_indices
-                ptr = self.ptr_val
-            else:
-                pool = self.test_indices
-                ptr = self.ptr_test
-
-            if ptr >= len(pool):
-                return None, None
-
-            end_ptr = min(ptr + num_samples, len(pool))
-            batch_indices = pool[ptr:end_ptr]
-
-            # Pull batch data from cached tensors in RAM
-            images_list = []
-            labels_list = []
-            for gi in batch_indices:
-                if gi < self.len_train:
-                    images_list.append(self.train_images[int(gi)])
-                    labels_list.append(self.train_labels[int(gi)])
-                else:
-                    idx = int(gi - self.len_train)
-                    images_list.append(self.test_images[idx])
-                    labels_list.append(self.test_labels[idx])
-
-            batch_images = torch.stack(images_list)
-            batch_labels = np.asarray(labels_list, dtype=np.int64)
-
-            # Convert to spikes
-            spike_data = self._convert_images_to_spikes(batch_images)
-
-            # Extend labels to match spike data (repeat each label for num_steps)
-            extended_labels = np.repeat(batch_labels, self.num_steps)
-
-            # advance pointer
-            if partition == "train":
-                self.ptr_train = end_ptr
-            elif partition == "val":
-                self.ptr_val = end_ptr
-            else:
-                self.ptr_test = end_ptr
-
-            return spike_data, extended_labels
-        else:
-            # identify desired data
-            if partition == "train":
-                spike_data = self.X_train_spikes
-                extended_labels = self.y_train_spikes
-            else:
-                spike_data = self.X_test_spikes
-                extended_labels = self.y_test_spikes
-
-            # define start and stop
-            start = self.partition_increment
-            stop = start + self.batch_size * self.num_steps
-
-            # fetch partition
-            spike_data = spike_data[start:stop]
-            extended_labels = extended_labels[start:stop]
-
-            # update partition
-            self.partition_increment = stop
-
-            return spike_data, extended_labels
-
     def _convert_images_to_spikes(self, images):
         """
         Convert image batch to Poisson spike trains.
         Assumes input intensities in range [0, 1].
         """
-        # apply gabor filters
         if self.gabor:
             images = self.gabor_pack_quadrants(images)
 
-        # Compute spike probability per timestep
-        # r_max = 67 Hz
-        # dt assumed 1 ms
+        # Pixel intensity → firing probability: p = intensity × r_max × dt
+        # At max intensity (1.0) and r_max=67 Hz with dt=1 ms → p = 0.067 per timestep
         dt_ms = 1.0
-        p = images * self.max_rate_hz * (dt_ms / 1000.0)  # (B, 1, H, W) or (B, H, W)
-        p = p.clamp(0.0, 1.0)  # safety cap
+        p = images * self.max_rate_hz * (dt_ms / 1000.0)  # (B, 1, H, W)
+        p = p.clamp(0.0, 1.0)
 
-        # Generate Poisson spikes
-        # Output shape: (T, B, C, H, W) -> where C = 1 -> (100,100,1,15,15)
+        # Independent Bernoulli draw per pixel per timestep approximates a Poisson process
+        # Shape: (T, B, 1, H, W)
         spikes = (torch.rand((self.num_steps,) + p.shape, device=p.device) < p).float()
 
-        # Remove channel dim if present -> (100,100,15,15)
-        spikes = spikes.squeeze(2)
+        spikes = spikes.squeeze(2)  # drop channel dim → (T, B, H, W)
 
-        # Flatten spatial dims
-        spikes_flat = spikes.flatten(start_dim=2)  # (T, B, N_pixels) -> (100,100,225)
+        spikes_flat = spikes.flatten(start_dim=2)  # (T, B, N_pixels)
 
-        # Reshape to match your expected format (T*B, N_pixels) -> (10000,225)
+        # Reorder to (B, T, N_pixels) then flatten time into batch → (B*T, N_pixels)
+        # so the training loop receives one row per timestep
         spikes = spikes_flat.transpose(0, 1).reshape(
             spikes_flat.shape[1] * spikes_flat.shape[0], spikes_flat.shape[2]
         )
@@ -580,37 +577,35 @@ class ImageDataStreamer:
             self.ptr_test = 0
 
     def gabor_pack_quadrants(self, images):
-        import math
+        """
+        Apply four oriented Gabor filters to each image and pack the responses
+        into the four quadrants of a single same-size output image.
 
-        """
+        This preserves the (B,1,H,W) shape expected by the rest of the pipeline
+        while encoding orientation-selective edge information from four angles
+        (0°, 90°, 45°, 135°), mimicking simple-cell responses in V1.
+
         images: (B,1,H,W) in [0,1]
-        returns: (B,1,H,W) with 4 gabor maps packed into quadrants
+        returns: (B,1,H,W) with 4 Gabor maps packed into quadrants
         """
+        import math
 
         assert images.dim() == 4 and images.shape[1] == 1
         B, _, H, W = images.shape
         device, dtype = images.device, images.dtype
 
-        # # plot first image before gabor process
-        # import matplotlib.pyplot as plt
-
-        # fig, ax = plt.subplots(figsize=(10, 10))
-        # ax.imshow(images[0].cpu().numpy().squeeze(0))
-        # plt.show()
-        # plt.close(fig)
-
-        # --- resolution-aware scaling ---
-        S = int(math.sqrt(H * W))  # auto adapts (28 for MNIST)
-        ksize = max(5, S // 4)  # kernel ~ 1/4 of image width
+        # Scale kernel parameters to image resolution so the same code works for
+        # different pixel_size values (e.g. 15×15 or 28×28)
+        S = int(math.sqrt(H * W))
+        ksize = max(5, S // 4)
         if ksize % 2 == 0:
-            ksize += 1  # force odd
+            ksize += 1  # convolution requires an odd kernel size
 
-        sigma = ksize / 3
-        lambd = ksize / 2
-        gamma = 0.5
-        psi = 0.0
+        sigma = ksize / 3   # Gaussian envelope width
+        lambd = ksize / 2   # sinusoidal wavelength
+        gamma = 0.5         # spatial aspect ratio (elongates the filter)
+        psi = 0.0           # phase offset
 
-        # --- build gabor kernels ---
         r = ksize // 2
         y, x = torch.meshgrid(
             torch.arange(-r, r + 1, device=device, dtype=dtype),
@@ -619,34 +614,32 @@ class ImageDataStreamer:
         )
 
         def gabor(theta):
+            # Rotate grid by theta, then apply Gaussian-modulated cosine
             ct, st = math.cos(theta), math.sin(theta)
             x_theta = x * ct + y * st
             y_theta = -x * st + y * ct
-
             gauss = torch.exp(-(x_theta**2 + (gamma**2) * y_theta**2) / (2 * sigma**2))
             wave = torch.cos(2 * math.pi * x_theta / lambd + psi)
             k = gauss * wave
-            k = k - k.mean()
-            k = k / (k.norm() + 1e-8)
+            k = k - k.mean()           # zero-mean → no DC response to uniform regions
+            k = k / (k.norm() + 1e-8)  # unit norm so response scale is consistent
             return k
 
         thetas = [0.0, math.pi / 2, math.pi / 4, 3 * math.pi / 4]
         kernels = torch.stack([gabor(t) for t in thetas], dim=0)
         kernels = kernels[:, None, :, :]  # (4,1,k,k)
 
-        # --- convolve ---
         pad = ksize // 2
         resp = F.conv2d(images, kernels, padding=pad)  # (B,4,H,W)
 
-        # unsigned response
-        resp = resp.abs()
+        resp = resp.abs()  # unsigned energy — direction of edge, not polarity
 
-        # Normalize per channel
-        rmin = resp.amin(dim=(2, 3), keepdim=True)  # only spatial dims
+        # Per-channel min-max normalisation so all four maps share [0,1] scale
+        rmin = resp.amin(dim=(2, 3), keepdim=True)
         rmax = resp.amax(dim=(2, 3), keepdim=True)
         resp = (resp - rmin) / (rmax - rmin + 1e-8)
 
-        # --- pack into quadrants ---
+        # Downsample each orientation map to fit its quadrant, then tile them
         h1 = H // 2
         h2 = H - h1
         w1 = W // 2
@@ -654,18 +647,10 @@ class ImageDataStreamer:
 
         packed = torch.zeros((B, 1, H, W), device=device, dtype=dtype)
 
-        tl = F.interpolate(
-            resp[:, 0:1], size=(h1, w1), mode="bilinear", align_corners=False
-        )
-        tr = F.interpolate(
-            resp[:, 1:2], size=(h1, w2), mode="bilinear", align_corners=False
-        )
-        bl = F.interpolate(
-            resp[:, 2:3], size=(h2, w1), mode="bilinear", align_corners=False
-        )
-        br = F.interpolate(
-            resp[:, 3:4], size=(h2, w2), mode="bilinear", align_corners=False
-        )
+        tl = F.interpolate(resp[:, 0:1], size=(h1, w1), mode="bilinear", align_corners=False)
+        tr = F.interpolate(resp[:, 1:2], size=(h1, w2), mode="bilinear", align_corners=False)
+        bl = F.interpolate(resp[:, 2:3], size=(h2, w1), mode="bilinear", align_corners=False)
+        br = F.interpolate(resp[:, 3:4], size=(h2, w2), mode="bilinear", align_corners=False)
 
         packed[:, :, :h1, :w1] = tl
         packed[:, :, :h1, w1:] = tr

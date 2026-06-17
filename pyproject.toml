@@ -19,6 +19,12 @@ dependencies = [
     "pillow>=10.0",
 ]
 
+[project.optional-dependencies]
+docs = [
+    "mkdocs-material>=9.5",
+    "pymdown-extensions>=10.0",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["neurosnn*"]

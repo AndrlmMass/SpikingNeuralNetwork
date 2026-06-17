@@ -11,7 +11,13 @@ class TrainTracker:
     track_stats: bool
     track_weights: bool
 
+    '''
+    Tracking object for neuron dynamics arrays. Initiates trackers, then periodically computes mean
+    scores per tracking dimension when called. Optional print function. 
+    '''
+
     def __post_init__(self):
+        # resets object for every new training run
         self.reset()
 
     def reset(self):
@@ -37,6 +43,9 @@ class TrainTracker:
         spike_threshold,
         spike_trace,
     ):
+        '''
+        Computes mean scores for tracking periodically when called. 
+        '''
         self.delta_mp_ex += delta_mp_ex_.mean()
         self.delta_mp_ih += delta_mp_ih_.mean()
         self.mp_ex += mp[: self.N_exc].mean()
@@ -51,6 +60,9 @@ class TrainTracker:
         self.track_count += 1
 
     def track_synapse(self, m_x_pre, m_first_term, m_delta_w, x_tar_se, x_tar_ee):
+        '''
+        Computes mean scores for tracking periodically when called. 
+        '''
         self.x_pre_sum += m_x_pre
         self.first_term_sum += m_first_term
         self.delta_w_sum += m_delta_w
@@ -59,6 +71,9 @@ class TrainTracker:
         self.x_tar_count += 1
 
     def to_dict(self) -> Optional[dict]:
+        '''
+        Store variables in dict. 
+        '''
         if self.track_count == 0 and self.x_tar_count == 0:
             return None
         n = max(1, self.track_count)
@@ -83,17 +98,21 @@ class TrainTracker:
         }
 
     def print(self, weights, spikes, track_weights, track_stats):
+        '''
+        Print function for runtime tracking
+        '''
         if not (track_stats or track_weights):
             return
-
+        # extract dict
         d = self.to_dict()
         if d is None:
             return
-
+        # compute spike means
         spikes_st = spikes[:, : self.st].mean(axis=0)
         spikes_ex = spikes[:, self.st : self.ex].mean(axis=0)
         spikes_ih = spikes[:, self.ex : self.ih].mean(axis=0)
 
+        # print stats
         if track_stats:
             print(f"Mean delta mp exc:        {d['mean_delta_mp_exc']:.5f}")
             print(f"Mean delta mp inh:        {d['mean_delta_mp_inh']:.5f}")

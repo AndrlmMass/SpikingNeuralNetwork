@@ -39,59 +39,85 @@ def update_membrane_potential(
     mean_noise,
     var_noise,
 ):
+    '''
+    Function takes current spiking activity and updates membrane potentials for all non-input neurons. 
+    Returns intermediate change-values if track_stats is true
+    
+    '''
+
+
     if track_stats:
+        # allocate arrays for stat tracking
         delta_mp_ex = np.zeros(N_exc)
         delta_mp_ih = np.zeros(N_inh)
         delta_I_syn_ex = np.zeros(N_exc)
         delta_I_syn_ih = np.zeros(N_inh)
     else:
+        # allocate empty arrays to ensure stable return variables (JIT requirement) 
         delta_mp_ex = np.empty(0)
         delta_mp_ih = np.empty(0)
         delta_I_syn_ex = np.empty(0)
         delta_I_syn_ih = np.empty(0)
 
+    # fetch indices for spiking neurons
     nonzero_all = np.where(spikes != 0)[0]
+    # fetch indices for excitatory layer spiking neurons (hidden recurrent layer)
     nonzero_exc_src = np.where(spikes[st:ex] != 0)[0]
 
     # --- Excitatory population ---
+
+    # Loop over each excitatory post-neurons to update membrane potential
     for i in range(N_exc):
+        # compute membrane current drive
         drive = 0.0
+        # loop over nonzero presynaptic spiking neurons (includes all three layers) per post-neuron
         for j in nonzero_all:
             drive += weights_exc[i, j]
-
+        # Compute and update total change in input current
         d_I = (-I_syn_exc[i] + drive) * dt / tau_syn_exc
         I_syn_exc[i] += d_I
-
+        # Compute change in membrane potential (LIF formula)
         d_mp = (
             (-(mp[i] - resting_potential) + membrane_resistance_exc * I_syn_exc[i])
             / tau_m_exc
             * dt
         )
+        # Update membrane potential
         mp_new[i] = mp[i] + d_mp
+        # Apply Gaussian noise to membrane potential if network is in sleep-mode 
         if noisy_potential_now:
             mp_new[i] += np.random.normal(mean_noise, var_noise)
+        # Update delta-membrane change and delta-input current trackers for run stats
         if track_stats:
             delta_mp_ex[i] = d_mp
             delta_I_syn_ex[i] = d_I
 
     # --- Inhibitory population ---
+
+    # Loop over each inhibitory post-neuron to update membrane potential
     for i in range(N_inh):
+        # Create inhibitory adjusted index
         ih_id = i + N_exc
+        # Compute current membrane drive
         drive = 0.0
         for j in nonzero_exc_src:
             drive += weights_inh[i, j]
-
+        # Apply decaying and time constants to drive
         d_I = (-I_syn_inh[i] + drive) * dt / tau_syn_inh
+        # Update total membrane current
         I_syn_inh[i] += d_I
-
+        # Compute change in membrane potential
         d_mp = (
             (-(mp[ih_id] - resting_potential) + membrane_resistance_inh * I_syn_inh[i])
             / tau_m_inh
             * dt
         )
+        # Update total membrane potential
         mp_new[ih_id] = mp[ih_id] + d_mp
+        # Apply Gaussian noise to membrane potential
         if noisy_potential_now:
             mp_new[ih_id] += np.random.normal(mean_noise, var_noise)
+        # Track change in current and membrane potential
         if track_stats:
             delta_mp_ih[i] = d_mp
             delta_I_syn_ih[i] = d_I
@@ -127,28 +153,44 @@ def update_spikes(
     reset_potential,
     decay,
 ):
+    '''
+    Function takes updated membrane potential, estimates which neuronal potentials surpass the spiking threshold, 
+    updates spiking arrays and spiking thresholds, then resets the membrane potential.
+    '''
+    # Compute total non-input neurons
     n_total = ih - st
 
+    # Loop over non-input neurons to clip potentials and compute threshold-surpassing potentials
     for j in range(n_total):
+        # Clip potentials to min/max
         if mp[j] < min_mp:
             mp[j] = min_mp
         elif mp[j] > max_mp:
             mp[j] = max_mp
+        # Compute potentials above threshold and reset
         if mp[j] > spike_threshold[j]:
             spikes[st + j] = 1
             mp[j] = reset_potential
-
+    # Update spiking threshold
     if spike_adaption:
+        # Loop over non-input neurons
         for j in range(n_total):
+            # Decay alpha (additive spiking threshold variable)
             a[j] += (-a[j] / tau_adaption) * dt
+            # If recent spike, increase alpha by delta_adaption
             if spikes[st + j] == 1:
                 a[j] += delta_adaption
+            # Add alpha to spiking threshold
             spike_threshold[j] = spike_threshold_default + a[j]
-
+    # Update spike trace (used in trace-STDP later)
+    
+    # Loop over excitatory neurons (inhibitoroy neurons are static and thus do not require tracking)
     for j in range(N_exc + st):
         idx = j
+        # Increase trace if neuron recently spiked
         if spikes[idx] == 1:
             spike_trace[idx] = spike_trace[idx] * decay + 1.0
+        # Else, only apply decay
         else:
             spike_trace[idx] *= decay
 
@@ -160,12 +202,15 @@ def update_spikes(
         spike_trace,
     )
 
-
 def update_x_tar(spike_trace, N_x):
+    '''
+    Update trace target. If presynaptic neuron is above target, the weight is strenghtened, and below it is weakened. 
+    See trace-STDP function for more details
+    '''
+    # Currently using mean targets
     x_tar_se = np.mean(spike_trace[:N_x], axis=0)
     x_tar_ex = np.mean(spike_trace[N_x:], axis=0)
     return x_tar_se, x_tar_ex
-
 
 @dataclass
 class NeuronState:
@@ -183,6 +228,10 @@ class NeuronState:
     )
     reset_potential: float | int
     tau_trace: float
+
+    '''
+    NeuronState object maintains constant variables related to "update_spikes" function
+    '''
 
     def __post_init__(self):
         self.decay = np.exp(-self.dt / self.tau_trace)
@@ -227,6 +276,10 @@ class MembranePotential:
     tau_m_inh: float
     mean_noise: float
     var_noise: float
+
+    '''
+    MembranePotential object retains constant parameters for membrane update calls
+    '''
 
     def step(
         self,

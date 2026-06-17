@@ -8,13 +8,24 @@
 
 ---
 
-## About
+`neurosnn` trains biologically plausible spiking neural networks (SNNs) with Leaky
+Integrate-and-Fire neurons, spike-trace STDP, and optional sleep-like synaptic homeostasis.
+Neuron dynamics are JIT-compiled via Numba for fast CPU simulation — no GPU required.
 
-`neurosnn` is a Python library for training biologically plausible spiking neural networks (SNNs) with Leaky Integrate-and-Fire neurons, spike-trace STDP, and optional sleep-like synaptic homeostasis. Neuron dynamics are JIT-compiled via Numba for fast CPU simulation; no GPU is required.
+The package replicates and extends the model of
+[Zenke et al. (2015)](https://www.nature.com/articles/ncomms7922) and is the software basis
+for a Zenke replication study and a sleep-protocol homeostasis article.
 
-The package replicates and extends the model of [Zenke et al. (2015)](https://www.nature.com/articles/ncomms7922) and is the software basis for two research articles: the Zenke et al. replication study and a sleep-protocol homeostasis article (citation to be added on publication).
+## 📖 Documentation
 
----
+**Full documentation lives at the [neurosnn docs site](https://andrlmmass.github.io/SpikingNeuralNetwork/).**
+
+The docs are organised like a book:
+
+- **Getting started** — [Installation](docs/getting-started/installation.md) · [Quickstart](docs/getting-started/quickstart.md) · [Core concepts](docs/getting-started/core-concepts.md)
+- **Guides** — [Neuron dynamics](docs/guides/neuron-dynamics.md) · [Connectivity & weights](docs/guides/connectivity.md) · [Learning (Trace STDP)](docs/guides/learning-stdp.md) · [Sleep & homeostasis](docs/guides/sleep-homeostasis.md) · [Data & encoding](docs/guides/data-encoding.md) · [Training loop](docs/guides/training-loop.md) · [Diagnostics](docs/guides/diagnostics.md)
+- **Reference** — [API reference](docs/reference/api.md) · [Datasets](docs/reference/datasets.md) · [Glossary](docs/reference/glossary.md)
+- **Research** — [Background & citation](docs/research/background.md) · [Reproducing experiments](docs/research/experiments.md)
 
 ## Installation
 
@@ -22,135 +33,41 @@ The package replicates and extends the model of [Zenke et al. (2015)](https://ww
 pip install neurosnn
 ```
 
-Requires **Python ≥ 3.12**. Core dependencies (`numpy`, `numba`, `scikit-learn`, `torch`, `matplotlib`) are installed automatically.
-
----
+Requires **Python ≥ 3.12**. Core dependencies (`numpy`, `numba`, `scikit-learn`, `torch`,
+`matplotlib`) are installed automatically. See the
+[installation guide](docs/getting-started/installation.md) for details.
 
 ## Quickstart
 
 ```python
 import neurosnn as snn
 
-# 1. Define connectivity
-weights = snn.weights.random(
-    density_se=0.05, density_ee=0.05, density_ei=0.05, density_ie=0.05,
-    peak_se=1.0,     peak_ee=0.5,     peak_ei=1.0,     peak_ie=-0.7,
-)
+layer = snn.Layer(N_exc=400, N_inh=100)      # an E/I population + its connectivity
+learner = snn.learner.TraceSTDP()            # how synapses change
+model = snn.Model(image_dataset="mnist")     # data + bookkeeping
 
-# 2. Build a layer (E/I population pair)
-layer = snn.Layer(
-    N_exc=1024,
-    N_inh=225,
-    membrane=snn.membrane.LIF(
-        tau_m_exc=20.0,   tau_m_inh=15.0,
-        tau_syn_exc=10.0, tau_syn_inh=9.0,
-        membrane_resistance_exc=15.0,
-        membrane_resistance_inh=15.0,
-        resting_potential=-70.0,
-        reset_potential=-80.0,
-        spike_threshold=-55.0,
-    ),
-    weights=weights,
-)
+# model.train() is a generator yielding one TrainResult per batch
+for result in model.train(layers=[layer], learner=learner, epochs=1):
+    if result.accuracy is not None:
+        print(result.epoch, result.batch, result.accuracy)
 
-# 3. Configure STDP
-learner = snn.learner.TraceSTDP(
-    learning_rate=0.0004,
-    tau_trace=20,
-    w_max=10.0,
-    mu_weight=0.6,
-)
-
-# 4. Configure the model (data + training bookkeeping)
-model = snn.Model(
-    input_size=784,
-    classes=list(range(10)),
-    num_steps=350,
-    image_dataset="mnist",
-    all_images_train=5000, batch_image_train=1000,
-    all_images_val=1000,   batch_image_val=1000,
-    all_images_test=1000,  batch_image_test=1000,
-)
-
-# 5. Training loop — model.train() is a generator
-for result in model.train(layers=[layer], learner=learner, epochs=3):
-    if result.batch % 5 == 0 and result.accuracy is not None:
-        val = model.validate()
-        print(
-            f"epoch {result.epoch + 1}  batch {result.batch}"
-            f"  train {result.accuracy:.3f}  val {val.accuracy:.3f}"
-        )
-
-print(f"Test accuracy: {model.test().accuracy:.3f}")
+print("Test accuracy:", model.test().accuracy)
 ```
 
-Adding **sleep regularisation** requires only one extra argument:
+Adding sleep-like homeostasis is one extra argument:
 
 ```python
 regularizer = snn.regularizer.Sleep(duration=200, frequency=1050, mode="neuron")
-
-for result in model.train(layers=[layer], learner=learner,
-                          regularizer=regularizer, epochs=3):
-    ...
+model.train(layers=[layer], learner=learner, regularizer=regularizer, epochs=1)
 ```
 
----
+See the [Quickstart](docs/getting-started/quickstart.md) for a fully annotated example.
 
-## Core concepts
+## Building the docs locally
 
-`model.train()` returns a Python generator. Each iteration processes one training batch and yields a `TrainResult`; `model.validate()` can be called at any point inside the loop without resetting state. Weights are built from the `Layer` spec on the **first** generator iteration, so inspection or plotting before training starts is possible after calling `next()` once.
-
-```
-Model  ──▶  Layer
-              ├── membrane.LIF        neuron dynamics (all units: ms / mV)
-              └── weights.*           connectivity density and peak amplitudes
-            learner.TraceSTDP         spike-trace STDP with soft weight bound
-            regularizer.Sleep         periodic noise-driven synaptic downscaling
-                        .Normalize    deterministic weight rescaling (no noise)
-```
-
----
-
-## API Reference
-
-### `Model`
-
-```python
-snn.Model(
-    input_size: int = 225,           # flattened input pixels (784 for MNIST)
-    classes: list = None,            # class labels; defaults to [0..9]
-    random_state: int = 0,
-    num_steps: int = 350,            # timesteps per image presentation (ms)
-    all_images_train: int = 1000,    # total training images per epoch
-    batch_image_train: int = 100,    # images per training batch
-    all_images_val: int = 200,
-    batch_image_val: int = 100,
-    all_images_test: int = 200,
-    batch_image_test: int = 100,
-    image_dataset: str = "mnist",    # see Supported datasets
-    max_rate_hz: float = 90.0,       # peak Poisson rate for input encoding
-    gain: float = 1.0,               # global input gain
-    gabor: bool = False,             # apply Gabor filter to inputs
-)
-```
-
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `train(layers, learner=None, regularizer=None, epochs=1, ...)` | `Generator[TrainResult]` | Build network and stream training batches |
-| `validate()` | `EvalResult` | Evaluate on validation split (call inside training loop) |
-| `test()` | `EvalResult` | Evaluate on test split after training |
-
----
-
-### `Layer`
-
-```python
-snn.Layer(
-    N_exc: int = 400,                   # excitatory neuron count
-    N_inh: int = 100,                   # inhibitory neuron count
-    membrane: LIF = LIF(),              # membrane dynamics spec
-    weights: WeightsSpec = receptive_fields(),  # connectivity spec
-)
+```bash
+pip install -e ".[docs]"
+mkdocs serve   # http://127.0.0.1:8000
 ```
 
 ---
