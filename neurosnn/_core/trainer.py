@@ -8,7 +8,6 @@ from neurosnn._utils.performance import report_RAM_usage, spawn_plot_thread
 from neurosnn._core.synapses import Learner, Clipper
 from neurosnn._core.trackers import TrainTracker
 
-
 @dataclass
 class Trainer:
     resting_potential: float
@@ -79,7 +78,14 @@ class Trainer:
     record_fn_awake_se: "callable | None" = None
     record_fn_awake_ee: "callable | None" = None
 
+    '''
+    Trainer object takes neuron dynamics arrays (spike trace, membrane potential,
+    STDP, clipping, regularization and tracking) and updates iteratively
+    throughout training. 
+    '''
+
     def __post_init__(self):
+        # convert to numba-consistent integer type
         self.track_stats = np.uint8(self.track_stats)
         self.track_weights = np.uint8(self.track_weights)
         self.spike_adaption = np.uint8(self.spike_adaption)
@@ -88,6 +94,7 @@ class Trainer:
         self.train_weights = np.uint8(self.train_weights)
         self.normalize_weights = np.uint8(self.normalize_weights)
 
+        # initiate neuron object
         self.neuron = NeuronState(
             st=self.st,
             ih=self.ih,
@@ -102,6 +109,8 @@ class Trainer:
             reset_potential=self.reset_potential,
             tau_trace=self.tau_trace,
         )
+
+        # initiate membrane object
         self.membrane = MembranePotential(
             mp_new=self.mp_new,
             resting_potential=self.resting_potential,
@@ -120,6 +129,8 @@ class Trainer:
             mean_noise=self.mean_noise,
             var_noise=self.var_noise,
         )
+
+        # initiate learner (STDP-object)
         self.learner = Learner(
             learning_rate=self.learning_rate,
             N_x=self.N_x,
@@ -127,12 +138,16 @@ class Trainer:
             w_max=self.w_max,
             mu_weight=self.mu_weight,
         )
+
+        # initiate clipper object
         self.clipper = Clipper(
             nz_cols=self.nz_cols_exc,
             nz_rows=self.nz_rows_exc,
             min_weight_exc=self.min_weight_exc,
             max_weight_exc=self.max_weight_exc,
         )
+
+        # initiate tracker object
         self.tracker = TrainTracker(
             N_exc=self.N_exc,
             st=self.st,
@@ -141,9 +156,11 @@ class Trainer:
             track_stats=self.track_stats,
             track_weights=self.track_weights,
         )
+        # catch regularization inconcistencies
         if self.sleep and self.normalize_weights:
             raise ValueError("sleep and normalize_weights cannot both be true.")
 
+        # initiate sleep regularization
         if self.sleep:
             self.sleep_se = Sleep(
                 mode=self.reg_mode,
@@ -163,6 +180,7 @@ class Trainer:
                 nz_cols=self.nz_cols_ee,
                 record_fn=self.record_fn_ee,
             )
+        # OR initiate normalization
         elif self.normalize_weights:
             self.norm_se = Normalizer(
                 mode=self.reg_mode,
@@ -202,28 +220,34 @@ class Trainer:
         update_weights_now=np.uint8(0),
         noisy_potential_now=np.uint8(0),
     ):
+        '''
+        Step-function runs a full training batch and returns dynamic arrays
+        '''
+
+        # prepare run configurations based on run-type (train, val or test)
         if training_mode == "train":
             desc = "Training network:"
             track_stats = self.track_stats
             track_weights = self.track_weights
             save_plots = self.save_plots
-            train_weights = self.train_weights
+            train_weights = self.train_weights # we only update weights during train
             self.tracker.reset()
         elif training_mode == "val":
             desc = "Validating network"
             track_weights = np.uint8(0)
             track_stats = np.uint8(0)
-            save_plots = False
+            save_plots = False 
             train_weights = np.uint8(0)
         elif training_mode == "test":
             desc = "Testing network:"
             track_weights = np.uint8(0)
             track_stats = np.uint8(0)
             train_weights = np.uint8(0)
-            save_plots = False
+            save_plots = False 
         else:
             raise ValueError("training_mode must be 'train', 'val', or 'test'.")
 
+        # prepare dynamic arrays derived from existing arrays
         mp_prev = mp.copy()
         spikes_prev = spikes[0].copy()
         weights_exc = np.ascontiguousarray(weights[:, self.st : self.ex].T)
@@ -231,15 +255,20 @@ class Trainer:
             weights[self.st : self.ex, self.ex : self.ih].T
         )
 
-        pbar = tqdm(range(1, spikes.shape[0]), desc=desc, leave=False, mininterval=1.0)
+        # initiate tqdm object
+        pbar = tqdm(range(1, spikes.shape[0]), desc=desc, leave=False, mininterval=1.0, colour="green", ascii=" <><><><>><<>")
 
+        # compare RAM usage across train, val and test to ensure no runaway RAM consumption
         report_RAM_usage()
 
+        # intiate x target values (set to mean of starting weights)
         x_tar_se, x_tar_ee = update_x_tar(
             spike_trace=spike_trace,
             N_x=self.N_x,
         )
+        # loop across time T 
         for t in pbar:
+            # check if weights and regularization should be active if train mode
             if training_mode == "train":
                 if t % self.update_weights_freq == 0:
                     update_weights_now = np.uint8(1)
@@ -253,10 +282,11 @@ class Trainer:
                         self.sleep_ee.onset(
                             weights[self.st : self.ex, self.st : self.ex]
                         )
-
+            # check if stat tracking or network plotting should occur for the current timestep
             if t % self.stat_tracking_frequency == 0:
                 if track_stats:
                     _track_stats = np.uint8(1)
+                # check if spawning multi-thread plotter for current run (ony during train)
                 if save_plots:
                     num, _ = spawn_plot_thread(
                         t,
@@ -275,13 +305,20 @@ class Trainer:
                         self.run,
                         self.save_plots,
                     )
-
+            # update dynamic arrays if sleep is about to begin 
             if sleep_remaining > 0:
+                # extract recent spikes
                 spikes_buf = spikes_prev.copy()
+                # remove input spikes (no data training during sleep)
                 spikes_buf[: self.st] = 0
+                # pre-allocate empty spikes array
                 current_spikes = np.zeros(self.ih, dtype=np.int8)
+            
+            ########## SLEEP PHASE ########## 
 
-            while sleep_remaining > 0 and train_weights:
+            # run while loop during sleep without iterating timestep t
+            while sleep_remaining > 0:
+                # update membrane potential
                 (
                     mp,
                     I_syn_exc,
@@ -297,10 +334,11 @@ class Trainer:
                     spikes=spikes_buf,
                     I_syn_exc=I_syn_exc,
                     I_syn_inh=I_syn_inh,
-                    noisy_potential_now=noisy_potential_now,
+                    noisy_potential_now=noisy_potential_now, # true during sleep
                 )
-
+                # reset current spiking array (array only 1xN, no time dimension)
                 current_spikes[:] = 0
+                # update dynamic neuron arrays 
                 (
                     mp,
                     spikes_buf,
@@ -314,36 +352,44 @@ class Trainer:
                     spike_trace=spike_trace,
                     spike_threshold=spike_threshold,
                 )
-
+                # update weights every 10% of sleep timesteps (around 1% during wake period)
                 if sleep_remaining % 10 == 0:
+                    # clip weights if object initialized
                     if self.clip_weights:
                         weights = self.clipper.step(weights=weights)
+                    # apply trace-stdp
                     weights, m_x_pre, m_first_term, m_delta_w = self.learner.step(
                         spike_trace=spike_trace,
                         weights=weights,
-                        spikes=spikes_buf,
+                        spikes=spikes_buf, # previous spikes, not current
                         track_weights=np.uint8(0),
                         x_tar_se=x_tar_se,
                         x_tar_ee=x_tar_ee,
                     )
+                    # convert to pre-transposed arrays for efficient membrane potential computing
                     np.copyto(weights_exc, weights[:, self.st : self.ex].T)
                     np.copyto(
                         weights_inh, weights[self.st : self.ex, self.ex : self.ih].T
                     )
-
+                # regularize weights with sleep for SE (input to excitatory)
                 weights[: self.st, self.st : self.ex] = self.sleep_se.step(
                     weights[: self.st, self.st : self.ex], t
                 )
+                # regularize weights with sleep for EE (excitatory to excitatory)
                 weights[self.st : self.ex, self.st : self.ex] = self.sleep_ee.step(
                     weights[self.st : self.ex, self.st : self.ex], t
                 )
-
+                # decrease remaining sleep duration
                 sleep_remaining -= 1
+                # update current membrane potential to newest
                 mp_prev = mp
-
+                # turn off noisy membrane potential if sleep is finished
                 if sleep_remaining <= 0:
                     noisy_potential_now = np.uint8(0)
 
+            ########## AWAKE PHASE ##########
+
+            # update membrane potential based on spiking activity
             (
                 mp,
                 I_syn_exc,
@@ -361,7 +407,7 @@ class Trainer:
                 I_syn_inh=I_syn_inh,
                 noisy_potential_now=noisy_potential_now,
             )
-
+            # update dynamic neuron arrays
             (
                 mp,
                 spikes[t],
@@ -376,9 +422,12 @@ class Trainer:
                 spike_threshold=spike_threshold,
             )
 
-            if update_weights_now and train_weights:
+            # clip, update and regularize weights if train mode
+            if update_weights_now:
+                # apply clipping if object initiated
                 if self.clip_weights:
                     weights = self.clipper.step(weights=weights)
+                # apply trace-STDP learning
                 weights, m_x_pre, m_first_term, m_delta_w = self.learner.step(
                     spike_trace=spike_trace,
                     weights=weights,
@@ -387,17 +436,20 @@ class Trainer:
                     x_tar_ee=x_tar_ee,
                     track_weights=track_weights,
                 )
-                if self.normalize_weights and normalize_now:
+                # apply normalization
+                if normalize_now:
                     weights[: self.st, self.st : self.ex] = self.norm_se.step(
                         weights[: self.st, self.st : self.ex], t
                     )
                     weights[self.st : self.ex, self.st : self.ex] = self.norm_ee.step(
                         weights[self.st : self.ex, self.st : self.ex], t
                     )
+                # update target arrays
                 x_tar_se, x_tar_ee = update_x_tar(
                     spike_trace=spike_trace,
                     N_x=self.N_x,
                 )
+                # update synapse tracking
                 if track_weights:
                     self.tracker.track_synapse(
                         m_x_pre,
@@ -406,20 +458,20 @@ class Trainer:
                         x_tar_se,
                         x_tar_ee,
                     )
-
+                # pre-transpose weight arrays for efficient handling
                 np.copyto(weights_exc, weights[:, self.st : self.ex].T)
                 np.copyto(weights_inh, weights[self.st : self.ex, self.ex : self.ih].T)
-
+                # record weights if tracking object initiated
                 if self.record_fn_awake_se is not None:
                     self.record_fn_awake_se(weights[: self.st, self.st : self.ex], t)
                 if self.record_fn_awake_ee is not None:
                     self.record_fn_awake_ee(
                         weights[self.st : self.ex, self.st : self.ex], t
                     )
-
+                # turn off weights updating and normalization (only performed periodically)
                 update_weights_now = np.uint8(0)
                 normalize_now = np.uint8(0)
-
+            # track neuron stats 
             if _track_stats:
                 self.tracker.track_neuron(
                     mp=mp,
@@ -434,10 +486,11 @@ class Trainer:
                     spike_trace=spike_trace,
                 )
                 _track_stats = np.uint8(0)
-
+            # map previous membrane potential and spikes to current
             mp_prev = mp
             spikes_prev = spikes[t]
 
+        # print stats if object exists
         self.tracker.print(
             weights=weights,
             spikes=spikes,

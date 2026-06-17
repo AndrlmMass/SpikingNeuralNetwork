@@ -374,7 +374,7 @@ def main():
         max_rate_hz=args.max_rate_hz,
         gain=1.0,
         gabor=args.gabor,
-        on_off=args.on_off,
+        #on_off=args.on_off,
     )
 
     # --- Training ---

@@ -5,6 +5,9 @@ figures/
 profile/
 plots/
 
+# MkDocs build output
+site/
+
 # Settings
 .vscode/
 
