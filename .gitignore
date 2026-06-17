@@ -5,12 +5,6 @@ figures/
 profile/
 plots/
 
-# MkDocs build output
-site/
-
-# Settings
-.vscode/
-
 # Data
 data/
 sdata/
@@ -28,3 +22,7 @@ __pycache__/
 
 # LLM support
 CLAUDE.md
+
+# Meta
+.vscode/
+.claude/

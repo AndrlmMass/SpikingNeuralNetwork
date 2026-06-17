@@ -70,6 +70,136 @@ pip install -e ".[docs]"
 mkdocs serve   # http://127.0.0.1:8000
 ```
 
+---
+
+### `membrane.LIF`
+
+All time constants in **ms**, all potentials in **mV**.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `tau_m_exc` / `tau_m_inh` | `30.0` | Membrane time constant (E / I) |
+| `tau_syn_exc` / `tau_syn_inh` | `30.0` | Synaptic time constant (E / I) |
+| `membrane_resistance_exc` / `..._inh` | `30.0` | Membrane resistance (E / I) |
+| `resting_potential` | `-70.0` | Resting membrane potential |
+| `reset_potential` | `-80.0` | Post-spike reset potential |
+| `spike_threshold` | `-55.0` | Spike threshold |
+| `min_mp` / `max_mp` | `-100.0` / `40.0` | Hard clamp on membrane potential |
+| `mean_noise` / `var_noise` | `0.0` / `1.0` | Gaussian membrane noise (μ, σ²) |
+| `spike_adaptation` | `True` | Enable spike-frequency adaptation |
+| `tau_adaptation` | `100.0` | Adaptation time constant |
+| `delta_adaptation` | `1.0` | Per-spike adaptation increment |
+
+---
+
+### `weights` — factory functions
+
+All three factories accept the same **shared parameters**:
+
+| Parameter | Description |
+|-----------|-------------|
+| `density_se/ee/ei/ie: float` | Structural connection probability for each pathway |
+| `peak_se/ee/ei/ie: float` | Peak initial weight magnitude (inhibitory peaks are negative) |
+
+**`snn.weights.random(...)`** — uniformly sparse random connectivity; no spatial structure.
+
+**`snn.weights.receptive_fields(..., rf_scale=1.0)`** — Gaussian/Mexican-hat structured RFs; `rf_scale` scales all spatial sigmas globally.
+
+**`snn.weights.oriented_receptive_fields(...)`** — oriented elliptical Gaussian RFs for the S→E pathway; additional parameters:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `sigma_x` | `3.0` | Major-axis sigma of each RF (pixels) |
+| `gamma` | `0.4` | Aspect ratio σ_y / σ_x; 1.0 = isotropic |
+| `n_orientations` | `4` | Number of orientation groups cycling across E neurons |
+| `r_cut_factor` | `3.0` | Hard elliptical cutoff at `r_cut_factor × σ` |
+| `sigma_x_lognormal_std` | `0.0` | Log-normal size diversity; 0 = uniform |
+
+---
+
+### `learner.TraceSTDP`
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `learning_rate` | `0.0008` | STDP step size |
+| `tau_trace` | `25` | Spike-trace time constant (ms) |
+| `w_max` | `10.0` | Soft weight bound (BCM-style) |
+| `mu_weight` | `0.6` | BCM softness exponent |
+| `update_freq` | `100` | Apply STDP every N timesteps |
+| `clip_weights` | `False` | Hard-clip weights to [min, max] after each update |
+| `min_weight_exc` / `max_weight_exc` | `0.01` / `25.0` | Hard bounds for excitatory weights (if `clip_weights=True`) |
+| `min_weight_inh` / `max_weight_inh` | `-25.0` / `-0.01` | Hard bounds for inhibitory weights (if `clip_weights=True`) |
+
+---
+
+### `regularizer.Sleep` / `regularizer.Normalize`
+
+Both support three **`mode`** values:
+
+| Mode | Behaviour |
+|------|-----------|
+| `"static"` | Restore to fixed target sums computed at initialisation |
+| `"layer"` | Restore total synaptic drive across all neurons in the layer |
+| `"neuron"` | Restore per-neuron incoming synaptic drive (strongest homeostasis) |
+
+**`Sleep`** parameters:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `duration` | `300` | Timesteps per sleep episode |
+| `frequency` | `1050` | Timesteps between sleep episodes |
+| `mode` | `"static"` | Target restoration mode (see above) |
+
+**`Normalize`** parameters:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `frequency` | `1050` | Timesteps between normalisation events |
+| `mode` | `"static"` | Target restoration mode (see above) |
+
+---
+
+### `TrainResult`
+
+Yielded after every training batch.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `epoch` | `int` | Current epoch index (0-based) |
+| `batch` | `int` | Batch index within epoch |
+| `weights` | `np.ndarray` | Live weight matrix reference (shape N × N) |
+| `accuracy` | `float \| None` | Training batch accuracy (None until first evaluation) |
+| `phi` | `float \| None` | Phi clustering metric (None until first evaluation) |
+| `spikes` | `np.ndarray \| None` | Mean firing rates shape (n_images, N_exc), only if `return_spikes=True` |
+| `stats` | `dict \| None` | Neuron/synapse diagnostics, only if `track_stats=True` |
+
+### `EvalResult`
+
+Returned by `model.validate()` and `model.test()`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `accuracy` | `float \| None` | Classification accuracy |
+| `phi` | `float \| None` | Phi clustering metric |
+| `split` | `str` | `"val"` or `"test"` |
+| `spikes` | `np.ndarray \| None` | Mean firing rates, only if `return_spikes=True` |
+
+---
+
+## Supported datasets
+
+| Key | Dataset |
+|-----|---------|
+| `"mnist"` | MNIST handwritten digits |
+| `"kmnist"` | Kuzushiji-MNIST |
+| `"fmnist"` / `"fashionmnist"` | Fashion-MNIST |
+| `"notmnist"` | notMNIST letters A–J |
+| `"geomfig"` | Geometric figures (toy dataset; fast for local testing) |
+
+Standard datasets are downloaded automatically on first use via `torchvision`.
+
+---
+
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
