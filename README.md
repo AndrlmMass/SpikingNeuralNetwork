@@ -25,6 +25,9 @@ The docs are organised like a book:
 - **Research** — [Background & citation](docs/research/background.md) · [Reproducing experiments](docs/research/experiments.md)
 
 ## Installation
+> [!CAUTION]
+> **DISCLAIMER:** The project has not been submitted as a PyPi yet and is not ready for production use. Use at own risk. 
+
 
 ```bash
 pip install neurosnn
@@ -136,16 +139,16 @@ Both support three **`mode`** values:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `duration` | `300` | Timesteps per sleep episode |
-| `frequency` | `1050` | Timesteps between sleep episodes |
-| `mode` | `"static"` | Target restoration mode (see above) |
+| `duration` | `50 ms` | Timesteps per sleep episode |
+| `frequency` | `1050 ms` | Timesteps between sleep episodes |
+| `mode` | `"neuron"` | Target restoration mode (see above) |
 
 **`Normalize`** parameters:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `frequency` | `1050` | Timesteps between normalisation events |
-| `mode` | `"static"` | Target restoration mode (see above) |
+| `frequency` | `1050 ms` | Timesteps between normalisation events |
+| `mode` | `"neuron"` | Target restoration mode (see above) |
 
 ---
 

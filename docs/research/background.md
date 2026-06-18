@@ -12,9 +12,9 @@ with a learning rule in the family described by
 
 The library is the software basis for two research articles:
 
-1. **A Zenke et al. replication study** — reproducing the core dynamics and learning behaviour.
-2. **A sleep-protocol homeostasis article** — studying how sleep-like synaptic downscaling
-   (the [`Sleep`](../guides/sleep-homeostasis.md) regularizer) interacts with STDP.
+1. **Sleep-Based Homeostatic Regularization for Stabilizing Spike-Timing-Dependent Plasticity in Recurrent Spiking Neural Networks** — Reproducing core functionality from Zenke with custom learning rule and static sleep regularization method employed [Massey et al. (2026)](https://arxiv.org/abs/2601.08447).
+2. **Exploring napping paradigm for Recurrent Spiking Neural Networks** — studying how sleep-like synaptic downscaling
+   (the [`Sleep`](../guides/sleep-homeostasis.md) regularizer) interacts with STDP and compare against normalization (article in IWAI conference proceedings).
 
 ## What it extends
 
@@ -34,11 +34,16 @@ against the source papers:
     Citation details for the two articles will be added on publication. For now, please cite
     the repository and the foundational works:
 
-    - Zenke, F., Agnes, E. J., & Gerstner, W. (2015). *Diverse synaptic plasticity mechanisms
-      orchestrated to form and retrieve memories in spiking neural networks.* Nature
-      Communications, 6, 6922.
-    - Diehl, P. U., & Cook, M. (2015). *Unsupervised learning of digit recognition using
-      spike-timing-dependent plasticity.* Frontiers in Computational Neuroscience, 9, 99.
+  @article{massey2026sleep,
+      title={Sleep-Based Homeostatic Regularization for Stabilizing Spike-Timing-Dependent Plasticity in Recurrent Spiking Neural Networks},
+      author={Massey, Andreas and Hubin, Aliaksandr and Nichele, Stefano and S{\ae}b{\o}, Solve},
+      year={2026},
+      eprint={2601.08447},
+      archivePrefix={arXiv},
+      primaryClass={cs.NE},
+      url={https://arxiv.org/abs/2601.08447},
+      journal={arXiv preprint arXiv:2601.08447}
+  }
 
 ## See also
 
