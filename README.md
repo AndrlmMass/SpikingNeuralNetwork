@@ -192,6 +192,10 @@ Standard datasets are downloaded automatically on first use via `torchvision`.
 
 ---
 
+## Development
+
+For a full walkthrough of the internal architecture — module layout, data flow, NJIT kernels, and how to extend the library — see the [Developer Guide](DEV-README.md).
+
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
