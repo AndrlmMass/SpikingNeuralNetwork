@@ -5,16 +5,14 @@
 [![PyPI version](https://img.shields.io/pypi/v/neurosnn)](https://pypi.org/project/neurosnn/)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](https://pypi.org/project/neurosnn/)
 
 ---
 
-`neurosnn` trains biologically plausible spiking neural networks (SNNs) with Leaky
-Integrate-and-Fire neurons, spike-trace STDP, and optional sleep-like synaptic homeostasis.
-Neuron dynamics are JIT-compiled via Numba for fast CPU simulation — no GPU required.
+`neurosnn` is biologically-inspired spiking neural network (SNN) package. It leverages No-Python Just-In-Time (NJIT) C-compiled parallel CPUs to achieve efficient runtime on projects at scale (4000 it/s) with planned multi-layer extensions (TBD). Users can leverage Leaky Fire-and-Integrate (LIF) neurons, adaptive spiking thresholds, parallel runtime plotting of network activity, two regularization modes (napping or normalization) and trace-based STDP. 
 
-The package replicates and extends the model of
-[Zenke et al. (2015)](https://www.nature.com/articles/ncomms7922) and is the software basis
-for a Zenke replication study and a sleep-protocol homeostasis article.
+The package was originally inspired by the clustering-benefits observed by unsupervised SNNs developed by
+[Zenke et al. (2015)](https://www.nature.com/articles/ncomms7922) and later more closely [Diehl et al. (2015)](https://www.frontiersin.org/journals/computational-neuroscience/articles/10.3389/fncom.2015.00099/full?ref=https://githubhelp.com), however the current implementation is a standalone library that provides more options and less rigid deployments compared to the aforementioned studies.
 
 ## 📖 Documentation
 
