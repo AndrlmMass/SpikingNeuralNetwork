@@ -2,14 +2,13 @@
 
 *A bio-inspired spiking neural network library for sleep-homeostasis research.*
 
-[![PyPI version](https://img.shields.io/pypi/v/neurosnn)](https://pypi.org/project/neurosnn/)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](https://pypi.org/project/neurosnn/)
 
 ---
 
-`neurosnn` is biologically-inspired spiking neural network (SNN) package. It leverages No-Python Just-In-Time (NJIT) C-compiled parallel CPUs to achieve efficient runtime on projects at scale (4000 it/s) with planned multi-layer extensions (TBD). Users can leverage Leaky Fire-and-Integrate (LIF) neurons, adaptive spiking thresholds, parallel runtime plotting of network activity, two regularization modes (napping or normalization) and trace-based STDP. 
+`neurosnn` is biologically-inspired spiking neural network (SNN) package. It leverages No-Python Just-In-Time (**NJIT**) C-compiled parallel CPUs to achieve efficient runtime on projects at scale (4000 it/s) with planned multi-layer extensions. Users can leverage Leaky Fire-and-Integrate (**LIF**) neurons, adaptive spiking thresholds, parallel runtime plotting of network activity, two regularization modes (napping or normalization) and trace-based STDP. 
 
 The package was originally inspired by the clustering-benefits observed by unsupervised SNNs developed by
 [Zenke et al. (2015)](https://www.nature.com/articles/ncomms7922) and later more closely [Diehl et al. (2015)](https://www.frontiersin.org/journals/computational-neuroscience/articles/10.3389/fncom.2015.00099/full?ref=https://githubhelp.com), however the current implementation is a standalone library that provides more options and less rigid deployments compared to the aforementioned studies.
@@ -60,8 +59,6 @@ model.train(layers=[layer], learner=learner, regularizer=regularizer, epochs=1)
 ```
 
 See the [Quickstart](docs/getting-started/quickstart.md) for a fully annotated example.
-
-```
 
 ---
 
