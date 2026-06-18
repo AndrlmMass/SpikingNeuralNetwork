@@ -25,16 +25,15 @@ The docs are organised like a book:
 - **Research** — [Background & citation](docs/research/background.md) · [Reproducing experiments](docs/research/experiments.md)
 
 ## Installation
-> [!CAUTION]
-> **DISCLAIMER:** The project has not been submitted as a PyPi yet and is not ready for production use. Use at own risk. 
-
 
 ```bash
-pip install neurosnn
+git clone https://github.com/AndrlmMass/SpikingNeuralNetwork.git
+cd SpikingNeuralNetwork
+pip install -e .
 ```
 
 Requires **Python ≥ 3.12**. Core dependencies (`numpy`, `numba`, `scikit-learn`, `torch`,
-`matplotlib`) are installed automatically. See the
+`matplotlib`) are installed automatically via `pyproject.toml`. See the
 [installation guide](docs/getting-started/installation.md) for details.
 
 ## Quickstart

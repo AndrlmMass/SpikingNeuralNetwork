@@ -1,24 +1,27 @@
 # Installation
 
-## From PyPI
+## Clone and install
+
+`neurosnn` is not yet published to PyPI. Install it directly from the repository:
 
 ```bash
-pip install neurosnn
+git clone https://github.com/AndrlmMass/SpikingNeuralNetwork.git
+cd SpikingNeuralNetwork
+pip install -e .
 ```
 
 `neurosnn` requires **Python ≥ 3.12**. The core scientific dependencies — `numpy`, `numba`,
 `scipy`, `scikit-learn`, `matplotlib`, `seaborn`, `pandas`, `tqdm`, `psutil`, and `pillow`
-— are installed automatically.
+— are declared in `pyproject.toml` and installed automatically.
 
 ## Data dependencies
 
 Image datasets are loaded through **`torch`** / **`torchvision`** and downloaded on first
-use. Depending on your platform you may want to install these explicitly first (for example
-to select a CPU-only PyTorch build):
+use. These are not declared as hard dependencies because the right PyTorch build varies by
+platform. Install them explicitly before running:
 
 ```bash
 pip install torch torchvision
-pip install neurosnn
 ```
 
 The `"notmnist"` dataset additionally requires the optional `deeplake` package:

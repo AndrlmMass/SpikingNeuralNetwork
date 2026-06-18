@@ -60,7 +60,7 @@ stay in control of evaluation, logging, and plotting.
 
 New here? Read these in order:
 
-1. **[Installation](getting-started/installation.md)** — install from PyPI.
+1. **[Installation](getting-started/installation.md)** — clone the repo and install.
 2. **[Quickstart](getting-started/quickstart.md)** — a fully annotated training script.
 3. **[Core concepts](getting-started/core-concepts.md)** — the mental model behind the API.
 
