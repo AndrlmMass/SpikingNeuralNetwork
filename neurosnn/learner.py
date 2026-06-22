@@ -44,6 +44,10 @@ class TraceSTDP:
     mu_weight: float = 0.6
     update_freq: int = 100
 
+    x_tar_mode: str = "mean"
+    x_tar_pct_se: float = 60.0
+    x_tar_pct_ee: float = 30.0
+
     clip_weights: bool = False
     min_weight_exc: float = 0.01
     max_weight_exc: float = 25.0
@@ -56,6 +60,9 @@ class TraceSTDP:
             tau_trace=self.tau_trace,
             w_max=self.w_max,
             mu_weight=self.mu_weight,
+            x_tar_mode=self.x_tar_mode,
+            x_tar_pct_se=self.x_tar_pct_se,
+            x_tar_pct_ee=self.x_tar_pct_ee,
             update_weights_freq=self.update_freq,
             clip_weights=self.clip_weights,
             min_weight_exc=self.min_weight_exc,

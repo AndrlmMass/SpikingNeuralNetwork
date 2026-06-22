@@ -1,6 +1,14 @@
 from dataclasses import dataclass
 from typing import Optional
 
+from neurosnn._utils.logger import (
+    rf_within_concentration,
+    rf_diversity,
+    ei_balance,
+    population_activity,
+    trace_spread,
+)
+
 
 @dataclass
 class TrainTracker:
@@ -29,6 +37,8 @@ class TrainTracker:
         self.track_count = self.x_tar_count = 0
         self.x_tar_sum_se = self.x_tar_sum_ee = 0.0
         self.first_term_sum = self.delta_w_sum = self.x_pre_sum = 0.0
+        # snapshot diagnostics (RF-collapse harness); computed once in print()
+        self._diag = {}
 
     def track_neuron(
         self,
@@ -78,7 +88,7 @@ class TrainTracker:
             return None
         n = max(1, self.track_count)
         nx = max(1, self.x_tar_count)
-        return {
+        d = {
             "mean_mp_exc": self.mp_ex / n,
             "mean_mp_inh": self.mp_ih / n,
             "mean_delta_mp_exc": self.delta_mp_ex / n,
@@ -96,8 +106,11 @@ class TrainTracker:
             "mean_x_tar_se": self.x_tar_sum_se / nx,
             "mean_x_tar_ee": self.x_tar_sum_ee / nx,
         }
+        # propagate snapshot diagnostics so they flow to TrainResult.stats
+        d.update(self._diag)
+        return d
 
-    def print(self, weights, spikes, track_weights, track_stats):
+    def print(self, weights, spikes, track_weights, track_stats, spike_trace=None):
         '''
         Print function for runtime tracking
         '''
@@ -128,6 +141,7 @@ class TrainTracker:
             print(f"Mean spikes input:        {spikes_st.mean():.5f}")
             print(f"Mean spikes exc:          {spikes_ex.mean():.5f}")
             print(f"Mean spikes inh:          {spikes_ih.mean():.5f}")
+            self._print_diagnostics(weights, spikes, spike_trace)
 
         if track_weights:
             nz = lambda block: block[block != 0]
@@ -144,3 +158,44 @@ class TrainTracker:
             print(f"Weights ST->EX std:       {nz(w[:self.st, self.st:self.ex]).std():.5f}")
             print(f"Weights EX->EX std:       {nz(w[self.st:self.ex, self.st:self.ex]).std():.5f}")
             print(f"Weights EX->IH std:       {nz(w[self.st:self.ex, self.ex:self.ih]).std():.5f}")
+
+    def _print_diagnostics(self, weights, spikes, spike_trace):
+        '''
+        RF-collapse harness: compute the five snapshot diagnostics, store the
+        scalars on self._diag (so to_dict propagates them to TrainResult.stats),
+        and print them grouped by synapse- vs neuron-side.
+        '''
+        W_se = weights[: self.st, self.st : self.ex]
+        # synapse-side
+        rf_entropy, rf_gini = rf_within_concentration(W_se)
+        mean_cos, pr, pr_norm = rf_diversity(W_se)
+        ei_med, ei_p90, _ = ei_balance(weights, spikes, self.st, self.ex, self.ih)
+        trace_p50, trace_p90 = trace_spread(spike_trace, self.st, self.ex)
+        # neuron-side
+        active_frac, sparseness, _ = population_activity(spikes, self.st, self.ex)
+
+        self._diag = {
+            "rf_entropy": rf_entropy,
+            "rf_gini": rf_gini,
+            "rf_mean_cosine": mean_cos,
+            "rf_participation_ratio": pr,
+            "rf_pr_norm": pr_norm,
+            "ei_ratio_median": ei_med,
+            "ei_ratio_p90": ei_p90,
+            "trace_p50": trace_p50,
+            "trace_p90": trace_p90,
+            "active_frac_exc": active_frac,
+            "pop_sparseness": sparseness,
+        }
+
+        print("--- Diagnostics (synapse) ---")
+        print(f"RF entropy (nats):        {rf_entropy:.5f}")
+        print(f"RF Gini:                  {rf_gini:.5f}")
+        print(f"RF mean cosine:           {mean_cos:.5f}")
+        print(f"RF participation ratio:   {pr:.3f} (norm {pr_norm:.5f})")
+        print(f"E/I ratio median:         {ei_med:.5f}")
+        print(f"E/I ratio p90:            {ei_p90:.5f}")
+        print(f"Trace p50/p90:            {trace_p50:.5f} / {trace_p90:.5f}")
+        print("--- Diagnostics (neuron) ---")
+        print(f"Active-E fraction:        {active_frac:.5f}")
+        print(f"Population sparseness:    {sparseness:.5f}")

@@ -67,6 +67,9 @@ class Trainer:
     stat_tracking_frequency: int
     reg_mode: str
     train_weights: bool
+    x_tar_mode: str
+    x_tar_pct_se: float
+    x_tar_pct_ee: float
     nz_cols_se: list
     nz_rows_se: list
     nz_cols_ee: list
@@ -265,6 +268,9 @@ class Trainer:
         x_tar_se, x_tar_ee = update_x_tar(
             spike_trace=spike_trace,
             N_x=self.N_x,
+            mode=self.x_tar_mode,
+            pct_se=self.x_tar_pct_se,
+            pct_ee=self.x_tar_pct_ee,
         )
         # loop across time T 
         for t in pbar:
@@ -448,6 +454,9 @@ class Trainer:
                 x_tar_se, x_tar_ee = update_x_tar(
                     spike_trace=spike_trace,
                     N_x=self.N_x,
+                    mode=self.x_tar_mode,
+                    pct_se=self.x_tar_pct_se,
+                    pct_ee=self.x_tar_pct_ee,
                 )
                 # update synapse tracking
                 if track_weights:
@@ -496,6 +505,7 @@ class Trainer:
             spikes=spikes,
             track_weights=track_weights,
             track_stats=track_stats,
+            spike_trace=spike_trace,
         )
 
         return (

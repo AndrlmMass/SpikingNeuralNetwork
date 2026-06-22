@@ -461,6 +461,106 @@ def plot_oriented_rf_summary(
     print(f"RF summary plot saved -> {out_path}")
 
 
+def plot_rf_coverage(
+    W_se: np.ndarray,
+    input_size: int,
+    n_orientations: int,
+    out_path: str,
+    orientation_mode: str = "block",
+) -> None:
+    """Per-orientation input-space coverage maps.
+
+    For each orientation group, sum every member neuron's RF over the input
+    grid and render as a 2D heatmap. This shows how the group tiles the input:
+
+    * Even, smooth coverage  -> neurons spread out, each capturing a distinct
+      patch of the input (what we want).
+    * Bright hotspots + dark gaps -> many neurons piled on the same position,
+      leaving other regions uncovered (the redundancy/overlap problem).
+
+    A coverage-uniformity number is printed on each panel:
+        CV   = std/mean of the coverage map  (lower = more even)
+        max/mean ratio                        (higher = more piling)
+
+    Parameters
+    ----------
+    W_se            Weight matrix slice, shape (N_x, N_exc).
+    input_size      Image side length in pixels (sqrt of N_x).
+    n_orientations  Number of orientation bins used during construction.
+    out_path        Save path (.pdf or .png).
+    orientation_mode  "block" or "interleaved" — must match how W_se was built
+                      so neurons are assigned to the same groups.
+    """
+    _, N_exc = W_se.shape
+    n_side = int(np.ceil(np.sqrt(N_exc)))
+    block_size = max(1, n_side // n_orientations)
+
+    # Group neurons by their actual orientation assignment (mirrors
+    # oriented_gaussian_se_weights exactly so the maps are faithful).
+    groups = [[] for _ in range(n_orientations)]
+    for idx in range(N_exc):
+        gx_i = idx // n_side
+        gy_i = idx % n_side
+        if orientation_mode == "interleaved":
+            g = gy_i % n_orientations
+        else:
+            g = min(gx_i // block_size, n_orientations - 1)
+        groups[g].append(idx)
+
+    # Sum each group's RFs over the input grid -> per-orientation coverage.
+    coverages = []
+    for g in range(n_orientations):
+        if groups[g]:
+            cov = W_se[:, groups[g]].sum(axis=1).reshape(input_size, input_size)
+        else:
+            cov = np.zeros((input_size, input_size), dtype=float)
+        coverages.append(cov)
+
+    # Shared colour scale so panels are directly comparable.
+    stacked = np.stack(coverages)
+    vmax = float(np.percentile(stacked[stacked > 0], 99)) if (stacked > 0).any() else 1.0
+
+    ncols = int(np.ceil(np.sqrt(n_orientations)))
+    nrows = int(np.ceil(n_orientations / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 4 * nrows))
+    axes = np.atleast_1d(axes).ravel()
+
+    orientations_deg = [
+        f"{int(round(180 * g / n_orientations))}°" for g in range(n_orientations)
+    ]
+
+    for g in range(n_orientations):
+        ax = axes[g]
+        cov = coverages[g]
+        im = ax.imshow(cov, cmap="magma", vmin=0, vmax=vmax, interpolation="nearest")
+        mean = cov.mean()
+        cv = cov.std() / (mean + 1e-12)
+        ratio = cov.max() / (mean + 1e-12)
+        ax.set_title(
+            f"{orientations_deg[g]}  (n={len(groups[g])})\n"
+            f"CV={cv:.2f}  max/mean={ratio:.1f}",
+            fontsize=10,
+        )
+        ax.set_xticks([])
+        ax.set_yticks([])
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+    # Hide any unused axes (n_orientations not a perfect grid).
+    for g in range(n_orientations, len(axes)):
+        axes[g].axis("off")
+
+    fig.suptitle(
+        "W_se input-space coverage per orientation group\n"
+        "(even = good tiling; hotspots/gaps = overlap & redundancy)",
+        fontsize=12,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"RF coverage plot saved -> {out_path}")
+
+
 def plot_weight_sample_trajectories(
     sampler, config_label: str, output_path: str, x_max: "int | None" = None
 ) -> None:

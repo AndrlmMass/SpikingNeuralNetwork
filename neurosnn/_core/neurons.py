@@ -202,15 +202,32 @@ def update_spikes(
         spike_trace,
     )
 
-def update_x_tar(spike_trace, N_x):
+def update_x_tar(spike_trace, N_x, mode="mean", pct_se=60.0, pct_ee=30.0):
     '''
-    Update trace target. If presynaptic neuron is above target, the weight is strenghtened, and below it is weakened. 
-    See trace-STDP function for more details
+    Update trace target. If presynaptic neuron is above target, the weight is strenghtened, and below it is weakened.
+    See trace-STDP function for more details.
+
+    mode:
+        "mean"       - population-mean trace per layer (original behaviour).
+        "percentile" - Kth percentile over the *active* (nonzero-trace) sub-population
+                       per layer. Robust to the heavy zero-inflation of both layers
+                       (input ~80% background, exc median trace ~0): a percentile taken
+                       over all neurons would collapse to ~0. A higher SE percentile
+                       depresses weak/surround pixels (sharpens RFs); a lower EE
+                       percentile spares moderately-active neurons (anti-domination).
     '''
-    # Currently using mean targets
-    x_tar_se = np.mean(spike_trace[:N_x], axis=0)
-    x_tar_ex = np.mean(spike_trace[N_x:], axis=0)
-    return x_tar_se, x_tar_ex
+    if mode == "mean":
+        x_tar_se = np.mean(spike_trace[:N_x], axis=0)
+        x_tar_ee = np.mean(spike_trace[N_x:], axis=0)
+        return x_tar_se, x_tar_ee
+    # percentile over active (nonzero) traces; empty active set -> 0.0
+    se_tr = spike_trace[:N_x]
+    ee_tr = spike_trace[N_x:]
+    se_act = se_tr[se_tr > 0]
+    ee_act = ee_tr[ee_tr > 0]
+    x_tar_se = np.percentile(se_act, pct_se) if se_act.size else 0.0
+    x_tar_ee = np.percentile(ee_act, pct_ee) if ee_act.size else 0.0
+    return x_tar_se, x_tar_ee
 
 @dataclass
 class NeuronState:

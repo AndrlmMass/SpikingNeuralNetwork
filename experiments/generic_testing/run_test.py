@@ -66,7 +66,7 @@ def parse_args():
         "--var-noise",
         type=float,
         default=0.0,
-        help="Membrane noise variance (default: 0.0)",
+        help="Membrane noise variance (default: 0.0) during sleep. Not active during normalization.",
     )
     parser.add_argument(
         "--gabor",
@@ -104,7 +104,7 @@ def parse_args():
     parser.add_argument(
         "--lognorm-se-std",
         type=float,
-        default=0.0,
+        default=1.0,
         help="Std of RF sizes for W_se log-normal (0 = disabled, try 1.5)",
     )
     parser.add_argument(
@@ -116,13 +116,13 @@ def parse_args():
     parser.add_argument(
         "--lognorm-ee-mean",
         type=float,
-        default=1.0,
+        default=0.0,
         help="Mean RF size (E-grid pixels) for W_ee log-normal distribution (default: 1.0 = auto sigma_ee)",
     )
     parser.add_argument(
         "--lognorm-ee-std",
         type=float,
-        default=0.0,
+        default=0.5,
         help="Std of RF sizes for W_ee log-normal (0 = disabled, try 0.5)",
     )
 
@@ -144,7 +144,7 @@ def parse_args():
     parser.add_argument(
         "--mu-weight",
         type=float,
-        default=0.6,
+        default=0.5,
         help="BCM soft-bound exponent: (w_max - w)^mu scales LTP (default: 0.6, try 0.3)",
     )
     parser.add_argument(
@@ -152,6 +152,37 @@ def parse_args():
         type=float,
         default=10.0,
         help="Soft weight upper bound for STDP (default: 10.0, try 15.0)",
+    )
+    parser.add_argument(
+        "--x-tar-mode",
+        type=str,
+        default="percentile",
+        choices=["mean", "percentile"],
+        help="x_tar estimator: 'mean' (population mean, original) or 'percentile' "
+        "(Kth percentile over active traces per layer) (default: percentile)",
+    )
+    parser.add_argument(
+        "--x-tar-pct-se",
+        type=float,
+        default=60.0,
+        help="SE percentile over active input traces when --x-tar-mode percentile "
+        "(higher = sharper RFs) (default: 60.0)",
+    )
+    parser.add_argument(
+        "--x-tar-pct-ee",
+        type=float,
+        default=30.0,
+        help="EE percentile over active exc traces when --x-tar-mode percentile "
+        "(lower = more distributed recurrent drive) (default: 30.0)",
+    )
+
+    parser.add_argument(
+        "--freeze-weights",
+        action="store_true",
+        default=False,
+        help="Disable STDP — run with the initial weights fixed. Use for the "
+        "frozen-vs-trained A/B that isolates what plasticity contributes "
+        "(default: False = weights learn)",
     )
 
     # --- Reproducibility ---
@@ -173,19 +204,19 @@ def parse_args():
         ],
     )
     parser.add_argument("--epochs", type=int, default=1)
-    parser.add_argument("--val-every", type=int, default=10)
+    parser.add_argument("--val-every", type=int, default=1)
     parser.add_argument(
         "--max-rate-hz",
         type=float,
         default=90.0,
         help="Peak Poisson firing rate for input encoding in Hz (default: 90.0)",
     )
-    parser.add_argument("--train-all", type=int, default=1000)
+    parser.add_argument("--train-all", type=int, default=30000)
     parser.add_argument("--train-batch", type=int, default=1000)
-    parser.add_argument("--val-all", type=int, default=200)
-    parser.add_argument("--val-batch", type=int, default=200)
-    parser.add_argument("--test-all", type=int, default=200)
-    parser.add_argument("--test-batch", type=int, default=200)
+    parser.add_argument("--val-all", type=int, default=1000)
+    parser.add_argument("--val-batch", type=int, default=1000)
+    parser.add_argument("--test-all", type=int, default=10000)
+    parser.add_argument("--test-batch", type=int, default=1000)
 
     # --- Output ---
     parser.add_argument(
@@ -197,7 +228,7 @@ def parse_args():
     parser.add_argument(
         "--plot-rfs",
         action="store_true",
-        default=False,
+        default=True,
         help="Save an oriented RF summary plot after weight initialisation (oriented_rf only)",
     )
     parser.add_argument(
@@ -239,7 +270,7 @@ def parse_args():
     parser.add_argument(
         "--track-stats",
         action="store_true",
-        default=False,
+        default=True,
         help="Enable neuron/synapse stat tracking and print diagnostics each val step",
     )
     parser.add_argument(
@@ -260,6 +291,7 @@ def build_output_dir(args) -> str:
         f"{args.dataset}_{args.weight_type}"
         f"_{args.reg_type}_{args.reg_mode}"
         f"_vn{args.var_noise}_hz{args.max_rate_hz}_s{args.seed}"
+        f"{'_frozen' if args.freeze_weights else ''}"
     )
     return os.path.join(base, tag)
 
@@ -273,6 +305,7 @@ def main():
         f"\nConfig — dataset: {args.dataset} | weight: {args.weight_type}"
         f" | reg: {args.reg_type}/{args.reg_mode}"
         f" | var_noise: {args.var_noise} | sleep_dur: {args.sleep_duration}"
+        f" | freeze_weights: {args.freeze_weights}"
         f" | seed: {args.seed} | epochs: {args.epochs}\n"
     )
 
@@ -280,12 +313,12 @@ def main():
     weight_kwargs = dict(
         density_se=0.01,
         density_ee=0.01,
-        density_ei=0.03,
-        density_ie=0.05,
-        peak_se=4.0,  # changed from 2.0
+        density_ei=0.03, # before 0.03
+        density_ie=0.05, # before 0.05
+        peak_se=4.0,  
         peak_ee=1.0,
-        peak_ei=1.0,
-        peak_ie=-0.7,
+        peak_ei=2.0, # increased from 1.0
+        peak_ie=-2.0, # increased from -0.7
     )
     if args.weight_type == "rf":
         weights = snn.weights.receptive_fields(
@@ -338,6 +371,9 @@ def main():
         tau_trace=20,
         w_max=args.w_max,
         mu_weight=args.mu_weight,
+        x_tar_mode=args.x_tar_mode,
+        x_tar_pct_se=args.x_tar_pct_se,
+        x_tar_pct_ee=args.x_tar_pct_ee,
         update_freq=100,
         clip_weights=True,
         min_weight_exc=0.01,
@@ -374,7 +410,6 @@ def main():
         max_rate_hz=args.max_rate_hz,
         gain=1.0,
         gabor=args.gabor,
-        #on_off=args.on_off,
     )
 
     # --- Training ---
@@ -390,12 +425,12 @@ def main():
         learner=learner,
         regularizer=regularizer,
         epochs=args.epochs,
-        train_weights=True,
+        train_weights=not args.freeze_weights,
         save_model=True,
         accuracy_method="pca_lr",
         use_LR=True,
         use_phi=True,
-        use_pca=True,
+        use_pca=False,
         pca_variance=args.pca_variance,
         track_stats=args.track_stats,
         stat_tracking_frequency=args.stat_freq,
@@ -421,7 +456,7 @@ def main():
         print(f"Single-neuron weight plot saved -> {out_path}")
 
     if args.plot_rfs:
-        from neurosnn._plot.weights import plot_oriented_rf_summary
+        from neurosnn._plot.weights import plot_oriented_rf_summary, plot_rf_coverage
 
         snn_model = model._runner.model
         W_se = snn_model.weights[: snn_model.st, snn_model.st : snn_model.ex]
@@ -430,6 +465,13 @@ def main():
             input_size=snn_model.pixel_size,
             n_orientations=args.n_orientations,
             out_path=os.path.join(output_dir, "oriented_rf_summary.pdf"),
+        )
+        plot_rf_coverage(
+            W_se=W_se,
+            input_size=snn_model.pixel_size,
+            n_orientations=args.n_orientations,
+            orientation_mode=args.orientation_mode,
+            out_path=os.path.join(output_dir, "oriented_rf_coverage.pdf"),
         )
 
     for result in train_gen:

@@ -125,9 +125,11 @@ def heatmap_spike_response(
         return im
 
     input_size = int(np.sqrt(spikes_in.shape[1]))
+    exc_size = int(np.sqrt(spikes_exc.shape[1]))   # E grid side: 32 @1024, 64 @4096
+    inh_size = int(np.sqrt(spikes_ih.shape[1]))    # I grid side: 15 @225, 30 @900
     create_plot(spikes_in, axs[0, 0], "Input activity", input_size, input_size, ax_flip=0)
-    create_plot(spikes_exc, axs[0, 1], "Excitatory activity", 32, 32, ax_flip=0)
-    create_plot(spikes_ih, axs[0, 2], "Inhibitory activity", 15, 15, ax_flip=0)
+    create_plot(spikes_exc, axs[0, 1], "Excitatory activity", exc_size, exc_size, ax_flip=0)
+    create_plot(spikes_ih, axs[0, 2], "Inhibitory activity", inh_size, inh_size, ax_flip=0)
 
     n = len(spike_trace)
     colors = []
@@ -148,14 +150,14 @@ def heatmap_spike_response(
 
     create_plot(weights_st_ex, axs[1, 0], "St->Ex Outgoing Weights",
                 input_size, input_size, ax_flip=1)
-    create_plot(weights_ex_ex, axs[1, 1], "Ex->Ex Outgoing Weights", 32, 32, ax_flip=1)
-    create_plot(weights_ex_ih, axs[1, 2], "Ex->Ih Outgoing Weights", 32, 32, ax_flip=1)
-    create_plot(np.abs(weights_ih_ex), axs[1, 3], "Ih->Ex Outgoing Weights", 15, 15, ax_flip=1)
+    create_plot(weights_ex_ex, axs[1, 1], "Ex->Ex Outgoing Weights", exc_size, exc_size, ax_flip=1)
+    create_plot(weights_ex_ih, axs[1, 2], "Ex->Ih Outgoing Weights", exc_size, exc_size, ax_flip=1)
+    create_plot(np.abs(weights_ih_ex), axs[1, 3], "Ih->Ex Outgoing Weights", inh_size, inh_size, ax_flip=1)
 
-    create_plot(weights_st_ex, axs[2, 0], "St->Ex Incoming Weights", 32, 32, ax_flip=0)
-    create_plot(weights_ex_ex, axs[2, 1], "Ex->Ex Incoming Weights", 32, 32, ax_flip=0)
-    create_plot(weights_ex_ih, axs[2, 2], "Ex->Ih Incoming Weights", 15, 15, ax_flip=0)
-    create_plot(np.abs(weights_ih_ex), axs[2, 3], "Ih->Ex Incoming Weights", 32, 32, ax_flip=0)
+    create_plot(weights_st_ex, axs[2, 0], "St->Ex Incoming Weights", exc_size, exc_size, ax_flip=0)
+    create_plot(weights_ex_ex, axs[2, 1], "Ex->Ex Incoming Weights", exc_size, exc_size, ax_flip=0)
+    create_plot(weights_ex_ih, axs[2, 2], "Ex->Ih Incoming Weights", inh_size, inh_size, ax_flip=0)
+    create_plot(np.abs(weights_ih_ex), axs[2, 3], "Ih->Ex Incoming Weights", exc_size, exc_size, ax_flip=0)
 
     row_labels = ["Spike activity", "Outgoing weights", "Incoming weights"]
     for i in range(3):

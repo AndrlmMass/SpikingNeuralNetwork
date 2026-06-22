@@ -9,6 +9,7 @@ plots/
 data/
 sdata/
 plot_files/
+xtar_logs/
 
 # Python cache
 __pycache__/
