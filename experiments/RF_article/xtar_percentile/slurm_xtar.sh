@@ -18,21 +18,36 @@
 # --array range = N_SEEDS * (len(SE_PCTS)*len(EE_PCTS) + 1) - 1.
 #
 # Build the container image ONCE first (see the container-image block below),
-# then submit:
+# then submit via the wrapper so the whole array lands in ONE timestamped
+# results folder:
 #   cd ${PROJECT_ROOT}
 #   singularity build --fakeroot noise_env.sif docker://continuumio/miniconda3
 #   singularity exec noise_env.sif conda env create -f environment.yml -n noise_env
-#   sbatch experiments/RF_article/xtar_percentile/slurm_xtar.sh
+#   bash experiments/RF_article/xtar_percentile/submit_xtar.sh
+#
+# You can still `sbatch slurm_xtar.sh` directly (e.g. from a web UI). In that
+# case RUN_ID isn't exported and the run folder falls back to the array job id,
+# which is still identical across all 246 tasks.
+#
+# Output: only results.json per config, all grouped under
+#   results/<RUN_ID>/<config>/results.json
+# SLURM .out logs go to results/<RUN_ID>/slurm_logs/ (a subfolder you can
+# ignore or delete), NOT the submission directory.
 
 #SBATCH --job-name=snn_xtar
-#SBATCH --array=0-245
+#SBATCH --array=0-245%20
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=32G
-#SBATCH --time=08:00:00
+#SBATCH --mem=12G
+#SBATCH --time=04:00:00
 #SBATCH --partition=orion
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=andreas.lie.massey@nmbu.no
+# Fallback log location for direct/UI submissions (the wrapper overrides this
+# to land inside results/<RUN_ID>/slurm_logs/). To drop SLURM logs entirely,
+# set both of these to /dev/null.
+#SBATCH --output=experiments/RF_article/xtar_percentile/results/slurm_logs/%A_%a.out
+#SBATCH --error=experiments/RF_article/xtar_percentile/results/slurm_logs/%A_%a.out
 
 set -uo pipefail
 
@@ -67,12 +82,32 @@ else
     TAG="se${PCT_SE}_ee${PCT_EE}_s${SEED}"
 fi
 
-OUTPUT_DIR="${PROJECT_ROOT}/experiments/RF_article/xtar_percentile/results/${TAG}"
+# ---- one results folder per job (shared by all 246 array tasks) -----------
+# RUN_ID resolution, in priority order:
+#   1. Exported by submit_xtar.sh at submission time (terminal path).
+#   2. Derived from this array job's SubmitTime via scontrol — identical for
+#      every task, so a UI/web submission (which can't run the wrapper) still
+#      gets a single date+time folder.
+#   3. Bare array job id, if scontrol can't answer (job already purged, etc.).
+# This means it never scatters into one-folder-per-task or per-config stamps,
+# whether you submit from the terminal OR the UI.
+if [ -z "${RUN_ID:-}" ]; then
+    SUBMIT_TIME=$(scontrol show job "${SLURM_ARRAY_JOB_ID}" -o 2>/dev/null \
+        | grep -oE 'SubmitTime=[^ ]+' | head -1 | cut -d= -f2)
+    if [ -n "${SUBMIT_TIME}" ]; then
+        RUN_ID="run_$(date -d "${SUBMIT_TIME}" +%Y%m%d_%H%M%S 2>/dev/null \
+            || echo "${SUBMIT_TIME//[:-]/}")"
+    else
+        RUN_ID="job_${SLURM_ARRAY_JOB_ID}"
+    fi
+fi
+RUN_DIR="${PROJECT_ROOT}/experiments/RF_article/xtar_percentile/results/${RUN_ID}"
+OUTPUT_DIR="${RUN_DIR}/${TAG}"
 mkdir -p "${OUTPUT_DIR}"
 
-# ---- log header -----------------------------------------------------------
-exec > >(tee -a "${OUTPUT_DIR}/job.log") 2>&1
+# ---- log header (to the SLURM .out, no separate job.log) -------------------
 echo "========================================"
+echo "Run  : ${RUN_ID}"
 echo "Job  : ${SLURM_JOB_ID}  Task : ${TASK_ID}"
 echo "Node : $(hostname)  Started : $(date)"
 echo "mode=${MODE}  pct_se=${PCT_SE}  pct_ee=${PCT_EE}  seed=${SEED}"

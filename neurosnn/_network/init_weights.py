@@ -571,11 +571,25 @@ def oriented_gaussian_se_weights(
     if rng is None:
         rng = np.random.default_rng(0)
 
+    # Guard against sigma_x <= 0 (e.g. a 0.0 CLI default flowing through):
+    # mean=np.log(sigma_x) would be -inf and the lognormal shape param below
+    # would divide by zero, producing NaN RFs. Fall back to the nominal size.
+    if sigma_x <= 0.0:
+        sigma_x = 3.0
+
     W = np.zeros((N_exc, N_x), dtype=np.float32)
 
-    n_side = int(np.ceil(np.sqrt(N_exc)))
-    neuron_xs = np.linspace(0, input_size - 1, n_side)
-    neuron_ys = np.linspace(0, input_size - 1, n_side)
+    # Lay out RF centres so EVERY orientation group independently tiles the FULL
+    # input space. Previously orientation and the row-position of the centre were
+    # BOTH derived from the neuron's grid row, which confined each orientation to
+    # a 1/n_orientations-tall horizontal strip of the image (the coverage bug).
+    # Instead give each orientation its own square grid of centres spanning the
+    # whole image — a V1-like hypercolumn layout where every spatial location is
+    # represented at every orientation.
+    per_ori = N_exc // n_orientations
+    side_o = int(np.ceil(np.sqrt(per_ori)))  # centre-grid side per orientation
+    xs_o = np.linspace(0, input_size - 1, side_o)
+    ys_o = np.linspace(0, input_size - 1, side_o)
 
     px, py = np.meshgrid(np.arange(input_size), np.arange(input_size), indexing="ij")
     px = px.ravel().astype(np.float32)
@@ -589,24 +603,42 @@ def oriented_gaussian_se_weights(
             sigma=sigma_x_lognormal_std / sigma_x,
             size=N_exc,
         ).astype(np.float32)
-        upper = sigma_x_lognormal_max if sigma_x_lognormal_max > 0.0 else None
-        sigma_x_arr = np.clip(sigma_x_arr, 0.5, upper)
+        # Clip RF sizes to a sane range around sigma_x: a lower bound (hard
+        # 1 px floor, since sub-pixel RFs collapse to dead single-pixel
+        # neurons) and an upper cap (default 3x sigma_x) to tame the heavy
+        # lognormal tail that would otherwise yield a few image-spanning,
+        # non-selective RFs. sigma_x_lognormal_max overrides the upper cap.
+        lower = max(0.75 * sigma_x, 1.0)
+        upper = (
+            sigma_x_lognormal_max if sigma_x_lognormal_max > 0.0 else 3.0 * sigma_x
+        )
+        sigma_x_arr = np.clip(sigma_x_arr, lower, upper)
     else:
         sigma_x_arr = np.full(N_exc, sigma_x, dtype=np.float32)
 
     for i in range(N_exc):
-        gx = i // n_side
-        gy = i % n_side
-        if gx >= len(neuron_xs) or gy >= len(neuron_ys):
+        # Decouple orientation from spatial position. In BOTH modes each
+        # orientation group tiles the full image via (xs_o, ys_o); the modes
+        # differ only in how orientation maps onto neuron index, which sets EE
+        # adjacency:
+        #   block       — orientation = contiguous block of neurons; within a
+        #                 block, neighbouring indices are spatially adjacent.
+        #   interleaved — orientation cycles per neuron; one hypercolumn (all
+        #                 orientations) per spatial slot, adjacent in index.
+        if orientation_mode == "interleaved":
+            g = i % n_orientations
+            slot = i // n_orientations
+        else:
+            g = min(i // per_ori, n_orientations - 1)
+            slot = i - g * per_ori
+        a = slot // side_o
+        b = slot % side_o
+        if a >= side_o or b >= side_o:
             continue
 
-        cx = neuron_xs[gx]
-        cy = neuron_ys[gy]
-        if orientation_mode == "interleaved":
-            theta = orientations[gy % n_orientations]
-        else:
-            block_size = max(1, n_side // n_orientations)
-            theta = orientations[min(gx // block_size, n_orientations - 1)]
+        cx = xs_o[a]
+        cy = ys_o[b]
+        theta = orientations[g]
         sx = sigma_x_arr[i]
         sy = gamma * sx
 

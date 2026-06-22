@@ -87,7 +87,7 @@ def parse_args():
         default="mnist",
         choices=["mnist", "kmnist", "fmnist", "fashionmnist", "notmnist", "geomfig", "fcx1"],
     )
-    parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--val-every", type=int, default=10)
     parser.add_argument("--train-all", type=int, default=59000)
     parser.add_argument("--train-batch", type=int, default=1000)
@@ -242,8 +242,8 @@ def main():
         accuracy_method="pca_lr",
         use_LR=True,
         use_phi=True,
-        use_pca=True,
-        pca_variance=15,
+        use_pca=False,
+        pca_variance=0.95,
         track_stats=True,
         stat_tracking_frequency=10500,
     ):
