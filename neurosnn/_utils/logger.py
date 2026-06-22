@@ -3,6 +3,8 @@ from datetime import datetime
 import json
 import os
 
+import numpy as np
+
 
 @dataclass
 class HistoryTracker:
@@ -125,3 +127,130 @@ class HistoryTracker:
                 except json.JSONDecodeError:
                     pass  # skip truncated/corrupted lines from concurrent writes
         return records
+
+
+# ---------------------------------------------------------------------------
+# Diagnostic metrics (RF-collapse harness)
+#
+# Pure NumPy snapshot metrics computed once per batch from the full weight
+# matrix / spike array. Each isolates one axis of the suspected E-layer
+# collapse so accuracy alone does not have to disambiguate them:
+#   within-neuron concentration -> RF over-sharpening   (synapse)
+#   cross-neuron RF diversity   -> redundant RFs         (synapse)
+#   functional E/I balance      -> over-inhibition       (synapse)
+#   population activity         -> population collapse    (neuron)
+#   trace spread                -> threshold drift        (synapse)
+# All are defensive (eps guards, empty-array safe) so they never crash a run.
+# ---------------------------------------------------------------------------
+
+_EPS = 1e-12
+
+
+def _gini_columns(W):
+    '''
+    Gini coefficient per column of a nonnegative matrix, via the sorted formula
+    G = 2*Σ(i*x_i)/(n*Σx) - (n+1)/n. Columns summing to ~0 return 0.
+    '''
+    n = W.shape[0]
+    Ws = np.sort(W, axis=0)
+    idx = np.arange(1, n + 1, dtype=np.float64)[:, None]
+    s = Ws.sum(axis=0)
+    g = (2.0 * (idx * Ws).sum(axis=0)) / (n * s + _EPS) - (n + 1.0) / n
+    g[s <= _EPS] = 0.0
+    return g
+
+
+def rf_within_concentration(W_se):
+    '''
+    Within-neuron RF concentration. Each column of W_se (N_x, N_exc) is one
+    E-neuron's receptive field; normalize it to a probability vector and report
+    the population-mean Shannon entropy (nats; low = peaky RF) and Gini
+    (high = concentrated onto few inputs). Diagnoses RF over-sharpening.
+    '''
+    W = np.asarray(W_se, dtype=np.float64)
+    if W.size == 0:
+        return 0.0, 0.0
+    W = np.clip(W, 0.0, None)
+    colsum = W.sum(axis=0)
+    P = W / (colsum + _EPS)
+    ent = -(P * np.log(P + _EPS)).sum(axis=0)
+    gini = _gini_columns(W)
+    live = colsum > _EPS
+    if not live.any():
+        return 0.0, 0.0
+    return float(ent[live].mean()), float(gini[live].mean())
+
+
+def rf_diversity(W_se):
+    '''
+    Cross-neuron RF diversity for W_se (N_x, N_exc). Returns mean pairwise cosine
+    similarity between RFs (->1 means redundant) and the participation ratio
+    PR = (Σs^2)^2 / Σs^4 of the centered RF set (->1 means full collapse onto one
+    template), plus PR normalized by min(N_exc, N_x) into (0, 1].
+    '''
+    R = np.asarray(W_se, dtype=np.float64).T  # (N_exc, N_x), one RF per row
+    if R.shape[0] < 2 or R.shape[1] == 0:
+        return 0.0, 1.0, 0.0
+    norms = np.linalg.norm(R, axis=1, keepdims=True)
+    Rn = R / (norms + _EPS)
+    G = Rn @ Rn.T
+    iu = np.triu_indices(G.shape[0], k=1)
+    mean_cos = float(G[iu].mean())
+    Rc = R - R.mean(axis=0, keepdims=True)
+    s = np.linalg.svd(Rc, compute_uv=False)
+    s2 = s * s
+    pr = float((s2.sum() ** 2) / ((s2 * s2).sum() + _EPS))
+    pr_norm = pr / min(R.shape)
+    return mean_cos, pr, pr_norm
+
+
+def ei_balance(weights, spikes, st, ex, ih):
+    '''
+    Functional inhibition/excitation balance per E neuron. Uses window-mean firing
+    rates so silent presynaptic neurons contribute no current:
+        exc_i = (W_se^T rate_in)_i + (W_ee^T rate_e)_i
+        inh_i = (|W_ie|^T rate_i)_i
+    Returns median ratio, 90th-percentile ratio (heavy tail = a strangled subset),
+    and the full per-neuron ratio vector. Diagnoses over-inhibition.
+    '''
+    W_se = weights[:st, st:ex]
+    W_ee = weights[st:ex, st:ex]
+    W_ie = weights[ex:ih, st:ex]
+    if W_se.shape[1] == 0 or spikes.shape[0] == 0:
+        return 0.0, 0.0, np.zeros(0)
+    rate_in = spikes[:, :st].mean(axis=0)
+    rate_e = spikes[:, st:ex].mean(axis=0)
+    rate_i = spikes[:, ex:ih].mean(axis=0)
+    exc = W_se.T @ rate_in + W_ee.T @ rate_e
+    inh = np.abs(W_ie).T @ rate_i
+    ratio = inh / (exc + _EPS)
+    return float(np.median(ratio)), float(np.percentile(ratio, 90)), ratio
+
+
+def population_activity(spikes, st, ex, theta=0.0):
+    '''
+    Population-level activity over the batch window. Returns the fraction of E
+    neurons firing above theta, the Treves-Rolls sparseness
+    S = (mean r)^2 / mean(r^2) in (0, 1] (->1 even spread, ->0 a few dominate),
+    and the per-neuron rate vector. Diagnoses population collapse.
+    '''
+    if spikes.shape[0] == 0 or ex <= st:
+        return 0.0, 0.0, np.zeros(0)
+    r = spikes[:, st:ex].mean(axis=0)
+    active_frac = float((r > theta).mean())
+    S = float(r.mean() ** 2 / ((r * r).mean() + _EPS))
+    return active_frac, S, r
+
+
+def trace_spread(spike_trace, st, ex):
+    '''
+    Median and 90th-percentile of the excitatory spike-trace. p90 >> p50 means a
+    few hyperactive E neurons drag x_tar_ee up and starve the rest -> threshold
+    drift. spike_trace has length N_x + N_exc, so [st:ex] are the E entries.
+    '''
+    if spike_trace is None or ex <= st:
+        return 0.0, 0.0
+    exc_trace = np.asarray(spike_trace[st:ex], dtype=np.float64)
+    if exc_trace.size == 0:
+        return 0.0, 0.0
+    return float(np.percentile(exc_trace, 50)), float(np.percentile(exc_trace, 90))

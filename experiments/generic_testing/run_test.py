@@ -36,7 +36,7 @@ def parse_args():
     parser.add_argument(
         "--weight-type",
         type=str,
-        default="oriented_rf",
+        default="rf",
         choices=["rf", "random", "oriented_rf"],
         help="Weight initialisation type (default: random)",
     )
@@ -98,7 +98,7 @@ def parse_args():
     parser.add_argument(
         "--lognorm-se-mean",
         type=float,
-        default=3.0,
+        default=0.0,
         help="Mean RF size (pixels) for oriented W_se log-normal distribution (default: 3.0 = sigma_x default)",
     )
     parser.add_argument(
@@ -116,7 +116,7 @@ def parse_args():
     parser.add_argument(
         "--lognorm-ee-mean",
         type=float,
-        default=1.0,
+        default=0.0,
         help="Mean RF size (E-grid pixels) for W_ee log-normal distribution (default: 1.0 = auto sigma_ee)",
     )
     parser.add_argument(
@@ -144,7 +144,7 @@ def parse_args():
     parser.add_argument(
         "--mu-weight",
         type=float,
-        default=0.6,
+        default=0.5,
         help="BCM soft-bound exponent: (w_max - w)^mu scales LTP (default: 0.6, try 0.3)",
     )
     parser.add_argument(
@@ -152,6 +152,28 @@ def parse_args():
         type=float,
         default=10.0,
         help="Soft weight upper bound for STDP (default: 10.0, try 15.0)",
+    )
+    parser.add_argument(
+        "--x-tar-mode",
+        type=str,
+        default="percentile",
+        choices=["mean", "percentile"],
+        help="x_tar estimator: 'mean' (population mean, original) or 'percentile' "
+        "(Kth percentile over active traces per layer) (default: percentile)",
+    )
+    parser.add_argument(
+        "--x-tar-pct-se",
+        type=float,
+        default=60.0,
+        help="SE percentile over active input traces when --x-tar-mode percentile "
+        "(higher = sharper RFs) (default: 60.0)",
+    )
+    parser.add_argument(
+        "--x-tar-pct-ee",
+        type=float,
+        default=30.0,
+        help="EE percentile over active exc traces when --x-tar-mode percentile "
+        "(lower = more distributed recurrent drive) (default: 30.0)",
     )
 
     # --- Reproducibility ---
@@ -173,19 +195,19 @@ def parse_args():
         ],
     )
     parser.add_argument("--epochs", type=int, default=1)
-    parser.add_argument("--val-every", type=int, default=10)
+    parser.add_argument("--val-every", type=int, default=1)
     parser.add_argument(
         "--max-rate-hz",
         type=float,
         default=90.0,
         help="Peak Poisson firing rate for input encoding in Hz (default: 90.0)",
     )
-    parser.add_argument("--train-all", type=int, default=1000)
+    parser.add_argument("--train-all", type=int, default=5000)
     parser.add_argument("--train-batch", type=int, default=1000)
-    parser.add_argument("--val-all", type=int, default=200)
-    parser.add_argument("--val-batch", type=int, default=200)
-    parser.add_argument("--test-all", type=int, default=200)
-    parser.add_argument("--test-batch", type=int, default=200)
+    parser.add_argument("--val-all", type=int, default=1000)
+    parser.add_argument("--val-batch", type=int, default=1000)
+    parser.add_argument("--test-all", type=int, default=1000)
+    parser.add_argument("--test-batch", type=int, default=1000)
 
     # --- Output ---
     parser.add_argument(
@@ -239,7 +261,7 @@ def parse_args():
     parser.add_argument(
         "--track-stats",
         action="store_true",
-        default=False,
+        default=True,
         help="Enable neuron/synapse stat tracking and print diagnostics each val step",
     )
     parser.add_argument(
@@ -280,12 +302,12 @@ def main():
     weight_kwargs = dict(
         density_se=0.01,
         density_ee=0.01,
-        density_ei=0.03,
-        density_ie=0.05,
-        peak_se=4.0,  # changed from 2.0
+        density_ei=0.0075, # before 0.03
+        density_ie=0.0125, # before 0.05
+        peak_se=4.0,  
         peak_ee=1.0,
-        peak_ei=1.0,
-        peak_ie=-0.7,
+        peak_ei=2.0, # increased from 1.0
+        peak_ie=-2.0, # increased from -0.7
     )
     if args.weight_type == "rf":
         weights = snn.weights.receptive_fields(
@@ -309,8 +331,8 @@ def main():
 
     # --- Layer ---
     layer = snn.Layer(
-        N_exc=1024,
-        N_inh=225,
+        N_exc=4096,
+        N_inh=900,
         membrane=snn.membrane.LIF(
             tau_m_exc=20.0,
             tau_m_inh=15.0,
@@ -338,6 +360,9 @@ def main():
         tau_trace=20,
         w_max=args.w_max,
         mu_weight=args.mu_weight,
+        x_tar_mode=args.x_tar_mode,
+        x_tar_pct_se=args.x_tar_pct_se,
+        x_tar_pct_ee=args.x_tar_pct_ee,
         update_freq=100,
         clip_weights=True,
         min_weight_exc=0.01,
@@ -374,7 +399,6 @@ def main():
         max_rate_hz=args.max_rate_hz,
         gain=1.0,
         gabor=args.gabor,
-        #on_off=args.on_off,
     )
 
     # --- Training ---
