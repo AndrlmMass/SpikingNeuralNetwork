@@ -42,6 +42,8 @@ class WeightFactory:
     sigma_ee_lognormal_std: float = 0.0  # 0 = disabled (fixed sigma_ee)
     sigma_se_mean: float = 0.0          # 0 = auto-compute from rf_scale
     sigma_se_lognormal_std: float = 0.0  # 0 = disabled (fixed sigma_se)
+    ablate_ee: bool = False             # zero the recurrent E->E block (causal test)
+    ablate_ie: bool = False             # zero the I->E inhibition block (causal test)
 
     def __post_init__(self):
         self.H = int(np.sqrt(self.N_x))
@@ -73,6 +75,15 @@ class WeightFactory:
             self._fill_random_weights()
         else:
             self._fill_receptive_fields()
+        # Causal-ablation switches: zero a recurrent block *after* construction.
+        # Because the plastic synapse set (nonzero_pre_idx) is read from this
+        # final matrix, a zeroed block carries no current AND is excluded from
+        # STDP — so it stays ablated for the whole run, isolating its effect on
+        # RF collapse.
+        if self.ablate_ee:
+            self.weights[self.st : self.ex, self.st : self.ex] = 0.0
+        if self.ablate_ie:
+            self.weights[self.ex : self.ih, self.st : self.ex] = 0.0
         return self.weights
 
     def sparse_indices(self, weights: np.ndarray) -> dict:

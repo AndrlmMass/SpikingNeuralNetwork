@@ -166,9 +166,14 @@ class TrainTracker:
         and print them grouped by synapse- vs neuron-side.
         '''
         W_se = weights[: self.st, self.st : self.ex]
-        # synapse-side
+        W_ee = weights[self.st : self.ex, self.st : self.ex]
+        # synapse-side: SE (feed-forward RFs) and EE (recurrent) tracked separately
+        # so the causal test can see whether the recurrent matrix itself collapses
+        # (rows becoming correlated) vs just transmitting SE collapse.
         rf_entropy, rf_gini = rf_within_concentration(W_se)
         mean_cos, pr, pr_norm = rf_diversity(W_se)
+        ee_entropy, ee_gini = rf_within_concentration(W_ee)
+        ee_cos, ee_pr, ee_pr_norm = rf_diversity(W_ee)
         ei_med, ei_p90, _ = ei_balance(weights, spikes, self.st, self.ex, self.ih)
         trace_p50, trace_p90 = trace_spread(spike_trace, self.st, self.ex)
         # neuron-side
@@ -180,6 +185,11 @@ class TrainTracker:
             "rf_mean_cosine": mean_cos,
             "rf_participation_ratio": pr,
             "rf_pr_norm": pr_norm,
+            "ee_entropy": ee_entropy,
+            "ee_gini": ee_gini,
+            "ee_mean_cosine": ee_cos,
+            "ee_participation_ratio": ee_pr,
+            "ee_pr_norm": ee_pr_norm,
             "ei_ratio_median": ei_med,
             "ei_ratio_p90": ei_p90,
             "trace_p50": trace_p50,
@@ -188,11 +198,17 @@ class TrainTracker:
             "pop_sparseness": sparseness,
         }
 
-        print("--- Diagnostics (synapse) ---")
+        print("--- Diagnostics (synapse: SE feed-forward) ---")
         print(f"RF entropy (nats):        {rf_entropy:.5f}")
         print(f"RF Gini:                  {rf_gini:.5f}")
         print(f"RF mean cosine:           {mean_cos:.5f}")
         print(f"RF participation ratio:   {pr:.3f} (norm {pr_norm:.5f})")
+        print("--- Diagnostics (synapse: EE recurrent) ---")
+        print(f"EE entropy (nats):        {ee_entropy:.5f}")
+        print(f"EE Gini:                  {ee_gini:.5f}")
+        print(f"EE mean cosine:           {ee_cos:.5f}")
+        print(f"EE participation ratio:   {ee_pr:.3f} (norm {ee_pr_norm:.5f})")
+        print("--- Diagnostics (balance/trace) ---")
         print(f"E/I ratio median:         {ei_med:.5f}")
         print(f"E/I ratio p90:            {ei_p90:.5f}")
         print(f"Trace p50/p90:            {trace_p50:.5f} / {trace_p90:.5f}")

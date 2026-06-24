@@ -40,6 +40,20 @@ def parse_args():
         choices=["rf", "random", "oriented_rf"],
         help="Weight initialisation type (default: random)",
     )
+    parser.add_argument(
+        "--ablate-ee",
+        action="store_true",
+        default=False,
+        help="Zero the recurrent E->E block at init (stays zero all run). Causal "
+        "test: does the recurrence drive RF collapse? (default: False)",
+    )
+    parser.add_argument(
+        "--ablate-ie",
+        action="store_true",
+        default=False,
+        help="Zero the I->E (Mexican-hat) inhibition at init. Causal test: does "
+        "center-surround inhibition drive blob formation? (default: False)",
+    )
 
     # --- Regularisation ---
     parser.add_argument(
@@ -292,6 +306,8 @@ def build_output_dir(args) -> str:
         f"_{args.reg_type}_{args.reg_mode}"
         f"_vn{args.var_noise}_hz{args.max_rate_hz}_s{args.seed}"
         f"{'_frozen' if args.freeze_weights else ''}"
+        f"{'_noEE' if args.ablate_ee else ''}"
+        f"{'_noIE' if args.ablate_ie else ''}"
     )
     return os.path.join(base, tag)
 
@@ -306,6 +322,7 @@ def main():
         f" | reg: {args.reg_type}/{args.reg_mode}"
         f" | var_noise: {args.var_noise} | sleep_dur: {args.sleep_duration}"
         f" | freeze_weights: {args.freeze_weights}"
+        f" | ablate_ee: {args.ablate_ee} | ablate_ie: {args.ablate_ie}"
         f" | seed: {args.seed} | epochs: {args.epochs}\n"
     )
 
@@ -325,6 +342,8 @@ def main():
             **weight_kwargs,
             sigma_ee_mean=args.lognorm_ee_mean,
             sigma_ee_lognormal_std=args.lognorm_ee_std,
+            ablate_ee=args.ablate_ee,
+            ablate_ie=args.ablate_ie,
         )
     elif args.weight_type == "oriented_rf":
         weights = snn.weights.oriented_receptive_fields(
@@ -336,6 +355,8 @@ def main():
             orientation_mode=args.orientation_mode,
             sigma_ee_mean=args.lognorm_ee_mean,
             sigma_ee_lognormal_std=args.lognorm_ee_std,
+            ablate_ee=args.ablate_ee,
+            ablate_ie=args.ablate_ie,
         )
     else:
         weights = snn.weights.random(**weight_kwargs)
