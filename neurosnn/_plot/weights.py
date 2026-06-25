@@ -81,6 +81,65 @@ def plot_single_neuron_weights(weights, st, ex, H, W, H_e, W_e, id_=None, out_pa
             break
 
 
+def save_init_weight_plots(
+    model,
+    out_dir,
+    neuron_id=None,
+    n_orientations=4,
+    orientation_mode="block",
+    weight_type="oriented_rf",
+    plot_single_neuron=False,
+    plot_rfs=False,
+):
+    '''
+    Save the pre-training weight-structure plots into out_dir: a single-neuron
+    2x2 (SE/EE/EI/IE) panel and, for oriented RFs, the orientation summary and
+    input-space coverage. Each plot is guarded independently so one failure
+    surfaces its error instead of silently aborting the rest. Intended to write
+    into the per-run tracking dir (e.g. <run>/plots/weights) alongside the logs.
+    '''
+    if not (plot_single_neuron or plot_rfs):
+        return
+    os.makedirs(out_dir, exist_ok=True)
+    w = model.weights
+    st, ex = model.st, model.ex
+
+    if plot_single_neuron:
+        try:
+            H = W = int(np.sqrt(st))
+            H_e = W_e = int(np.sqrt(ex - st))
+            out_path = os.path.join(out_dir, f"single_neuron_{neuron_id}.pdf")
+            plot_single_neuron_weights(
+                w, st, ex, H, W, H_e, W_e, id_=neuron_id, out_path=out_path
+            )
+            print(f"Single-neuron weight plot saved -> {out_path}")
+        except Exception as e:
+            print(f"[single-neuron plot failed: {e}]")
+
+    if plot_rfs and weight_type == "oriented_rf":
+        W_se = w[:st, st:ex]
+        try:
+            plot_oriented_rf_summary(
+                W_se=W_se,
+                input_size=model.pixel_size,
+                n_orientations=n_orientations,
+                orientation_mode=orientation_mode,
+                out_path=os.path.join(out_dir, "oriented_rf_summary.pdf"),
+            )
+        except Exception as e:
+            print(f"[RF summary plot failed: {e}]")
+        try:
+            plot_rf_coverage(
+                W_se=W_se,
+                input_size=model.pixel_size,
+                n_orientations=n_orientations,
+                orientation_mode=orientation_mode,
+                out_path=os.path.join(out_dir, "oriented_rf_coverage.pdf"),
+            )
+        except Exception as e:
+            print(f"[RF coverage plot failed: {e}]")
+
+
 def plot_weight_evolution_during_sleep_epoch(weight_tracking_epoch, epoch):
     import matplotlib.pyplot as plt
     import shutil
@@ -349,6 +408,7 @@ def plot_oriented_rf_summary(
     n_orientations: int,
     out_path: str,
     n_show: int = 256,
+    orientation_mode: str = "block",
 ) -> None:
     """Diagnostic figure for oriented elliptical RF weights.
 
@@ -373,12 +433,14 @@ def plot_oriented_rf_summary(
     n_show = side * side
     quota = n_show // n_orientations  # neurons per orientation group in tile
 
-    # Group neurons by actual orientation assignment: horizontal stripes (gx // block_size)
-    block_size = max(1, n_side // n_orientations)
-    groups = [[] for _ in range(n_orientations)]
-    for idx in range(N_exc):
-        gx_i = idx // n_side
-        groups[min(gx_i // block_size, n_orientations - 1)].append(idx)
+    # Group neurons by their actual orientation assignment, using the SAME
+    # shared mapping the weights were built with so the panels stay faithful.
+    from neurosnn._network.init_weights import oriented_rf_assignment
+
+    _, orientation_idx = oriented_rf_assignment(
+        N_exc, n_orientations, input_size, orientation_mode
+    )
+    groups = [list(np.nonzero(orientation_idx == g)[0]) for g in range(n_orientations)]
 
     # Select quota neurons evenly spaced from each group (covers full grid)
     selected = []
@@ -492,20 +554,15 @@ def plot_rf_coverage(
                       so neurons are assigned to the same groups.
     """
     _, N_exc = W_se.shape
-    n_side = int(np.ceil(np.sqrt(N_exc)))
-    block_size = max(1, n_side // n_orientations)
 
-    # Group neurons by their actual orientation assignment (mirrors
-    # oriented_gaussian_se_weights exactly so the maps are faithful).
-    groups = [[] for _ in range(n_orientations)]
-    for idx in range(N_exc):
-        gx_i = idx // n_side
-        gy_i = idx % n_side
-        if orientation_mode == "interleaved":
-            g = gy_i % n_orientations
-        else:
-            g = min(gx_i // block_size, n_orientations - 1)
-        groups[g].append(idx)
+    # Group neurons by their actual orientation assignment, using the SAME
+    # shared mapping the weights were built with so the maps are faithful.
+    from neurosnn._network.init_weights import oriented_rf_assignment
+
+    _, orientation_idx = oriented_rf_assignment(
+        N_exc, n_orientations, input_size, orientation_mode
+    )
+    groups = [list(np.nonzero(orientation_idx == g)[0]) for g in range(n_orientations)]
 
     # Sum each group's RFs over the input grid -> per-orientation coverage.
     coverages = []

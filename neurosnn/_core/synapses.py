@@ -49,6 +49,8 @@ def trace_STDP(
         list_x_pre = 0
         first_term = 0
         delta_w_sum = 0
+        ltp_sum = 0.0
+        ltd_sum = 0.0
         count = 0
         # Loop over post-neurons (only excitatory, not input neurons as they do not receive weights, just sends)
         for i in range(N_x, n_neurons):
@@ -58,7 +60,9 @@ def trace_STDP(
                 pre_indices = nonzero_pre_idx[i - N_x]
                 # Loop over each presynaptic neuron index
                 for j in pre_indices:
-                    # Skip if neuron did not spike
+                    # Skip padding sentinel (-1). NOT a spike check: every
+                    # structural pre of the spiking post is updated via its trace,
+                    # so stale pre (trace < x_tar) are depressed (LTD).
                     if j == -1:
                         continue
                     # Compute difference between trace and target for stimulation (input) to excitatory (SE)
@@ -77,12 +81,20 @@ def trace_STDP(
                     list_x_pre += spike_trace[j]
                     first_term += first_trm
                     delta_w_sum += delta_weight
+                    # split the signed update into potentiation (LTP) vs
+                    # depression (LTD) magnitudes to check the static-x_tar balance
+                    if delta_weight >= 0.0:
+                        ltp_sum += delta_weight
+                    else:
+                        ltd_sum += -delta_weight
                     count += 1
         return (
             weights,
             list_x_pre / (count + 1e-5),
             first_term / (count + 1e-5),
             delta_w_sum / (count + 1e-5),
+            ltp_sum / (count + 1e-5),
+            ltd_sum / (count + 1e-5),
         )
     else:
         # Loop over post-neurons (only excitatory, not input neurons as they do not receive weights, just sends)
@@ -93,7 +105,9 @@ def trace_STDP(
                 pre_indices = nonzero_pre_idx[i - N_x]
                 # Loop over each presynaptic neuron index
                 for j in pre_indices:
-                    # Skip if neuron did not spike
+                    # Skip padding sentinel (-1). NOT a spike check: every
+                    # structural pre of the spiking post is updated via its trace,
+                    # so stale pre (trace < x_tar) are depressed (LTD).
                     if j == -1:
                         continue
                     # Compute difference between trace and target for stimulation (input) to excitatory (SE)
@@ -108,7 +122,7 @@ def trace_STDP(
                     delta_weight = learning_rate * first_trm * second_trm
                     # Update weights
                     weights[j, i] += delta_weight
-        return weights, 0, 0, 0
+        return weights, 0, 0, 0, 0, 0
 
 
 @dataclass

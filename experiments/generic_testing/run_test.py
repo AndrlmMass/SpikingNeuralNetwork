@@ -118,7 +118,7 @@ def parse_args():
     parser.add_argument(
         "--lognorm-se-std",
         type=float,
-        default=1.0,
+        default=0.0,
         help="Std of RF sizes for W_se log-normal (0 = disabled, try 1.5)",
     )
     parser.add_argument(
@@ -170,10 +170,12 @@ def parse_args():
     parser.add_argument(
         "--x-tar-mode",
         type=str,
-        default="percentile",
-        choices=["mean", "percentile"],
-        help="x_tar estimator: 'mean' (population mean, original) or 'percentile' "
-        "(Kth percentile over active traces per layer) (default: percentile)",
+        default="static",
+        choices=["mean", "percentile", "static"],
+        help="x_tar estimator: 'mean' (population mean), 'percentile' (Kth percentile "
+        "over active traces per layer), or 'static' (fixed constants --x-tar-static-se/-ee; "
+        "restores the LTD term when sparse firing collapses mean/percentile to ~0) "
+        "(default: percentile)",
     )
     parser.add_argument(
         "--x-tar-pct-se",
@@ -188,6 +190,19 @@ def parse_args():
         default=30.0,
         help="EE percentile over active exc traces when --x-tar-mode percentile "
         "(lower = more distributed recurrent drive) (default: 30.0)",
+    )
+    parser.add_argument(
+        "--x-tar-static-se",
+        type=float,
+        default=1.0,
+        help="Fixed SE x_tar threshold when --x-tar-mode static (LTP/LTD boundary on "
+        "input traces; try 0.1-0.3) (default: 0.2)",
+    )
+    parser.add_argument(
+        "--x-tar-static-ee",
+        type=float,
+        default=0.5,
+        help="Fixed EE x_tar threshold when --x-tar-mode static (try 0.1-0.3) (default: 0.2)",
     )
 
     parser.add_argument(
@@ -237,12 +252,13 @@ def parse_args():
         "--output-dir",
         type=str,
         default=None,
-        help="Where to write results.json (default: experiments/generic_testing/results/<tag>)",
+        help="Override dir for results.json (default: the per-run tracking dir, "
+        "results/tracking/<dataset>/<date>/<ts_spec>/)",
     )
     parser.add_argument(
         "--plot-rfs",
         action="store_true",
-        default=True,
+        default=False,
         help="Save an oriented RF summary plot after weight initialisation (oriented_rf only)",
     )
     parser.add_argument(
@@ -284,8 +300,15 @@ def parse_args():
     parser.add_argument(
         "--track-stats",
         action="store_true",
-        default=True,
+        default=False,
         help="Enable neuron/synapse stat tracking and print diagnostics each val step",
+    )
+    parser.add_argument(
+        "--track-weights",
+        action="store_true",
+        default=False,
+        help="Enable per-synapse weight tracking, incl. the LTP/LTD balance under static "
+        "x_tar (adds the weight-stats block to the diagnostics; slightly slower)",
     )
     parser.add_argument(
         "--stat-freq",
@@ -297,25 +320,8 @@ def parse_args():
     return parser.parse_args()
 
 
-def build_output_dir(args) -> str:
-    if args.output_dir is not None:
-        return args.output_dir
-    base = os.path.join(os.path.dirname(__file__), "results")
-    tag = (
-        f"{args.dataset}_{args.weight_type}"
-        f"_{args.reg_type}_{args.reg_mode}"
-        f"_vn{args.var_noise}_hz{args.max_rate_hz}_s{args.seed}"
-        f"{'_frozen' if args.freeze_weights else ''}"
-        f"{'_noEE' if args.ablate_ee else ''}"
-        f"{'_noIE' if args.ablate_ie else ''}"
-    )
-    return os.path.join(base, tag)
-
-
 def main():
     args = parse_args()
-    output_dir = build_output_dir(args)
-    os.makedirs(output_dir, exist_ok=True)
 
     print(
         f"\nConfig — dataset: {args.dataset} | weight: {args.weight_type}"
@@ -333,7 +339,7 @@ def main():
         density_ei=0.03, # before 0.03
         density_ie=0.05, # before 0.05
         peak_se=4.0,  
-        peak_ee=1.0,
+        peak_ee=2.0, # increased from 1.0
         peak_ei=2.0, # increased from 1.0
         peak_ie=-2.0, # increased from -0.7
     )
@@ -395,6 +401,8 @@ def main():
         x_tar_mode=args.x_tar_mode,
         x_tar_pct_se=args.x_tar_pct_se,
         x_tar_pct_ee=args.x_tar_pct_ee,
+        x_tar_static_se=args.x_tar_static_se,
+        x_tar_static_ee=args.x_tar_static_ee,
         update_freq=100,
         clip_weights=True,
         min_weight_exc=0.01,
@@ -454,45 +462,33 @@ def main():
         use_pca=False,
         pca_variance=args.pca_variance,
         track_stats=args.track_stats,
+        track_weights=args.track_weights,
         stat_tracking_frequency=args.stat_freq,
         heatmap_plot=args.plot_spikes,
         PCA_plot=args.plot_pca,
         gif_pca_plot=args.gif_pca,
     )
 
-    # Weights are built at this point — plot initial weight structure before training
-    if args.plot_single_neuron:
-        from neurosnn._plot.weights import plot_single_neuron_weights
-        import numpy as np
+    # Weights are built at this point (model.train builds eagerly). Resolve the
+    # single per-run tracking dir from the logger so every artifact (config,
+    # results, stats, plots) lands in one spot.
+    runner = model._runner
+    runner.logger._ensure_run_dir()  # force-create the run dir pre-training
+    run_dir = runner.logger._run_dir
 
-        snn_model = model._runner.model
-        w = snn_model.weights
-        st, ex = snn_model.st, snn_model.ex
-        H = W = int(np.sqrt(st))
-        H_e = W_e = int(np.sqrt(ex - st))
-        out_path = os.path.join(output_dir, f"single_neuron_{args.neuron_id}.pdf")
-        plot_single_neuron_weights(
-            w, st, ex, H, W, H_e, W_e, id_=args.neuron_id, out_path=out_path
-        )
-        print(f"Single-neuron weight plot saved -> {out_path}")
+    # Save the initial weight-structure plots into <run>/plots/weights.
+    if args.plot_single_neuron or args.plot_rfs:
+        from neurosnn._plot.weights import save_init_weight_plots
 
-    if args.plot_rfs:
-        from neurosnn._plot.weights import plot_oriented_rf_summary, plot_rf_coverage
-
-        snn_model = model._runner.model
-        W_se = snn_model.weights[: snn_model.st, snn_model.st : snn_model.ex]
-        plot_oriented_rf_summary(
-            W_se=W_se,
-            input_size=snn_model.pixel_size,
-            n_orientations=args.n_orientations,
-            out_path=os.path.join(output_dir, "oriented_rf_summary.pdf"),
-        )
-        plot_rf_coverage(
-            W_se=W_se,
-            input_size=snn_model.pixel_size,
+        save_init_weight_plots(
+            runner.model,
+            os.path.join(run_dir, "plots", "weights"),
+            neuron_id=args.neuron_id,
             n_orientations=args.n_orientations,
             orientation_mode=args.orientation_mode,
-            out_path=os.path.join(output_dir, "oriented_rf_coverage.pdf"),
+            weight_type=args.weight_type,
+            plot_single_neuron=args.plot_single_neuron,
+            plot_rfs=args.plot_rfs,
         )
 
     for result in train_gen:
@@ -519,7 +515,13 @@ def main():
                 )
                 stats_history.append({"batch": result.batch, **s})
             val_history.append(
-                {"batch": result.batch, "val_acc": val_acc, "val_phi": val_phi}
+                {
+                    "batch": result.batch,
+                    "val_acc": val_acc,
+                    "val_phi": val_phi,
+                    "train_acc": result.accuracy,
+                    "train_phi": result.phi,
+                }
             )
             if val.accuracy is not None and val.accuracy > best_val_acc:
                 best_val_acc = val.accuracy
@@ -549,7 +551,10 @@ def main():
         "val_history": val_history,
         "stats_history": stats_history,
     }
-    results_path = os.path.join(output_dir, "results.json")
+    # Write into the single per-run tracking dir (override with --output-dir).
+    results_dir = args.output_dir if args.output_dir is not None else run_dir
+    os.makedirs(results_dir, exist_ok=True)
+    results_path = os.path.join(results_dir, "results.json")
     with open(results_path, "w") as f:
         json.dump(results, f, indent=2)
     print(f"Results saved -> {results_path}")
