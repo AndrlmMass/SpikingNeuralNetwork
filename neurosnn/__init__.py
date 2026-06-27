@@ -5,5 +5,6 @@ from neurosnn import membrane
 from neurosnn import weights
 from neurosnn import learner
 from neurosnn import regularizer
+from neurosnn.learner import TripletSTDP
 
-__all__ = ["Model", "Layer", "TrainResult", "EvalResult", "membrane", "weights", "learner", "regularizer"]
+__all__ = ["Model", "Layer", "TrainResult", "EvalResult", "membrane", "weights", "learner", "regularizer", "TripletSTDP"]

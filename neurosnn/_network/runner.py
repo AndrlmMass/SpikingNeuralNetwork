@@ -118,6 +118,13 @@ class Runner:
         record_fn_ee: "callable | None" = None,
         record_fn_awake_se: "callable | None" = None,
         record_fn_awake_ee: "callable | None" = None,
+        use_triplet: bool = False,
+        tau_x: float = 101.0,
+        tau_y: float = 125.0,
+        A2_plus: float = 5e-10,
+        A3_plus: float = 6.2e-3,
+        A2_minus: float = 7e-3,
+        A3_minus: float = 2.3e-4,
     ) -> Generator[TrainResult, None, None]:
         if accuracy_method != "pca_lr" and PCA_plot:
             raise ValueError("PCA_plot requires accuracy_method='pca_lr'")
@@ -212,6 +219,13 @@ class Runner:
             record_fn_ee=record_fn_ee,
             record_fn_awake_se=record_fn_awake_se,
             record_fn_awake_ee=record_fn_awake_ee,
+            use_triplet=use_triplet,
+            tau_x=tau_x,
+            tau_y=tau_y,
+            A2_plus=A2_plus,
+            A3_plus=A3_plus,
+            A2_minus=A2_minus,
+            A3_minus=A3_minus,
         )
 
         self._evaluator = Evaluator(

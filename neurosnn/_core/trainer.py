@@ -3,9 +3,9 @@ from tqdm import tqdm
 import numpy as np
 
 from neurosnn._core.regularization import Sleep, Normalizer
-from neurosnn._core.neurons import NeuronState, MembranePotential, update_x_tar
+from neurosnn._core.neurons import NeuronState, MembranePotential, update_x_tar, update_slow_traces
 from neurosnn._utils.performance import report_RAM_usage, spawn_plot_thread
-from neurosnn._core.synapses import Learner, Clipper
+from neurosnn._core.synapses import Learner, TripletLearner, Clipper
 from neurosnn._core.trackers import TrainTracker
 
 @dataclass
@@ -76,6 +76,13 @@ class Trainer:
     nz_rows_ee: list
     nz_cols_exc: list
     nz_rows_exc: list
+    use_triplet: bool = False
+    tau_x: float = 101.0
+    tau_y: float = 125.0
+    A2_plus: float = 5e-10
+    A3_plus: float = 6.2e-3
+    A2_minus: float = 7e-3
+    A3_minus: float = 2.3e-4
     record_fn_se: "callable | None" = None
     record_fn_ee: "callable | None" = None
     record_fn_awake_se: "callable | None" = None
@@ -141,6 +148,25 @@ class Trainer:
             w_max=self.w_max,
             mu_weight=self.mu_weight,
         )
+
+        # triplet STDP — slow-trace decays and persistent state arrays
+        if self.use_triplet:
+            self._decay_r2 = np.exp(-self.dt / self.tau_x)
+            self._decay_o2 = np.exp(-self.dt / self.tau_y)
+            self._r2_train = np.zeros(self.N_x + self.N_exc)
+            self._o2_train = np.zeros(self.N_exc)
+            self.triplet_learner = TripletLearner(
+                learning_rate=self.learning_rate,
+                N_x=self.N_x,
+                nonzero_pre_idx=list(self.nonzero_pre_idx),
+                w_max=self.w_max,
+                w_min=self.min_weight_exc,
+                mu_weight=self.mu_weight,
+                A2_plus=self.A2_plus,
+                A3_plus=self.A3_plus,
+                A2_minus=self.A2_minus,
+                A3_minus=self.A3_minus,
+            )
 
         # initiate clipper object
         self.clipper = Clipper(
@@ -258,6 +284,15 @@ class Trainer:
             weights[self.st : self.ex, self.ex : self.ih].T
         )
 
+        # slow traces: persistent during training, fresh zeros for val/test
+        if self.use_triplet:
+            if training_mode == "train":
+                r2 = self._r2_train
+                o2 = self._o2_train
+            else:
+                r2 = np.zeros(self.N_x + self.N_exc)
+                o2 = np.zeros(self.N_exc)
+
         # initiate tqdm object
         pbar = tqdm(range(1, spikes.shape[0]), desc=desc, leave=False, mininterval=1.0, colour="green", ascii=" <><><><>><<>")
 
@@ -358,20 +393,37 @@ class Trainer:
                     spike_trace=spike_trace,
                     spike_threshold=spike_threshold,
                 )
+                # update slow traces during sleep (keeps r2/o2 consistent with fast trace)
+                if self.use_triplet:
+                    r2, o2 = update_slow_traces(
+                        current_spikes, r2, o2, self._decay_r2, self._decay_o2,
+                        self.N_x, self.N_exc,
+                    )
+
                 # update weights every 10% of sleep timesteps (around 1% during wake period)
                 if sleep_remaining % 10 == 0:
                     # clip weights if object initialized
                     if self.clip_weights:
                         weights = self.clipper.step(weights=weights)
-                    # apply trace-stdp
-                    weights, m_x_pre, m_first_term, m_delta_w = self.learner.step(
-                        spike_trace=spike_trace,
-                        weights=weights,
-                        spikes=spikes_buf, # previous spikes, not current
-                        track_weights=np.uint8(0),
-                        x_tar_se=x_tar_se,
-                        x_tar_ee=x_tar_ee,
-                    )
+                    # apply STDP (trace or triplet)
+                    if self.use_triplet:
+                        weights = self.triplet_learner.step(
+                            weights=weights,
+                            spikes=spikes_buf,
+                            spike_trace=spike_trace,
+                            r2=r2,
+                            o2=o2,
+                        )
+                        m_x_pre, m_first_term, m_delta_w = 0.0, 0.0, 0.0
+                    else:
+                        weights, m_x_pre, m_first_term, m_delta_w = self.learner.step(
+                            spike_trace=spike_trace,
+                            weights=weights,
+                            spikes=spikes_buf,
+                            track_weights=np.uint8(0),
+                            x_tar_se=x_tar_se,
+                            x_tar_ee=x_tar_ee,
+                        )
                     # convert to pre-transposed arrays for efficient membrane potential computing
                     np.copyto(weights_exc, weights[:, self.st : self.ex].T)
                     np.copyto(
@@ -428,20 +480,37 @@ class Trainer:
                 spike_threshold=spike_threshold,
             )
 
+            # update slow traces with current timestep's spikes (awake phase)
+            if self.use_triplet:
+                r2, o2 = update_slow_traces(
+                    spikes[t], r2, o2, self._decay_r2, self._decay_o2,
+                    self.N_x, self.N_exc,
+                )
+
             # clip, update and regularize weights if train mode
             if update_weights_now:
                 # apply clipping if object initiated
                 if self.clip_weights:
                     weights = self.clipper.step(weights=weights)
-                # apply trace-STDP learning
-                weights, m_x_pre, m_first_term, m_delta_w = self.learner.step(
-                    spike_trace=spike_trace,
-                    weights=weights,
-                    spikes=spikes_prev,
-                    x_tar_se=x_tar_se,
-                    x_tar_ee=x_tar_ee,
-                    track_weights=track_weights,
-                )
+                # apply STDP (trace or triplet)
+                if self.use_triplet:
+                    weights = self.triplet_learner.step(
+                        weights=weights,
+                        spikes=spikes_prev,
+                        spike_trace=spike_trace,
+                        r2=r2,
+                        o2=o2,
+                    )
+                    m_x_pre, m_first_term, m_delta_w = 0.0, 0.0, 0.0
+                else:
+                    weights, m_x_pre, m_first_term, m_delta_w = self.learner.step(
+                        spike_trace=spike_trace,
+                        weights=weights,
+                        spikes=spikes_prev,
+                        x_tar_se=x_tar_se,
+                        x_tar_ee=x_tar_ee,
+                        track_weights=track_weights,
+                    )
                 # apply normalization
                 if normalize_now:
                     weights[: self.st, self.st : self.ex] = self.norm_se.step(
