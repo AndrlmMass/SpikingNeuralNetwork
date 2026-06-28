@@ -339,7 +339,7 @@ def main():
         density_ei=0.03, # before 0.03
         density_ie=0.05, # before 0.05
         peak_se=4.0,  
-        peak_ee=2.0, # increased from 1.0
+        peak_ee=1.0, # increased from 1.0
         peak_ei=2.0, # increased from 1.0
         peak_ie=-2.0, # increased from -0.7
     )
@@ -373,7 +373,7 @@ def main():
         N_inh=225,
         membrane=snn.membrane.LIF(
             tau_m_exc=20.0,
-            tau_m_inh=15.0,
+            tau_m_inh=15.0, # changed from 15.0
             tau_syn_exc=10.0,
             tau_syn_inh=9.0,
             membrane_resistance_exc=15.0,
