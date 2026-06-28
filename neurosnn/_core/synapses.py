@@ -111,6 +111,60 @@ def trace_STDP(
         return weights, 0, 0, 0
 
 
+@njit(parallel=False, cache=True)
+def triplet_STDP(
+    learning_rate,
+    spike_trace,
+    r2,
+    o2,
+    weights,
+    N_x,
+    spikes,
+    nonzero_pre_idx,
+    A2_plus,
+    A3_plus,
+    A2_minus,
+    A3_minus,
+    w_max,
+    w_min,
+    mu_weight,
+):
+    """Pfister & Gerstner (2006) triplet STDP with asymmetric soft weight bounds.
+
+    Triggered at postsynaptic spikes (approximation of the full rule).
+    LTP uses fast pre trace r1 and slow post trace o2.
+    LTD uses fast post trace o1 and slow pre trace r2.
+    Soft bounds: (w_max - w)^mu for LTP, (w - w_min)^mu for LTD.
+
+    o1 is read as spike_trace[i] — the fast post trace value after one decay
+    step since the triggering spike (we use spikes_prev, so the spike was in
+    the previous timestep and the trace has decayed by one step).
+    """
+    n_neurons = spike_trace.shape[0]
+
+    for i in range(N_x, n_neurons):
+        if spikes[i] == 1:
+            o1_i = spike_trace[i]          # fast post trace (decayed since spike)
+            o2_i = o2[i - N_x]            # slow post trace
+
+            pre_indices = nonzero_pre_idx[i - N_x]
+            for j in pre_indices:
+                if j == -1:
+                    continue
+                r1_j = spike_trace[j]      # fast pre trace
+                r2_j = r2[j]              # slow pre trace
+
+                ltp = r1_j * (A2_plus + A3_plus * o2_i)
+                ltd = o1_i * (A2_minus + A3_minus * r2_j)
+
+                ltp_bound = max(w_max - weights[j, i], 0.0) ** mu_weight
+                ltd_bound = max(weights[j, i] - w_min, 0.0) ** mu_weight
+
+                weights[j, i] += learning_rate * (ltp * ltp_bound - ltd * ltd_bound)
+
+    return weights
+
+
 @dataclass
 class Learner:
     learning_rate: float
@@ -150,6 +204,48 @@ class Learner:
 
 
 @dataclass
+class TripletLearner:
+    learning_rate: float
+    N_x: int
+    nonzero_pre_idx: list
+    w_max: float
+    w_min: float
+    mu_weight: float
+    A2_plus: float
+    A3_plus: float
+    A2_minus: float
+    A3_minus: float
+
+    def __post_init__(self):
+        max_len = max(len(x) for x in self.nonzero_pre_idx)
+        self.pre_idx_arr = np.full(
+            (len(self.nonzero_pre_idx), max_len), -1, dtype=np.int64
+        )
+        for i, idx in enumerate(self.nonzero_pre_idx):
+            self.pre_idx_arr[i, : len(idx)] = idx
+        del self.nonzero_pre_idx
+
+    def step(self, weights, spikes, spike_trace, r2, o2):
+        return triplet_STDP(
+            self.learning_rate,
+            spike_trace,
+            r2,
+            o2,
+            weights,
+            self.N_x,
+            spikes,
+            self.pre_idx_arr,
+            self.A2_plus,
+            self.A3_plus,
+            self.A2_minus,
+            self.A3_minus,
+            self.w_max,
+            self.w_min,
+            self.mu_weight,
+        )
+
+
+@dataclass
 class Clipper:
     nz_cols: list
     nz_rows: list
@@ -157,7 +253,7 @@ class Clipper:
     max_weight_exc: float
 
     '''
-    Object retains static clipping parameters and calls function when step is initiated. 
+    Object retains static clipping parameters and calls function when step is initiated.
     '''
 
     def step(self, weights):
