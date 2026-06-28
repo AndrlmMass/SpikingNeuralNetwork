@@ -116,6 +116,8 @@ class TraceSTDP:
     x_tar_mode: str = "mean"
     x_tar_pct_se: float = 60.0
     x_tar_pct_ee: float = 30.0
+    x_tar_static_se: float = 0.2
+    x_tar_static_ee: float = 0.2
 
     clip_weights: bool = False
     min_weight_exc: float = 0.01
@@ -132,6 +134,8 @@ class TraceSTDP:
             x_tar_mode=self.x_tar_mode,
             x_tar_pct_se=self.x_tar_pct_se,
             x_tar_pct_ee=self.x_tar_pct_ee,
+            x_tar_static_se=self.x_tar_static_se,
+            x_tar_static_ee=self.x_tar_static_ee,
             update_weights_freq=self.update_freq,
             clip_weights=self.clip_weights,
             min_weight_exc=self.min_weight_exc,

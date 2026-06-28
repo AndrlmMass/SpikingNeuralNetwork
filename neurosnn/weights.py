@@ -33,6 +33,9 @@ class WeightsSpec:
     sigma_se_mean: float = 0.0          # 0 = auto-compute from rf_scale (rf mode only)
     sigma_se_lognormal_std: float = 0.0  # 0 = disabled (fixed sigma_se, rf mode only)
 
+    ablate_ee: bool = False             # zero E->E recurrence (causal collapse test)
+    ablate_ie: bool = False             # zero I->E inhibition (causal collapse test)
+
     def _to_factory_kwargs(self) -> dict:
         return dict(
             w_dense_se=self.density_se,
@@ -57,6 +60,8 @@ class WeightsSpec:
             sigma_ee_lognormal_std=self.sigma_ee_lognormal_std,
             sigma_se_mean=self.sigma_se_mean,
             sigma_se_lognormal_std=self.sigma_se_lognormal_std,
+            ablate_ee=self.ablate_ee,
+            ablate_ie=self.ablate_ie,
         )
 
 
@@ -74,6 +79,8 @@ def receptive_fields(
     sigma_ee_lognormal_std: float = 0.0,
     sigma_se_mean: float = 0.0,
     sigma_se_lognormal_std: float = 0.0,
+    ablate_ee: bool = False,
+    ablate_ie: bool = False,
 ) -> WeightsSpec:
     """Gaussian / Mexican-hat structured receptive fields (topographic connectivity)."""
     return WeightsSpec(
@@ -91,6 +98,8 @@ def receptive_fields(
         sigma_ee_lognormal_std=sigma_ee_lognormal_std,
         sigma_se_mean=sigma_se_mean,
         sigma_se_lognormal_std=sigma_se_lognormal_std,
+        ablate_ee=ablate_ee,
+        ablate_ie=ablate_ie,
     )
 
 
@@ -113,6 +122,8 @@ def oriented_receptive_fields(
     orientation_mode: str = "block",
     sigma_ee_mean: float = 0.0,
     sigma_ee_lognormal_std: float = 0.0,
+    ablate_ee: bool = False,
+    ablate_ie: bool = False,
 ) -> WeightsSpec:
     """Oriented elliptical Gaussian RFs for W_se; isotropic Gaussians for W_ee/W_ei/W_ie."""
     return WeightsSpec(
@@ -136,6 +147,8 @@ def oriented_receptive_fields(
         orientation_mode=orientation_mode,
         sigma_ee_mean=sigma_ee_mean,
         sigma_ee_lognormal_std=sigma_ee_lognormal_std,
+        ablate_ee=ablate_ee,
+        ablate_ie=ablate_ie,
     )
 
 

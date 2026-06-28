@@ -234,7 +234,16 @@ def update_x_tar(spike_trace, N_x, mode="mean", pct_se=60.0, pct_ee=30.0):
                        over all neurons would collapse to ~0. A higher SE percentile
                        depresses weak/surround pixels (sharpens RFs); a lower EE
                        percentile spares moderately-active neurons (anti-domination).
+        "static"     - fixed constant thresholds (static_se, static_ee), independent of
+                       the live trace distribution. In the sparse-firing regime both the
+                       mean and any moderate percentile collapse to ~0, leaving the rule
+                       with no LTD term (first_trm = trace - x_tar >= 0 -> potentiation
+                       only). A fixed boundary (~0.1-0.3) sits between the high trace of
+                       just-fired drivers and the near-zero trace of stale inputs, so
+                       weak synapses are depressed/pruned (classic trace-STDP behaviour).
     '''
+    if mode == "static":
+        return np.float64(static_se), np.float64(static_ee)
     if mode == "mean":
         x_tar_se = np.mean(spike_trace[:N_x], axis=0)
         x_tar_ee = np.mean(spike_trace[N_x:], axis=0)

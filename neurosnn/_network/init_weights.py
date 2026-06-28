@@ -42,6 +42,8 @@ class WeightFactory:
     sigma_ee_lognormal_std: float = 0.0  # 0 = disabled (fixed sigma_ee)
     sigma_se_mean: float = 0.0          # 0 = auto-compute from rf_scale
     sigma_se_lognormal_std: float = 0.0  # 0 = disabled (fixed sigma_se)
+    ablate_ee: bool = False             # zero the recurrent E->E block (causal test)
+    ablate_ie: bool = False             # zero the I->E inhibition block (causal test)
 
     def __post_init__(self):
         self.H = int(np.sqrt(self.N_x))
@@ -73,6 +75,15 @@ class WeightFactory:
             self._fill_random_weights()
         else:
             self._fill_receptive_fields()
+        # Causal-ablation switches: zero a recurrent block *after* construction.
+        # Because the plastic synapse set (nonzero_pre_idx) is read from this
+        # final matrix, a zeroed block carries no current AND is excluded from
+        # STDP — so it stays ablated for the whole run, isolating its effect on
+        # RF collapse.
+        if self.ablate_ee:
+            self.weights[self.st : self.ex, self.st : self.ex] = 0.0
+        if self.ablate_ie:
+            self.weights[self.ex : self.ih, self.st : self.ex] = 0.0
         return self.weights
 
     def sparse_indices(self, weights: np.ndarray) -> dict:
@@ -544,6 +555,68 @@ def gaussian_se_weights(
     return W_se
 
 
+def oriented_rf_assignment(N_exc, n_orientations, input_size, orientation_mode="block"):
+    """Map each excitatory neuron to a RF center + orientation from its position
+    on the H_e x W_e sheet (row-major: row = i // W_e, col = i % W_e).
+
+    Single source of truth for the index -> (center, orientation) mapping, shared
+    by ``oriented_gaussian_se_weights`` and the RF diagnostic plots so they can
+    never drift apart.
+
+    Both modes keep every orientation tiling the FULL image (V1 intent); they
+    differ only in how sheet-neighbors relate, which is what the torus-distance
+    W_ee / W_ei / W_ie builders assume about adjacency:
+
+      interleaved : sqrt(n_or) x sqrt(n_or) hypercolumn patches. Neighbors inside
+                    a patch share a location and span all orientations -> learns
+                    multi-orientation co-activation.
+      block       : n_or quadrants (grid_shape(n_or)). Neighbors inside a quadrant
+                    share an orientation and tile the image retinotopically ->
+                    learns oriented-contour continuity.
+
+    Returns
+    -------
+    centers : (N_exc, 2) float32 array of (cx, cy) image-space RF centers.
+    orientation_idx : (N_exc,) int64 array in [0, n_orientations).
+    """
+    H_e = W_e = int(np.sqrt(N_exc))
+    assert H_e * W_e == N_exc, "N_exc must be a perfect square"
+    i = np.arange(N_exc)
+    r, c = i // W_e, i % W_e
+
+    if orientation_mode == "interleaved":
+        p = int(round(np.sqrt(n_orientations)))
+        if p * p != n_orientations:
+            raise ValueError(
+                "interleaved layout needs a perfect-square n_orientations, "
+                f"got {n_orientations}"
+            )
+        if H_e % p != 0 or W_e % p != 0:
+            raise ValueError(
+                f"sheet {H_e}x{W_e} not divisible by patch side {p} "
+                f"(n_orientations={n_orientations})"
+            )
+        Sr, Sc = H_e // p, W_e // p  # spatial-location grid (one neuron/ori per slot)
+        xs = np.linspace(0, input_size - 1, Sr)
+        ys = np.linspace(0, input_size - 1, Sc)
+        orientation_idx = (r % p) * p + (c % p)
+        centers = np.stack([xs[r // p], ys[c // p]], axis=1)
+    else:  # block = quadrants
+        qr, qc = grid_shape(n_orientations)
+        if H_e % qr != 0 or W_e % qc != 0:
+            raise ValueError(
+                f"sheet {H_e}x{W_e} not divisible by quadrant grid {qr}x{qc} "
+                f"(n_orientations={n_orientations})"
+            )
+        Qh, Qw = H_e // qr, W_e // qc  # neurons per quadrant == per-ori center grid
+        xs = np.linspace(0, input_size - 1, Qh)
+        ys = np.linspace(0, input_size - 1, Qw)
+        orientation_idx = (r // Qh) * qc + (c // Qw)
+        centers = np.stack([xs[r % Qh], ys[c % Qw]], axis=1)
+
+    return centers.astype(np.float32), orientation_idx.astype(np.int64)
+
+
 def oriented_gaussian_se_weights(
     N_x: int,
     N_exc: int,
@@ -579,17 +652,13 @@ def oriented_gaussian_se_weights(
 
     W = np.zeros((N_exc, N_x), dtype=np.float32)
 
-    # Lay out RF centres so EVERY orientation group independently tiles the FULL
-    # input space. Previously orientation and the row-position of the centre were
-    # BOTH derived from the neuron's grid row, which confined each orientation to
-    # a 1/n_orientations-tall horizontal strip of the image (the coverage bug).
-    # Instead give each orientation its own square grid of centres spanning the
-    # whole image — a V1-like hypercolumn layout where every spatial location is
-    # represented at every orientation.
-    per_ori = N_exc // n_orientations
-    side_o = int(np.ceil(np.sqrt(per_ori)))  # centre-grid side per orientation
-    xs_o = np.linspace(0, input_size - 1, side_o)
-    ys_o = np.linspace(0, input_size - 1, side_o)
+    # RF centre + orientation per neuron come from the shared sheet-position
+    # assignment, so the RF geometry and the W_ee/W_ei/W_ie sheet adjacency are
+    # consistent (sheet-neighbors code related features). See
+    # oriented_rf_assignment for the block/interleaved layout semantics.
+    centers, orientation_idx = oriented_rf_assignment(
+        N_exc, n_orientations, input_size, orientation_mode
+    )
 
     px, py = np.meshgrid(np.arange(input_size), np.arange(input_size), indexing="ij")
     px = px.ravel().astype(np.float32)
@@ -617,28 +686,11 @@ def oriented_gaussian_se_weights(
         sigma_x_arr = np.full(N_exc, sigma_x, dtype=np.float32)
 
     for i in range(N_exc):
-        # Decouple orientation from spatial position. In BOTH modes each
-        # orientation group tiles the full image via (xs_o, ys_o); the modes
-        # differ only in how orientation maps onto neuron index, which sets EE
-        # adjacency:
-        #   block       — orientation = contiguous block of neurons; within a
-        #                 block, neighbouring indices are spatially adjacent.
-        #   interleaved — orientation cycles per neuron; one hypercolumn (all
-        #                 orientations) per spatial slot, adjacent in index.
-        if orientation_mode == "interleaved":
-            g = i % n_orientations
-            slot = i // n_orientations
-        else:
-            g = min(i // per_ori, n_orientations - 1)
-            slot = i - g * per_ori
-        a = slot // side_o
-        b = slot % side_o
-        if a >= side_o or b >= side_o:
-            continue
-
-        cx = xs_o[a]
-        cy = ys_o[b]
-        theta = orientations[g]
+        # Center + orientation are read from the shared sheet-position assignment;
+        # the modes differ only in how (location, orientation) map onto the sheet
+        # (see oriented_rf_assignment).
+        cx, cy = centers[i]
+        theta = orientations[orientation_idx[i]]
         sx = sigma_x_arr[i]
         sy = gamma * sx
 
@@ -733,7 +785,11 @@ def gaussian_ee_weights(
             sigma=sigma_lognormal_std / sigma,
             size=N_exc,
         )
-        sigmas = np.clip(sigmas, 0.3, None)
+        # Floor must keep the nearest torus neighbour (d=1) above the 0.01 prune
+        # below: exp(-1/(2 sigma^2)) > 0.01 needs sigma > 0.33, else the whole
+        # off-diagonal row is pruned and that E neuron gets zero outgoing EE
+        # weight (isolated dead neuron). 0.5 leaves a safe margin (nn ~ 0.135).
+        sigmas = np.clip(sigmas, 0.5, None)
     else:
         sigmas = np.full(N_exc, sigma)
 
