@@ -507,7 +507,7 @@ class Trainer:
                     )
                     m_x_pre, m_first_term, m_delta_w = 0.0, 0.0, 0.0
                 else:
-                    weights, m_x_pre, m_first_term, m_delta_w = self.learner.step(
+                    weights, m_x_pre, m_first_term, m_delta_w, m_ltp, m_ltd = self.learner.step(
                         spike_trace=spike_trace,
                         weights=weights,
                         spikes=spikes_prev,

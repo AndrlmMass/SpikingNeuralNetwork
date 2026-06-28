@@ -221,7 +221,7 @@ def update_slow_traces(spikes, r2, o2, decay_r2, decay_o2, N_x, N_exc):
     return r2, o2
 
 
-def update_x_tar(spike_trace, N_x, mode="mean", pct_se=60.0, pct_ee=30.0):
+def update_x_tar(spike_trace, N_x, mode="mean", pct_se=60.0, pct_ee=30.0, static_se=0.2, static_ee=0.2):
     '''
     Update trace target. If presynaptic neuron is above target, the weight is strenghtened, and below it is weakened.
     See trace-STDP function for more details.
