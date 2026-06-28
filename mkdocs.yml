@@ -1,5 +1,5 @@
 site_name: neurosnn
-site_description: A bio-inspired spiking neural network library for sleep-homeostasis research.
+site_description: A bio-inspired spiking neural network library for homeostasis research.
 site_author: Andreas Lie Massey
 repo_url: https://github.com/AndrlmMass/SpikingNeuralNetwork
 repo_name: neurosnn

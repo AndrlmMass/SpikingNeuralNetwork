@@ -2,6 +2,75 @@ from dataclasses import dataclass
 
 
 @dataclass
+class TripletSTDP:
+    """Pfister & Gerstner (2006) triplet STDP learning rule.
+
+    Extends pair STDP with slow pre (r2) and post (o2) traces so that
+    bursting history modulates both LTP and LTD:
+
+        LTP = A2+ * r1 + A3+ * r1 * o2    (at post-synaptic spike)
+        LTD = A2- * o1 + A3- * o1 * r2    (at post-synaptic spike, approx.)
+
+    Default amplitudes approximate the visual-cortex fit from Pfister &
+    Gerstner (2006), Table 2.
+
+    Parameters
+    ----------
+    tau_trace : int
+        Shared fast trace time constant for r1 / o1 (ms).
+    tau_x : float
+        Slow presynaptic trace time constant for r2 (ms).
+    tau_y : float
+        Slow postsynaptic trace time constant for o2 (ms).
+    A2_plus, A3_plus : float
+        Pair and triplet LTP amplitudes.
+    A2_minus, A3_minus : float
+        Pair and triplet LTD amplitudes.
+    """
+
+    learning_rate: float = 0.0004
+    tau_trace: int = 20
+    tau_x: float = 101.0
+    tau_y: float = 125.0
+    A2_plus: float = 5e-10
+    A3_plus: float = 6.2e-3
+    A2_minus: float = 7e-3
+    A3_minus: float = 2.3e-4
+    w_max: float = 10.0
+    mu_weight: float = 0.6
+    update_freq: int = 100
+    clip_weights: bool = True
+    min_weight_exc: float = 0.01
+    max_weight_exc: float = 25.0
+    min_weight_inh: float = -25.0
+    max_weight_inh: float = -0.01
+
+    def _to_runner_kwargs(self) -> dict:
+        return dict(
+            learning_rate=self.learning_rate,
+            tau_trace=self.tau_trace,
+            w_max=self.w_max,
+            mu_weight=self.mu_weight,
+            update_weights_freq=self.update_freq,
+            clip_weights=self.clip_weights,
+            min_weight_exc=self.min_weight_exc,
+            max_weight_exc=self.max_weight_exc,
+            min_weight_inh=self.min_weight_inh,
+            max_weight_inh=self.max_weight_inh,
+            use_triplet=True,
+            tau_x=self.tau_x,
+            tau_y=self.tau_y,
+            A2_plus=self.A2_plus,
+            A3_plus=self.A3_plus,
+            A2_minus=self.A2_minus,
+            A3_minus=self.A3_minus,
+            x_tar_mode="mean",
+            x_tar_pct_se=60.0,
+            x_tar_pct_ee=30.0,
+        )
+
+
+@dataclass
 class TraceSTDP:
     """Spike-trace STDP with BCM-style soft weight bound.
 

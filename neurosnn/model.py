@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Generator, List, Optional
 
 from neurosnn.layer import Layer
-from neurosnn.learner import TraceSTDP
+from neurosnn.learner import TraceSTDP, TripletSTDP
 from neurosnn.results import EvalResult, TrainResult
 from neurosnn._network.io import CheckpointManager
 from neurosnn._network.model import SNNModel
@@ -67,7 +67,7 @@ class Model:
     def train(
         self,
         layers: List[Layer],
-        learner: TraceSTDP = None,
+        learner: "TraceSTDP | TripletSTDP | None" = None,
         regularizer=None,
         epochs: int = 1,
         train_weights: bool = True,

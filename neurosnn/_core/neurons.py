@@ -202,9 +202,26 @@ def update_spikes(
         spike_trace,
     )
 
-def update_x_tar(
-    spike_trace, N_x, mode="mean", pct_se=60.0, pct_ee=30.0, static_se=0.2, static_ee=0.2
-):
+@njit(cache=True)
+def update_slow_traces(spikes, r2, o2, decay_r2, decay_o2, N_x, N_exc):
+    """Decay and update slow pre (r2) and post (o2) traces for triplet STDP.
+
+    r2 tracks slow pre-synaptic bursting (input + excitatory neurons).
+    o2 tracks slow post-synaptic bursting (excitatory neurons only).
+    Both decay exponentially and jump by +1 on each spike.
+    """
+    for j in range(N_x + N_exc):
+        r2[j] *= decay_r2
+        if spikes[j] == 1:
+            r2[j] += 1.0
+    for j in range(N_exc):
+        o2[j] *= decay_o2
+        if spikes[N_x + j] == 1:
+            o2[j] += 1.0
+    return r2, o2
+
+
+def update_x_tar(spike_trace, N_x, mode="mean", pct_se=60.0, pct_ee=30.0):
     '''
     Update trace target. If presynaptic neuron is above target, the weight is strenghtened, and below it is weakened.
     See trace-STDP function for more details.
