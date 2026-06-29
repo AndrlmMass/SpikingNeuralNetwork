@@ -165,6 +165,52 @@ def triplet_STDP(
     return weights
 
 
+@njit(parallel=False, cache=True)
+def vogels_iSTDP(
+    learning_rate, spike_trace, inh_trace, weights,
+    N_x, N_exc, N_inh, spikes, rho_0, w_min, w_max, mu_weight,
+):
+    """Vogels et al. 2011 iSTDP for W_ie (I→E synapses, negative weights).
+
+    W_ie lives at weights[N_x+N_exc:N_x+N_exc+N_inh, N_x:N_x+N_exc].
+    Weights are negative; LTP = more negative = stronger inhibition.
+
+    On E spike j:  Δw[i,j] -= lr * x_pre[i]            (Hebbian)
+    On I spike i:  Δw[i,j] -= lr * (x_post[j] - 2*ρ₀)  (homeostatic target)
+
+    Soft bounds: LTP uses (w - w_min)^μ, LTD uses (w_max - w)^μ.
+    """
+    ex = N_x + N_exc
+
+    # On E post-synaptic spike: Hebbian term
+    for j in range(N_exc):
+        if spikes[N_x + j] == 1:
+            for i in range(N_inh):
+                x_pre_i = inh_trace[i]
+                dw = -learning_rate * x_pre_i
+                w = weights[ex + i, N_x + j]
+                if dw <= 0.0:  # LTP (more inhibitory)
+                    bound = max(w - w_min, 0.0) ** mu_weight
+                else:           # LTD (less inhibitory)
+                    bound = max(w_max - w, 0.0) ** mu_weight
+                weights[ex + i, N_x + j] = w + dw * bound
+
+    # On I pre-synaptic spike: homeostatic term
+    for i in range(N_inh):
+        if spikes[ex + i] == 1:
+            for j in range(N_exc):
+                x_post_j = spike_trace[N_x + j]
+                dw = -learning_rate * (x_post_j - 2.0 * rho_0)
+                w = weights[ex + i, N_x + j]
+                if dw <= 0.0:
+                    bound = max(w - w_min, 0.0) ** mu_weight
+                else:
+                    bound = max(w_max - w, 0.0) ** mu_weight
+                weights[ex + i, N_x + j] = w + dw * bound
+
+    return weights
+
+
 @dataclass
 class Learner:
     learning_rate: float
@@ -242,6 +288,25 @@ class TripletLearner:
             self.w_max,
             self.w_min,
             self.mu_weight,
+        )
+
+
+@dataclass
+class iLearner:
+    learning_rate: float
+    N_x: int
+    N_exc: int
+    N_inh: int
+    rho_0: float
+    w_min: float
+    w_max: float
+    mu_weight: float
+
+    def step(self, weights, spikes, spike_trace, inh_trace):
+        return vogels_iSTDP(
+            self.learning_rate, spike_trace, inh_trace, weights,
+            self.N_x, self.N_exc, self.N_inh, spikes,
+            self.rho_0, self.w_min, self.w_max, self.mu_weight,
         )
 
 

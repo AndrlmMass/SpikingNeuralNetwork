@@ -2,6 +2,43 @@ from dataclasses import dataclass
 
 
 @dataclass
+class VogelsSTDP:
+    """Vogels et al. 2011 inhibitory STDP for I→E synapses.
+
+    Pass as `inh_learner` to model.train() alongside a TraceSTDP or
+    TripletSTDP excitatory learner.
+
+    Parameters
+    ----------
+    learning_rate : float
+        Step size for W_ie updates (default: 0.01).
+    rho_0 : float
+        Target E neuron firing rate in trace units.
+        rho_0 = target_Hz * tau_trace_ms / 1000.
+        At tau_trace=20ms: rho_0=0.1 ≈ 5 Hz, rho_0=0.04 ≈ 2 Hz.
+    mu_weight : float
+        Soft-bound exponent (shared with excitatory rule).
+    min_weight_inh : float
+        Lower hard bound for I→E weights (most inhibitory).
+    max_weight_inh : float
+        Upper hard bound for I→E weights (least inhibitory).
+    """
+
+    learning_rate: float = 0.01
+    rho_0: float = 0.1
+    mu_weight: float = 0.6
+    min_weight_inh: float = -25.0
+    max_weight_inh: float = -0.01
+
+    def _to_runner_kwargs(self) -> dict:
+        return dict(
+            use_vogels=True,
+            lr_inh=self.learning_rate,
+            rho_0=self.rho_0,
+        )
+
+
+@dataclass
 class TripletSTDP:
     """Pfister & Gerstner (2006) triplet STDP learning rule.
 
