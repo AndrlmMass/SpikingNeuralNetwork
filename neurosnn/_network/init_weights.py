@@ -42,6 +42,7 @@ class WeightFactory:
     sigma_ee_lognormal_std: float = 0.0  # 0 = disabled (fixed sigma_ee)
     sigma_se_mean: float = 0.0          # 0 = auto-compute from rf_scale
     sigma_se_lognormal_std: float = 0.0  # 0 = disabled (fixed sigma_se)
+    wta_inhibition: bool = False
 
     def __post_init__(self):
         self.H = int(np.sqrt(self.N_x))
@@ -168,45 +169,56 @@ class WeightFactory:
         )
         self.weights[self.st : self.ex, self.st : self.ex] = W_ee
 
-        W_ei, _, inh_centers = gaussian_ei_local(
-            N_exc=self.N_exc,
-            N_inh=self.N_inh,
-            H_e=self.H_e,
-            W_e=self.W_e,
-            sigma=self.rf_scale * self._fei * self.ref_e,
-            peak=self.ei_weights,
-            frac=self.w_dense_ei,
-        )
-        self.weights[self.st : self.ex, self.ex : self.ih] = W_ei
-
-        W_ie = mexican_hat_ie_far(
-            H_e=self.H_e,
-            W_e=self.W_e,
-            inh_centers=inh_centers,
-            peak=self.ie_weights,
-            frac=self.w_dense_ie,
-            rng=self.rng,
-            r0=self.rf_scale * self._fr0 * self.ref_e,
-            sigma_r=self.rf_scale * self._fsr * self.ref_e,
-            local_r=self.rf_scale * self._flr * self.ref_e,
-            N_exc=self.N_exc,
-        )
-        self.weights[self.ex : self.ih, self.st : self.ex] = W_ie
+        if self.wta_inhibition:
+            W_ei = wta_ei_weights(self.N_exc, self.N_inh, peak=self.ei_weights)
+            self.weights[self.st : self.ex, self.ex : self.ih] = W_ei
+            W_ie = wta_ie_weights(self.N_inh, self.N_exc, peak=self.ie_weights)
+            self.weights[self.ex : self.ih, self.st : self.ex] = W_ie
+        else:
+            W_ei, _, inh_centers = gaussian_ei_local(
+                N_exc=self.N_exc,
+                N_inh=self.N_inh,
+                H_e=self.H_e,
+                W_e=self.W_e,
+                sigma=self.rf_scale * self._fei * self.ref_e,
+                peak=self.ei_weights,
+                frac=self.w_dense_ei,
+            )
+            self.weights[self.st : self.ex, self.ex : self.ih] = W_ei
+            W_ie = mexican_hat_ie_far(
+                H_e=self.H_e,
+                W_e=self.W_e,
+                inh_centers=inh_centers,
+                peak=self.ie_weights,
+                frac=self.w_dense_ie,
+                rng=self.rng,
+                r0=self.rf_scale * self._fr0 * self.ref_e,
+                sigma_r=self.rf_scale * self._fsr * self.ref_e,
+                local_r=self.rf_scale * self._flr * self.ref_e,
+                N_exc=self.N_exc,
+            )
+            self.weights[self.ex : self.ih, self.st : self.ex] = W_ie
 
     def _fill_random_weights(self):
         mask_ee = self.rng.random((self.N_exc, self.N_exc)) < self.w_dense_ee
-        mask_ei = self.rng.random((self.N_exc, self.N_inh)) < self.w_dense_ei
-        mask_ie = self.rng.random((self.N_inh, self.N_exc)) < self.w_dense_ie
         mask_se = self.rng.random((self.N_x, self.N_exc)) < self.w_dense_se
 
         self.weights[: self.st, self.st : self.ex][mask_se] = self.se_weights
         self.weights[self.st : self.ex, self.st : self.ex][mask_ee] = self.ee_weights
         np.fill_diagonal(self.weights[self.st : self.ex, self.st : self.ex], 0)
-        self.weights[self.st : self.ex, self.ex : self.ih][mask_ei] = self.ei_weights
-        self.weights[self.ex : self.ih, self.st : self.ex][mask_ie] = self.ie_weights
 
-        inh_mask = self.weights[self.st : self.ex, self.ex : self.ih].T != 0
-        self.weights[self.ex : self.ih, self.st : self.ex][inh_mask] = 0
+        if self.wta_inhibition:
+            W_ei = wta_ei_weights(self.N_exc, self.N_inh, peak=self.ei_weights)
+            self.weights[self.st : self.ex, self.ex : self.ih] = W_ei
+            W_ie = wta_ie_weights(self.N_inh, self.N_exc, peak=self.ie_weights)
+            self.weights[self.ex : self.ih, self.st : self.ex] = W_ie
+        else:
+            mask_ei = self.rng.random((self.N_exc, self.N_inh)) < self.w_dense_ei
+            mask_ie = self.rng.random((self.N_inh, self.N_exc)) < self.w_dense_ie
+            self.weights[self.st : self.ex, self.ex : self.ih][mask_ei] = self.ei_weights
+            self.weights[self.ex : self.ih, self.st : self.ex][mask_ie] = self.ie_weights
+            inh_mask = self.weights[self.st : self.ex, self.ex : self.ih].T != 0
+            self.weights[self.ex : self.ih, self.st : self.ex][inh_mask] = 0
 
     def plot(
         self,
@@ -378,6 +390,19 @@ class WeightFactory:
                 "max  inh/exc ratio =",
                 inh_in_per_E.max() / (exc_in_per_E.max() + 1e-12),
             )
+
+
+def wta_ei_weights(N_exc, N_inh, peak=1.0):
+    """WTA E→I: each E neuron connects to exactly one I neuron (round-robin)."""
+    W_ei = np.zeros((N_exc, N_inh))
+    for e in range(N_exc):
+        W_ei[e, e % N_inh] = peak
+    return W_ei
+
+
+def wta_ie_weights(N_inh, N_exc, peak=-0.2):
+    """WTA I→E: each I neuron inhibits all E neurons uniformly."""
+    return np.full((N_inh, N_exc), peak)
 
 
 def exc_coords(H_e, W_e):

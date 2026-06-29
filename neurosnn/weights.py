@@ -33,6 +33,8 @@ class WeightsSpec:
     sigma_se_mean: float = 0.0          # 0 = auto-compute from rf_scale (rf mode only)
     sigma_se_lognormal_std: float = 0.0  # 0 = disabled (fixed sigma_se, rf mode only)
 
+    wta_inhibition: bool = False
+
     def _to_factory_kwargs(self) -> dict:
         return dict(
             w_dense_se=self.density_se,
@@ -57,6 +59,7 @@ class WeightsSpec:
             sigma_ee_lognormal_std=self.sigma_ee_lognormal_std,
             sigma_se_mean=self.sigma_se_mean,
             sigma_se_lognormal_std=self.sigma_se_lognormal_std,
+            wta_inhibition=self.wta_inhibition,
         )
 
 
@@ -74,6 +77,7 @@ def receptive_fields(
     sigma_ee_lognormal_std: float = 0.0,
     sigma_se_mean: float = 0.0,
     sigma_se_lognormal_std: float = 0.0,
+    wta_inhibition: bool = False,
 ) -> WeightsSpec:
     """Gaussian / Mexican-hat structured receptive fields (topographic connectivity)."""
     return WeightsSpec(
@@ -91,6 +95,7 @@ def receptive_fields(
         sigma_ee_lognormal_std=sigma_ee_lognormal_std,
         sigma_se_mean=sigma_se_mean,
         sigma_se_lognormal_std=sigma_se_lognormal_std,
+        wta_inhibition=wta_inhibition,
     )
 
 
@@ -113,6 +118,7 @@ def oriented_receptive_fields(
     orientation_mode: str = "block",
     sigma_ee_mean: float = 0.0,
     sigma_ee_lognormal_std: float = 0.0,
+    wta_inhibition: bool = False,
 ) -> WeightsSpec:
     """Oriented elliptical Gaussian RFs for W_se; isotropic Gaussians for W_ee/W_ei/W_ie."""
     return WeightsSpec(
@@ -136,6 +142,7 @@ def oriented_receptive_fields(
         orientation_mode=orientation_mode,
         sigma_ee_mean=sigma_ee_mean,
         sigma_ee_lognormal_std=sigma_ee_lognormal_std,
+        wta_inhibition=wta_inhibition,
     )
 
 
@@ -148,6 +155,7 @@ def random(
     peak_ee: float = 0.3,
     peak_ei: float = 0.3,
     peak_ie: float = -0.2,
+    wta_inhibition: bool = False,
 ) -> WeightsSpec:
     """Uniformly random sparse connectivity."""
     return WeightsSpec(
@@ -160,4 +168,5 @@ def random(
         peak_ei=peak_ei,
         peak_ie=peak_ie,
         _random=True,
+        wta_inhibition=wta_inhibition,
     )
