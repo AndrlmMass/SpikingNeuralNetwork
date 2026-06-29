@@ -66,7 +66,7 @@ def parse_args():
     parser.add_argument(
         "--reg-mode",
         type=str,
-        default="neuron",
+        default="layer",
         choices=["static", "layer", "neuron"],
         help="Regularisation schedule mode (default: neuron)",
     )
@@ -201,7 +201,7 @@ def parse_args():
     parser.add_argument(
         "--x-tar-static-ee",
         type=float,
-        default=0.5,
+        default=0.8,
         help="Fixed EE x_tar threshold when --x-tar-mode static (try 0.1-0.3) (default: 0.2)",
     )
 
