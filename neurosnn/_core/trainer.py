@@ -90,6 +90,8 @@ class Trainer:
     record_fn_ee: "callable | None" = None
     record_fn_awake_se: "callable | None" = None
     record_fn_awake_ee: "callable | None" = None
+    x_tar_static_se: float = 0.2
+    x_tar_static_ee: float = 0.2
 
     '''
     Trainer object takes neuron dynamics arrays (spike trace, membrane potential,
@@ -331,6 +333,8 @@ class Trainer:
             mode=self.x_tar_mode,
             pct_se=self.x_tar_pct_se,
             pct_ee=self.x_tar_pct_ee,
+            static_se=self.x_tar_static_se,
+            static_ee=self.x_tar_static_ee,
         )
         # loop across time T 
         for t in pbar:
@@ -544,7 +548,7 @@ class Trainer:
                     )
                     m_x_pre, m_first_term, m_delta_w = 0.0, 0.0, 0.0
                 else:
-                    weights, m_x_pre, m_first_term, m_delta_w = self.learner.step(
+                    weights, m_x_pre, m_first_term, m_delta_w, m_ltp, m_ltd = self.learner.step(
                         spike_trace=spike_trace,
                         weights=weights,
                         spikes=spikes_prev,
@@ -575,6 +579,8 @@ class Trainer:
                     mode=self.x_tar_mode,
                     pct_se=self.x_tar_pct_se,
                     pct_ee=self.x_tar_pct_ee,
+                    static_se=self.x_tar_static_se,
+                    static_ee=self.x_tar_static_ee,
                 )
                 # update synapse tracking
                 if track_weights:
@@ -582,6 +588,8 @@ class Trainer:
                         m_x_pre,
                         m_first_term,
                         m_delta_w,
+                        m_ltp,
+                        m_ltd,
                         x_tar_se,
                         x_tar_ee,
                     )
@@ -624,6 +632,10 @@ class Trainer:
             track_weights=track_weights,
             track_stats=track_stats,
             spike_trace=spike_trace,
+            training_mode=training_mode,
+            x_tar_se=x_tar_se,
+            x_tar_ee=x_tar_ee,
+            x_tar_mode=self.x_tar_mode,
         )
 
         return (

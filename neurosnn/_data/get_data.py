@@ -9,16 +9,12 @@ import os
 from PIL import Image
 
 os.environ["TQDM_DISABLE"] = "True"
-
+warnings.filterwarnings("ignore")
 
 def normalize_image(img, target_sum=1.0):
     # Rescale pixel values so they sum to target_sum (used for rate-coded input normalization)
     current_sum = img.sum()
     return img * (target_sum / current_sum) if current_sum > 0 else img
-
-
-warnings.filterwarnings("ignore")
-
 
 def _normalize_split_value(split_value):
     """Convert Deeplake split tensor values to lowercase strings."""

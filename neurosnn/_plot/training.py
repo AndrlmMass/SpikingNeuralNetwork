@@ -80,152 +80,111 @@ def preview_loaded_data(
         self._image_preview_done = True
 
 
-def plot_accuracy(self, wta, mcc, phi, pca, acc_log_file, read_jsonl):
-    import pandas as pd
+def plot_stats(self, stats_log_file, read_jsonl):
+    '''
+    Iterative per-batch diagnostics figure, saved to <run>/stats/stats.png and
+    overwritten each val step. One accuracy anchor (top, full width) plus six
+    diagnostic panels: SE diversity, RF concentration, plasticity balance, E/I &
+    activity, weight magnitudes, neuron dynamics.
 
-    records = read_jsonl(acc_log_file)
+    Reads the single unified stats jsonl: accuracy/phi records (carrying an
+    'accuracy'/'phi' key) feed the anchor; the remaining per-batch diagnostics
+    records feed the panels. No-ops gracefully if nothing was recorded.
+    '''
+    import matplotlib.gridspec as gridspec
 
-    if pca:
-        train_acc_pca = {}
-        val_acc_pca = {}
-    if wta:
-        train_acc_top = {}
-        val_acc_top = {}
-    if phi:
-        val_phi = {}
-        train_phi = {}
-    if mcc:
-        train_mcc = {}
-        val_mcc = {}
+    if not stats_log_file or not os.path.exists(stats_log_file):
+        return
+    all_recs = [r for r in read_jsonl(stats_log_file) if r.get("epoch") is not None]
+    if not all_recs:
+        return
 
-    for r in records:
-        epoch = r.get("epoch")
-        if epoch is None:
-            continue
+    # Diagnostics records are those that are NOT accuracy/phi/mcc rows.
+    recs = [
+        r for r in all_recs
+        if not any(k in r for k in ("accuracy", "phi", "mcc"))
+    ]
+    recs.sort(key=lambda r: r["epoch"])
+    xs = [int(r["epoch"]) for r in recs]
 
-        split = r.get("split")
-        method = r.get("method")
+    def col(key):
+        return np.asarray([r.get(key, np.nan) for r in recs], dtype=float)
 
-        if "accuracy" in r and r["accuracy"] is not None:
-            acc_val = float(r["accuracy"])
-            if split == "train":
-                if method == "pca_lr" and pca:
-                    train_acc_pca[int(epoch)] = acc_val
-                elif method == "top" and wta:
-                    train_acc_top[int(epoch)] = acc_val
-            elif split == "val":
-                if method == "pca_lr" and pca:
-                    val_acc_pca[int(epoch)] = acc_val
-                elif method == "top" and wta:
-                    val_acc_top[int(epoch)] = acc_val
+    # --- accuracy anchor data (same unified file) ---
+    val_acc, train_acc, val_phi, train_phi = {}, {}, {}, {}
+    for r in all_recs:
+        e = int(r["epoch"])
+        if r.get("accuracy") is not None and r.get("method") == "pca_lr":
+            (val_acc if r.get("split") == "val" else train_acc)[e] = float(r["accuracy"])
+        if r.get("phi") is not None:
+            (val_phi if r.get("split") == "val" else train_phi)[e] = float(r["phi"])
 
-        if "phi" in r and r["phi"] is not None:
-            if split == "val" and phi:
-                val_phi[int(epoch)] = float(r["phi"])
-            if split == "train" and phi:
-                train_phi[int(epoch)] = float(r["phi"])
+    fig = plt.figure(figsize=(13, 11))
+    gs = gridspec.GridSpec(3, 3, figure=fig, hspace=0.45, wspace=0.32)
 
-        if "mcc" in r and r["mcc"] is not None:
-            if split == "val" and mcc:
-                val_mcc[int(epoch)] = float(r["mcc"])
-            if split == "train" and mcc:
-                train_mcc[int(epoch)] = float(r["mcc"])
+    # Row 0 (full width): accuracy anchor
+    ax = fig.add_subplot(gs[0, :])
+    if val_acc:
+        ex = sorted(val_acc)
+        ax.plot(ex, [val_acc[e] for e in ex], "-o", ms=3, color="indianred", label="val acc")
+    if train_acc:
+        ex = sorted(train_acc)
+        ax.plot(ex, [train_acc[e] for e in ex], "-o", ms=3, color="lightcoral", label="train acc")
+    ax.set_ylabel("accuracy"); ax.set_title("accuracy (+ phi)")
+    ax.grid(alpha=0.3); ax.legend(loc="lower left", fontsize=7)
+    if val_phi or train_phi:
+        axp = ax.twinx()
+        if val_phi:
+            ep = sorted(val_phi); axp.plot(ep, [val_phi[e] for e in ep], "-", color="skyblue", lw=1.2, label="val phi")
+        if train_phi:
+            ep = sorted(train_phi); axp.plot(ep, [train_phi[e] for e in ep], "-", color="deepskyblue", lw=1.2, label="train phi")
+        axp.set_ylabel("phi", color="steelblue"); axp.tick_params(axis="y", labelcolor="steelblue")
+        axp.legend(loc="lower right", fontsize=7)
 
-    fig, (ax, ax2) = plt.subplots(2, 1)
+    def twin_panel(pos, title, left, right):
+        a = fig.add_subplot(pos); a2 = a.twinx()
+        for key, lbl, c in left:
+            a.plot(xs, col(key), "-o", ms=2.5, color=c, label=lbl)
+        for key, lbl, c in right:
+            a2.plot(xs, col(key), "-o", ms=2.5, color=c, label=lbl)
+        a.set_title(title); a.set_xlabel("batch"); a.grid(alpha=0.3)
+        lc = left[0][2] if left else "k"; rc = right[0][2] if right else "k"
+        a.set_ylabel("/".join(l[1] for l in left), color=lc, fontsize=8)
+        a2.set_ylabel("/".join(r[1] for r in right), color=rc, fontsize=8)
+        h1, l1 = a.get_legend_handles_labels(); h2, l2 = a2.get_legend_handles_labels()
+        a.legend(h1 + h2, l1 + l2, fontsize=6, loc="best")
+        return a
 
-    handles = []
-    labels = []
-    labels2 = []
-    handles2 = []
+    # P1 SE diversity (decorrelation): PR up + cosine down = good
+    twin_panel(gs[1, 0], "SE diversity",
+               [("rf_participation_ratio", "SE PR", "C0")],
+               [("rf_mean_cosine", "SE cosine", "C3")])
+    # P2 RF concentration
+    twin_panel(gs[1, 1], "RF concentration",
+               [("rf_gini", "Gini", "C0")],
+               [("rf_entropy", "entropy", "C3")])
+    # P3 plasticity balance
+    twin_panel(gs[1, 2], "plasticity balance",
+               [("ltp_ltd_ratio", "LTP/LTD", "C2")],
+               [("mean_delta_w", "delta_w", "C1")])
+    # P4 E/I & activity
+    twin_panel(gs[2, 0], "E/I & activity",
+               [("ei_ratio_median", "E/I med", "C1"), ("ei_ratio_p90", "E/I p90", "C5")],
+               [("active_frac_exc", "active-E", "C0"), ("pop_sparseness", "sparse", "C2")])
+    # P5 weight magnitudes (single axis, 4 lines)
+    aw = fig.add_subplot(gs[2, 1])
+    for key, lbl, c in [("w_se_mean", "SE", "C0"), ("w_ee_mean", "EE", "C2"),
+                        ("w_ei_mean", "EI", "C1"), ("w_ie_mean", "|IE|", "C3")]:
+        aw.plot(xs, col(key), "-o", ms=2.5, color=c, label=lbl)
+    aw.set_title("weight magnitudes"); aw.set_xlabel("batch")
+    aw.set_ylabel("mean |w|", fontsize=8); aw.grid(alpha=0.3); aw.legend(fontsize=6)
+    # P6 neuron dynamics
+    twin_panel(gs[2, 2], "neuron dynamics",
+               [("mean_I_syn_exc", "Isyn E", "C0"), ("mean_I_syn_inh", "Isyn I", "C3")],
+               [("mean_mp_exc", "mp E", "C2"), ("mean_mp_inh", "mp I", "C1")])
 
-    if pca:
-        xs = sorted(val_acc_pca)
-        val_acc = np.asarray([val_acc_pca[e] for e in xs])
-        line = ax.plot(xs, val_acc, linestyle="none", marker="o", markersize=1.0, color="indianred")
-        window = max(1, val_acc.shape[0] // 5)
-        val_acc_roll_mean = (
-            pd.Series(val_acc).rolling(window=window, min_periods=1).mean()
-        )
-        line2 = ax.plot(xs, val_acc_roll_mean, color="indianred", linewidth=1.5)
-        handles.append(line2[0])
-        labels.append("Val accuracy")
-        train_acc = np.asarray([train_acc_pca[e] for e in xs])
-        line = ax.plot(xs, train_acc, linestyle="none", marker="o", markersize=1.0, color="lightcoral")
-        window = max(1, train_acc.shape[0] // 5)
-        train_acc_roll_mean = (
-            pd.Series(train_acc).rolling(window=window, min_periods=1).mean()
-        )
-        line2 = ax.plot(xs, train_acc_roll_mean, color="lightcoral", linewidth=1.5)
-        handles.append(line2[0])
-        labels.append("Train accuracy")
-    if wta:
-        xs = sorted(train_acc_top)
-        line = ax.plot(xs, [train_acc_top[e] for e in xs], label="train acc (top)",
-                       linestyle="none", marker="s", markersize=3, color="red")
-        handles2.append(line[0])
-        labels2.append("Train accuracy")
-        xs = sorted(val_acc_top)
-        line = ax.plot(xs, [val_acc_top[e] for e in xs], label="val acc (top)",
-                       linestyle="none", marker="s", markersize=3, color="orange")
-        handles2.append(line[0])
-        labels2.append("Val accuracy")
-
-    if mcc:
-        xs = sorted(val_mcc)
-        mcc_line = ax.plot(xs, [val_mcc[e] for e in xs], linestyle="solid", label="MCC",
-                           color="blue", marker="s", markersize=3, linewidth=1.5)
-        handles.append(mcc_line[0])
-        labels.append("MCC")
-        xs = sorted(train_mcc)
-        mcc_line = ax.plot(xs, [train_mcc[e] for e in xs], linestyle="dashed", label="train mcc",
-                           color="blue", marker="s", markersize=3, linewidth=1.5)
-        handles.append(mcc_line[0])
-        labels.append("train mcc")
-
-    if pca:
-        y_line = val_acc[0]
-        l1 = ax.axhline(y=y_line, linestyle="dashed", linewidth=0.5, color="grey", label="baseline val acc")
-        handles.append(l1)
-        labels.append("baseline val acc")
-
-    ax.set_ylabel("Accuracy")
-    ax2.set_ylabel("Clustering")
-    fig.supxlabel("Batches")
-    ax.set_ylim(bottom=val_acc.min(), top=train_acc.max())
-
-    if phi:
-        xs = sorted(val_phi)
-        val_phi_arr = np.asarray([val_phi[e] for e in xs])
-        train_phi_arr = np.asarray([train_phi[e] for e in xs])
-        ax2.plot(xs, val_phi_arr, linestyle="none", color="skyblue", marker="p", markersize=1.0)
-        window = max(1, val_phi_arr.shape[0] // 5)
-        val_phi_roll_mean = (
-            pd.Series(val_phi_arr).rolling(window=window, min_periods=1).mean()
-        )
-        phi_line_val2 = ax2.plot(xs, val_phi_roll_mean, color="skyblue", linewidth=1.5)
-        ax2.plot(xs, train_phi_arr, linestyle="none", color="deepskyblue", marker="p", markersize=1.0)
-        train_phi_roll_mean = (
-            pd.Series(train_phi_arr).rolling(window=window, min_periods=1).mean()
-        )
-        phi_line_train2 = ax2.plot(xs, train_phi_roll_mean, color="deepskyblue", linewidth=1.5)
-        ax2.set_ylabel("Clustering")
-        handles2.append(phi_line_val2[0])
-        labels2.append("Phi val")
-        handles2.append(phi_line_train2[0])
-        labels2.append("Phi train")
-
-    if handles:
-        ax.legend(handles, labels, loc="lower left", framealpha=1.0, fontsize=5)
-    else:
-        ax.legend(loc="lower left", framealpha=1.0, fontsize=5)
-
-    if handles2:
-        ax2.legend(handles2, labels2, loc="lower left", framealpha=1.0, fontsize=5)
-    else:
-        ax2.legend(loc="lower left", framealpha=1.0, fontsize=5)
-
-    out_path = self._acc_log_file.replace(".jsonl", ".png")
-    fig.savefig(out_path, dpi=200, bbox_inches="tight")
+    out_path = stats_log_file.replace(".jsonl", ".png")
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -396,9 +355,10 @@ class PCAScatterDisplay:
             title += f": $\\phi$={phi:.2f}"
         self.ax_.set_title(title)
 
-        date = datetime.now().strftime("%m%d%Y")
+        from neurosnn._utils.logger import tracking_run_dir
+
         ts = datetime.now().strftime("%m%d%Y_%H%M%S")
-        self.dir = os.path.join("plots", "PCA", dataset, date, run)
+        self.dir = os.path.join(tracking_run_dir(dataset, run), "plots", "PCA")
         os.makedirs(self.dir, exist_ok=True)
         self.figure_.savefig(os.path.join(self.dir, f"{ts}.png"), dpi=100)
 

@@ -6,43 +6,60 @@ import os
 import numpy as np
 
 
+def tracking_run_dir(dataset, ts_spec) -> str:
+    '''
+    Single source of truth for a run's output folder:
+    results/tracking/<dataset>/<date>/<ts_spec>. The date is derived from the
+    YYYYMMDD prefix of ts_spec so every caller (logger, spike worker, PCA display,
+    gif assembly) resolves to the same per-run directory without any plumbing.
+    Falls back to today's date only if ts_spec is not an 8-digit-prefixed stamp.
+    '''
+    ts = str(ts_spec)
+    if len(ts) >= 8 and ts[:8].isdigit():
+        date = f"{ts[:4]}.{ts[4:6]}.{ts[6:8]}"
+    else:
+        date = datetime.now().strftime("%Y.%m.%d")
+    return os.path.join("results", "tracking", str(dataset), date, ts)
+
+
 @dataclass
 class HistoryTracker:
     ts_spec: str
     image_dataset: str = "unknown"
     acc_history: dict = field(default_factory=dict)
-    _acc_log_dir: str = None
-    _acc_log_file: str = None
+    _run_dir: str = None
+    _stats_log_file: str = None
 
-    def _ensure_acc_logger(self):
-        if self._acc_log_file is None:
-            from datetime import datetime
-
+    def _ensure_run_dir(self):
+        '''Resolve + create the per-run dir and the stats/ subfolder (lazy).'''
+        if self._stats_log_file is None:
             self.image_dataset = getattr(self, "image_dataset", "unknown")
-            date = datetime.now().strftime("%Y.%m.%d")
             try:
-                self._acc_log_dir = os.path.join(
-                    "results",
-                    "acc_history",
-                    f"{self.image_dataset}",
-                    f"{date}",
-                    f"acc_{self.ts_spec}",
-                )
-                os.makedirs(self._acc_log_dir, exist_ok=True)
+                self._run_dir = tracking_run_dir(self.image_dataset, self.ts_spec)
+                os.makedirs(os.path.join(self._run_dir, "stats"), exist_ok=True)
             except Exception:
                 pass
-            self._acc_log_file = os.path.join(
-                self._acc_log_dir, f"acc_{self.ts_spec}.jsonl"
-            )
+            self._stats_log_file = os.path.join(self._run_dir, "stats", "stats.jsonl")
 
     def log_config(self, config: dict):
-        self._ensure_acc_logger()
-        path = os.path.join(self._acc_log_dir, "config.json")
+        self._ensure_run_dir()
+        path = os.path.join(self._run_dir, "config.json")
         try:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2)
         except Exception as e:
             print(f"Warning: failed to write config ({e})")
+
+    def _append_record(self, rec: dict):
+        '''Append one JSON line to the unified stats jsonl (accuracy + phi + mcc
+        + per-batch diagnostics all live here now).'''
+        try:
+            self._ensure_run_dir()
+            with open(self._stats_log_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(rec) + "\n")
+                f.flush()
+        except Exception as e:
+            print(f"Warning: failed to persist record ({e})")
 
     def _record_accuracy(
         self, split: str, value, epoch: int | None = None, method: str | None = None
@@ -54,66 +71,76 @@ class HistoryTracker:
         try:
             if acc_val is not None:
                 method_key = method if method is not None else "default"
-                if split not in self.acc_history:
-                    self.acc_history[split] = {}
-                if method_key not in self.acc_history[split]:
-                    self.acc_history[split][method_key] = []
-                self.acc_history[split][method_key].append(acc_val)
+                self.acc_history.setdefault(split, {}).setdefault(
+                    method_key, []
+                ).append(acc_val)
         except Exception:
             pass
-        try:
-            self._ensure_acc_logger()
-            rec = {
-                "timestamp": datetime.now().isoformat(),
-                "split": str(split),
-                "epoch": int(epoch) if epoch is not None else None,
-                "accuracy": acc_val,
-            }
-            if method is not None:
-                rec["method"] = method
-            with open(self._acc_log_file, "a", encoding="utf-8") as f:
-                f.write(json.dumps(rec) + "\n")
-                f.flush()
-        except Exception as e:
-            print(f"Warning: failed to persist accuracy record ({e})")
+        rec = {
+            "timestamp": datetime.now().isoformat(),
+            "split": str(split),
+            "epoch": int(epoch) if epoch is not None else None,
+            "accuracy": acc_val,
+        }
+        if method is not None:
+            rec["method"] = method
+        self._append_record(rec)
 
     def _record_phi(self, split: str, phi_value, epoch: int | None = None):
         try:
             phi_val = float(phi_value) if phi_value is not None else None
         except Exception:
             phi_val = None
-        try:
-            self._ensure_acc_logger()
-            rec = {
+        self._append_record(
+            {
                 "timestamp": datetime.now().isoformat(),
                 "split": str(split),
                 "epoch": int(epoch) if epoch is not None else None,
                 "phi": phi_val,
             }
-            with open(self._acc_log_file, "a", encoding="utf-8") as f:
-                f.write(json.dumps(rec) + "\n")
-                f.flush()
-        except Exception as e:
-            print(f"Warning: failed to persist phi record ({e})")
+        )
 
     def _record_mcc(self, split: str, mcc_value, epoch: int | None = None):
         try:
             mcc_val = float(mcc_value) if mcc_value is not None else None
         except Exception:
             mcc_val = None
-        try:
-            self._ensure_acc_logger()
-            rec = {
+        self._append_record(
+            {
                 "timestamp": datetime.now().isoformat(),
                 "split": str(split),
                 "epoch": int(epoch) if epoch is not None else None,
                 "mcc": mcc_val,
             }
-            with open(self._acc_log_file, "a", encoding="utf-8") as f:
-                f.write(json.dumps(rec) + "\n")
-                f.flush()
-        except Exception as e:
-            print(f"Warning: failed to persist mcc record ({e})")
+        )
+
+    def _record_stats(self, stats: dict, epoch: int | None = None):
+        '''
+        Persist one per-batch diagnostics dict (TrainTracker.to_dict) as a JSON
+        line in the unified stats jsonl. Numpy scalars are coerced to float so the
+        record is JSON-serialisable. Diagnostics records are distinguished from
+        accuracy/phi/mcc records by the absence of those keys (see plot_stats).
+        '''
+        if not stats:
+            return
+        clean = {}
+        for k, v in stats.items():
+            if isinstance(v, (np.floating, np.integer)):
+                clean[k] = float(v)
+            elif isinstance(v, (int, float)) or v is None:
+                clean[k] = v
+            else:
+                try:
+                    clean[k] = float(v)
+                except (TypeError, ValueError):
+                    clean[k] = None
+        self._append_record(
+            {
+                "timestamp": datetime.now().isoformat(),
+                "epoch": int(epoch) if epoch is not None else None,
+                **clean,
+            }
+        )
 
     def _read_jsonl(self, path):
         records = []

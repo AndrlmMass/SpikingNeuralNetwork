@@ -12,7 +12,7 @@ from neurosnn._core.trainer import Trainer
 from neurosnn._evaluation.evaluation import Evaluator
 from neurosnn._network.io import CheckpointManager
 from neurosnn._network.model import SNNModel
-from neurosnn._plot.training import PCAScatterDisplay, plot_accuracy
+from neurosnn._plot.training import PCAScatterDisplay, plot_stats
 from neurosnn._utils.logger import HistoryTracker
 from neurosnn._utils.performance import start_plot_worker, stop_plot_worker
 
@@ -104,6 +104,8 @@ class Runner:
         x_tar_mode: str = "mean",
         x_tar_pct_se: float = 60.0,
         x_tar_pct_ee: float = 30.0,
+        x_tar_static_se: float = 0.2,
+        x_tar_static_ee: float = 0.2,
         track_stats: bool = False,
         track_weights: bool = False,
         PCA_plot: bool = True,
@@ -212,6 +214,8 @@ class Runner:
             x_tar_mode=x_tar_mode,
             x_tar_pct_se=x_tar_pct_se,
             x_tar_pct_ee=x_tar_pct_ee,
+            x_tar_static_se=x_tar_static_se,
+            x_tar_static_ee=x_tar_static_ee,
             nz_rows_se=sparse["nz_rows_se"],
             nz_cols_se=sparse["nz_cols_se"],
             nz_rows_ee=sparse["nz_rows_ee"],
@@ -377,6 +381,12 @@ class Runner:
                             if return_spikes:
                                 tr_spikes = X_tr
 
+                    # persist the per-batch diagnostics time series (rendered at val)
+                    if batch_stats is not None:
+                        self.logger._record_stats(
+                            batch_stats, epoch=self._global_batch + 1
+                        )
+
                     del spikes_tr_out, labels_tr_out
                     gc.collect()
 
@@ -402,11 +412,11 @@ class Runner:
             pbar.close()
             if heatmap_plot:
                 stop_plot_worker()
-                from datetime import datetime
                 from neurosnn._plot.spikes import gif_spike_rate_by_label
-                ts = datetime.now().strftime("%Y.%m.%d")
+                from neurosnn._utils.logger import tracking_run_dir
                 frame_folder = os.path.join(
-                    "plots", "spikes", model.image_dataset, "all", ts, str(model.ts_spec)
+                    tracking_run_dir(model.image_dataset, model.ts_spec),
+                    "plots", "spikes", "all",
                 )
                 gif_out = os.path.join(frame_folder, "evolution.gif")
                 gif_spike_rate_by_label(frame_folder, output_filename=gif_out)
@@ -441,14 +451,11 @@ class Runner:
                 "val", acc, epoch=self._global_batch, method="pca_lr"
             )
             self.logger._record_phi("val", phi, epoch=self._global_batch)
-            if self._accuracy_method == "pca_lr" and self.logger._acc_log_file:
-                plot_accuracy(
+            if self._accuracy_method == "pca_lr" and self.logger._stats_log_file:
+                # single unified figure: accuracy anchor + per-batch diagnostics
+                plot_stats(
                     self.logger,
-                    wta=False,
-                    mcc=False,
-                    phi=True,
-                    pca=True,
-                    acc_log_file=self.logger._acc_log_file,
+                    stats_log_file=self.logger._stats_log_file,
                     read_jsonl=self.logger._read_jsonl,
                 )
             if self._save_model and acc > self._best_val:

@@ -168,13 +168,15 @@ def heatmap_spike_response(
 
     fig.suptitle(f"Run: {num}, Label {label}")
     from datetime import datetime
-    ts = datetime.now().strftime("%Y.%m.%d")
+    from neurosnn._utils.logger import tracking_run_dir
+
     ts_spec = datetime.now().strftime("%Y%m%d_%H%M%S")
-    directory = os.path.join("plots", "spikes", dataset, str(label), ts, str(run))
+    base = os.path.join(tracking_run_dir(dataset, run), "plots", "spikes")
+    directory = os.path.join(base, str(label))
     os.makedirs(directory, exist_ok=True)
     out_path = os.path.join(directory, f"{ts_spec}.png")
     fig.savefig(out_path, dpi=100)
-    directory = os.path.join("plots", "spikes", dataset, "all", ts, str(run))
+    directory = os.path.join(base, "all")
     os.makedirs(directory, exist_ok=True)
     out_path_glob = os.path.join(directory, f"{ts_spec}.png")
     fig.savefig(out_path_glob, dpi=100)
