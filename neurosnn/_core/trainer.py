@@ -3,9 +3,9 @@ from tqdm import tqdm
 import numpy as np
 
 from neurosnn._core.regularization import Sleep, Normalizer
-from neurosnn._core.neurons import NeuronState, MembranePotential, update_x_tar, update_slow_traces
+from neurosnn._core.neurons import NeuronState, MembranePotential, update_x_tar, update_slow_traces, update_inh_trace
 from neurosnn._utils.performance import report_RAM_usage, spawn_plot_thread
-from neurosnn._core.synapses import Learner, TripletLearner, Clipper
+from neurosnn._core.synapses import Learner, TripletLearner, iLearner, Clipper
 from neurosnn._core.trackers import TrainTracker
 
 @dataclass
@@ -83,6 +83,9 @@ class Trainer:
     A3_plus: float = 6.2e-3
     A2_minus: float = 7e-3
     A3_minus: float = 2.3e-4
+    use_vogels: bool = False
+    lr_inh: float = 0.01
+    rho_0: float = 0.1
     record_fn_se: "callable | None" = None
     record_fn_ee: "callable | None" = None
     record_fn_awake_se: "callable | None" = None
@@ -168,6 +171,21 @@ class Trainer:
                 A3_plus=self.A3_plus,
                 A2_minus=self.A2_minus,
                 A3_minus=self.A3_minus,
+            )
+
+        # initiate Vogels iSTDP learner
+        if self.use_vogels:
+            self._decay_inh = np.exp(-self.dt / self.tau_trace)
+            self._inh_trace_train = np.zeros(self.N_inh)
+            self.ilearner = iLearner(
+                learning_rate=self.lr_inh,
+                N_x=self.N_x,
+                N_exc=self.N_exc,
+                N_inh=self.N_inh,
+                rho_0=self.rho_0,
+                w_min=self.min_weight_inh,
+                w_max=self.max_weight_inh,
+                mu_weight=self.mu_weight,
             )
 
         # initiate clipper object
@@ -295,6 +313,13 @@ class Trainer:
                 r2 = np.zeros(self.N_x + self.N_exc)
                 o2 = np.zeros(self.N_exc)
 
+        # inhibitory trace for Vogels iSTDP: persistent during training only
+        if self.use_vogels:
+            if training_mode == "train":
+                inh_trace = self._inh_trace_train
+            else:
+                inh_trace = np.zeros(self.N_inh)
+
         # initiate tqdm object
         pbar = tqdm(range(1, spikes.shape[0]), desc=desc, leave=False, mininterval=1.0, colour="green", ascii=" <><><><>><<>")
 
@@ -403,6 +428,10 @@ class Trainer:
                         current_spikes, r2, o2, self._decay_r2, self._decay_o2,
                         self.N_x, self.N_exc,
                     )
+                if self.use_vogels:
+                    inh_trace = update_inh_trace(
+                        spikes_buf, inh_trace, self._decay_inh, self.N_x, self.N_exc,
+                    )
 
                 # update weights every 10% of sleep timesteps (around 1% during wake period)
                 if sleep_remaining % 10 == 0:
@@ -427,6 +456,14 @@ class Trainer:
                             track_weights=np.uint8(0),
                             x_tar_se=x_tar_se,
                             x_tar_ee=x_tar_ee,
+                        )
+                    # apply Vogels iSTDP on I→E weights
+                    if self.use_vogels:
+                        weights = self.ilearner.step(weights, spikes_buf, spike_trace, inh_trace)
+                        np.clip(
+                            weights[self.ex : self.ih, self.st : self.ex],
+                            self.min_weight_inh, self.max_weight_inh,
+                            out=weights[self.ex : self.ih, self.st : self.ex],
                         )
                     # convert to pre-transposed arrays for efficient membrane potential computing
                     np.copyto(weights_exc, weights[:, self.st : self.ex].T)
@@ -490,6 +527,10 @@ class Trainer:
                     spikes[t], r2, o2, self._decay_r2, self._decay_o2,
                     self.N_x, self.N_exc,
                 )
+            if self.use_vogels:
+                inh_trace = update_inh_trace(
+                    spikes[t], inh_trace, self._decay_inh, self.N_x, self.N_exc,
+                )
 
             # clip, update and regularize weights if train mode
             if update_weights_now:
@@ -514,6 +555,14 @@ class Trainer:
                         x_tar_se=x_tar_se,
                         x_tar_ee=x_tar_ee,
                         track_weights=track_weights,
+                    )
+                # apply Vogels iSTDP on I→E weights
+                if self.use_vogels:
+                    weights = self.ilearner.step(weights, spikes_prev, spike_trace, inh_trace)
+                    np.clip(
+                        weights[self.ex : self.ih, self.st : self.ex],
+                        self.min_weight_inh, self.max_weight_inh,
+                        out=weights[self.ex : self.ih, self.st : self.ex],
                     )
                 # apply normalization
                 if normalize_now:
