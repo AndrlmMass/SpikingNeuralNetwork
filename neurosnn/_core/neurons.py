@@ -203,6 +203,16 @@ def update_spikes(
     )
 
 @njit(cache=True)
+def update_inh_trace(spikes, inh_trace, decay_inh, N_x, N_exc):
+    """Decay and update inhibitory neuron spike traces for Vogels iSTDP."""
+    for i in range(inh_trace.shape[0]):
+        inh_trace[i] *= decay_inh
+        if spikes[N_x + N_exc + i] == 1:
+            inh_trace[i] += 1.0
+    return inh_trace
+
+
+@njit(cache=True)
 def update_slow_traces(spikes, r2, o2, decay_r2, decay_o2, N_x, N_exc):
     """Decay and update slow pre (r2) and post (o2) traces for triplet STDP.
 

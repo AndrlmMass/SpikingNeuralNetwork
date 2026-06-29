@@ -127,6 +127,9 @@ class Runner:
         A3_plus: float = 6.2e-3,
         A2_minus: float = 7e-3,
         A3_minus: float = 2.3e-4,
+        use_vogels: bool = False,
+        lr_inh: float = 0.01,
+        rho_0: float = 0.1,
     ) -> Generator[TrainResult, None, None]:
         if accuracy_method != "pca_lr" and PCA_plot:
             raise ValueError("PCA_plot requires accuracy_method='pca_lr'")
@@ -230,6 +233,9 @@ class Runner:
             A3_plus=A3_plus,
             A2_minus=A2_minus,
             A3_minus=A3_minus,
+            use_vogels=use_vogels,
+            lr_inh=lr_inh,
+            rho_0=rho_0,
         )
 
         self._evaluator = Evaluator(

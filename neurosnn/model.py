@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Generator, List, Optional
 
 from neurosnn.layer import Layer
-from neurosnn.learner import TraceSTDP, TripletSTDP
+from neurosnn.learner import TraceSTDP, TripletSTDP, VogelsSTDP
 from neurosnn.results import EvalResult, TrainResult
 from neurosnn._network.io import CheckpointManager
 from neurosnn._network.model import SNNModel
@@ -68,6 +68,7 @@ class Model:
         self,
         layers: List[Layer],
         learner: "TraceSTDP | TripletSTDP | None" = None,
+        inh_learner: "VogelsSTDP | None" = None,
         regularizer=None,
         epochs: int = 1,
         train_weights: bool = True,
@@ -151,6 +152,8 @@ class Model:
         )
         self._runner = Runner(model=snn, checkpoint=checkpoint, logger=logger)
 
+        inh_kwargs = inh_learner._to_runner_kwargs() if inh_learner is not None else {}
+
         return self._runner.train(
             epochs=epochs,
             return_spikes=return_spikes,
@@ -186,6 +189,7 @@ class Model:
             heatmap_plot=heatmap_plot,
             **learner._to_runner_kwargs(),
             **reg_kwargs,
+            **inh_kwargs,
             record_fn_awake_se=record_fn_awake_se,
             record_fn_awake_ee=record_fn_awake_ee,
         )
