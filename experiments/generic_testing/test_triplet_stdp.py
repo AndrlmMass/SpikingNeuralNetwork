@@ -40,11 +40,11 @@ def parse_args():
     parser.add_argument("--val-all", type=int, default=1000)
     parser.add_argument("--test-all", type=int, default=5000)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--val-every", type=int, default=5,
-                        help="Validate every N batches (default: 5)")
+    parser.add_argument("--val-every", type=int, default=1,
+                        help="Validate every N batches (default: 1)")
 
     # TripletSTDP learning rule parameters
-    parser.add_argument("--lr", type=float, default=0.01,
+    parser.add_argument("--lr", type=float, default=0.0004,
                         help="Learning rate (default: 0.01; higher than TraceSTDP because "
                              "Pfister amplitudes are small — scales updates to ~3e-4 per event)")
     parser.add_argument("--tau-x", type=float, default=101.0,

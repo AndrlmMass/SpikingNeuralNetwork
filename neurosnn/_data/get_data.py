@@ -58,8 +58,21 @@ def _load_notmnist_deeplake(transform):
             "Install it via 'pip install deeplake'."
         ) from exc
 
+    # Prefer a local deeplake copy when present so offline compute nodes work.
+    # Create it once on a networked node with:
+    #   import deeplake
+    #   deeplake.deepcopy("hub://activeloop/not-mnist-small",
+    #                     "data/datasets/notmnist_dl", overwrite=True)
+    # Override the path with the NOTMNIST_LOCAL env var. Falls back to the hub
+    # (live network) when no local copy exists — preserving the old behaviour.
+    local_path = os.environ.get(
+        "NOTMNIST_LOCAL", os.path.join("data", "datasets", "notmnist_dl")
+    )
     try:
-        ds = deeplake.load("hub://activeloop/not-mnist-small", read_only=True)
+        if os.path.isdir(local_path) and os.listdir(local_path):
+            ds = deeplake.load(local_path, read_only=True)
+        else:
+            ds = deeplake.load("hub://activeloop/not-mnist-small", read_only=True)
     except Exception as exc:
         raise RuntimeError(f"Failed to load NotMNIST from Deeplake ({exc})") from exc
 
@@ -135,6 +148,39 @@ def _load_notmnist_deeplake(transform):
     return train_images, train_labels, test_images, test_labels
 
 
+# Torchvision datasets that use the standard train=True/False API.
+_STANDARD_DS_MAP = {
+    "mnist": datasets.MNIST,
+    "kmnist": datasets.KMNIST,
+    "fashionmnist": datasets.FashionMNIST,
+    "fmnist": datasets.FashionMNIST,
+    "fashion": datasets.FashionMNIST,
+    "cifar10": datasets.CIFAR10,
+}
+
+
+def _get_torchvision_splits(dataset_name, transform, torch_root):
+    """Return (train_ds, test_ds) for any supported torchvision dataset.
+
+    SVHN uses split='train'/'test' instead of train=True/False, so it needs
+    special handling. All other datasets go through _STANDARD_DS_MAP.
+    """
+    if dataset_name == "svhn":
+        train_ds = datasets.SVHN(
+            root=torch_root, split="train", transform=transform, download=True
+        )
+        test_ds = datasets.SVHN(
+            root=torch_root, split="test", transform=transform, download=True
+        )
+    elif dataset_name in _STANDARD_DS_MAP:
+        ds_cls = _STANDARD_DS_MAP[dataset_name]
+        train_ds = ds_cls(root=torch_root, train=True, transform=transform, download=True)
+        test_ds = ds_cls(root=torch_root, train=False, transform=transform, download=True)
+    else:
+        raise ValueError(f"Unsupported image dataset: {dataset_name!r}")
+    return train_ds, test_ds
+
+
 class ImageDataStreamer:
     """
     Eagerly loads and preprocesses the configured dataset into RAM so the
@@ -180,13 +226,6 @@ class ImageDataStreamer:
             ]
         )
 
-        ds_map = {
-            "mnist": datasets.MNIST,
-            "kmnist": datasets.KMNIST,
-            "fashionmnist": datasets.FashionMNIST,
-            "fmnist": datasets.FashionMNIST,
-            "fashion": datasets.FashionMNIST,
-        }
         if self.dataset == "notmnist":
             (
                 self.train_images,
@@ -217,19 +256,12 @@ class ImageDataStreamer:
             self.X_train_spikes = self.X_train_spikes[:, :100]
             self.X_test_spikes = self.X_test_spikes[:, :100]
         else:
-            if self.dataset not in ds_map:
-                raise ValueError(f"Unsupported image dataset: {self.dataset}")
-            ds_cls = ds_map[self.dataset]
-
             # Use a stable on-disk cache for torchvision datasets to avoid re-downloads
             torch_root = os.path.join("data", "torchvision")
             os.makedirs(torch_root, exist_ok=True)
 
-            mnist_train = ds_cls(
-                root=torch_root, train=True, transform=transform, download=True
-            )
-            mnist_test = ds_cls(
-                root=torch_root, train=False, transform=transform, download=True
+            mnist_train, mnist_test = _get_torchvision_splits(
+                self.dataset, transform, torch_root
             )
 
             # Eagerly materialize tensors for faster repeated access
@@ -270,8 +302,12 @@ class ImageDataStreamer:
                 self.test_images[idx] = img
                 self.test_labels[idx] = int(lbl)
 
-            train_label_targets = np.array(getattr(mnist_train, "targets", []))
-            test_label_targets = np.array(getattr(mnist_test, "targets", []))
+            train_label_targets = np.array(
+                getattr(mnist_train, "targets", getattr(mnist_train, "labels", []))
+            )
+            test_label_targets = np.array(
+                getattr(mnist_test, "targets", getattr(mnist_test, "labels", []))
+            )
 
         total = self.len_train + self.len_test
         self.indices = np.arange(total)
