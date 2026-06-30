@@ -63,6 +63,7 @@ class Runner:
         epochs: int = 1,
         return_spikes: bool = False,
         train_weights: bool = False,
+        run_full_stream: bool = False,
         tau_trace: int = 25,
         learning_rate: float = 0.0008,
         var_noise: float = 1.0,
@@ -282,9 +283,16 @@ class Runner:
 
         n_train = model.n_train_batches
 
+        # Iterate the whole training stream when learning OR when explicitly asked
+        # to (run_full_stream): the latter lets a frozen-weight run still push every
+        # batch through the network so neuronal state (adaptation, threshold, traces)
+        # accumulates and we can watch the on-stream representation evolve without
+        # any weight changes. Default frozen behaviour (single batch) is unchanged.
+        iterate_full = train_weights or run_full_stream
+
         pbar = tqdm(
-            total=n_train * epochs if train_weights else epochs,
-            desc="Training" if train_weights else "Test-only",
+            total=n_train * epochs if iterate_full else epochs,
+            desc="Training" if iterate_full else "Test-only",
             unit="batch",
             ncols=80,
             bar_format="{desc} [{bar}] ETA: {remaining} |{postfix}",
@@ -297,7 +305,7 @@ class Runner:
             for epoch in range(epochs):
                 model.image_streamer.reset_partition("train")
 
-                for b in range(n_train if train_weights else 1):
+                for b in range(n_train if iterate_full else 1):
                     data_train, labels_train = model.image_streamer.get_batch(
                         0, model.batch_train, "train"
                     )
