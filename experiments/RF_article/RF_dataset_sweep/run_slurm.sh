@@ -37,7 +37,7 @@
 #SBATCH --array=0-29
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=16G
+#SBATCH --mem=32G
 #SBATCH --time=06:00:00
 #SBATCH --partition=orion
 #SBATCH --mail-type=END,FAIL
@@ -130,7 +130,10 @@ if [ ! -f "${SIF}" ]; then
 fi
 
 # ---- run ------------------------------------------------------------------
-singularity exec "${SIF}" conda run -n noise_env python \
+# --no-capture-output + python -u stream stdout/stderr live to the .out file.
+# Without these, conda run buffers everything and a killed process (OOM/timeout)
+# leaves only the bash header — hiding the real error.
+singularity exec "${SIF}" conda run --no-capture-output -n noise_env python -u \
     experiments/RF_article/RF_dataset_sweep/run_experiment.py \
     --dataset    "${DATASET}" \
     --seed       "${SEED}" \

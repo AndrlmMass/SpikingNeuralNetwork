@@ -1,21 +1,25 @@
 """
-Aggregate the network-size sweep from per-cell results.json files and render the
-deliverable heatmap.
+Aggregate the network-size sweep from SLURM .out files and render the deliverable heatmap.
 
-Each cell (run_experiment.py) writes results/<RUN_ID>/<tag>/results.json with:
-  * config            — n_exc, n_inh, inh_scale, peak_ei, peak_ie, seed, ...
-  * test_acc/test_phi — final test scores
-  * best_val_acc      — best validation accuracy
+The per-cell results.json was not reliably written on the cluster, so the authoritative
+source here is each task's captured stdout (*.out). We parse the printed config + summary
+lines with regex (same approach as RF_size_tuning/aggregate_rf_size.py). The relevant lines
+each run prints are:
 
-This scans every <tag>/results.json (authoritative — independent of the best-effort
-live size_sweep.jsonl), writes a tidy per-run table (Results_size.xlsx) and a clean
+    Config — dataset: mnist | ... | N_exc: 1024 | N_inh: 225 | inh_scale: 1.0000
+             | peak_ei: 2.0000 | peak_ie: -2.0000 | seed: 0 | epochs: 1
+    Test accuracy : 0.8474          (also "Test accuracy (PCA+LR): 0.8474")
+    Test phi      : 0.1273
+    Best val acc  : 0.8870
+
+This scans every *.out, writes a tidy per-run table (Results_size.xlsx) and a clean
 size_sweep.jsonl, reports coverage, and saves a size x seed heatmap (heatmap_size.pdf)
 with a per-size mean column. Separate panels for accuracy and phi (never mixed units).
 
 Usage
 -----
     python experiments/RF_article/RF_netw_size_sweep/aggregate_size.py \
-        --results-dir experiments/RF_article/RF_netw_size_sweep/results/run_20260629_120000
+        --results-dir results/mnist/2026.06.29/HPC_network_size_sweep
     python experiments/RF_article/RF_netw_size_sweep/aggregate_size.py \
         --results-dir <dir> --out-dir <dir>
 """
@@ -24,6 +28,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 
 import matplotlib
@@ -33,53 +38,109 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
+# Config line, e.g.:
+#   Config — ... | N_exc: 1024 | N_inh: 225 | inh_scale: 1.0000 | peak_ei: 2.0000
+#            | peak_ie: -2.0000 | seed: 0 | epochs: 1
+RE_NEXC = re.compile(r"N_exc:\s*(\d+)")
+RE_NINH = re.compile(r"N_inh:\s*(\d+)")
+RE_SEED = re.compile(r"seed:\s*(\d+)")
+RE_INH_SCALE = re.compile(r"inh_scale:\s*([\d.]+|nan)")
+RE_PEAK_EI = re.compile(r"peak_ei:\s*(-?[\d.]+|nan)")
+RE_PEAK_IE = re.compile(r"peak_ie:\s*(-?[\d.]+|nan)")
+# Summary lines (test accuracy may carry a "(PCA+LR)" parenthetical).
+RE_ACC = re.compile(r"Test accuracy\s*(?:\([^)]*\))?\s*:\s*([\d.]+|nan)")
+RE_PHI = re.compile(r"Test phi\s*:\s*([\d.]+|nan)")
+RE_BEST_VAL = re.compile(r"Best val acc\s*:\s*([\d.]+|nan)")
 
-def parse_run(results_path: str):
-    """Return a per-run row dict, or None if the JSON is missing/unreadable."""
+
+def _parse_float(s: str) -> float:
+    return float("nan") if s == "nan" else float(s)
+
+
+def parse_run(out_path: str):
+    """Parse one SLURM .out file into a per-run row dict, or None if no config found.
+
+    Scans line by line: the Config line appears before the summary block, so we
+    pick up identifiers first, then test/val scores. We stop early once every
+    field is filled. inh_scale/peak_* default to NaN if an older run omitted them.
+    """
+    n_exc = n_inh = seed = None
+    inh_scale = peak_ei = peak_ie = float("nan")
+    test_acc = test_phi = best_val = float("nan")
+    got_acc = got_phi = got_val = False
+
     try:
-        with open(results_path, "r", encoding="utf-8") as fh:
-            data = json.load(fh)
-    except (json.JSONDecodeError, OSError):
+        with open(out_path, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                if n_exc is None:
+                    m = RE_NEXC.search(line)
+                    if m:
+                        n_exc = int(m.group(1))
+                        mi = RE_NINH.search(line)
+                        ms = RE_SEED.search(line)
+                        msc = RE_INH_SCALE.search(line)
+                        mei = RE_PEAK_EI.search(line)
+                        mie = RE_PEAK_IE.search(line)
+                        if mi:
+                            n_inh = int(mi.group(1))
+                        if ms:
+                            seed = int(ms.group(1))
+                        if msc:
+                            inh_scale = _parse_float(msc.group(1))
+                        if mei:
+                            peak_ei = _parse_float(mei.group(1))
+                        if mie:
+                            peak_ie = _parse_float(mie.group(1))
+                        continue
+                if not got_acc:
+                    m = RE_ACC.search(line)
+                    if m:
+                        test_acc = _parse_float(m.group(1))
+                        got_acc = True
+                        continue
+                if not got_phi:
+                    m = RE_PHI.search(line)
+                    if m:
+                        test_phi = _parse_float(m.group(1))
+                        got_phi = True
+                        continue
+                if not got_val:
+                    m = RE_BEST_VAL.search(line)
+                    if m:
+                        best_val = _parse_float(m.group(1))
+                        got_val = True
+                if n_exc is not None and got_acc and got_phi and got_val:
+                    break
+    except OSError:
         return None
 
-    cfg = data.get("config", {})
-    n_exc = cfg.get("n_exc")
-    n_inh = cfg.get("n_inh")
     if n_exc is None or n_inh is None:
         return None
     return {
         "n_exc": n_exc,
         "n_inh": n_inh,
-        "seed": cfg.get("seed"),
-        "inh_scale": cfg.get("inh_scale", float("nan")),
-        "peak_ei": cfg.get("peak_ei", float("nan")),
-        "peak_ie": cfg.get("peak_ie", float("nan")),
-        "test_acc": data.get("test_acc", float("nan")),
-        "test_phi": data.get("test_phi", float("nan")),
-        "best_val_acc": data.get("best_val_acc", float("nan")),
+        "seed": seed,
+        "inh_scale": inh_scale,
+        "peak_ei": peak_ei,
+        "peak_ie": peak_ie,
+        "test_acc": test_acc,
+        "test_phi": test_phi,
+        "best_val_acc": best_val,
     }
 
 
 def load_all(results_dir: str):
-    """Walk <results-dir>/<tag>/results.json. Report dirs missing a JSON."""
-    cell_dirs = sorted(
-        d for d in glob.glob(os.path.join(results_dir, "*")) if os.path.isdir(d)
-    )
+    """Glob <results-dir>/*.out and parse each. Report files with no usable config."""
+    files = sorted(glob.glob(os.path.join(results_dir, "*.out")))
     rows, missing = [], []
-    for d in cell_dirs:
-        base = os.path.basename(d)
-        if base == "slurm_logs":
-            continue
-        rp = os.path.join(d, "results.json")
-        if not os.path.isfile(rp):
-            missing.append(base)
-            continue
-        row = parse_run(rp)
+    for f in files:
+        row = parse_run(f)
         if row is None:
-            missing.append(base + " (unreadable)")
+            missing.append(os.path.basename(f) + " (no config / unreadable)")
             continue
         rows.append(row)
-    print(f"  {len(rows)} runs parsed; {len(missing)} cell dir(s) without a usable results.json")
+    print(f"  {len(rows)} runs parsed from {len(files)} .out file(s); "
+          f"{len(missing)} unparseable")
     return rows, missing
 
 
@@ -155,12 +216,12 @@ def create_heatmaps(df: pd.DataFrame, out_dir: str) -> None:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Aggregate network-size sweep results.json into a table + heatmap"
+        description="Aggregate network-size sweep .out files into a table + heatmap"
     )
     parser.add_argument(
         "--results-dir",
         default=os.path.join(os.path.dirname(__file__), "results"),
-        help="Directory containing <tag>/results.json subfolders",
+        help="Directory containing the SLURM *.out files",
     )
     parser.add_argument(
         "--out-dir",
@@ -177,7 +238,7 @@ def main():
 
     rows, missing = load_all(results_dir)
     if not rows:
-        sys.exit("No usable results.json found — nothing to write.")
+        sys.exit("No parseable *.out files found — nothing to write.")
 
     df = pd.DataFrame(rows).sort_values(["n_exc", "n_inh", "seed"])
 
@@ -202,7 +263,7 @@ def main():
         for (e, i), k in partial.items():
             print(f"    {_size_label(e, i)}: {k} seed(s)")
     if missing:
-        print(f"  {len(missing)} cell dir(s) produced no usable results.json:")
+        print(f"  {len(missing)} .out file(s) had no usable config:")
         for name in missing:
             print(f"    {name}")
 
