@@ -214,6 +214,44 @@ def create_heatmaps(df: pd.DataFrame, out_dir: str) -> None:
         print(f"  Saved -> {p}")
 
 
+def create_lineplot(df: pd.DataFrame, out_dir: str) -> None:
+    """Accuracy / phi vs population size: mean line + per-seed points over N_exc."""
+    grid = df.copy()
+    grid["test_acc_pct"] = grid["test_acc"] * 100
+    grid = grid.sort_values("n_exc")
+    # x tick labels combine both populations, e.g. "1024/225"
+    labels = {e: _size_label(e, i)
+              for e, i in zip(grid["n_exc"], grid["n_inh"])}
+    xs = sorted(grid["n_exc"].unique())
+
+    # evenly-spaced categorical x positions (cleaner than a log axis for 2-3 sizes)
+    pos = {e: k for k, e in enumerate(xs)}
+    panels = [("test_acc_pct", "Test accuracy (%)", "#2a78d6"),
+              ("test_phi", "Test phi", "#1baf7a")]
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5.5), constrained_layout=True)
+    for (col, title, color), ax in zip(panels, axes):
+        means = grid.groupby("n_exc")[col].mean().reindex(xs)
+        sds = grid.groupby("n_exc")[col].std().reindex(xs)
+        xpos = [pos[x] for x in xs]
+        ax.errorbar(xpos, means.values, yerr=sds.values, color=color, lw=2,
+                    marker="o", ms=7, capsize=4, zorder=3, label="mean +/- sd")
+        ax.scatter([pos[e] for e in grid["n_exc"]], grid[col], color=color,
+                   alpha=0.4, s=40, zorder=2, label="per seed")
+        ax.set_xticks(xpos)
+        ax.set_xticklabels([labels[x] for x in xs])
+        ax.set_xlim(-0.5, len(xs) - 0.5)
+        ax.set_xlabel("network size  (N_exc / N_inh)", fontsize=12)
+        ax.set_ylabel(title, fontsize=12)
+        ax.set_title(title + " vs population size", fontsize=13)
+        ax.grid(True, alpha=0.3)
+        ax.legend(frameon=False)
+    fig.suptitle("Network-size sweep (proportional inhibition)", fontsize=15)
+    out = os.path.join(out_dir, "lineplot_size.pdf")
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    print(f"  Saved -> {out}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Aggregate network-size sweep .out files into a table + heatmap"
@@ -278,6 +316,7 @@ def main():
         print(summary.to_string(index=False))
 
     create_heatmaps(df, out_dir)
+    create_lineplot(df, out_dir)
 
 
 if __name__ == "__main__":

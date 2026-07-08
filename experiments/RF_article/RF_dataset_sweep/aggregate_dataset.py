@@ -1,34 +1,39 @@
 """
-Aggregate the dataset sweep (dataset x {trained, frozen} x seed) from per-cell
-results.json files and render the deliverable heatmaps.
+Aggregate the dataset sweep (dataset x {trained, frozen} x seed) from the SLURM
+.out files and render the deliverable heatmaps.
 
-Each cell (run_experiment.py) writes results/<RUN_ID>/<tag>/results.json with:
-  * config            — dataset, condition (trained/frozen), seed, counts, ...
-  * test_acc/test_phi — final test scores
-  * best_val_acc      — best validation accuracy
+The per-cell results.json is not written reliably on the cluster, so the
+authoritative source is each task's captured stdout (*.out). We parse the printed
+config + summary lines with regex (same approach as RF_size_tuning /
+RF_netw_size_sweep). The relevant lines each run prints are:
 
-This scans every <tag>/results.json (authoritative — independent of the best-effort
-live dataset_sweep.jsonl), writes a tidy per-run table (Results_dataset.xlsx) and a clean
-dataset_sweep.jsonl, reports coverage, and saves the comparison figure
+    Config — dataset: cifar10 | condition: trained | ... | seed: 0 | epochs: 1
+    Test accuracy : 0.2128           (also "Test accuracy (PCA+LR): 0.2128")
+    Test phi      : 0.0601
+    Best val acc  : 0.2260
+
+This scans every *.out, writes a tidy per-run table (Results_dataset.xlsx) and a
+clean dataset_sweep.jsonl, reports coverage, and saves the comparison figure
 (heatmap_dataset.pdf):
 
     accuracy : dataset x [trained, frozen]   +   delta = trained - frozen
     phi      : dataset x [trained, frozen]   +   delta = trained - frozen
 
 The delta panels (diverging colormap, centered at 0) are the point of the experiment —
-positive => training helps. NaN-masked so a failed cell (e.g. NotMNIST without its local
-copy) shows as a gap rather than crashing aggregation.
+positive => training helps. NaN-masked so a failed cell shows as a gap rather than
+crashing aggregation.
 
 Usage
 -----
     python experiments/RF_article/RF_dataset_sweep/aggregate_dataset.py \
-        --results-dir experiments/RF_article/RF_dataset_sweep/results/run_20260629_120000
+        --results-dir results/HPC/dataset_sweep
 """
 
 import argparse
 import glob
 import json
 import os
+import re
 import sys
 
 import matplotlib
@@ -42,53 +47,91 @@ import seaborn as sns
 DATASET_ORDER = ["mnist", "kmnist", "fmnist", "fashionmnist", "cifar10", "svhn", "notmnist"]
 CONDITIONS = ["trained", "frozen"]
 
+# Config line uses "key: value" (the SLURM header uses "key=value", so ':' is safe).
+RE_DS = re.compile(r"dataset:\s*(\w+)")
+RE_COND = re.compile(r"condition:\s*(\w+)")
+RE_SEED = re.compile(r"seed:\s*(\d+)")
+# Summary lines (test accuracy may carry a "(PCA+LR)" parenthetical).
+RE_ACC = re.compile(r"Test accuracy\s*(?:\([^)]*\))?\s*:\s*([\d.]+|nan)")
+RE_PHI = re.compile(r"Test phi\s*:\s*([\d.]+|nan)")
+RE_VAL = re.compile(r"Best val acc\s*:\s*([\d.]+|nan)")
 
-def parse_run(results_path: str):
-    """Return a per-run row dict, or None if the JSON is missing/unreadable."""
+
+def _parse_float(s: str) -> float:
+    return float("nan") if s == "nan" else float(s)
+
+
+def parse_run(out_path: str):
+    """Parse one SLURM .out file into a per-run row dict, or None if no config.
+
+    Scans line by line: the Config line (which also carries 'weight_type') comes
+    before the summary block, so identifiers are picked up first, then scores.
+    Stops early once every field is filled.
+    """
+    dataset = condition = seed = None
+    test_acc = test_phi = best_val = float("nan")
+    got_acc = got_phi = got_val = False
+
     try:
-        with open(results_path, "r", encoding="utf-8") as fh:
-            data = json.load(fh)
-    except (json.JSONDecodeError, OSError):
+        with open(out_path, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                if dataset is None and "weight_type" in line:
+                    m = RE_DS.search(line)
+                    if m:
+                        dataset = m.group(1)
+                        mc = RE_COND.search(line)
+                        ms = RE_SEED.search(line)
+                        condition = mc.group(1) if mc else None
+                        seed = int(ms.group(1)) if ms else None
+                        continue
+                if not got_acc:
+                    m = RE_ACC.search(line)
+                    if m:
+                        test_acc = _parse_float(m.group(1))
+                        got_acc = True
+                        continue
+                if not got_phi:
+                    m = RE_PHI.search(line)
+                    if m:
+                        test_phi = _parse_float(m.group(1))
+                        got_phi = True
+                        continue
+                if not got_val:
+                    m = RE_VAL.search(line)
+                    if m:
+                        best_val = _parse_float(m.group(1))
+                        got_val = True
+                if dataset is not None and got_acc and got_phi and got_val:
+                    break
+    except OSError:
         return None
 
-    cfg = data.get("config", {})
-    dataset = cfg.get("dataset")
     if dataset is None:
         return None
-    # condition may be absent in older runs -> infer from freeze_weights, default trained
-    condition = cfg.get("condition")
     if condition is None:
-        condition = "frozen" if cfg.get("freeze_weights") else "trained"
+        condition = "trained"
     return {
         "dataset": dataset,
         "condition": condition,
-        "seed": cfg.get("seed"),
-        "test_acc": data.get("test_acc", float("nan")),
-        "test_phi": data.get("test_phi", float("nan")),
-        "best_val_acc": data.get("best_val_acc", float("nan")),
+        "seed": seed,
+        "test_acc": test_acc,
+        "test_phi": test_phi,
+        "best_val_acc": best_val,
     }
 
 
 def load_all(results_dir: str):
-    """Walk <results-dir>/<tag>/results.json. Report dirs missing a JSON."""
-    cell_dirs = sorted(
-        d for d in glob.glob(os.path.join(results_dir, "*")) if os.path.isdir(d)
-    )
+    """Glob <results-dir>/*.out and parse each. Report files with no usable config."""
+    files = sorted(glob.glob(os.path.join(results_dir, "*.out")))
     rows, missing = [], []
-    for d in cell_dirs:
-        base = os.path.basename(d)
-        if base == "slurm_logs":
-            continue
-        rp = os.path.join(d, "results.json")
-        if not os.path.isfile(rp):
-            missing.append(base)
-            continue
-        row = parse_run(rp)
+    for f in files:
+        row = parse_run(f)
         if row is None:
-            missing.append(base + " (unreadable)")
+            missing.append(os.path.basename(f) + " (no config / unreadable)")
             continue
         rows.append(row)
-    print(f"  {len(rows)} runs parsed; {len(missing)} cell dir(s) without a usable results.json")
+    print(f"  {len(rows)} runs parsed from {len(files)} .out file(s); "
+          f"{len(missing)} unparseable")
     return rows, missing
 
 
@@ -99,66 +142,41 @@ def _dataset_order(values) -> list:
     return ordered
 
 
-def cond_pivot(df: pd.DataFrame, value_col: str, order: list) -> pd.DataFrame:
-    """dataset (rows) x [trained, frozen] (cols), mean over seeds."""
-    pivot = df.pivot_table(
-        index="dataset", columns="condition", values=value_col, aggfunc="mean",
-        observed=True,
+def _box_panel(df, ax, value_col, title, order):
+    """Grouped box plot: dataset on x, trained vs frozen boxes, seed points overlaid."""
+    conds = [c for c in CONDITIONS if c in df["condition"].unique()]
+    palette = {"trained": "#2a78d6", "frozen": "#1baf7a"}
+    sns.boxplot(
+        data=df, x="dataset", y=value_col, hue="condition",
+        order=order, hue_order=conds, palette=palette,
+        width=0.6, fliersize=0, linewidth=1.2, ax=ax,
     )
-    pivot = pivot.reindex(index=order)
-    pivot = pivot.reindex(columns=[c for c in CONDITIONS if c in pivot.columns])
-    return pivot
-
-
-def plot_heatmap(pivot, ax, title, cbar_label, cmap, fmt, center=None):
-    sns.heatmap(
-        pivot,
-        ax=ax,
-        mask=pivot.isna(),
-        annot=True,
-        fmt=fmt,
-        cmap=cmap,
-        center=center,
-        linewidths=0.4,
-        linecolor="white",
-        cbar=True,
-        cbar_kws={"label": cbar_label, "shrink": 0.85},
+    # darker points so the 3 seeds per box are visible
+    sns.stripplot(
+        data=df, x="dataset", y=value_col, hue="condition",
+        order=order, hue_order=conds,
+        palette={"trained": "#14375f", "frozen": "#0b5c41"},
+        dodge=True, jitter=0.12, size=5, edgecolor="white", linewidth=0.5,
+        ax=ax, legend=False,
     )
     ax.set_title(title, fontsize=14, pad=8)
-    ax.set_xlabel("", fontsize=12)
-    ax.set_ylabel("dataset", fontsize=12)
-    ax.set_xticklabels(ax.get_xticklabels(), fontsize=11, rotation=0)
-    ax.set_yticklabels(ax.get_yticklabels(), fontsize=11, rotation=0)
+    ax.set_xlabel("dataset", fontsize=12)
+    ax.set_ylabel(title, fontsize=12)
+    ax.grid(True, axis="y", alpha=0.3)
+    ax.legend(title="", frameon=False, loc="upper right")
 
 
-def create_heatmaps(df: pd.DataFrame, out_dir: str) -> None:
+def create_boxplots(df: pd.DataFrame, out_dir: str) -> None:
     order = _dataset_order(df["dataset"].tolist())
     grid = df.copy()
     grid["test_acc_pct"] = grid["test_acc"] * 100
 
-    # (value_col, label, cmap, fmt, delta_label)
-    metrics = [
-        ("test_acc_pct", "Test accuracy (%)", "viridis", ".1f", "delta accuracy (pts)"),
-        ("test_phi", "Test phi", "magma", ".3f", "delta phi"),
-    ]
-
-    fig, axes = plt.subplots(2, 2, figsize=(14, 11), constrained_layout=True)
-    for row_i, (col, label, cmap, fmt, dlabel) in enumerate(metrics):
-        piv = cond_pivot(grid, col, order)
-        plot_heatmap(piv, axes[row_i, 0], f"{label}: trained vs frozen", label, cmap, fmt)
-
-        # delta = trained - frozen (positive => training helps)
-        if {"trained", "frozen"}.issubset(piv.columns):
-            delta = (piv["trained"] - piv["frozen"]).to_frame(name="trained - frozen")
-        else:
-            delta = pd.DataFrame(index=piv.index, data={"trained - frozen": float("nan")})
-        plot_heatmap(
-            delta, axes[row_i, 1], f"{label}: does training help?", dlabel,
-            "coolwarm", fmt, center=0.0,
-        )
-
-    fig.suptitle("Dataset sweep — trained vs frozen (canonical 1024/225 network)", fontsize=16)
-    out_path = os.path.join(out_dir, "heatmap_dataset.pdf")
+    fig, axes = plt.subplots(1, 2, figsize=(15, 6), constrained_layout=True)
+    _box_panel(grid, axes[0], "test_acc_pct", "Test accuracy (%)", order)
+    _box_panel(grid, axes[1], "test_phi", "Test phi", order)
+    fig.suptitle("Dataset sweep — trained vs frozen (canonical 1024/225 network)",
+                 fontsize=16)
+    out_path = os.path.join(out_dir, "boxplot_dataset.pdf")
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
     print(f"  Saved -> {out_path}")
@@ -171,7 +189,7 @@ def main():
     parser.add_argument(
         "--results-dir",
         default=os.path.join(os.path.dirname(__file__), "results"),
-        help="Directory containing <tag>/results.json subfolders",
+        help="Directory containing the SLURM *.out files",
     )
     parser.add_argument(
         "--out-dir",
@@ -188,7 +206,7 @@ def main():
 
     rows, missing = load_all(results_dir)
     if not rows:
-        sys.exit("No usable results.json found — nothing to write.")
+        sys.exit("No parseable *.out files found — nothing to write.")
 
     order = _dataset_order([r["dataset"] for r in rows])
     df = pd.DataFrame(rows)
@@ -220,7 +238,7 @@ def main():
         for (ds, cond), k in partial.items():
             print(f"    {ds}/{cond}: {k} seed(s)")
     if missing:
-        print(f"  {len(missing)} cell dir(s) produced no usable results.json:")
+        print(f"  {len(missing)} .out file(s) had no usable config:")
         for name in missing:
             print(f"    {name}")
 
@@ -242,7 +260,7 @@ def main():
         for ds, v in delta.items():
             print(f"    {ds}: {v:+.4f}")
 
-    create_heatmaps(df, out_dir)
+    create_boxplots(df, out_dir)
 
 
 if __name__ == "__main__":

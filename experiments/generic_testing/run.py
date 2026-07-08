@@ -66,7 +66,7 @@ def parse_args():
     parser.add_argument(
         "--reg-mode",
         type=str,
-        default="layer",
+        default="neuron",
         choices=["static", "layer", "neuron"],
         help="Regularisation schedule mode (default: neuron)",
     )

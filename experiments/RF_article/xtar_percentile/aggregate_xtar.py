@@ -68,14 +68,26 @@ def parse_run(results_path: str):
         return None
     row = {
         "mode": mode,
-        # baseline cells carry no meaningful percentile — blank for readability
-        "pct_se": None if mode == "mean" else cfg.get("x_tar_pct_se"),
-        "pct_ee": None if mode == "mean" else cfg.get("x_tar_pct_ee"),
+        # percentile cells: SE/EE percentiles; blank for mean/static
+        "pct_se": cfg.get("x_tar_pct_se") if mode == "percentile" else None,
+        "pct_ee": cfg.get("x_tar_pct_ee") if mode == "percentile" else None,
+        # static cells: fixed SE/EE thresholds; blank for mean/percentile
+        "stat_se": cfg.get("x_tar_static_se") if mode == "static" else None,
+        "stat_ee": cfg.get("x_tar_static_ee") if mode == "static" else None,
         "seed": cfg.get("seed"),
         "test_acc": data.get("test_acc", float("nan")),
         "test_phi": data.get("test_phi", float("nan")),
         "best_val_acc": data.get("best_val_acc", float("nan")),
     }
+
+    # unified cell coordinates so percentile and static cells each group by their
+    # own SE/EE level (mean stays a single cell with blank levels).
+    if mode == "percentile":
+        row["level_se"], row["level_ee"] = row["pct_se"], row["pct_ee"]
+    elif mode == "static":
+        row["level_se"], row["level_ee"] = row["stat_se"], row["stat_ee"]
+    else:
+        row["level_se"], row["level_ee"] = None, None
 
     sh = data.get("stats_history", []) or []
     for key in TRAJ_KEYS:
@@ -130,38 +142,49 @@ def main():
     if not rows:
         sys.exit("No usable results.json found — nothing to write.")
 
+    cell_keys = ["mode", "level_se", "level_ee"]
     df = pd.DataFrame(rows).sort_values(
-        ["mode", "pct_se", "pct_ee", "seed"], na_position="first"
+        cell_keys + ["seed"], na_position="first"
     )
 
     out_path = args.out or os.path.join(results_dir, "Results_xtar.xlsx")
     df.to_excel(out_path, index=False, engine="openpyxl")
-    n_cells = df.groupby(["mode", "pct_se", "pct_ee"], dropna=False).ngroups
+    n_cells = df.groupby(cell_keys, dropna=False).ngroups
     print(f"\n  Written {len(df)} rows ({n_cells} unique cells) -> {out_path}")
 
+    # per-mode cell counts so the three estimators' coverage is visible at a glance
+    print("\n  Cells per mode:")
+    for mode, sub in df.groupby("mode"):
+        print(f"    {mode:<11}: {sub.groupby(cell_keys, dropna=False).ngroups} cells, {len(sub)} runs")
+
     # ---- coverage: which cells are under-seeded (partial grid) -------------
-    seeds_per_cell = df.groupby(["mode", "pct_se", "pct_ee"], dropna=False).size()
+    seeds_per_cell = df.groupby(cell_keys, dropna=False).size()
     n_seeds = int(df["seed"].nunique())
     partial = seeds_per_cell[seeds_per_cell < n_seeds]
     print(f"\n  Coverage: {n_cells} cells present, target {n_seeds} seeds/cell.")
     if len(partial):
         print(f"  {len(partial)} cell(s) under-seeded (<{n_seeds} seeds):")
         for (mode, se, ee), k in partial.items():
-            tag = "mean" if mode == "mean" else f"se{int(se)}_ee{int(ee)}"
+            if mode == "mean":
+                tag = "mean"
+            elif mode == "static":
+                tag = f"stat_se{se}_ee{ee}"
+            else:
+                tag = f"se{int(se)}_ee{int(ee)}"
             print(f"    {tag}: {k} seed(s)")
     if missing:
         print(f"  {len(missing)} cell dir(s) produced no usable results.json (see list above).")
 
     # ---- per-cell mean over seeds, sharpening-relevant columns ------------
     summary = (
-        df.groupby(["mode", "pct_se", "pct_ee"], dropna=False)[
-            ["test_acc", "d_rf_mean_cosine", "d_rf_gini", "active_frac_exc_last"]
+        df.groupby(cell_keys, dropna=False)[
+            ["test_acc", "test_phi", "d_rf_mean_cosine", "d_rf_gini", "active_frac_exc_last"]
         ]
         .mean()
         .reset_index()
     )
     print("\n  Per-cell mean over seeds (sharpen => d_cosine<0, d_gini>0):")
-    with pd.option_context("display.max_rows", None, "display.width", 120):
+    with pd.option_context("display.max_rows", None, "display.width", 130):
         print(summary.to_string(index=False))
 
 

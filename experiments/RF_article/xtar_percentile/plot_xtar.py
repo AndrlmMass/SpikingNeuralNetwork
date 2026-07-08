@@ -38,17 +38,18 @@ def load_results(results_dir: str) -> pd.DataFrame:
     return df
 
 
-def build_pivot(df: pd.DataFrame, value_col: str) -> pd.DataFrame:
-    """Mean over seeds → (pct_se × pct_ee) pivot, SE largest at top."""
+def build_pivot(df: pd.DataFrame, value_col: str, row_col: str, col_col: str) -> pd.DataFrame:
+    """Mean over seeds → (row_col × col_col) pivot, largest SE at top."""
     pivot = df.pivot_table(
-        index="pct_se", columns="pct_ee", values=value_col, aggfunc="mean"
+        index=row_col, columns=col_col, values=value_col, aggfunc="mean"
     )
     pivot = pivot.sort_index(ascending=False)
     pivot = pivot.reindex(sorted(pivot.columns), axis=1)
     return pivot
 
 
-def plot_heatmap(pivot, ax, title, cbar_label, cmap="viridis", fmt=".3f", center=None):
+def plot_heatmap(pivot, ax, title, cbar_label, cmap="viridis", fmt=".3f", center=None,
+                 xlabel="EE percentile", ylabel="SE percentile"):
     sns.heatmap(
         pivot,
         ax=ax,
@@ -63,8 +64,8 @@ def plot_heatmap(pivot, ax, title, cbar_label, cmap="viridis", fmt=".3f", center
         cbar_kws={"label": cbar_label, "shrink": 0.85},
     )
     ax.set_title(title, fontsize=15, pad=10)
-    ax.set_xlabel("EE percentile", fontsize=13)
-    ax.set_ylabel("SE percentile", fontsize=13)
+    ax.set_xlabel(xlabel, fontsize=13)
+    ax.set_ylabel(ylabel, fontsize=13)
     ax.set_xticklabels(ax.get_xticklabels(), fontsize=11, rotation=0)
     ax.set_yticklabels(ax.get_yticklabels(), fontsize=11, rotation=0)
 
@@ -76,42 +77,62 @@ def _baseline(df: pd.DataFrame, col: str):
     return base[col].mean()
 
 
-def create_heatmaps(df: pd.DataFrame, out_dir: str) -> None:
-    grid = df[df["mode"] == "percentile"].copy()
+def create_heatmaps(
+    df: pd.DataFrame,
+    out_dir: str,
+    mode: str,
+    row_col: str,
+    col_col: str,
+    xlabel: str,
+    ylabel: str,
+    tag: str,
+) -> None:
+    """Render the 4-panel + individual heatmaps for one estimator grid.
+
+    mode     : 'percentile' or 'static' — which rows of df to plot.
+    row_col  : SE coordinate column (pct_se or stat_se).
+    col_col  : EE coordinate column (pct_ee or stat_ee).
+    tag      : filename suffix (e.g. 'pct' or 'static').
+    """
+    grid = df[df["mode"] == mode].copy()
     if grid.empty:
-        sys.exit("No percentile-mode rows found — nothing to plot.")
+        print(f"  No {mode}-mode rows found — skipping {tag} heatmaps.")
+        return
     grid["test_acc_pct"] = grid["test_acc"] * 100
 
     panels = [
         ("test_acc_pct", "Test accuracy (%)", "Accuracy (%)", "viridis", ".1f", None,
          _baseline(df, "test_acc") * 100),
+        ("test_phi", "Test φ  (η², separability ⇒ higher)", "test φ",
+         "viridis", ".3f", None, _baseline(df, "test_phi")),
         ("d_rf_mean_cosine", "ΔRF cosine  (sharpen ⇒ < 0)", "Δ mean cosine",
          "coolwarm_r", ".4f", 0.0, _baseline(df, "d_rf_mean_cosine")),
         ("d_rf_gini", "ΔRF Gini  (sharpen ⇒ > 0)", "Δ Gini",
          "coolwarm", ".4f", 0.0, _baseline(df, "d_rf_gini")),
-        ("active_frac_exc_last", "Final active-E fraction", "active fraction",
-         "magma", ".3f", None, _baseline(df, "active_frac_exc_last")),
     ]
 
     fig, axes = plt.subplots(2, 2, figsize=(17, 13), constrained_layout=True)
     for (col, title, cbar, cmap, fmt, center, base), ax in zip(panels, axes.ravel()):
-        pivot = build_pivot(grid, col)
+        pivot = build_pivot(grid, col, row_col, col_col)
         sub = f"{title}\n(mean baseline: {base:.3f})" if not pd.isna(base) else title
-        plot_heatmap(pivot, ax, sub, cbar, cmap=cmap, fmt=fmt, center=center)
+        plot_heatmap(pivot, ax, sub, cbar, cmap=cmap, fmt=fmt, center=center,
+                     xlabel=xlabel, ylabel=ylabel)
 
-    out_path = os.path.join(out_dir, "heatmaps_xtar.pdf")
+    fig.suptitle(f"x_tar sweep — {mode} estimator", fontsize=18)
+    out_path = os.path.join(out_dir, f"heatmaps_xtar_{tag}.pdf")
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
     print(f"  Saved -> {out_path}")
 
     # individual panels too
     for col, title, cbar, cmap, fmt, center, base in panels:
-        pivot = build_pivot(grid, col)
+        pivot = build_pivot(grid, col, row_col, col_col)
         fig_s, ax_s = plt.subplots(figsize=(9, 7), constrained_layout=True)
         sub = f"{title}\n(mean baseline: {base:.3f})" if not pd.isna(base) else title
-        plot_heatmap(pivot, ax_s, sub, cbar, cmap=cmap, fmt=fmt, center=center)
+        plot_heatmap(pivot, ax_s, sub, cbar, cmap=cmap, fmt=fmt, center=center,
+                     xlabel=xlabel, ylabel=ylabel)
         stem = col.replace("/", "_")
-        p = os.path.join(out_dir, f"heatmap_xtar_{stem}.pdf")
+        p = os.path.join(out_dir, f"heatmap_xtar_{tag}_{stem}.pdf")
         fig_s.savefig(p, dpi=150)
         plt.close(fig_s)
         print(f"  Saved -> {p}")
@@ -147,7 +168,16 @@ def main():
 
     if df.empty:
         sys.exit("No data found — nothing to plot.")
-    create_heatmaps(df, out_dir)
+
+    # percentile grid (SE × EE percentiles) and static grid (fixed thresholds)
+    create_heatmaps(
+        df, out_dir, mode="percentile", row_col="pct_se", col_col="pct_ee",
+        xlabel="EE percentile", ylabel="SE percentile", tag="pct",
+    )
+    create_heatmaps(
+        df, out_dir, mode="static", row_col="stat_se", col_col="stat_ee",
+        xlabel="EE static x_tar", ylabel="SE static x_tar", tag="static",
+    )
 
 
 if __name__ == "__main__":

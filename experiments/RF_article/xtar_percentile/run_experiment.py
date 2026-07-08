@@ -58,8 +58,9 @@ def parse_args():
         "--x-tar-mode",
         type=str,
         default="percentile",
-        choices=["mean", "percentile"],
-        help="x_tar estimator: 'mean' (baseline) or 'percentile' over active traces",
+        choices=["mean", "percentile", "static"],
+        help="x_tar estimator: 'mean' (baseline), 'percentile' over active traces, "
+        "or 'static' fixed thresholds",
     )
     parser.add_argument(
         "--x-tar-pct-se",
@@ -72,6 +73,18 @@ def parse_args():
         type=float,
         default=30.0,
         help="EE percentile over active exc traces (percentile mode only)",
+    )
+    parser.add_argument(
+        "--x-tar-static-se",
+        type=float,
+        default=0.2,
+        help="SE fixed x_tar threshold on the input->exc trace (static mode only)",
+    )
+    parser.add_argument(
+        "--x-tar-static-ee",
+        type=float,
+        default=0.2,
+        help="EE fixed x_tar threshold on the exc->exc trace (static mode only)",
     )
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
 
@@ -108,6 +121,12 @@ def build_output_dir(args) -> str:
     base = os.path.join(os.path.dirname(__file__), "results")
     if args.x_tar_mode == "mean":
         tag = f"mean_s{args.seed}"
+    elif args.x_tar_mode == "static":
+        # encode static levels (x1000, integer) so tags stay filesystem-safe
+        tag = (
+            f"stat_se{int(round(args.x_tar_static_se * 1000))}"
+            f"_ee{int(round(args.x_tar_static_ee * 1000))}_s{args.seed}"
+        )
     else:
         tag = f"se{int(args.x_tar_pct_se)}_ee{int(args.x_tar_pct_ee)}_s{args.seed}"
     return os.path.join(base, tag)
@@ -121,7 +140,7 @@ def main():
     # ------------------------------------------------------------------
     # Weights — current engaged-inhibition regime
     # ------------------------------------------------------------------
-    weights = snn.weights.receptive_fields(
+    weights = snn.weights.oriented_receptive_fields(
         density_se=0.01,
         density_ee=0.01,
         density_ei=0.03,
@@ -130,6 +149,8 @@ def main():
         peak_ee=1.0,
         peak_ei=2.0,
         peak_ie=-2.0,
+        n_orientations=4,
+        orientation_mode="block",
     )
 
     # ------------------------------------------------------------------
@@ -170,6 +191,8 @@ def main():
         x_tar_mode=args.x_tar_mode,
         x_tar_pct_se=args.x_tar_pct_se,
         x_tar_pct_ee=args.x_tar_pct_ee,
+        x_tar_static_se=args.x_tar_static_se,
+        x_tar_static_ee=args.x_tar_static_ee,
         update_freq=100,
         clip_weights=True,
         min_weight_exc=0.01,
@@ -212,13 +235,21 @@ def main():
         x_tar_mode=args.x_tar_mode,
         x_tar_pct_se=args.x_tar_pct_se,
         x_tar_pct_ee=args.x_tar_pct_ee,
+        x_tar_static_se=args.x_tar_static_se,
+        x_tar_static_ee=args.x_tar_static_ee,
         learning_rate=args.learning_rate,
         mu_weight=args.mu_weight,
         w_max=args.w_max,
     )
+    if args.x_tar_mode == "static":
+        thresh_str = f"static_se: {args.x_tar_static_se} | static_ee: {args.x_tar_static_ee}"
+    elif args.x_tar_mode == "percentile":
+        thresh_str = f"pct_se: {args.x_tar_pct_se} | pct_ee: {args.x_tar_pct_ee}"
+    else:
+        thresh_str = "(population mean)"
     print(
         f"\nConfig — dataset: {args.dataset} | x_tar: {args.x_tar_mode}"
-        f" | pct_se: {args.x_tar_pct_se} | pct_ee: {args.x_tar_pct_ee}"
+        f" | {thresh_str}"
         f" | seed: {args.seed} | epochs: {args.epochs}\n"
     )
 

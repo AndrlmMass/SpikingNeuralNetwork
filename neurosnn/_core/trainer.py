@@ -338,8 +338,12 @@ class Trainer:
         )
         # loop across time T 
         for t in pbar:
-            # check if weights and regularization should be active if train mode
-            if training_mode == "train":
+            # check if weights and regularization should be active if train mode.
+            # Gate on train_weights so train_weights=False is a genuine freeze:
+            # previously the local `train_weights` was computed but never used, so
+            # a "frozen" run still applied STDP + regularization during the single
+            # readout-fitting batch (and every batch under run_full_stream).
+            if training_mode == "train" and train_weights:
                 if t % self.update_weights_freq == 0:
                     update_weights_now = np.uint8(1)
                 if t % self.reg_frequency == 0:

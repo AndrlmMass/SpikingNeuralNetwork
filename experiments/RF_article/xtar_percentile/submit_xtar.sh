@@ -3,7 +3,7 @@
 # date+time-stamped results folder.
 #
 # The timestamp is computed HERE, once, and exported to every array task via
-# --export. That guarantees all 246 tasks agree on a single run folder — if
+# --export. That guarantees all 354 tasks agree on a single run folder — if
 # each task computed its own `date`, they'd start at different moments and
 # scatter into different folders.
 #

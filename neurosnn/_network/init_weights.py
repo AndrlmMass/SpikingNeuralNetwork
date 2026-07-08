@@ -183,7 +183,9 @@ class WeightFactory:
         if self.wta_inhibition:
             W_ei = wta_ei_weights(self.N_exc, self.N_inh, peak=self.ei_weights)
             self.weights[self.st : self.ex, self.ex : self.ih] = W_ei
-            W_ie = wta_ie_weights(self.N_inh, self.N_exc, peak=self.ie_weights)
+            W_ie = wta_ie_weights(
+                self.N_inh, self.N_exc, peak=self.ie_weights, frac=self.w_dense_ie
+            )
             self.weights[self.ex : self.ih, self.st : self.ex] = W_ie
         else:
             W_ei, _, inh_centers = gaussian_ei_local(
@@ -221,7 +223,9 @@ class WeightFactory:
         if self.wta_inhibition:
             W_ei = wta_ei_weights(self.N_exc, self.N_inh, peak=self.ei_weights)
             self.weights[self.st : self.ex, self.ex : self.ih] = W_ei
-            W_ie = wta_ie_weights(self.N_inh, self.N_exc, peak=self.ie_weights)
+            W_ie = wta_ie_weights(
+                self.N_inh, self.N_exc, peak=self.ie_weights, frac=self.w_dense_ie
+            )
             self.weights[self.ex : self.ih, self.st : self.ex] = W_ie
         else:
             mask_ei = self.rng.random((self.N_exc, self.N_inh)) < self.w_dense_ei
@@ -404,16 +408,45 @@ class WeightFactory:
 
 
 def wta_ei_weights(N_exc, N_inh, peak=1.0):
-    """WTA E→I: each E neuron connects to exactly one I neuron (round-robin)."""
-    W_ei = np.zeros((N_exc, N_inh))
-    for e in range(N_exc):
-        W_ei[e, e % N_inh] = peak
-    return W_ei
+    """WTA E→I, one-to-one: E neuron e drives its own dedicated interneuron e (an
+    inhibitory 'hitman'). Requires N_inh == N_exc so every E cell has exactly one
+    private interneuron.
+
+    The old round-robin (``e % N_inh``) mapped ~N_exc/N_inh excitatory cells onto
+    each interneuron; combined with a global I→E projection that degenerated into
+    plain uniform inhibition with no per-neuron competition. One-to-one restores a
+    genuine winner-take-all: only the interneurons of E cells that fired become
+    active.
+    """
+    if N_inh != N_exc:
+        raise ValueError(
+            f"one-to-one WTA requires N_inh == N_exc (got N_inh={N_inh}, "
+            f"N_exc={N_exc}). Set the layer's N_inh equal to N_exc for WTA."
+        )
+    return np.eye(N_exc, dtype=float) * peak
 
 
-def wta_ie_weights(N_inh, N_exc, peak=-0.2):
-    """WTA I→E: each I neuron inhibits all E neurons uniformly."""
-    return np.full((N_inh, N_exc), peak)
+def wta_ie_weights(N_inh, N_exc, peak=-0.2, frac=None):
+    """WTA I→E: interneuron e inhibits every OTHER E cell (global minus self), so a
+    winning E's hitman suppresses all its competitors but never the winner itself
+    (zero diagonal).
+
+    If ``frac`` is given, each interneuron's total outgoing inhibition is scaled by
+    ``weight_compliance`` to ``frac * N_exc * peak`` — i.e. weak per-synapse
+    (≈ peak·frac each) but broadcast to all competitors. Requires N_inh == N_exc.
+    """
+    if N_inh != N_exc:
+        raise ValueError(
+            f"one-to-one WTA requires N_inh == N_exc (got N_inh={N_inh}, "
+            f"N_exc={N_exc}). Set the layer's N_inh equal to N_exc for WTA."
+        )
+    W_ie = np.full((N_inh, N_exc), peak, dtype=float)
+    np.fill_diagonal(W_ie, 0.0)  # the hitman spares its own driver E cell
+    if frac is not None:
+        W_ie = weight_compliance(
+            frac=frac, N=N_exc, weights=W_ie, peak=peak, type="W_ie_wta"
+        )
+    return W_ie
 
 
 def exc_coords(H_e, W_e):
