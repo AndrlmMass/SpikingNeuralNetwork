@@ -11,10 +11,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 ORDER = ["A0_rand_frozen_ff", "A1_rand_trace_ff", "A2_rand_trace_ee",
-         "B0_ori_frozen_ff", "B1_ori_trace_ff", "B2_ori_trace_ee", "B3_ori_triplet_ee"]
+         "B0_ori_frozen_ff", "B1_ori_trace_ff", "B2_ori_trace_ee", "B3_ori_triplet_ee",
+         "R1_ori_reward_ff"]
 COLORS = {"A0_rand_frozen_ff": "#9ecae1", "A1_rand_trace_ff": "#3182bd", "A2_rand_trace_ee": "#08519c",
           "B0_ori_frozen_ff": "#a1d99b", "B1_ori_trace_ff": "#fd8d3c", "B2_ori_trace_ee": "#e6550d",
-          "B3_ori_triplet_ee": "#9467bd"}
+          "B3_ori_triplet_ee": "#9467bd", "R1_ori_reward_ff": "#d62728"}
 
 
 def load(run_dir):
@@ -37,9 +38,13 @@ def main():
     args = ap.parse_args()
     runs = load(args.results_dir)
 
-    panels = [("val_acc", "Val accuracy"), ("selectivity", "Class selectivity (per-neuron)"),
-              ("orient_coh", "RF orientation coherence"), ("ee_se_ratio", "EE/SE drive ratio")]
-    fig, axes = plt.subplots(2, 2, figsize=(15, 11))
+    panels = [("val_acc", "Val accuracy (PCA+LR readout)"),
+              ("pool_acc", "Pool-by-label readout (reward V1)"),
+              ("selectivity", "Class selectivity (per-neuron)"),
+              ("orient_coh", "RF orientation coherence"),
+              ("ee_se_ratio", "EE/SE drive ratio"),
+              ("dead_frac", "Dead-neuron fraction (reward)")]
+    fig, axes = plt.subplots(3, 2, figsize=(15, 16))
     for (key, title), ax in zip(panels, axes.ravel()):
         for tag in ORDER:
             if tag not in runs:
@@ -48,6 +53,8 @@ def main():
             if not traj:
                 continue
             xs, ys = series(traj, key)
+            if all(v is None for v in ys):   # metric absent for this cell (e.g. pool_acc on non-reward)
+                continue
             if len(xs) == 1:  # frozen -> horizontal line
                 ax.axhline(ys[0], ls="--", lw=1.4, color=COLORS.get(tag), label=tag)
             else:

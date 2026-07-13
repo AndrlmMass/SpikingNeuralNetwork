@@ -143,8 +143,14 @@ Health / coverage:
    fires once per sample, SE weights change, potentiation:depression ~ 1:9 (matches
    1 target vs C-1 non-target classes). Baseline initialized to (2-C)/C so updates
    are zero-mean from step 0 (avoids early net-depression drift).
-3. Pool-by-label readout.
-4. New interp-harness cell (V1); run vs B1/B2; add reward/coverage diagnostics.
+3. [DONE] Pool-by-label readout (`pool_by_label` in interp_harness) — argmax over
+   per-class summed exc rates, using the same fixed "mod" assignment the runner builds.
+4. [DONE] interp-harness `--rule reward` cell (R1_ori_reward_ff in run_interp_sweep) +
+   coverage diagnostics (dead_frac, frac_ever_winner, winner_entropy) + 6-panel plot
+   (adds pool_acc, dead_frac). Smoke-verified end-to-end on a tiny run; results.json
+   carries all fields; plotter robust to reward/non-reward mix.
+   PENDING: the actual full sweep run (results/interp/) vs B1/B2 — a compute job;
+   reward-lr (default 2e-5) will likely need tuning on the first real run.
 5. Sanity controls (label shuffle, baseline on/off).
 6. If V1 works: V2, then V3/V4. If V1 flat: add group structure and retry.
 

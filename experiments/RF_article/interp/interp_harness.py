@@ -88,6 +88,44 @@ def w_floor_frac(W_se, floor=0.02):
     return float((np.abs(nz) <= floor).mean()) if nz.size else 0.0
 
 
+# ---------------- reward-STDP (V1) readout + coverage ----------------
+def pool_by_label(X, y, neuron_class, K=10):
+    """V1 readout: predict argmax over per-class summed exc firing rates.
+
+    X: (n_items, N_exc) rates; neuron_class: (N_exc,) fixed class label per neuron.
+    This is the a-priori class-assignment readout — directly measures whether
+    reward-STDP built class-selective groups (no fitted classifier).
+    """
+    scores = np.zeros((X.shape[0], K))
+    for c in range(K):
+        m = neuron_class == c
+        if m.any():
+            scores[:, c] = X[:, m].sum(1)
+    return float((scores.argmax(1) == y).mean())
+
+
+def coverage_stats(X):
+    """Monopolization diagnostics from val firing rates X (n_items, N_exc).
+
+    dead_frac      — fraction of exc neurons with ~0 total activity (never fire).
+    frac_ever_win  — fraction of neurons that are the top responder for >=1 item.
+    winner_entropy — normalized entropy of the argmax-winner distribution
+                     (1 = every neuron wins equally often, ->0 = a few monopolize).
+    """
+    N = X.shape[1]
+    tot = X.sum(0)
+    dead_frac = float((tot <= 1e-9).mean())
+    active_items = X.sum(1) > 1e-9            # ignore items that elicited no spikes
+    if not active_items.any():
+        return dead_frac, 0.0, 0.0
+    winners = X[active_items].argmax(1)
+    frac_ever = float(len(np.unique(winners)) / N)
+    counts = np.bincount(winners, minlength=N).astype(float)
+    p = counts[counts > 0] / counts.sum()
+    ent = float(-(p * np.log(p)).sum() / np.log(N)) if N > 1 else 0.0
+    return dead_frac, frac_ever, ent
+
+
 # ---------------- readout drift ----------------
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
@@ -128,7 +166,8 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--tag", required=True)
     p.add_argument("--prior", choices=["oriented", "random"], required=True)
-    p.add_argument("--rule", choices=["frozen", "trace", "triplet"], required=True)
+    p.add_argument("--rule", choices=["frozen", "trace", "triplet", "reward"], required=True)
+    p.add_argument("--reward-lr", type=float, default=2e-5, help="reward-STDP learning rate (rule=reward)")
     p.add_argument("--ee", action="store_true", help="enable E->E recurrence (default off=feedforward)")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--train-all", type=int, default=15000)
@@ -163,12 +202,16 @@ def main():
         min_mp=-100.0, max_mp=40.0, mean_noise=0.0, var_noise=0.0,
         spike_adaptation=True, tau_adaptation=200.0, delta_adaptation=0.5), weights=weights)
 
-    if a.rule == "triplet":
+    if a.rule == "reward":
+        learner = snn.learner.RewardSTDP(learning_rate=a.reward_lr, class_assignment="mod", seed=a.seed)
+    elif a.rule == "triplet":
         learner = snn.learner.TripletSTDP()
     else:
         learner = snn.learner.TraceSTDP(learning_rate=0.0004, tau_trace=20, w_max=10.0,
             mu_weight=0.5, x_tar_mode="mean", update_freq=100, clip_weights=True,
             min_weight_exc=0.01, max_weight_exc=25.0, min_weight_inh=-25.0, max_weight_inh=-0.01)
+    # reward-STDP V1 readout uses the same fixed "mod" class assignment the runner builds
+    neuron_class = (np.arange(N_exc) % 10) if a.rule == "reward" else None
     reg = snn.regularizer.Normalize(frequency=1050, mode="neuron")
 
     model = snn.Model(input_size=784, classes=list(range(10)), random_state=a.seed, num_steps=350,
@@ -212,10 +255,15 @@ def main():
                    refit_acc=float(refit), fixed_acc=float(fixed_acc),
                    cur_se=se, cur_ee=ee, cur_ie=ie, ee_se_ratio=ee / (se + 1e-12),
                    w_floor_frac=w_floor_frac(W_se))
+        if neuron_class is not None:
+            rec["pool_acc"] = pool_by_label(X, y, neuron_class)
+            rec["dead_frac"], rec["frac_ever_winner"], rec["winner_entropy"] = coverage_stats(X)
         traj.append(rec)
+        extra = (f" pool {rec['pool_acc']:.3f} dead {rec['dead_frac']:.2f} "
+                 f"win_ent {rec['winner_entropy']:.2f}") if "pool_acc" in rec else ""
         print(f"  [{a.tag}] b{batch:>3} val {rec['val_acc']:.3f} sel {rec['selectivity']:.3f} "
               f"coh {rec['orient_coh']:.3f} refit {refit:.3f} fixed {fixed_acc:.3f} "
-              f"EE/SE {rec['ee_se_ratio']:.3f}", flush=True)
+              f"EE/SE {rec['ee_se_ratio']:.3f}{extra}", flush=True)
         # RF snapshots: first & last
         key = "first" if "first" not in rf_saved else "last"
         save_rf_grid(W_se, os.path.join(a.output_dir, f"rf_{key}.png"))

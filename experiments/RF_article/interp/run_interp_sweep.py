@@ -10,6 +10,7 @@ Cells (all one-to-one WTA, PCA+LR readout):
   B1 oriented trace    FF     oriented feedforward
   B2 oriented trace    +EE    our full regime (degradation case)
   B3 oriented triplet  +EE    rule variant
+  R1 oriented reward   FF     supervised reward-STDP (V1) — compare vs B1/B2
 
   python experiments/RF_article/interp/run_interp_sweep.py --parallel 6
 """
@@ -27,6 +28,7 @@ CELLS = [
     ("B1_ori_trace_ff",    ["--prior", "oriented", "--rule", "trace"]),
     ("B2_ori_trace_ee",    ["--prior", "oriented", "--rule", "trace",   "--ee"]),
     ("B3_ori_triplet_ee",  ["--prior", "oriented", "--rule", "triplet", "--ee"]),
+    ("R1_ori_reward_ff",   ["--prior", "oriented", "--rule", "reward"]),
 ]
 
 
