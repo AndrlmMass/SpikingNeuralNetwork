@@ -225,6 +225,58 @@ def vogels_iSTDP(
     return weights
 
 
+@njit(parallel=False, cache=True)
+def reward_STDP(
+    learning_rate,
+    spike_count,
+    reward_post,
+    weights,
+    N_x,
+    nonzero_pre_idx,
+    w_max,
+    w_min,
+    mu_weight,
+):
+    """Reward-modulated STDP with a count-product eligibility (V1).
+
+    Applied ONCE per sample (at the sample boundary), not per timestep.
+
+    Eligibility is the symmetric rate/correlation trace
+        e_ij = spike_count[j] * spike_count[i]      (#pre spikes x #post spikes, >= 0)
+    accumulated over the sample. The supervised direction is carried by a
+    per-post-neuron reward (already baseline-subtracted):
+        Δw_ij = learning_rate * reward_post[i] * e_ij * bound
+    reward_post[i] > 0 for target-class neurons (potentiate their active inputs),
+    < 0 for non-target (depress). Since e_ij = 0 whenever post i is silent, no
+    explicit "did i fire" check is needed. Soft bounds match the trace/triplet
+    kernels: (w_max - w)^mu for potentiation, (w - w_min)^mu for depression.
+
+    spike_count is length n_neurons (= N_x + N_exc); reward_post is length N_exc.
+    """
+    n_neurons = spike_count.shape[0]
+    for i in range(N_x, n_neurons):
+        r_i = reward_post[i - N_x]
+        pc_i = spike_count[i]
+        # silent post (pc_i == 0) or zero reward -> eligibility/update is zero
+        if pc_i == 0.0 or r_i == 0.0:
+            continue
+        pre_indices = nonzero_pre_idx[i - N_x]
+        for j in pre_indices:
+            if j == -1:
+                continue
+            e = spike_count[j] * pc_i
+            if e == 0.0:
+                continue
+            dw = learning_rate * r_i * e
+            w = weights[j, i]
+            if dw >= 0.0:  # potentiation
+                bound = max(w_max - w, 0.0) ** mu_weight
+            else:           # depression
+                bound = max(w - w_min, 0.0) ** mu_weight
+            weights[j, i] = w + dw * bound
+    return weights
+
+
 @dataclass
 class Learner:
     learning_rate: float
@@ -322,6 +374,72 @@ class iLearner:
             self.N_x, self.N_exc, self.N_inh, spikes,
             self.rho_0, self.w_min, self.w_max, self.mu_weight,
         )
+
+
+@dataclass
+class RewardLearner:
+    """Reward-modulated STDP learner (V1): only feedforward SE weights.
+
+    Accumulate per-neuron spike counts over a sample via `accumulate`, then call
+    `step(weights, target_label)` at the sample boundary to apply the reward
+    update and reset the counts.
+
+    reward_post[i] = R_i - baseline, with R_i = +1 if neuron_class[i] == target
+    else -1. The baseline is an EMA of the mean teacher signal; it centers the
+    (mostly-negative, since 1 target vs C-1 non-target classes) reward so the net
+    update is ~zero-mean (kills DC drift, reduces variance). For fixed class
+    balance it converges to a constant; it becomes a true performance baseline if
+    R_i is later made performance-dependent.
+    """
+
+    learning_rate: float
+    N_x: int
+    N_exc: int
+    nonzero_pre_idx: list
+    neuron_class: np.ndarray  # (N_exc,) fixed class label per exc neuron
+    w_max: float
+    w_min: float
+    mu_weight: float
+    baseline_decay: float = 0.01
+
+    def __post_init__(self):
+        max_len = max(len(x) for x in self.nonzero_pre_idx)
+        self.pre_idx_arr = np.full(
+            (len(self.nonzero_pre_idx), max_len), -1, dtype=np.int64
+        )
+        for i, idx in enumerate(self.nonzero_pre_idx):
+            self.pre_idx_arr[i, : len(idx)] = idx
+        del self.nonzero_pre_idx
+        self.neuron_class = np.asarray(self.neuron_class)
+        self.spike_count = np.zeros(self.N_x + self.N_exc, dtype=np.float64)
+        self.baseline = 0.0
+
+    def accumulate(self, spikes):
+        """Add a timestep's (or a (T, n_neurons) block's) spikes to the counts."""
+        s = np.asarray(spikes)
+        add = s.sum(axis=0) if s.ndim == 2 else s
+        self.spike_count[: add.shape[0]] += add
+
+    def reset_counts(self):
+        self.spike_count[:] = 0.0
+
+    def step(self, weights, target_label):
+        R = np.where(self.neuron_class == target_label, 1.0, -1.0)
+        reward_post = R - self.baseline
+        weights = reward_STDP(
+            self.learning_rate,
+            self.spike_count,
+            reward_post,
+            weights,
+            self.N_x,
+            self.pre_idx_arr,
+            self.w_max,
+            self.w_min,
+            self.mu_weight,
+        )
+        self.baseline += self.baseline_decay * (float(R.mean()) - self.baseline)
+        self.reset_counts()
+        return weights
 
 
 @dataclass
