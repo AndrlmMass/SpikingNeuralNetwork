@@ -180,3 +180,44 @@ class TraceSTDP:
             min_weight_inh=self.min_weight_inh,
             max_weight_inh=self.max_weight_inh,
         )
+
+
+@dataclass
+class RewardSTDP:
+    """Reward-modulated STDP on the feedforward SE weights (supervised, V1).
+
+    Excitatory neurons are assigned to classes (fixed). A count-product
+    eligibility (#pre x #post spikes per sample) is gated by a per-neuron reward
+    (+1 for target-class neurons, -1 otherwise), centered by a running baseline,
+    and applied once per sample at the sample boundary. Pass as `learner` to
+    model.train() in place of TraceSTDP.
+
+    V1 scope: only SE weights are plastic — keep inh_learner=None (static
+    inhibition as a fixed WTA scaffold) and no recurrent plasticity. Use a
+    Normalize regularizer and the homeostatic spike-adaptation threshold.
+
+    Parameters
+    ----------
+    learning_rate : float
+        Step size for the reward weight update.
+    baseline_decay : float
+        EMA rate for the reward baseline (0 disables centering).
+    class_assignment : {"mod", "random"}
+        "mod": exc neuron j -> class j % N_classes; "random": seeded shuffle.
+    seed : int
+        Seed for random class assignment.
+    """
+
+    learning_rate: float = 0.0005
+    baseline_decay: float = 0.01
+    class_assignment: str = "mod"
+    seed: int = 0
+
+    def _to_runner_kwargs(self) -> dict:
+        return dict(
+            use_reward=True,
+            reward_learning_rate=self.learning_rate,
+            reward_baseline_decay=self.baseline_decay,
+            reward_class_assignment=self.class_assignment,
+            reward_seed=self.seed,
+        )

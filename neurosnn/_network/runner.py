@@ -131,6 +131,11 @@ class Runner:
         use_vogels: bool = False,
         lr_inh: float = 0.01,
         rho_0: float = 0.1,
+        use_reward: bool = False,
+        reward_learning_rate: float = 0.0005,
+        reward_baseline_decay: float = 0.01,
+        reward_class_assignment: str = "mod",
+        reward_seed: int = 0,
     ) -> Generator[TrainResult, None, None]:
         if accuracy_method != "pca_lr" and PCA_plot:
             raise ValueError("PCA_plot requires accuracy_method='pca_lr'")
@@ -153,6 +158,16 @@ class Runner:
         self._evaluator_fitted = False
         self._validate_call_count = 0
         self._global_batch = 0
+
+        # reward-STDP: fixed class assignment of excitatory neurons (balanced).
+        # "mod": neuron j -> class j % N_classes; "random": a seeded shuffle of it.
+        neuron_class = None
+        if use_reward:
+            base = np.arange(model.N_exc) % model.N_classes
+            if reward_class_assignment == "random":
+                neuron_class = np.random.default_rng(reward_seed).permutation(base)
+            else:
+                neuron_class = base
 
         self._trainer = Trainer(
             resting_potential=model.resting_potential,
@@ -237,6 +252,10 @@ class Runner:
             use_vogels=use_vogels,
             lr_inh=lr_inh,
             rho_0=rho_0,
+            use_reward=use_reward,
+            reward_learning_rate=reward_learning_rate,
+            reward_baseline_decay=reward_baseline_decay,
+            neuron_class=neuron_class,
         )
 
         self._evaluator = Evaluator(

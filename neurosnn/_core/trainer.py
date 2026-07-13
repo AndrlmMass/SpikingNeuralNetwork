@@ -5,7 +5,7 @@ import numpy as np
 from neurosnn._core.regularization import Sleep, Normalizer
 from neurosnn._core.neurons import NeuronState, MembranePotential, update_x_tar, update_slow_traces, update_inh_trace
 from neurosnn._utils.performance import report_RAM_usage, spawn_plot_thread
-from neurosnn._core.synapses import Learner, TripletLearner, iLearner, Clipper
+from neurosnn._core.synapses import Learner, TripletLearner, iLearner, Clipper, RewardLearner
 from neurosnn._core.trackers import TrainTracker
 
 @dataclass
@@ -86,6 +86,10 @@ class Trainer:
     use_vogels: bool = False
     lr_inh: float = 0.01
     rho_0: float = 0.1
+    use_reward: bool = False
+    reward_learning_rate: float = 0.0005
+    reward_baseline_decay: float = 0.01
+    neuron_class: "np.ndarray | None" = None
     record_fn_se: "callable | None" = None
     record_fn_ee: "callable | None" = None
     record_fn_awake_se: "callable | None" = None
@@ -186,6 +190,22 @@ class Trainer:
                 w_min=self.min_weight_inh,
                 w_max=self.max_weight_inh,
                 mu_weight=self.mu_weight,
+            )
+
+        # initiate reward-modulated STDP learner (V1: only feedforward SE plastic)
+        if self.use_reward:
+            if self.neuron_class is None:
+                raise ValueError("use_reward=True requires neuron_class (per-exc-neuron labels).")
+            self.reward_learner = RewardLearner(
+                learning_rate=self.reward_learning_rate,
+                N_x=self.N_x,
+                N_exc=self.N_exc,
+                nonzero_pre_idx=list(self.nonzero_pre_idx),
+                neuron_class=self.neuron_class,
+                w_max=self.max_weight_exc,
+                w_min=self.min_weight_exc,
+                mu_weight=self.mu_weight,
+                baseline_decay=self.reward_baseline_decay,
             )
 
         # initiate clipper object
@@ -336,14 +356,18 @@ class Trainer:
             static_se=self.x_tar_static_se,
             static_ee=self.x_tar_static_ee,
         )
-        # loop across time T 
+        # reward-STDP: count the first timestep's spikes before the loop (loop starts at t=1)
+        if self.use_reward and training_mode == "train" and train_weights:
+            self.reward_learner.accumulate(spikes[0])
+
+        # loop across time T
         for t in pbar:
             # check if weights and regularization should be active if train mode.
             # Gate on train_weights so train_weights=False is a genuine freeze:
             # previously the local `train_weights` was computed but never used, so
             # a "frozen" run still applied STDP + regularization during the single
             # readout-fitting batch (and every batch under run_full_stream).
-            if training_mode == "train" and train_weights:
+            if training_mode == "train" and train_weights and not self.use_reward:
                 if t % self.update_weights_freq == 0:
                     update_weights_now = np.uint8(1)
                 if t % self.reg_frequency == 0:
@@ -535,6 +559,25 @@ class Trainer:
                 inh_trace = update_inh_trace(
                     spikes[t], inh_trace, self._decay_inh, self.N_x, self.N_exc,
                 )
+
+            # reward-modulated STDP: accumulate spike counts every timestep, then
+            # apply the reward update ONCE at each sample boundary (every
+            # time_per_item steps). The image that just finished has label
+            # spike_labels[t]; step() applies Δw and resets the counts.
+            if self.use_reward and training_mode == "train" and train_weights:
+                self.reward_learner.accumulate(spikes[t])
+                if (t + 1) % self.time_per_item == 0:
+                    weights = self.reward_learner.step(weights, int(spike_labels[t]))
+                    if self.clip_weights:
+                        weights = self.clipper.step(weights=weights)
+                    if self.normalize_weights:
+                        weights[: self.st, self.st : self.ex] = self.norm_se.step(
+                            weights[: self.st, self.st : self.ex], t
+                        )
+                    np.copyto(weights_exc, weights[:, self.st : self.ex].T)
+                    np.copyto(
+                        weights_inh, weights[self.st : self.ex, self.ex : self.ih].T
+                    )
 
             # clip, update and regularize weights if train mode
             if update_weights_now:

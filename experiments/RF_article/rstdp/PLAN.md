@@ -135,9 +135,14 @@ Health / coverage:
 
 ## 6. Build order (milestones)
 
-1. `reward_STDP` njit kernel + wrapper (reuse trace coincidence; eligibility buffer +
-   boundary application). Unit-test the eligibility/reset on a toy 2-neuron case.
-2. Wire `neuron_class` + label plumbing + boundary cadence into trainer/runner.
+1. [DONE] `reward_STDP` njit kernel + `RewardLearner` wrapper (count-product
+   eligibility, boundary application). Unit-tested on a toy 2-neuron case
+   (test_reward_kernel.py).
+2. [DONE] Wire `neuron_class` + label plumbing + boundary cadence into
+   trainer/runner + `RewardSTDP` config in learner.py. Verified end-to-end: reward
+   fires once per sample, SE weights change, potentiation:depression ~ 1:9 (matches
+   1 target vs C-1 non-target classes). Baseline initialized to (2-C)/C so updates
+   are zero-mean from step 0 (avoids early net-depression drift).
 3. Pool-by-label readout.
 4. New interp-harness cell (V1); run vs B1/B2; add reward/coverage diagnostics.
 5. Sanity controls (label shuffle, baseline on/off).

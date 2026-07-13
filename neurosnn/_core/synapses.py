@@ -412,13 +412,23 @@ class RewardLearner:
         del self.nonzero_pre_idx
         self.neuron_class = np.asarray(self.neuron_class)
         self.spike_count = np.zeros(self.N_x + self.N_exc, dtype=np.float64)
-        self.baseline = 0.0
+        # Initialize the baseline to the class-balance mean of R_i so updates are
+        # zero-mean from step 0 (1 target class at +1, C-1 non-target at -1 ->
+        # mean = (2 - C) / C). Avoids early net-depression drift before the EMA
+        # would otherwise converge. For C=2 this is 0.0 (unit-test compatible).
+        n_classes = len(np.unique(self.neuron_class))
+        self.baseline = (2.0 - n_classes) / n_classes
 
     def accumulate(self, spikes):
-        """Add a timestep's (or a (T, n_neurons) block's) spikes to the counts."""
+        """Add a timestep's (or a (T, n_neurons) block's) spikes to the counts.
+
+        `spikes` may include the inhibitory tail (length N_x+N_exc+N_inh); only
+        the input+exc entries (length N_x+N_exc) are counted.
+        """
         s = np.asarray(spikes)
         add = s.sum(axis=0) if s.ndim == 2 else s
-        self.spike_count[: add.shape[0]] += add
+        n = self.spike_count.shape[0]
+        self.spike_count += add[:n]
 
     def reset_counts(self):
         self.spike_count[:] = 0.0
