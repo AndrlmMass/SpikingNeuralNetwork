@@ -208,6 +208,9 @@ def grouped_excitatory(
         n_orientations=n_orientations,
         r_cut_factor=r_cut_factor,
         orientation_mode=orientation_mode,
+        # When isotropic, use sigma_x as the Gaussian radius so RF size is
+        # consistent between oriented and isotropic modes (auto-compute gives sigma=1px).
+        sigma_se_mean=0.0 if oriented else sigma_x,
         wta_inhibition=True,
         grouped_inhibition=True,
         n_groups=n_groups,

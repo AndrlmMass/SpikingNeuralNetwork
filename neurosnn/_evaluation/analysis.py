@@ -144,3 +144,42 @@ def softmax_readout(
     acc = float((probs.argmax(1) == y).mean())
     ce = float(-np.log(probs[np.arange(len(y)), y] + 1e-12).mean())
     return acc, ce
+
+
+def eta_squared(X: np.ndarray, y: np.ndarray) -> float:
+    """Multivariate eta-squared: BCSS / (BCSS + WCSS), the fraction of total
+    representational variance explained by class structure. Bounded in [0, 1]
+    and sample-size independent.
+
+    Note: computed on whatever feature space X is given. On raw sparse WTA
+    population rates this collapses as the code sharpens (stochastic per-sample
+    winners inflate within-class scatter) even while linear separability is
+    preserved — so for grouped architectures prefer group_eta_squared, which
+    measures separation in the pooled space the readout actually uses.
+    """
+    present = np.unique(y).astype(int)
+    centroids = {c: X[y == c].mean(axis=0) for c in present}
+    wcss = sum(np.sum((X[y == c] - centroids[c]) ** 2) for c in present)
+    overall_mean = X.mean(axis=0)
+    bcss = sum(np.sum(y == c) * np.sum((centroids[c] - overall_mean) ** 2)
+               for c in present)
+    total = bcss + wcss
+    return float(bcss / total) if total > 1e-12 else 0.0
+
+
+def group_eta_squared(
+    X: np.ndarray,
+    y: np.ndarray,
+    group_assignment: np.ndarray,
+    n_groups: int = 10,
+) -> float:
+    """eta-squared computed on group-pooled mean rates (n_groups-dim features).
+
+    This is the clustering quality of the representation *in the space the
+    group-pooled readout uses*, so it tracks classification accuracy instead
+    of anti-correlating with it the way raw-rate eta-squared does under WTA.
+    """
+    group_rates = np.stack(
+        [X[:, group_assignment == g].mean(1) for g in range(n_groups)], axis=1
+    )
+    return eta_squared(group_rates, y)

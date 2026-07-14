@@ -273,6 +273,7 @@ class Runner:
             do_LR=use_LR,
             do_pca=use_pca,
             seed=model.random_state,
+            group_assignment=group_assignment,
         )
 
         self.logger.log_config(dict(

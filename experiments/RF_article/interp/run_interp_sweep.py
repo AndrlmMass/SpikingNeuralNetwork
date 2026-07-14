@@ -29,10 +29,10 @@ CELLS = [
     ("B2_ori_trace_ee",    ["--prior", "oriented", "--rule", "trace",   "--ee"]),
     ("B3_ori_triplet_ee",  ["--prior", "oriented", "--rule", "triplet", "--ee"]),
     ("R1_ori_reward_ff",   ["--prior", "oriented", "--rule", "reward"]),
-    # Grouped excitatory architecture: intra-class WTA + reward-STDP
-    ("G1_grp_reward_ff_static", ["--prior", "oriented", "--rule", "reward",
+    # Grouped excitatory architecture: intra-class WTA + reward-STDP, isotropic 2D Gaussian RFs
+    ("G1_grp_reward_ff_static", ["--prior", "isotropic", "--rule", "reward",
                                  "--grouped", "--group-layout", "interleaved"]),
-    ("G2_grp_reward_ff_vogels", ["--prior", "oriented", "--rule", "reward",
+    ("G2_grp_reward_ff_vogels", ["--prior", "isotropic", "--rule", "reward",
                                  "--grouped", "--group-layout", "interleaved", "--use-vogels"]),
 ]
 

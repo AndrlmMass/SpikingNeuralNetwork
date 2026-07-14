@@ -86,6 +86,9 @@ def parse_args():
     p.add_argument("--group-layout", choices=["interleaved", "block"], default="interleaved")
     p.add_argument("--use-vogels", action="store_true", help="Vogels iSTDP on I->E (plastic intra-group inhibition)")
     p.add_argument("--track-stats", action="store_true", help="enable weight/spike statistics tracking during training")
+    p.add_argument("--plot-rfs", action="store_true", help="save RF grid and (oriented) summary/coverage plots after init")
+    p.add_argument("--plot-single-neuron", action="store_true", help="save 2x2 SE/EE/EI/IE panel for one neuron after init")
+    p.add_argument("--neuron-id", type=int, default=512, help="neuron index for --plot-single-neuron (default 512)")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--train-all", type=int, default=15000)
     p.add_argument("--val-all", type=int, default=1000)
@@ -226,8 +229,40 @@ def main():
     if inh_learner is not None:
         train_kwargs["inh_learner"] = inh_learner
 
+    train_gen = model.train(**train_kwargs)
+    runner = model._runner
+
+    if a.plot_single_neuron or a.plot_rfs:
+        from neurosnn._plot.weights import save_init_weight_plots
+        weight_type = "oriented_rf" if a.prior == "oriented" else "rf"
+        plot_dir = os.path.join(a.output_dir, "plots", "weights")
+        save_init_weight_plots(
+            runner.model,
+            plot_dir,
+            neuron_id=a.neuron_id,
+            n_orientations=4,
+            orientation_mode="block",
+            weight_type=weight_type,
+            plot_single_neuron=a.plot_single_neuron,
+            plot_rfs=a.plot_rfs,
+        )
+        if a.plot_rfs and a.prior != "oriented":
+            # save_init_weight_plots only does RF summary for oriented_rf;
+            # for isotropic/random use save_rf_grid directly
+            save_rf_grid(runner.model.weights[:runner.model.st, runner.model.st:runner.model.ex],
+                         os.path.join(plot_dir, "rf_grid_init.png"), n=64)
+        if a.plot_rfs and group_assignment is not None:
+            # per-class input-space coverage: verify each group tiles the full input
+            from neurosnn._plot.weights import plot_group_coverage
+            plot_group_coverage(
+                runner.model.weights[:runner.model.st, runner.model.st:runner.model.ex],
+                group_assignment,
+                os.path.join(plot_dir, "group_coverage_init.png"),
+                n_groups=a.n_groups,
+            )
+
     last_w = None
-    for r in model.train(**train_kwargs):
+    for r in train_gen:
         last_w = r.weights if r.weights is not None else last_w
         if r.accuracy is not None and r.batch % a.val_every == 0 and last_w is not None:
             checkpoint(r.batch, last_w)

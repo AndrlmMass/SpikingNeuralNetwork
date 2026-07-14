@@ -637,6 +637,83 @@ def plot_rf_coverage(
     print(f"RF coverage plot saved -> {out_path}")
 
 
+def plot_group_coverage(
+    W_se: np.ndarray,
+    group_assignment: np.ndarray,
+    out_path: str,
+    input_size: int = None,
+    n_groups: int = None,
+) -> None:
+    """Per-class-group input-space coverage maps for a grouped architecture.
+
+    For each group, sum every member neuron's W_se receptive field over the
+    input grid and render as a heatmap. Each group is meant to independently
+    tile the *full* input (interleaved layout); this plot verifies that:
+
+    * Even, full coverage        -> group tiles the whole image (interleaved, good).
+    * Coverage confined to a band -> group only sees a strip (block layout,
+      no RF remapping — the failure mode).
+
+    Per-panel stats:
+        cover% = fraction of input pixels with any RF weight
+        CV     = std/mean of the coverage map (lower = more even)
+
+    Parameters
+    ----------
+    W_se              Weight matrix slice, shape (N_x, N_exc).
+    group_assignment  (N_exc,) int group index per exc neuron (make_group_assignment).
+    out_path          Save path (.pdf or .png).
+    input_size        Image side length; defaults to sqrt(N_x).
+    n_groups          Number of groups; defaults to group_assignment.max() + 1.
+    """
+    N_x, _ = W_se.shape
+    if input_size is None:
+        input_size = int(round(np.sqrt(N_x)))
+    if n_groups is None:
+        n_groups = int(group_assignment.max()) + 1
+
+    coverages, sizes = [], []
+    for g in range(n_groups):
+        members = np.nonzero(group_assignment == g)[0]
+        sizes.append(len(members))
+        cov = (W_se[:, members].sum(axis=1).reshape(input_size, input_size)
+               if len(members) else np.zeros((input_size, input_size)))
+        coverages.append(cov)
+
+    stacked = np.stack(coverages)
+    vmax = float(np.percentile(stacked[stacked > 0], 99)) if (stacked > 0).any() else 1.0
+
+    ncols = int(np.ceil(np.sqrt(n_groups)))
+    nrows = int(np.ceil(n_groups / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(3 * ncols, 3 * nrows))
+    axes = np.atleast_1d(axes).ravel()
+
+    for g in range(n_groups):
+        ax = axes[g]
+        cov = coverages[g]
+        im = ax.imshow(cov, cmap="magma", vmin=0, vmax=vmax, interpolation="nearest")
+        cover_pct = 100.0 * (cov > 1e-6).mean()
+        cv = cov.std() / (cov.mean() + 1e-12)
+        ax.set_title(f"group {g} (n={sizes[g]})\ncover={cover_pct:.0f}%  CV={cv:.2f}",
+                     fontsize=9)
+        ax.set_xticks([]); ax.set_yticks([])
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+    for g in range(n_groups, len(axes)):
+        axes[g].axis("off")
+
+    fig.suptitle(
+        "W_se input-space coverage per class group\n"
+        "(each group should fully tile the input under interleaved layout)",
+        fontsize=12,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Group coverage plot saved -> {out_path}")
+
+
 def plot_weight_sample_trajectories(
     sampler, config_label: str, output_path: str, x_max: "int | None" = None
 ) -> None:
