@@ -3,6 +3,25 @@ import numpy as np
 import os
 
 
+def save_rf_grid(W_se: np.ndarray, path: str, n: int = 64, input_size: int = None) -> None:
+    """Save a tiled grid of n RF patches sampled evenly across W_se columns.
+
+    W_se: (N_x, N_exc). input_size defaults to sqrt(N_x) (assumes square input).
+    """
+    if input_size is None:
+        input_size = int(round(np.sqrt(W_se.shape[0])))
+    idx = np.linspace(0, W_se.shape[1] - 1, n).astype(int)
+    s = int(np.sqrt(n))
+    fig, axes = plt.subplots(s, s, figsize=(s, s))
+    for ax, i in zip(axes.ravel(), idx):
+        ax.imshow(W_se[:, i].reshape(input_size, input_size), cmap="RdBu_r")
+        ax.axis("off")
+    fig.tight_layout(pad=0.1)
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    fig.savefig(path, dpi=80)
+    plt.close(fig)
+
+
 def create_3D_weights_plot(weights, title, x_label, y_label, axis_flip, H_, W_):
     total_input = weights.sum(axis=axis_flip)
     Z = total_input.reshape(H_, W_)

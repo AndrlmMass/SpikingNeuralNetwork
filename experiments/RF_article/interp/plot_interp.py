@@ -11,11 +11,15 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 ORDER = ["A0_rand_frozen_ff", "A1_rand_trace_ff", "A2_rand_trace_ee",
-         "B0_ori_frozen_ff", "B1_ori_trace_ff", "B2_ori_trace_ee", "B3_ori_triplet_ee",
-         "R1_ori_reward_ff"]
+         "B0_ori_frozen_ff", "B1_ori_trace_ff", "B2_ori_trace_ee",
+         "B3_ori_triplet_ee", "B3x_ori_triplet_ff",
+         "R1_ori_reward_ff", "R1x_ori_reward_ee",
+         "G1_grp_reward_ff_static", "G2_grp_reward_ff_vogels"]
 COLORS = {"A0_rand_frozen_ff": "#9ecae1", "A1_rand_trace_ff": "#3182bd", "A2_rand_trace_ee": "#08519c",
           "B0_ori_frozen_ff": "#a1d99b", "B1_ori_trace_ff": "#fd8d3c", "B2_ori_trace_ee": "#e6550d",
-          "B3_ori_triplet_ee": "#9467bd", "R1_ori_reward_ff": "#d62728"}
+          "B3_ori_triplet_ee": "#9467bd", "B3x_ori_triplet_ff": "#c5b0d5",
+          "R1_ori_reward_ff": "#d62728", "R1x_ori_reward_ee": "#ff9896",
+          "G1_grp_reward_ff_static": "#2ca02c", "G2_grp_reward_ff_vogels": "#17becf"}
 
 
 def load(run_dir):
@@ -43,8 +47,10 @@ def main():
               ("selectivity", "Class selectivity (per-neuron)"),
               ("orient_coh", "RF orientation coherence"),
               ("ee_se_ratio", "EE/SE drive ratio"),
-              ("dead_frac", "Dead-neuron fraction (reward)")]
-    fig, axes = plt.subplots(3, 2, figsize=(15, 16))
+              ("dead_frac", "Dead-neuron fraction (reward)"),
+              ("softmax_acc", "Softmax group-pool accuracy (grouped)"),
+              ("ce_loss", "Cross-entropy loss (grouped)")]
+    fig, axes = plt.subplots(4, 2, figsize=(15, 22))
     for (key, title), ax in zip(panels, axes.ravel()):
         for tag in ORDER:
             if tag not in runs:

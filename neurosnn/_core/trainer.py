@@ -90,6 +90,8 @@ class Trainer:
     reward_learning_rate: float = 0.0005
     reward_baseline_decay: float = 0.01
     neuron_class: "np.ndarray | None" = None
+    ie_struct_mask: "np.ndarray | None" = None    # (N_inh, N_exc) bool; None = disabled
+    group_assignment: "np.ndarray | None" = None  # (N_exc,) int; None = disabled
     record_fn_se: "callable | None" = None
     record_fn_ee: "callable | None" = None
     record_fn_awake_se: "callable | None" = None
@@ -493,6 +495,8 @@ class Trainer:
                             self.min_weight_inh, self.max_weight_inh,
                             out=weights[self.ex : self.ih, self.st : self.ex],
                         )
+                        if self.ie_struct_mask is not None:
+                            weights[self.ex : self.ih, self.st : self.ex][~self.ie_struct_mask] = 0.0
                     # convert to pre-transposed arrays for efficient membrane potential computing
                     np.copyto(weights_exc, weights[:, self.st : self.ex].T)
                     np.copyto(
@@ -611,6 +615,8 @@ class Trainer:
                         self.min_weight_inh, self.max_weight_inh,
                         out=weights[self.ex : self.ih, self.st : self.ex],
                     )
+                    if self.ie_struct_mask is not None:
+                        weights[self.ex : self.ih, self.st : self.ex][~self.ie_struct_mask] = 0.0
                 # apply normalization
                 if normalize_now:
                     weights[: self.st, self.st : self.ex] = self.norm_se.step(

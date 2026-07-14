@@ -147,6 +147,8 @@ class Runner:
 
         model = self.model
         sparse = model.sparse_indices()
+        ie_struct_mask = sparse.get("ie_struct_mask")    # None for non-grouped
+        group_assignment = sparse.get("group_assignment")
         initial_sums_se, initial_sums_ee = model.initial_sums(reg_mode)
 
         self._accuracy_method = accuracy_method
@@ -160,14 +162,18 @@ class Runner:
         self._global_batch = 0
 
         # reward-STDP: fixed class assignment of excitatory neurons (balanced).
-        # "mod": neuron j -> class j % N_classes; "random": a seeded shuffle of it.
+        # "mod": neuron j -> class j % N_classes (default; matches interleaved group layout)
+        # "block": use group_assignment from WeightFactory (for block group layout)
+        # "random": seeded shuffle of "mod"
         neuron_class = None
         if use_reward:
-            base = np.arange(model.N_exc) % model.N_classes
-            if reward_class_assignment == "random":
+            if reward_class_assignment == "block" and group_assignment is not None:
+                neuron_class = group_assignment.copy()
+            elif reward_class_assignment == "random":
+                base = np.arange(model.N_exc) % model.N_classes
                 neuron_class = np.random.default_rng(reward_seed).permutation(base)
-            else:
-                neuron_class = base
+            else:  # "mod" — default; also correct for interleaved grouped layout
+                neuron_class = np.arange(model.N_exc) % model.N_classes
 
         self._trainer = Trainer(
             resting_potential=model.resting_potential,
@@ -256,6 +262,8 @@ class Runner:
             reward_learning_rate=reward_learning_rate,
             reward_baseline_decay=reward_baseline_decay,
             neuron_class=neuron_class,
+            ie_struct_mask=ie_struct_mask,
+            group_assignment=group_assignment,
         )
 
         self._evaluator = Evaluator(

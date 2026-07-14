@@ -46,6 +46,10 @@ class WeightFactory:
     ablate_ee: bool = False             # zero the recurrent E->E block (causal test)
     ablate_ie: bool = False             # zero the I->E inhibition block (causal test)
 
+    grouped_inhibition: bool = False    # block-diagonal W_ie by group
+    n_groups: int = 0                   # 0 = auto (10); ignored unless grouped_inhibition
+    group_layout: str = "interleaved"   # "interleaved" | "block"
+
     def __post_init__(self):
         self.H = int(np.sqrt(self.N_x))
         self.W = self.H
@@ -97,7 +101,7 @@ class WeightFactory:
         nonzero_pre_idx = [
             np.nonzero(weights[: self.ex, i])[0] for i in range(self.st, self.ex)
         ]
-        return dict(
+        result = dict(
             nz_rows_se=nz_rows_se,
             nz_cols_se=nz_cols_se,
             nz_rows_ee=nz_rows_ee,
@@ -106,6 +110,14 @@ class WeightFactory:
             nz_cols_exc=nz_cols_exc,
             nonzero_pre_idx=nonzero_pre_idx,
         )
+        if self.grouped_inhibition and hasattr(self, "_group_assignment"):
+            ie_block = weights[self.ex : self.ih, self.st : self.ex]
+            result["ie_struct_mask"] = ie_block != 0.0
+            result["group_assignment"] = self._group_assignment.copy()
+        else:
+            result["ie_struct_mask"] = None
+            result["group_assignment"] = None
+        return result
 
     def initial_sums(self, weights: np.ndarray, reg_mode: str) -> tuple:
         if reg_mode == "static":
@@ -183,9 +195,14 @@ class WeightFactory:
         if self.wta_inhibition:
             W_ei = wta_ei_weights(self.N_exc, self.N_inh, peak=self.ei_weights)
             self.weights[self.st : self.ex, self.ex : self.ih] = W_ei
-            W_ie = wta_ie_weights(
-                self.N_inh, self.N_exc, peak=self.ie_weights, frac=self.w_dense_ie
-            )
+            if self.grouped_inhibition:
+                n_grp = self.n_groups if self.n_groups > 0 else 10
+                self._group_assignment = make_group_assignment(self.N_exc, n_grp, self.group_layout)
+                W_ie = grouped_wta_ie_weights(self.N_exc, self._group_assignment, peak=self.ie_weights)
+            else:
+                W_ie = wta_ie_weights(
+                    self.N_inh, self.N_exc, peak=self.ie_weights, frac=self.w_dense_ie
+                )
             self.weights[self.ex : self.ih, self.st : self.ex] = W_ie
         else:
             W_ei, _, inh_centers = gaussian_ei_local(
@@ -223,9 +240,14 @@ class WeightFactory:
         if self.wta_inhibition:
             W_ei = wta_ei_weights(self.N_exc, self.N_inh, peak=self.ei_weights)
             self.weights[self.st : self.ex, self.ex : self.ih] = W_ei
-            W_ie = wta_ie_weights(
-                self.N_inh, self.N_exc, peak=self.ie_weights, frac=self.w_dense_ie
-            )
+            if self.grouped_inhibition:
+                n_grp = self.n_groups if self.n_groups > 0 else 10
+                self._group_assignment = make_group_assignment(self.N_exc, n_grp, self.group_layout)
+                W_ie = grouped_wta_ie_weights(self.N_exc, self._group_assignment, peak=self.ie_weights)
+            else:
+                W_ie = wta_ie_weights(
+                    self.N_inh, self.N_exc, peak=self.ie_weights, frac=self.w_dense_ie
+                )
             self.weights[self.ex : self.ih, self.st : self.ex] = W_ie
         else:
             mask_ei = self.rng.random((self.N_exc, self.N_inh)) < self.w_dense_ei
@@ -446,6 +468,46 @@ def wta_ie_weights(N_inh, N_exc, peak=-0.2, frac=None):
         W_ie = weight_compliance(
             frac=frac, N=N_exc, weights=W_ie, peak=peak, type="W_ie_wta"
         )
+    return W_ie
+
+
+def make_group_assignment(N_exc: int, n_groups: int, layout: str = "interleaved") -> np.ndarray:
+    """Return (N_exc,) int array: group index in [0, n_groups) per excitatory neuron.
+
+    interleaved: group[i] = i % n_groups
+        Stride-n_groups sampling of the 2D excitatory grid visits every region,
+        so each group naturally tiles the full input with the existing retinotopic mapping.
+    block: group[i] = chunk index
+        Contiguous blocks; each block covers only a sub-region of the grid unless
+        RF centers are explicitly remapped (not done here; interleaved is preferred).
+    """
+    if layout == "interleaved":
+        return np.arange(N_exc, dtype=int) % n_groups
+    sizes = [N_exc // n_groups + (1 if i < N_exc % n_groups else 0) for i in range(n_groups)]
+    a = np.empty(N_exc, dtype=int)
+    start = 0
+    for g, sz in enumerate(sizes):
+        a[start : start + sz] = g
+        start += sz
+    return a
+
+
+def grouped_wta_ie_weights(N_exc: int, group_assignment: np.ndarray, peak: float = -2.0) -> np.ndarray:
+    """Block-diagonal W_ie for intra-group WTA inhibition.
+
+    Hitman i suppresses only the neurons in the same group as i, excluding itself.
+    N_inh == N_exc (enforced by wta_ei_weights upstream).
+
+    weight_compliance is intentionally NOT applied: cross-group sparsity already
+    reduces total inhibitory drive by ~(group_size / N_exc) vs global WTA.
+    Rescaling would multiply per-synapse weight by ~n_groups, catastrophically
+    over-inhibiting all groups at initialization.
+    """
+    W_ie = np.zeros((N_exc, N_exc), dtype=float)
+    for i in range(N_exc):
+        same_group = group_assignment == group_assignment[i]
+        same_group[i] = False
+        W_ie[i, same_group] = peak
     return W_ie
 
 

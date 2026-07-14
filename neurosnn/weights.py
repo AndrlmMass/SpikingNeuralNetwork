@@ -37,6 +37,10 @@ class WeightsSpec:
     ablate_ee: bool = False             # zero E->E recurrence (causal collapse test)
     ablate_ie: bool = False             # zero I->E inhibition (causal collapse test)
 
+    grouped_inhibition: bool = False    # block-diagonal W_ie by group
+    n_groups: int = 0                   # 0 = auto (uses 10); ignored unless grouped_inhibition
+    group_layout: str = "interleaved"   # "interleaved" | "block"
+
     def _to_factory_kwargs(self) -> dict:
         return dict(
             w_dense_se=self.density_se,
@@ -64,6 +68,9 @@ class WeightsSpec:
             wta_inhibition=self.wta_inhibition,
             ablate_ee=self.ablate_ee,
             ablate_ie=self.ablate_ie,
+            grouped_inhibition=self.grouped_inhibition,
+            n_groups=self.n_groups,
+            group_layout=self.group_layout,
         )
 
 
@@ -153,6 +160,58 @@ def oriented_receptive_fields(
         sigma_ee_mean=sigma_ee_mean,
         sigma_ee_lognormal_std=sigma_ee_lognormal_std,
         wta_inhibition=wta_inhibition,
+        ablate_ee=ablate_ee,
+        ablate_ie=ablate_ie,
+    )
+
+
+def grouped_excitatory(
+    n_groups: int = 10,
+    group_layout: str = "interleaved",
+    oriented: bool = True,
+    density_se: float = 0.01,
+    density_ee: float = 0.0,
+    density_ei: float = 0.03,
+    density_ie: float = 0.05,
+    peak_se: float = 4.0,
+    peak_ee: float = 1.0,
+    peak_ei: float = 20.0,
+    peak_ie: float = -2.0,
+    n_orientations: int = 4,
+    orientation_mode: str = "block",
+    sigma_x: float = 3.0,
+    gamma: float = 0.4,
+    r_cut_factor: float = 3.0,
+    ablate_ee: bool = False,
+    ablate_ie: bool = False,
+) -> WeightsSpec:
+    """Grouped excitatory architecture: N_exc divided into n_groups class groups,
+    each independently tiling the full input, with intra-group WTA inhibition
+    (block-diagonal W_ie). Designed for use with reward-STDP.
+
+    oriented=True  — elliptical Gabor-style RFs (default)
+    oriented=False — isotropic 2D Gaussian RFs; orientation params are ignored
+    """
+    return WeightsSpec(
+        density_se=density_se,
+        density_ee=density_ee,
+        density_ei=density_ei,
+        density_ie=density_ie,
+        peak_se=peak_se,
+        peak_ee=peak_ee,
+        peak_ei=peak_ei,
+        peak_ie=peak_ie,
+        _random=False,
+        _oriented=oriented,
+        sigma_x=sigma_x,
+        gamma=gamma,
+        n_orientations=n_orientations,
+        r_cut_factor=r_cut_factor,
+        orientation_mode=orientation_mode,
+        wta_inhibition=True,
+        grouped_inhibition=True,
+        n_groups=n_groups,
+        group_layout=group_layout,
         ablate_ee=ablate_ee,
         ablate_ie=ablate_ie,
     )
