@@ -88,7 +88,7 @@ def parse_args():
     p.add_argument("--track-stats", action="store_true", help="enable weight/spike statistics tracking during training")
     p.add_argument("--plot-rfs", action="store_true", help="save RF grid and (oriented) summary/coverage plots after init")
     p.add_argument("--plot-single-neuron", action="store_true", help="save 2x2 SE/EE/EI/IE panel for one neuron after init")
-    p.add_argument("--plot-schematic", action="store_true", help="save cartoon wiring diagram (grouped only)")
+    p.add_argument("--plot-schematic", action="store_true", help="save force-directed network graph from real weights (grouped only)")
     p.add_argument("--neuron-id", type=int, default=512, help="neuron index for --plot-single-neuron (default 512)")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--train-all", type=int, default=15000)
@@ -276,12 +276,12 @@ def main():
                 n_groups=a.n_groups,
             )
         if a.plot_schematic and group_assignment is not None:
-            # cartoon wiring diagram: input -> class groups (WTA) -> readout
-            from neurosnn._plot.network import plot_network_schematic
+            # force-directed graph from real weights: WTA groups + W_se input + readout
+            from neurosnn._plot.network import plot_network_graph
             m = runner.model
-            plot_network_schematic(
+            plot_network_graph(
                 m.weights, group_assignment, m.st, m.ex, m.ih,
-                os.path.join(plot_dir, "network_schematic.png"),
+                os.path.join(plot_dir, "network_graph.png"),
                 n_groups=a.n_groups,
             )
 
