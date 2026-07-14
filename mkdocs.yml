@@ -1,0 +1,73 @@
+site_name: neurosnn
+site_description: A bio-inspired spiking neural network library for homeostasis research.
+site_author: Andreas Lie Massey
+repo_url: https://github.com/AndrlmMass/SpikingNeuralNetwork
+repo_name: neurosnn
+docs_dir: docs
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.indexes
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - footnotes
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.arithmatex:
+      generic: true
+
+extra_javascript:
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+nav:
+  - Introduction: index.md
+  - Getting started:
+      - Installation: getting-started/installation.md
+      - Quickstart: getting-started/quickstart.md
+      - Core concepts: getting-started/core-concepts.md
+  - Guides:
+      - Neuron dynamics: guides/neuron-dynamics.md
+      - Connectivity & weights: guides/connectivity.md
+      - Learning (Trace STDP): guides/learning-stdp.md
+      - Sleep & homeostasis: guides/sleep-homeostasis.md
+      - Data & input encoding: guides/data-encoding.md
+      - The training loop: guides/training-loop.md
+      - Diagnostics & metrics: guides/diagnostics.md
+  - Reference:
+      - API reference: reference/api.md
+      - Supported datasets: reference/datasets.md
+      - Glossary: reference/glossary.md
+  - Research:
+      - Background & citation: research/background.md
+      - Reproducing experiments: research/experiments.md

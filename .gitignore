@@ -1,13 +1,30 @@
-# Ignore all data and model files
-data/
+# Generated outputs (runtime only)
 model/
-plot_files/
-sdata/
-plots/
 results/
-pycache/
-*.pkl
-*.pyc
+figures/
+profile/
+plots/
 
-# VS Code Local History extension
-.history/
+# Data
+data/
+sdata/
+plot_files/
+xtar_logs/
+legacy_plots/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Compiled extensions
+*.so
+*.egg-info/
+.Rproj.user
+
+# LLM support
+CLAUDE.md
+
+# Meta
+.vscode/
+.claude/
