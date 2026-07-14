@@ -90,6 +90,7 @@ class Model:
         return_spikes: bool = False,
         record_fn_awake_se: "callable | None" = None,
         record_fn_awake_ee: "callable | None" = None,
+        output_dir: "str | None" = None,
     ) -> Generator[TrainResult, None, None]:
         """Build the network from layer specs and return a training generator.
 
@@ -150,6 +151,7 @@ class Model:
         logger = HistoryTracker(
             ts_spec=self.ts_spec,
             image_dataset=self.image_dataset,
+            run_dir_override=output_dir,
         )
         self._runner = Runner(model=snn, checkpoint=checkpoint, logger=logger)
 

@@ -358,7 +358,7 @@ class PCAScatterDisplay:
         from neurosnn._utils.logger import tracking_run_dir
 
         ts = datetime.now().strftime("%m%d%Y_%H%M%S")
-        self.dir = os.path.join(tracking_run_dir(dataset, run), "plots", "PCA")
+        self.dir = os.path.join(tracking_run_dir(dataset, run), "PCA")
         os.makedirs(self.dir, exist_ok=True)
         self.figure_.savefig(os.path.join(self.dir, f"{ts}.png"), dpi=100)
 

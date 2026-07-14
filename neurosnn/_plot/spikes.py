@@ -171,7 +171,7 @@ def heatmap_spike_response(
     from neurosnn._utils.logger import tracking_run_dir
 
     ts_spec = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base = os.path.join(tracking_run_dir(dataset, run), "plots", "spikes")
+    base = os.path.join(tracking_run_dir(dataset, run), "spikes")
     directory = os.path.join(base, str(label))
     os.makedirs(directory, exist_ok=True)
     out_path = os.path.join(directory, f"{ts_spec}.png")

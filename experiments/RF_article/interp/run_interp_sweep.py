@@ -14,7 +14,7 @@ Cells (all one-to-one WTA, PCA+LR readout):
 
   python experiments/RF_article/interp/run_interp_sweep.py --parallel 6
 """
-import argparse, concurrent.futures as cf, datetime as dt, os, subprocess, sys, time
+import argparse, concurrent.futures as cf, datetime as dt, os, subprocess, sys, time, uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
@@ -42,7 +42,9 @@ def parse_args():
     p.add_argument("--parallel", type=int, default=6)
     p.add_argument("--train-all", type=int, default=15000)
     p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--run-id", default=None)
+    p.add_argument("--dataset", default="mnist")
+    p.add_argument("--run-id", default=None,
+                   help="sweep id (default: sweep_<HHMMSS>_<uid>, unique so re-runs don't overwrite)")
     return p.parse_args()
 
 
@@ -62,8 +64,12 @@ def run_one(tag, flags, run_dir, common):
 
 def main():
     a = parse_args()
-    run_id = a.run_id or f"run_{dt.datetime.now():%Y%m%d_%H%M%S}"
-    run_dir = os.path.join(REPO, "results", "interp", run_id); os.makedirs(run_dir, exist_ok=True)
+    now = dt.datetime.now()
+    # unified scheme: results/<dataset>/<date>/<sweep_id>/<tag>/  — sweep_id is
+    # unique (timestamp + random suffix) so a later sweep never overwrites an earlier one.
+    sweep_id = a.run_id or f"sweep_{now:%H%M%S}_{uuid.uuid4().hex[:4]}"
+    run_dir = os.path.join(REPO, "results", a.dataset, f"{now:%Y.%m.%d}", sweep_id)
+    os.makedirs(run_dir, exist_ok=True)
     common = ["--train-all", str(a.train_all), "--seed", str(a.seed)]
     print(f"Interp ladder -> {run_dir}\n  {len(CELLS)} cells, parallel {a.parallel}\n")
     t0 = time.time()

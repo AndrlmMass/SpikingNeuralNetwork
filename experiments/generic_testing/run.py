@@ -253,7 +253,7 @@ def parse_args():
         type=str,
         default=None,
         help="Override dir for results.json (default: the per-run tracking dir, "
-        "results/tracking/<dataset>/<date>/<ts_spec>/)",
+        "results/<dataset>/<date>/<ts_spec>/)",
     )
     parser.add_argument(
         "--plot-rfs",
@@ -476,13 +476,13 @@ def main():
     runner.logger._ensure_run_dir()  # force-create the run dir pre-training
     run_dir = runner.logger._run_dir
 
-    # Save the initial weight-structure plots into <run>/plots/weights.
+    # Save the initial weight-structure plots into <run>/weights.
     if args.plot_single_neuron or args.plot_rfs:
         from neurosnn._plot.weights import save_init_weight_plots
 
         save_init_weight_plots(
             runner.model,
-            os.path.join(run_dir, "plots", "weights"),
+            os.path.join(run_dir, "weights"),
             neuron_id=args.neuron_id,
             n_orientations=args.n_orientations,
             orientation_mode=args.orientation_mode,

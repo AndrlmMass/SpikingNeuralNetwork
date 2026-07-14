@@ -452,7 +452,7 @@ class Runner:
                 from neurosnn._utils.logger import tracking_run_dir
                 frame_folder = os.path.join(
                     tracking_run_dir(model.image_dataset, model.ts_spec),
-                    "plots", "spikes", "all",
+                    "spikes", "all",
                 )
                 gif_out = os.path.join(frame_folder, "evolution.gif")
                 gif_spike_rate_by_label(frame_folder, output_filename=gif_out)

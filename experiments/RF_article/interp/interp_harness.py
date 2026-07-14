@@ -94,12 +94,25 @@ def parse_args():
     p.add_argument("--val-all", type=int, default=1000)
     p.add_argument("--val-every", type=int, default=1)
     p.add_argument("--test-all", type=int, default=3000)
-    p.add_argument("--output-dir", required=True)
+    p.add_argument("--output-dir", default=None,
+                   help="run dir (default: results/<dataset>/<date>/<tag>_<uid>/); "
+                        "the sweep passes results/<dataset>/<date>/<sweep_id>/<tag>/")
     return p.parse_args()
+
+
+def default_output_dir(tag, dataset="mnist"):
+    """Unified run dir: results/<dataset>/<date>/<tag>_<uid>/ (uid keeps standalone
+    runs from overwriting each other)."""
+    from datetime import datetime
+    from uuid import uuid4
+    date = datetime.now().strftime("%Y.%m.%d")
+    return os.path.join(REPO, "results", dataset, date, f"{tag}_{uuid4().hex[:4]}")
 
 
 def main():
     a = parse_args()
+    if a.output_dir is None:
+        a.output_dir = default_output_dir(a.tag)
     os.makedirs(a.output_dir, exist_ok=True)
     N_exc, N_inh = 1024, 1024   # WTA: N_inh == N_exc
     st, ex, ih = 784, 784 + N_exc, 784 + N_exc + N_inh
@@ -218,13 +231,14 @@ def main():
               f"coh {rec['orient_coh']:.3f} refit {refit:.3f} fixed {fixed_acc:.3f} "
               f"EE/SE {rec['ee_se_ratio']:.3f}{extra}", flush=True)
         key = "first" if "first" not in rf_saved else "last"
-        save_rf_grid(W_se, os.path.join(a.output_dir, f"rf_{key}.png"))
+        save_rf_grid(W_se, os.path.join(a.output_dir, "weights", f"rf_{key}.png"))
         rf_saved[key] = batch
 
     train_kwargs = dict(
         layers=[layer], learner=learner, regularizer=reg, epochs=1,
         train_weights=train_weights, save_model=False, accuracy_method="pca_lr",
         use_LR=True, use_phi=True, use_pca=False, track_stats=a.track_stats,
+        output_dir=a.output_dir,   # unify: config.json + stats/ land alongside results.json + weights/
     )
     if inh_learner is not None:
         train_kwargs["inh_learner"] = inh_learner
@@ -235,7 +249,7 @@ def main():
     if a.plot_single_neuron or a.plot_rfs:
         from neurosnn._plot.weights import save_init_weight_plots
         weight_type = "oriented_rf" if a.prior == "oriented" else "rf"
-        plot_dir = os.path.join(a.output_dir, "plots", "weights")
+        plot_dir = os.path.join(a.output_dir, "weights")
         save_init_weight_plots(
             runner.model,
             plot_dir,

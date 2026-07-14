@@ -9,17 +9,20 @@ import numpy as np
 def tracking_run_dir(dataset, ts_spec) -> str:
     '''
     Single source of truth for a run's output folder:
-    results/tracking/<dataset>/<date>/<ts_spec>. The date is derived from the
-    YYYYMMDD prefix of ts_spec so every caller (logger, spike worker, PCA display,
-    gif assembly) resolves to the same per-run directory without any plumbing.
+    results/<dataset>/<date>/<ts_spec>. The date is derived from the YYYYMMDD
+    prefix of ts_spec so every caller (logger, spike worker, PCA display, gif
+    assembly) resolves to the same per-run directory without any plumbing.
     Falls back to today's date only if ts_spec is not an 8-digit-prefixed stamp.
+
+    Per-run artifacts live in top-level subfolders of this dir: stats/, weights/,
+    spikes/, PCA/.
     '''
     ts = str(ts_spec)
     if len(ts) >= 8 and ts[:8].isdigit():
         date = f"{ts[:4]}.{ts[4:6]}.{ts[6:8]}"
     else:
         date = datetime.now().strftime("%Y.%m.%d")
-    return os.path.join("results", "tracking", str(dataset), date, ts)
+    return os.path.join("results", str(dataset), date, ts)
 
 
 @dataclass
@@ -27,15 +30,23 @@ class HistoryTracker:
     ts_spec: str
     image_dataset: str = "unknown"
     acc_history: dict = field(default_factory=dict)
+    run_dir_override: str = None       # if set, use this dir instead of tracking_run_dir
     _run_dir: str = None
     _stats_log_file: str = None
 
     def _ensure_run_dir(self):
-        '''Resolve + create the per-run dir and the stats/ subfolder (lazy).'''
+        '''Resolve + create the per-run dir and the stats/ subfolder (lazy).
+
+        Uses run_dir_override when provided (so a caller like the interp harness
+        can keep config.json, stats/, and its own results.json/weights/ in one
+        dir); otherwise falls back to the standard tracking_run_dir scheme.
+        '''
         if self._stats_log_file is None:
             self.image_dataset = getattr(self, "image_dataset", "unknown")
             try:
-                self._run_dir = tracking_run_dir(self.image_dataset, self.ts_spec)
+                self._run_dir = self.run_dir_override or tracking_run_dir(
+                    self.image_dataset, self.ts_spec
+                )
                 os.makedirs(os.path.join(self._run_dir, "stats"), exist_ok=True)
             except Exception:
                 pass
