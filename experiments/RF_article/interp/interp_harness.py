@@ -83,6 +83,8 @@ def parse_args():
     p.add_argument("--reward-lr", type=float, default=2e-5, help="reward-STDP learning rate (rule=reward); set 0 for the reward-off control")
     p.add_argument("--shuffle-labels", action="store_true",
                    help="CONTROL: reward on random targets (signal=noise); readout still evaluated on true labels")
+    p.add_argument("--readout-lr", type=float, default=0.0,
+                   help="plastic cluster->class readout learning rate (0 = fixed uniform pooling)")
     p.add_argument("--ee", action="store_true", help="enable E->E recurrence (default off=feedforward)")
     p.add_argument("--grouped", action="store_true", help="grouped excitatory architecture (intra-class WTA)")
     p.add_argument("--n-groups", type=int, default=10, help="number of excitatory groups (default 10)")
@@ -160,7 +162,7 @@ def main():
     if a.rule == "reward":
         learner = snn.learner.RewardSTDP(learning_rate=a.reward_lr,
             class_assignment=("block" if a.tiled else "mod"), seed=a.seed,
-            shuffle_labels=a.shuffle_labels)
+            shuffle_labels=a.shuffle_labels, readout_lr=a.readout_lr)
     elif a.rule == "triplet":
         learner = snn.learner.TripletSTDP()
     else:
@@ -239,6 +241,8 @@ def main():
             _os = _rl.pop_online_stats()
             rec["online_acc"] = _os["online_acc"]
             rec["baseline"] = _os["baseline"]
+            if getattr(_rl, "readout_lr", 0.0) > 0.0:
+                rec["readout_learned_acc"] = float((_rl.readout_predict(X) == y).mean())
         if neuron_class is not None:
             rec["pool_acc"] = pool_by_label(X, y, neuron_class)
             rec["dead_frac"], rec["frac_ever_winner"], rec["winner_entropy"] = coverage_stats(X)

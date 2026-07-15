@@ -137,6 +137,7 @@ class Runner:
         reward_class_assignment: str = "mod",
         reward_seed: int = 0,
         reward_shuffle_labels: bool = False,
+        reward_readout_lr: float = 0.0,
         output_dir: "str | None" = None,
     ) -> Generator[TrainResult, None, None]:
         if accuracy_method != "pca_lr" and PCA_plot:
@@ -269,6 +270,7 @@ class Runner:
             n_groups=(int(group_assignment.max()) + 1) if group_assignment is not None else 0,
             output_dir=output_dir,
             reward_shuffle_labels=reward_shuffle_labels,
+            reward_readout_lr=reward_readout_lr,
         )
 
         self._evaluator = Evaluator(

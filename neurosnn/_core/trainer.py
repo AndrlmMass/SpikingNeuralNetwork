@@ -95,6 +95,7 @@ class Trainer:
     ie_struct_mask: "np.ndarray | None" = None    # (N_inh, N_exc) bool; None = disabled
     group_assignment: "np.ndarray | None" = None  # (N_exc,) int; None = disabled
     reward_shuffle_labels: bool = False  # control: reward on random targets (signal = noise)
+    reward_readout_lr: float = 0.0       # >0 -> plastic cluster->class readout weights
     record_fn_se: "callable | None" = None
     record_fn_ee: "callable | None" = None
     record_fn_awake_se: "callable | None" = None
@@ -211,6 +212,7 @@ class Trainer:
                 w_min=self.min_weight_exc,
                 mu_weight=self.mu_weight,
                 baseline_decay=self.reward_baseline_decay,
+                readout_lr=self.reward_readout_lr,
             )
             self._reward_rng = np.random.default_rng(0)
 

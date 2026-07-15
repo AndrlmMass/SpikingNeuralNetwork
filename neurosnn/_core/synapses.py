@@ -401,6 +401,7 @@ class RewardLearner:
     w_min: float
     mu_weight: float
     baseline_decay: float = 0.01
+    readout_lr: float = 0.0   # >0 -> plastic cluster->class readout weight per neuron
 
     def __post_init__(self):
         max_len = max(len(x) for x in self.nonzero_pre_idx)
@@ -422,6 +423,17 @@ class RewardLearner:
         # online efficacy tracking (window since last pop_online_stats)
         self._n = 0
         self._correct = 0
+        # plastic cluster->class readout: one weight per exc neuron to ITS class
+        # neuron (block-diagonal). _A is the (N_exc, n_classes) one-hot assignment
+        # so scores = (rates * w_readout) @ _A. Uniform (all 1) until trained.
+        self._A = np.zeros((self.N_exc, n_classes))
+        self._A[np.arange(self.N_exc), self.neuron_class] = 1.0
+        self.w_readout = np.ones(self.N_exc)
+
+    def readout_predict(self, X):
+        """Learned-readout predictions for val features X (n_items, N_exc)."""
+        Xr = X / (X.max(axis=1, keepdims=True) + 1e-9)
+        return ((Xr * self.w_readout) @ self._A).argmax(1)
 
     def pop_online_stats(self):
         """Online training accuracy (net's own pooled prediction vs the reward
@@ -447,11 +459,21 @@ class RewardLearner:
         self.spike_count[:] = 0.0
 
     def step(self, weights, target_label):
-        # online prediction from this sample's pooled exc counts (before reset):
-        # the net's own decision = argmax over per-class summed exc rates.
+        # online prediction from this sample's exc activity (before reset).
         exc = self.spike_count[self.N_x:]
         if exc.sum() > 0:
-            scores = np.array([exc[self.neuron_class == c].sum() for c in range(self.n_classes)])
+            if self.readout_lr > 0.0:
+                # learned readout: score = (normalized rates * w_readout) pooled per
+                # class; softmax delta-rule update on the block-diagonal readout so
+                # each class neuron learns which of its cluster's neurons to trust.
+                er = exc / (exc.max() + 1e-9)
+                scores = (er * self.w_readout) @ self._A
+                p = np.exp(scores - scores.max()); p /= p.sum() + 1e-12
+                onehot = np.zeros(self.n_classes); onehot[target_label] = 1.0
+                self.w_readout -= self.readout_lr * (p - onehot)[self.neuron_class] * er
+                np.clip(self.w_readout, 0.0, None, out=self.w_readout)  # non-negative reliability
+            else:
+                scores = exc @ self._A   # uniform pool
             self._n += 1
             self._correct += int(scores.argmax() == target_label)
         R = np.where(self.neuron_class == target_label, 1.0, -1.0)
