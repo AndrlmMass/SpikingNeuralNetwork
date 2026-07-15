@@ -91,6 +91,9 @@ def parse_args():
     p.add_argument("--use-vogels", action="store_true", help="Vogels iSTDP on I->E (plastic intra-group inhibition)")
     p.add_argument("--track-stats", action="store_true", help="enable weight/spike statistics tracking during training")
     p.add_argument("--live-plot", action="store_true", help="save the live class-tiled spike plot during training (grouped/tiled)")
+    p.add_argument("--plot-every", type=int, default=1000,
+                   help="timesteps between live spike plots AND stat snapshots (default 1000; "
+                        "raise it on full runs, e.g. 35000 = once per 100 images, to limit frame count)")
     p.add_argument("--plot-rfs", action="store_true", help="save RF grid and (oriented) summary/coverage plots after init")
     p.add_argument("--plot-single-neuron", action="store_true", help="save 2x2 SE/EE/EI/IE panel for one neuron after init")
     p.add_argument("--plot-schematic", action="store_true", help="save force-directed network graph from real weights (grouped only)")
@@ -263,6 +266,7 @@ def main():
         layers=[layer], learner=learner, regularizer=reg, epochs=1,
         train_weights=train_weights, save_model=False, accuracy_method="pca_lr",
         use_LR=True, use_phi=True, use_pca=False, track_stats=a.track_stats,
+        stat_tracking_frequency=a.plot_every,  # cadence of live spike plots + stat snapshots
         heatmap_plot=a.live_plot,  # live class-tiled spike plot during training (grouped/tiled)
         output_dir=a.output_dir,   # unify: config.json + stats/ land alongside results.json + weights/
     )
