@@ -453,10 +453,10 @@ class Runner:
                 stop_plot_worker()
                 from neurosnn._plot.spikes import gif_spike_rate_by_label
                 from neurosnn._utils.logger import tracking_run_dir
-                frame_folder = os.path.join(
-                    tracking_run_dir(model.image_dataset, model.ts_spec),
-                    "spikes", "all",
-                )
+                # match where the spike frames were actually written (output_dir when
+                # the harness set one, else the legacy tracking_run_dir scheme)
+                run_dir = output_dir or tracking_run_dir(model.image_dataset, model.ts_spec)
+                frame_folder = os.path.join(run_dir, "spikes", "all")
                 gif_out = os.path.join(frame_folder, "evolution.gif")
                 gif_spike_rate_by_label(frame_folder, output_filename=gif_out)
             if gif_pca_plot and PCA_plot and self._pca_plotter is not None:

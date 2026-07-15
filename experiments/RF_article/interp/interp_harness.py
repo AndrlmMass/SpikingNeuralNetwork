@@ -261,6 +261,18 @@ def main():
         key = "first" if "first" not in rf_saved else "last"
         save_rf_grid(W_se, os.path.join(a.output_dir, "weights", f"rf_{key}.png"))
         rf_saved[key] = batch
+        # live progress: write partial results.json + regenerate confusion.png each
+        # checkpoint so readout accuracy / grouped clustering / per-class recall
+        # update as the run goes (test matrices fill in at the end).
+        try:
+            partial = dict(config=cfg, trajectory=traj)
+            with open(os.path.join(a.output_dir, "results.json"), "w") as f:
+                json.dump(partial, f, indent=2)
+            sys.path.insert(0, os.path.dirname(__file__))
+            from plot_confusion import make_confusion_plot
+            make_confusion_plot(partial, a.output_dir)
+        except Exception as e:
+            print(f"  [live-plot] skipped: {e}", flush=True)
 
     train_kwargs = dict(
         layers=[layer], learner=learner, regularizer=reg, epochs=1,
