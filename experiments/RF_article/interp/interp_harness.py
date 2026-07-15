@@ -90,6 +90,7 @@ def parse_args():
                         "input (block layout, full coverage). Forces N_exc=1000, grouped, block.")
     p.add_argument("--use-vogels", action="store_true", help="Vogels iSTDP on I->E (plastic intra-group inhibition)")
     p.add_argument("--track-stats", action="store_true", help="enable weight/spike statistics tracking during training")
+    p.add_argument("--live-plot", action="store_true", help="save the live class-tiled spike plot during training (grouped/tiled)")
     p.add_argument("--plot-rfs", action="store_true", help="save RF grid and (oriented) summary/coverage plots after init")
     p.add_argument("--plot-single-neuron", action="store_true", help="save 2x2 SE/EE/EI/IE panel for one neuron after init")
     p.add_argument("--plot-schematic", action="store_true", help="save force-directed network graph from real weights (grouped only)")
@@ -262,6 +263,7 @@ def main():
         layers=[layer], learner=learner, regularizer=reg, epochs=1,
         train_weights=train_weights, save_model=False, accuracy_method="pca_lr",
         use_LR=True, use_phi=True, use_pca=False, track_stats=a.track_stats,
+        heatmap_plot=a.live_plot,  # live class-tiled spike plot during training (grouped/tiled)
         output_dir=a.output_dir,   # unify: config.json + stats/ land alongside results.json + weights/
     )
     if inh_learner is not None:

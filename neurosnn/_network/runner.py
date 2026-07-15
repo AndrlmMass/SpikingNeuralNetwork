@@ -264,6 +264,7 @@ class Runner:
             neuron_class=neuron_class,
             ie_struct_mask=ie_struct_mask,
             group_assignment=group_assignment,
+            n_groups=(int(group_assignment.max()) + 1) if group_assignment is not None else 0,
         )
 
         self._evaluator = Evaluator(

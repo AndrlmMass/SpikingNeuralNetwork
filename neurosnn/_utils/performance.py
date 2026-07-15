@@ -48,12 +48,14 @@ def spawn_plot_thread(
     dataset,
     run,
     save_plots,
+    n_groups=None,
 ):
     if not save_plots:
         return num, None
 
     _plot_queue.put(
         dict(
+            n_groups=n_groups,
             spikes_exc=spikes[t - iterations - 1 : t - 1, st:ex].copy(),
             spikes_in=spikes[t - iterations - 1 : t - 1, :st].copy(),
             spikes_ih=spikes[t - iterations - 1 : t - 1, ex:].copy(),

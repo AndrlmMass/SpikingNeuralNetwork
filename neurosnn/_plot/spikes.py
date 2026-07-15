@@ -83,6 +83,106 @@ def spike_plot(data, labels):
     plt.show()
 
 
+def _meta_grid(n):
+    """Most-square factor pair (rows, cols) for arranging n class tiles (e.g. 10 -> 2x5)."""
+    best = (1, n)
+    for r in range(1, int(np.sqrt(n)) + 1):
+        if n % r == 0:
+            best = (r, n // r)
+    return best
+
+
+def tiled_positions(n_exc, n_groups):
+    """Neuron index (block order) -> (row, col) in the composite tiled heatmap.
+
+    Layout: n_groups class tiles of k x k each (k = sqrt(N_exc/n_groups)), arranged
+    in a most-square meta-grid. Returns (rows, cols, H, W, k, meta_r, meta_c).
+    """
+    g = n_exc // n_groups
+    k = int(round(np.sqrt(g)))
+    meta_r, meta_c = _meta_grid(n_groups)
+    H, W = meta_r * k, meta_c * k
+    idx = np.arange(n_exc)
+    cls, p = idx // g, idx % g
+    rows = (cls // meta_c) * k + p // k
+    cols = (cls % meta_c) * k + p % k
+    return rows, cols, H, W, k, meta_r, meta_c
+
+
+def _tiled_composite(vec, rows, cols, H, W):
+    img = np.full((H, W), np.nan)
+    img[rows, cols] = vec[: len(rows)]
+    return img
+
+
+def tiled_spike_plot(
+    spikes_exc, spikes_in, spikes_ih, label, run, dataset, num,
+    weights_st_ex, weights_ih_ex, n_groups, **_ignored,
+):
+    """Class-tiled spike plot for the grouped/tiled architecture: excitatory and
+    inhibitory mean activity re-arranged into a meta-grid of per-class k x k tiles
+    (so a class 'lights up' as a contiguous region), plus per-exc-neuron incoming
+    inhibition (|W_ie|, which regions are most suppressed), total input weight
+    (|W_se|), and the pooled per-class readout. Works for non-square N_exc."""
+    import matplotlib
+    matplotlib.use("Agg")
+    from matplotlib.patches import Rectangle
+    from datetime import datetime
+    from neurosnn._utils.logger import tracking_run_dir
+
+    N_exc = spikes_exc.shape[1]
+    rows, cols, H, W, k, meta_r, meta_c = tiled_positions(N_exc, n_groups)
+    g = N_exc // n_groups
+
+    exc = spikes_exc.mean(axis=0)                          # (N_exc,) mean rate
+    inh = spikes_ih.mean(axis=0)                           # (N_inh==N_exc,) 1:1 paired
+    inh_in = np.abs(weights_ih_ex).sum(axis=0)             # (N_exc,) inhibition received
+    se_in = np.abs(weights_st_ex).sum(axis=0)              # (N_exc,) total input weight
+    readout = np.array([exc[c * g:(c + 1) * g].mean() for c in range(n_groups)])
+    pred = int(readout.argmax())
+    inp = spikes_in.mean(axis=0)
+    iside = int(round(np.sqrt(inp.size)))
+
+    def tiled(ax, vec, title, cmap="viridis", mark_true=None, mark_pred=None):
+        ax.imshow(_tiled_composite(vec, rows, cols, H, W), cmap=cmap, interpolation="nearest")
+        for c in range(n_groups):
+            r0, c0 = (c // meta_c) * k, (c % meta_c) * k
+            ec = "#00d000" if c == mark_true else ("red" if c == mark_pred else "white")
+            lw = 2.2 if ec != "white" else 0.4
+            ax.add_patch(Rectangle((c0 - 0.5, r0 - 0.5), k, k, fill=False, edgecolor=ec, lw=lw))
+            ax.text(c0 + k / 2, r0 + 1.0, str(c), ha="center", va="center",
+                    color="white", fontsize=8, fontweight="bold")
+        ax.set_title(title, fontsize=9); ax.set_xticks([]); ax.set_yticks([])
+
+    fig = plt.figure(figsize=(15, 7))
+    gs = fig.add_gridspec(2, 3, width_ratios=[1, 2.4, 1.2], hspace=0.28, wspace=0.22)
+
+    ax = fig.add_subplot(gs[0, 0]); ax.imshow(inp.reshape(iside, iside), cmap="gray_r")
+    ax.set_title(f"Input  label={label}", fontsize=9); ax.axis("off")
+
+    tiled(fig.add_subplot(gs[0, 1]), exc, "Excitatory activity (class tiles; green=true red=pred)",
+          mark_true=int(label), mark_pred=pred)
+    tiled(fig.add_subplot(gs[1, 1]), inh, "Inhibitory activity (same layout, 1:1 paired)")
+
+    ax = fig.add_subplot(gs[0, 2]); ax.imshow(readout.reshape(meta_r, meta_c), cmap="magma")
+    for c in range(n_groups):
+        ax.text(c % meta_c, c // meta_c, f"{c}", ha="center", va="center", color="white",
+                fontsize=9, fontweight="bold" if c == pred else "normal")
+    ax.add_patch(Rectangle((pred % meta_c - 0.5, pred // meta_c - 0.5), 1, 1, fill=False, edgecolor="red", lw=2.5))
+    ax.set_title(f"Readout (pooled/class) pred={pred}", fontsize=9); ax.axis("off")
+
+    tiled(fig.add_subplot(gs[1, 0]), inh_in, "I->E inhibition received (|W_ie|/neuron)", cmap="inferno")
+    tiled(fig.add_subplot(gs[1, 2]), se_in, "Input weight (|W_se|/neuron)", cmap="cividis")
+
+    fig.suptitle(f"Run {num} — label {label}", fontsize=12)
+    ts_spec = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    base = os.path.join(tracking_run_dir(dataset, run), "spikes")
+    for sub in (str(label), "all"):
+        d = os.path.join(base, sub); os.makedirs(d, exist_ok=True)
+        fig.savefig(os.path.join(d, f"{ts_spec}.png"), dpi=100)
+    plt.close(fig)
+
+
 def heatmap_spike_response(
     spikes_exc,
     spikes_in,
@@ -100,9 +200,20 @@ def heatmap_spike_response(
     weights_ex_ex,
     weights_ex_ih,
     weights_ih_ex,
+    n_groups=None,
 ):
     import matplotlib
     matplotlib.use("Agg")
+
+    # grouped/tiled architecture: use the class-tiled layout (also handles
+    # non-square N_exc, which the sqrt(N_exc) reshape below cannot).
+    if n_groups:
+        tiled_spike_plot(
+            spikes_exc=spikes_exc, spikes_in=spikes_in, spikes_ih=spikes_ih,
+            label=label, run=run, dataset=dataset, num=num,
+            weights_st_ex=weights_st_ex, weights_ih_ex=weights_ih_ex, n_groups=n_groups,
+        )
+        return
 
     fig, axs = plt.subplots(figsize=(10, 6), nrows=3, ncols=4)
 
