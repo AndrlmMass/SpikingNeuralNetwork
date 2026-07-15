@@ -45,6 +45,19 @@ per-class excitatory layout** so the live spike raster is interpretable.
 architecture + analysis.py refactor + softmax readout + network-graph plots; merged into
 main (`53ec0be8` and around). Nothing lost.
 
+**CONTROLS RESULT (decisive — reward-STDP WORKS):** control suite
+(results/rstdp_controls/controls_main) — reward vs reward-off (lr=0) vs
+shuffled-labels, 5k images each. Readout (softmax) accuracy: **reward 0.55->0.65,
+reward_off flat at 0.11 (chance), shuffle flat at ~0.10 (chance)**. Online train
+accuracy same pattern. So the readout gain is genuinely the correct-label reward
+signal, NOT Normalize/homeostasis (reward_off at chance) and NOT an artifact
+(shuffle at chance). Correction to the earlier "weak/ambiguous" read: the tiled
+init is at CHANCE (all class groups tile identically -> identical responses);
+reward breaks the symmetry chance->0.65. The full-run "0.58->0.68" looked weak
+only because its first checkpoint was already post-1000-images of reward. Effect
+is real and large; it saturates ~0.65 vs 0.85 the features support (fitted LR) ->
+the FIXED uniform pooling readout is now the bottleneck -> learnable readout next.
+
 **Open / next:**
 - Full interp sweep run (results/interp/) comparing R1 vs B1/B2; **reward-lr (2e-5) needs
   tuning** (`tune_reward_lr.py`).
