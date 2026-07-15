@@ -58,6 +58,16 @@ only because its first checkpoint was already post-1000-images of reward. Effect
 is real and large; it saturates ~0.65 vs 0.85 the features support (fitted LR) ->
 the FIXED uniform pooling readout is now the bottleneck -> learnable readout next.
 
+**LEARNABLE READOUT WORKS (readout was the bottleneck):** added plastic
+cluster->class readout (RewardLearner.w_readout, block-diagonal, softmax delta
+rule, --readout-lr; readout_learned_acc metric). 5k-image test
+(results/rstdp_controls/readout_test5k): uniform pool 0.64, **learned readout
+0.74**, fitted-LR ceiling 0.83. So the learned readout recovers ~half the
+0.64->0.83 gap, and learns fast (already 0.69 at first checkpoint). Remaining gap
+is the block-diagonal constraint (each class neuron reads only its own cluster,
+can't use cross-cluster info). Plastic inhibition available via --use-vogels
+(intra-group, block-masked) but not yet tested.
+
 **Open / next:**
 - Full interp sweep run (results/interp/) comparing R1 vs B1/B2; **reward-lr (2e-5) needs
   tuning** (`tune_reward_lr.py`).

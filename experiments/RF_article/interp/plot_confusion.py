@@ -48,7 +48,7 @@ def accuracy_over_time(ax, traj):
     """Readout accuracy (primary) + fitted LR (reference); grouped clustering on twin."""
     xs = [t["batch"] + 1 for t in traj]
     ser = lambda k: [t.get(k, np.nan) for t in traj]
-    for key, lbl, c in [("readout_learned_acc", "readout (learned)", "#1f77b4"),
+    for key, lbl, c in [("readout_learned_acc", "readout (learned)", "#9467bd"),
                         ("softmax_acc", "readout (uniform pool)", "#d62728"),
                         ("online_acc", "online train decisions", "#2ca02c"),
                         ("val_acc", "fitted PCA+LR", "#999999")]:
