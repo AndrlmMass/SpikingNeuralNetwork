@@ -146,6 +146,36 @@ def softmax_readout(
     return acc, ce
 
 
+def pool_by_label_pred(X: np.ndarray, neuron_class: np.ndarray, K: int = 10) -> np.ndarray:
+    """Predictions of the pool-by-label readout (argmax over per-class summed rates)."""
+    scores = np.zeros((X.shape[0], K))
+    for c in range(K):
+        m = neuron_class == c
+        if m.any():
+            scores[:, c] = X[:, m].sum(1)
+    return scores.argmax(1)
+
+
+def softmax_readout_pred(X: np.ndarray, group_assignment: np.ndarray, n_groups: int = 10) -> np.ndarray:
+    """Predictions of the group-pooled softmax readout (argmax of group mean rates;
+    softmax is monotonic, so argmax of the logits == argmax of the probabilities)."""
+    group_rates = np.stack(
+        [X[:, group_assignment == g].mean(1) for g in range(n_groups)], axis=1
+    )
+    return group_rates.argmax(1)
+
+
+def confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, K: int = 10) -> np.ndarray:
+    """(K, K) confusion matrix, row = true class, col = predicted class (pure numpy).
+
+    Fixed KxK shape regardless of which classes appear, so matrices are directly
+    comparable across checkpoints. Diagonal = correct discrimination.
+    """
+    cm = np.zeros((K, K), dtype=np.int64)
+    np.add.at(cm, (np.asarray(y_true).astype(int), np.asarray(y_pred).astype(int)), 1)
+    return cm
+
+
 def eta_squared(X: np.ndarray, y: np.ndarray) -> float:
     """Multivariate eta-squared: BCSS / (BCSS + WCSS), the fraction of total
     representational variance explained by class structure. Bounded in [0, 1]

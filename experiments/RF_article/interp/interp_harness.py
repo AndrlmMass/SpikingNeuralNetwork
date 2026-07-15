@@ -31,6 +31,7 @@ from neurosnn._evaluation import evaluation as evalmod
 from neurosnn._evaluation.analysis import (
     class_selectivity, orientation_coherence, current_decomp, w_floor_frac,
     pool_by_label, coverage_stats, softmax_readout,
+    pool_by_label_pred, softmax_readout_pred, confusion_matrix,
 )
 from neurosnn._plot.weights import save_rf_grid
 
@@ -188,6 +189,7 @@ def main():
 
     traj = []
     fixed = {"sc": None, "clf": None}
+    last_val = {"X": None, "y": None}   # latest val features, for the test-set readout fit
     rf_saved = {}
 
     def checkpoint(batch, weights):
@@ -222,6 +224,19 @@ def main():
             sm_acc, ce = softmax_readout(X, y, group_assignment, n_groups=a.n_groups)
             rec["softmax_acc"] = sm_acc
             rec["ce_loss"] = ce
+        # per-class confusion matrices on the held-out te split: linear classifier
+        # (all runs) and the reward/group readout (when a class assignment exists),
+        # so we can watch which classes get discriminated / confused over training.
+        yte = y[te]
+        rec["cm_linear"] = confusion_matrix(
+            yte, clf.predict(np.nan_to_num(sc.transform(X[te]))), 10).tolist()
+        if group_assignment is not None:
+            rec["cm_readout"] = confusion_matrix(
+                yte, softmax_readout_pred(X[te], group_assignment, a.n_groups), 10).tolist()
+        elif neuron_class is not None:
+            rec["cm_readout"] = confusion_matrix(
+                yte, pool_by_label_pred(X[te], neuron_class, 10), 10).tolist()
+        last_val["X"], last_val["y"] = X, y
         traj.append(rec)
         extra = ""
         if "pool_acc" in rec:
@@ -294,9 +309,25 @@ def main():
     if not traj and last_w is not None:
         checkpoint(0, last_w)
 
+    CAP["rows"].clear()
     test = model.test()
     out = dict(config=cfg, test_acc=float(test.accuracy) if test.accuracy is not None else float("nan"),
                test_phi=float(test.phi) if test.phi is not None else float("nan"), trajectory=traj)
+    # final test-set confusion matrices: fit the linear readout on the last val
+    # features, evaluate on captured test features; readout needs no fit.
+    if CAP["rows"] and last_val["X"] is not None:
+        Xt = np.concatenate([x for x, _ in CAP["rows"]], 0)
+        yt = np.concatenate([yy for _, yy in CAP["rows"]], 0).astype(int)
+        sc, clf = fit_clf(last_val["X"], last_val["y"], a.seed)
+        lin_pred = clf.predict(np.nan_to_num(sc.transform(Xt)))
+        out["test_lin_acc"] = float((lin_pred == yt).mean())
+        out["test_cm_linear"] = confusion_matrix(yt, lin_pred, 10).tolist()
+        if group_assignment is not None:
+            out["test_cm_readout"] = confusion_matrix(
+                yt, softmax_readout_pred(Xt, group_assignment, a.n_groups), 10).tolist()
+        elif neuron_class is not None:
+            out["test_cm_readout"] = confusion_matrix(
+                yt, pool_by_label_pred(Xt, neuron_class, 10), 10).tolist()
     with open(os.path.join(a.output_dir, "results.json"), "w") as f:
         json.dump(out, f, indent=2)
     print(f"[{a.tag}] DONE test_acc={out['test_acc']:.3f} -> {a.output_dir}", flush=True)
