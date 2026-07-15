@@ -40,6 +40,7 @@ class WeightsSpec:
     grouped_inhibition: bool = False    # block-diagonal W_ie by group
     n_groups: int = 0                   # 0 = auto (uses 10); ignored unless grouped_inhibition
     group_layout: str = "interleaved"   # "interleaved" | "block"
+    tiled_centers: bool = False         # per-class tiled RF centers (block + full coverage)
 
     def _to_factory_kwargs(self) -> dict:
         return dict(
@@ -71,6 +72,7 @@ class WeightsSpec:
             grouped_inhibition=self.grouped_inhibition,
             n_groups=self.n_groups,
             group_layout=self.group_layout,
+            tiled_centers=self.tiled_centers,
         )
 
 
@@ -168,6 +170,7 @@ def oriented_receptive_fields(
 def grouped_excitatory(
     n_groups: int = 10,
     group_layout: str = "interleaved",
+    tiled: bool = False,
     oriented: bool = True,
     density_se: float = 0.01,
     density_ee: float = 0.0,
@@ -214,7 +217,9 @@ def grouped_excitatory(
         wta_inhibition=True,
         grouped_inhibition=True,
         n_groups=n_groups,
-        group_layout=group_layout,
+        # tiled forces block layout (contiguous class blocks) + tiled RF centers
+        group_layout="block" if tiled else group_layout,
+        tiled_centers=tiled,
         ablate_ee=ablate_ee,
         ablate_ie=ablate_ie,
     )

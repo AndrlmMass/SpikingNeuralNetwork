@@ -49,6 +49,8 @@ class WeightFactory:
     grouped_inhibition: bool = False    # block-diagonal W_ie by group
     n_groups: int = 0                   # 0 = auto (10); ignored unless grouped_inhibition
     group_layout: str = "interleaved"   # "interleaved" | "block"
+    tiled_centers: bool = False         # per-class tiled RF centers (block layout, full-input
+                                        # coverage per class); allows non-square N_exc = n_groups*k^2
 
     def __post_init__(self):
         self.H = int(np.sqrt(self.N_x))
@@ -137,6 +139,9 @@ class WeightFactory:
             )
 
     def _fill_receptive_fields(self):
+        if self.tiled_centers:
+            self._fill_grouped_tiled()
+            return
         if self.oriented_rf:
             W_se = oriented_gaussian_se_weights(
                 N_x=self.N_x,
@@ -228,6 +233,47 @@ class WeightFactory:
                 N_exc=self.N_exc,
             )
             self.weights[self.ex : self.ih, self.st : self.ex] = W_ie
+
+    def _fill_grouped_tiled(self):
+        """Grouped-tiled SE: each class = a contiguous block whose RF centers tile the
+        full input on a regular torus grid (block layout + full coverage). Feedforward
+        only (W_ee = 0), 1:1 WTA hitman + intra-group (block) I->E inhibition. Works for
+        non-square N_exc = n_groups * k^2 (bypasses the sheet-grid square asserts)."""
+        n_grp = self.n_groups if self.n_groups > 0 else 10
+        centers = group_tiled_centers(self.N_exc, n_grp, self.H)  # (N_exc, 2) input coords
+
+        if self.oriented_rf:
+            W_se = oriented_gaussian_se_weights(
+                N_x=self.N_x, N_exc=self.N_exc, input_size=self.H,
+                sigma_x=self.sigma_x, gamma=self.gamma, n_orientations=self.n_orientations,
+                r_cut_factor=self.r_cut_factor, orientation_mode=self.orientation_mode,
+                peak=self.se_weights, fraction=self.w_dense_se, rng=self.rng,
+                centers=centers,
+            )
+        else:
+            sigma_se = (
+                self.sigma_se_mean if self.sigma_se_mean > 0.0
+                else self.rf_scale * self._fse * self.ref_x
+            )
+            W_se = gaussian_se_weights(
+                self.N_x, self.N_exc, self.H, self.W, self.H_e, self.W_e, rng=self.rng,
+                sigma=sigma_se, peak=self.se_weights, fraction=self.w_dense_se, torus=True,
+                jitter=0.0, sigma_se_lognormal_std=self.sigma_se_lognormal_std,
+                centers=centers,
+            )
+        self.weights[: self.st, self.st : self.ex] = W_se
+
+        # W_ee stays zero (feedforward reward architecture): skip gaussian_ee_weights,
+        # which asserts a square exc sheet and would crash at non-square N_exc.
+
+        # Inhibition: 1:1 WTA hitman (E->I identity) + intra-group block I->E.
+        self._group_assignment = np.repeat(np.arange(n_grp), self.N_exc // n_grp)
+        self.weights[self.st : self.ex, self.ex : self.ih] = wta_ei_weights(
+            self.N_exc, self.N_inh, peak=self.ei_weights
+        )
+        self.weights[self.ex : self.ih, self.st : self.ex] = grouped_wta_ie_weights(
+            self.N_exc, self._group_assignment, peak=self.ie_weights
+        )
 
     def _fill_random_weights(self):
         mask_ee = self.rng.random((self.N_exc, self.N_exc)) < self.w_dense_ee
@@ -492,6 +538,34 @@ def make_group_assignment(N_exc: int, n_groups: int, layout: str = "interleaved"
     return a
 
 
+def group_tiled_centers(N_exc: int, n_groups: int, input_size: int) -> np.ndarray:
+    """Per-class-group RF centers that tile the full input on a regular torus grid.
+
+    Each group gets g = N_exc // n_groups neurons whose centers form a k x k grid
+    over the input, with the SAME grid for every group, so every class tiles the
+    whole image. Centers use offset spacing ((i+0.5)*input/k), not linspace
+    endpoints, so the torus wrap spacing is uniform — this maximizes the *minimum*
+    inter-center spacing (even coverage), rather than maximizing total pairwise
+    distance (which would clump centers at the edges).
+
+    Returned in block order (neuron n -> group n // g), matching the block
+    assignment np.repeat(arange(n_groups), g). Shape (N_exc, 2), (row, col) coords.
+    """
+    if N_exc % n_groups != 0:
+        raise ValueError(f"N_exc ({N_exc}) must be divisible by n_groups ({n_groups})")
+    g = N_exc // n_groups
+    k = int(round(np.sqrt(g)))
+    if k * k != g:
+        raise ValueError(
+            f"neurons per group ({g}) must be a perfect square for a k x k tile; "
+            f"got sqrt={np.sqrt(g):.3f}. Try N_exc = n_groups * k^2 (e.g. 10*100=1000)."
+        )
+    step = input_size / k
+    coords = (np.arange(k) + 0.5) * step
+    grid = np.array([(r, c) for r in coords for c in coords], dtype=float)  # (g, 2)
+    return np.tile(grid, (n_groups, 1))  # (N_exc, 2) in block order
+
+
 def grouped_wta_ie_weights(N_exc: int, group_assignment: np.ndarray, peak: float = -2.0) -> np.ndarray:
     """Block-diagonal W_ie for intra-group WTA inhibition.
 
@@ -634,17 +708,25 @@ def gaussian_se_weights(
     torus=True,
     jitter=0.25,
     sigma_se_lognormal_std=0.0,
+    centers=None,
 ):
     assert H * W == N_x
-    assert H_e * W_e == N_exc
 
-    coords_e = exc_coords(H_e, W_e)
-    centers = np.empty_like(coords_e)
-    centers[:, 0] = coords_e[:, 0] * (H - 1) / max(H_e - 1, 1)
-    centers[:, 1] = coords_e[:, 1] * (W - 1) / max(W_e - 1, 1)
+    # centers=None: derive from the retinotopic sheet grid (requires N_exc square).
+    # centers given (N_exc, 2): use them directly (tiled / grouped path) and skip the
+    # square assumption entirely.
+    if centers is None:
+        assert H_e * W_e == N_exc
+        coords_e = exc_coords(H_e, W_e)
+        centers = np.empty_like(coords_e)
+        centers[:, 0] = coords_e[:, 0] * (H - 1) / max(H_e - 1, 1)
+        centers[:, 1] = coords_e[:, 1] * (W - 1) / max(W_e - 1, 1)
+    else:
+        centers = np.array(centers, dtype=float)  # copy: never mutate caller's array
+        assert centers.shape == (N_exc, 2), f"centers must be ({N_exc}, 2), got {centers.shape}"
 
     if jitter is not None and jitter > 0:
-        centers += rng.uniform(-jitter, jitter, size=centers.shape)
+        centers = centers + rng.uniform(-jitter, jitter, size=centers.shape)
         centers[:, 0] = np.clip(centers[:, 0], 0, H - 1)
         centers[:, 1] = np.clip(centers[:, 1], 0, W - 1)
 
@@ -751,6 +833,8 @@ def oriented_gaussian_se_weights(
     peak: float = 1.0,
     fraction: float = 0.05,
     rng=None,
+    centers=None,
+    orientation_idx=None,
 ) -> np.ndarray:
     """Oriented elliptical Gaussian W_se, shape (N_x, N_exc).
 
@@ -776,9 +860,18 @@ def oriented_gaussian_se_weights(
     # assignment, so the RF geometry and the W_ee/W_ei/W_ie sheet adjacency are
     # consistent (sheet-neighbors code related features). See
     # oriented_rf_assignment for the block/interleaved layout semantics.
-    centers, orientation_idx = oriented_rf_assignment(
-        N_exc, n_orientations, input_size, orientation_mode
-    )
+    # centers/orientation_idx=None: derive from the retinotopic sheet (requires N_exc
+    # square). Provided (tiled path): use them and skip oriented_rf_assignment's assert.
+    if centers is None:
+        centers, orientation_idx = oriented_rf_assignment(
+            N_exc, n_orientations, input_size, orientation_mode
+        )
+    else:
+        centers = np.asarray(centers, dtype=np.float32)
+        assert centers.shape == (N_exc, 2), f"centers must be ({N_exc}, 2), got {centers.shape}"
+        if orientation_idx is None:
+            orientation_idx = np.arange(N_exc) % n_orientations
+        orientation_idx = np.asarray(orientation_idx).astype(np.int64)
 
     px, py = np.meshgrid(np.arange(input_size), np.arange(input_size), indexing="ij")
     px = px.ravel().astype(np.float32)

@@ -85,6 +85,9 @@ def parse_args():
     p.add_argument("--grouped", action="store_true", help="grouped excitatory architecture (intra-class WTA)")
     p.add_argument("--n-groups", type=int, default=10, help="number of excitatory groups (default 10)")
     p.add_argument("--group-layout", choices=["interleaved", "block"], default="interleaved")
+    p.add_argument("--tiled", action="store_true",
+                   help="tiled per-class RF centers: each class = a k x k grid tiling the full "
+                        "input (block layout, full coverage). Forces N_exc=1000, grouped, block.")
     p.add_argument("--use-vogels", action="store_true", help="Vogels iSTDP on I->E (plastic intra-group inhibition)")
     p.add_argument("--track-stats", action="store_true", help="enable weight/spike statistics tracking during training")
     p.add_argument("--plot-rfs", action="store_true", help="save RF grid and (oriented) summary/coverage plots after init")
@@ -116,7 +119,11 @@ def main():
     if a.output_dir is None:
         a.output_dir = default_output_dir(a.tag)
     os.makedirs(a.output_dir, exist_ok=True)
-    N_exc, N_inh = 1024, 1024   # WTA: N_inh == N_exc
+    # tiled forces the grouped/block architecture at N_exc=1000 (10 classes x 10x10 tile)
+    if a.tiled:
+        a.grouped = True
+        a.group_layout = "block"
+    N_exc, N_inh = (1000, 1000) if a.tiled else (1024, 1024)   # WTA: N_inh == N_exc
     st, ex, ih = 784, 784 + N_exc, 784 + N_exc + N_inh
     train_weights = a.rule != "frozen"
     density_ee = 0.01 if a.ee else 0.0
@@ -131,7 +138,7 @@ def main():
     elif a.prior in ("oriented", "isotropic") and a.grouped:  # grouped handles both RF shapes
         gkw = {k: v for k, v in wkw.items() if k != "wta_inhibition"}
         weights = snn.weights.grouped_excitatory(
-            n_groups=a.n_groups, group_layout=a.group_layout,
+            n_groups=a.n_groups, group_layout=a.group_layout, tiled=a.tiled,
             oriented=(a.prior == "oriented"),
             n_orientations=4, orientation_mode="block", **gkw)
     else:
@@ -145,7 +152,8 @@ def main():
         spike_adaptation=True, tau_adaptation=200.0, delta_adaptation=0.5), weights=weights)
 
     if a.rule == "reward":
-        learner = snn.learner.RewardSTDP(learning_rate=a.reward_lr, class_assignment="mod", seed=a.seed)
+        learner = snn.learner.RewardSTDP(learning_rate=a.reward_lr,
+            class_assignment=("block" if a.tiled else "mod"), seed=a.seed)
     elif a.rule == "triplet":
         learner = snn.learner.TripletSTDP()
     else:
