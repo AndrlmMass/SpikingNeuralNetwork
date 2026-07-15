@@ -212,6 +212,7 @@ class RewardSTDP:
     baseline_decay: float = 0.01
     class_assignment: str = "mod"
     seed: int = 0
+    shuffle_labels: bool = False   # control: reward on random targets (signal = noise)
 
     def _to_runner_kwargs(self) -> dict:
         return dict(
@@ -220,4 +221,5 @@ class RewardSTDP:
             reward_baseline_decay=self.baseline_decay,
             reward_class_assignment=self.class_assignment,
             reward_seed=self.seed,
+            reward_shuffle_labels=self.shuffle_labels,
         )

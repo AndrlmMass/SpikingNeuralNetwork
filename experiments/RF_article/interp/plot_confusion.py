@@ -50,6 +50,7 @@ def accuracy_over_time(ax, traj):
     ser = lambda k: [t.get(k, np.nan) for t in traj]
     for key, lbl, c in [("softmax_acc", "readout (softmax)", "#d62728"),
                         ("pool_acc", "readout (pool)", "#ff7f0e"),
+                        ("online_acc", "online train decisions", "#2ca02c"),
                         ("val_acc", "fitted PCA+LR", "#999999")]:
         if _finite(ser(key)):
             ax.plot(xs, ser(key), "-o", ms=3, color=c, label=lbl)

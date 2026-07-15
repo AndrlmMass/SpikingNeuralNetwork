@@ -94,6 +94,7 @@ class Trainer:
     output_dir: "str | None" = None  # if set, spike plots land here (matches config.json/stats/)
     ie_struct_mask: "np.ndarray | None" = None    # (N_inh, N_exc) bool; None = disabled
     group_assignment: "np.ndarray | None" = None  # (N_exc,) int; None = disabled
+    reward_shuffle_labels: bool = False  # control: reward on random targets (signal = noise)
     record_fn_se: "callable | None" = None
     record_fn_ee: "callable | None" = None
     record_fn_awake_se: "callable | None" = None
@@ -211,6 +212,7 @@ class Trainer:
                 mu_weight=self.mu_weight,
                 baseline_decay=self.reward_baseline_decay,
             )
+            self._reward_rng = np.random.default_rng(0)
 
         # initiate clipper object
         self.clipper = Clipper(
@@ -575,7 +577,11 @@ class Trainer:
             if self.use_reward and training_mode == "train" and train_weights:
                 self.reward_learner.accumulate(spikes[t])
                 if (t + 1) % self.time_per_item == 0:
-                    weights = self.reward_learner.step(weights, int(spike_labels[t]))
+                    # label-shuffle control: reward on a random target (signal = noise),
+                    # while the readout is still evaluated against true labels.
+                    tgt = (int(self._reward_rng.integers(self.reward_learner.n_classes))
+                           if self.reward_shuffle_labels else int(spike_labels[t]))
+                    weights = self.reward_learner.step(weights, tgt)
                     if self.clip_weights:
                         weights = self.clipper.step(weights=weights)
                     if self.normalize_weights:

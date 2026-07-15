@@ -417,7 +417,20 @@ class RewardLearner:
         # mean = (2 - C) / C). Avoids early net-depression drift before the EMA
         # would otherwise converge. For C=2 this is 0.0 (unit-test compatible).
         n_classes = len(np.unique(self.neuron_class))
+        self.n_classes = n_classes
         self.baseline = (2.0 - n_classes) / n_classes
+        # online efficacy tracking (window since last pop_online_stats)
+        self._n = 0
+        self._correct = 0
+
+    def pop_online_stats(self):
+        """Online training accuracy (net's own pooled prediction vs the reward
+        target) over samples since the last call, plus the current baseline.
+        Reset the window. NaN acc if no samples fired."""
+        acc = (self._correct / self._n) if self._n else float("nan")
+        self._n = 0
+        self._correct = 0
+        return dict(online_acc=acc, baseline=float(self.baseline))
 
     def accumulate(self, spikes):
         """Add a timestep's (or a (T, n_neurons) block's) spikes to the counts.
@@ -434,6 +447,13 @@ class RewardLearner:
         self.spike_count[:] = 0.0
 
     def step(self, weights, target_label):
+        # online prediction from this sample's pooled exc counts (before reset):
+        # the net's own decision = argmax over per-class summed exc rates.
+        exc = self.spike_count[self.N_x:]
+        if exc.sum() > 0:
+            scores = np.array([exc[self.neuron_class == c].sum() for c in range(self.n_classes)])
+            self._n += 1
+            self._correct += int(scores.argmax() == target_label)
         R = np.where(self.neuron_class == target_label, 1.0, -1.0)
         reward_post = R - self.baseline
         weights = reward_STDP(

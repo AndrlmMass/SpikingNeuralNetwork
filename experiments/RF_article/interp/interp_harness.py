@@ -80,7 +80,9 @@ def parse_args():
     p.add_argument("--tag", required=True)
     p.add_argument("--prior", choices=["oriented", "isotropic", "random"], required=True)
     p.add_argument("--rule", choices=["frozen", "trace", "triplet", "reward"], required=True)
-    p.add_argument("--reward-lr", type=float, default=2e-5, help="reward-STDP learning rate (rule=reward)")
+    p.add_argument("--reward-lr", type=float, default=2e-5, help="reward-STDP learning rate (rule=reward); set 0 for the reward-off control")
+    p.add_argument("--shuffle-labels", action="store_true",
+                   help="CONTROL: reward on random targets (signal=noise); readout still evaluated on true labels")
     p.add_argument("--ee", action="store_true", help="enable E->E recurrence (default off=feedforward)")
     p.add_argument("--grouped", action="store_true", help="grouped excitatory architecture (intra-class WTA)")
     p.add_argument("--n-groups", type=int, default=10, help="number of excitatory groups (default 10)")
@@ -157,7 +159,8 @@ def main():
 
     if a.rule == "reward":
         learner = snn.learner.RewardSTDP(learning_rate=a.reward_lr,
-            class_assignment=("block" if a.tiled else "mod"), seed=a.seed)
+            class_assignment=("block" if a.tiled else "mod"), seed=a.seed,
+            shuffle_labels=a.shuffle_labels)
     elif a.rule == "triplet":
         learner = snn.learner.TripletSTDP()
     else:
@@ -229,6 +232,13 @@ def main():
                    refit_acc=float(refit), fixed_acc=float(fixed_acc),
                    cur_se=se, cur_ee=ee, cur_ie=ie, ee_se_ratio=ee / (se + 1e-12),
                    w_floor_frac=w_floor_frac(W_se))
+        # online efficacy from the reward learner: the net's own training-time
+        # decisions (pooled argmax) vs the reward target, + the baseline R̄.
+        _rl = getattr(getattr(getattr(model, "_runner", None), "_trainer", None), "reward_learner", None)
+        if _rl is not None:
+            _os = _rl.pop_online_stats()
+            rec["online_acc"] = _os["online_acc"]
+            rec["baseline"] = _os["baseline"]
         if neuron_class is not None:
             rec["pool_acc"] = pool_by_label(X, y, neuron_class)
             rec["dead_frac"], rec["frac_ever_winner"], rec["winner_entropy"] = coverage_stats(X)
