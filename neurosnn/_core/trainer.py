@@ -91,6 +91,7 @@ class Trainer:
     reward_baseline_decay: float = 0.01
     neuron_class: "np.ndarray | None" = None
     n_groups: int = 0   # >0 -> grouped/tiled live spike plot (class-tiled layout)
+    output_dir: "str | None" = None  # if set, spike plots land here (matches config.json/stats/)
     ie_struct_mask: "np.ndarray | None" = None    # (N_inh, N_exc) bool; None = disabled
     group_assignment: "np.ndarray | None" = None  # (N_exc,) int; None = disabled
     record_fn_se: "callable | None" = None
@@ -406,6 +407,7 @@ class Trainer:
                         self.run,
                         self.save_plots,
                         n_groups=self.n_groups,
+                        output_dir=self.output_dir,
                     )
             # update dynamic arrays if sleep is about to begin 
             if sleep_remaining > 0:

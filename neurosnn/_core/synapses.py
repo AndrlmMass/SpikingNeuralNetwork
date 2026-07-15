@@ -262,6 +262,7 @@ def reward_STDP(
             continue
         pre_indices = nonzero_pre_idx[i - N_x]
         for j in pre_indices:
+            # skip if padding pre-index
             if j == -1:
                 continue
             e = spike_count[j] * pc_i
@@ -275,7 +276,6 @@ def reward_STDP(
                 bound = max(w - w_min, 0.0) ** mu_weight
             weights[j, i] = w + dw * bound
     return weights
-
 
 @dataclass
 class Learner:

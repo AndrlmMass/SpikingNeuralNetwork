@@ -136,6 +136,7 @@ class Runner:
         reward_baseline_decay: float = 0.01,
         reward_class_assignment: str = "mod",
         reward_seed: int = 0,
+        output_dir: "str | None" = None,
     ) -> Generator[TrainResult, None, None]:
         if accuracy_method != "pca_lr" and PCA_plot:
             raise ValueError("PCA_plot requires accuracy_method='pca_lr'")
@@ -265,6 +266,7 @@ class Runner:
             ie_struct_mask=ie_struct_mask,
             group_assignment=group_assignment,
             n_groups=(int(group_assignment.max()) + 1) if group_assignment is not None else 0,
+            output_dir=output_dir,
         )
 
         self._evaluator = Evaluator(

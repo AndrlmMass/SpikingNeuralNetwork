@@ -191,6 +191,7 @@ class Model:
             PCA_plot=PCA_plot,
             gif_pca_plot=gif_pca_plot,
             heatmap_plot=heatmap_plot,
+            output_dir=output_dir,
             **learner._to_runner_kwargs(),
             **reg_kwargs,
             **inh_kwargs,

@@ -117,7 +117,7 @@ def _tiled_composite(vec, rows, cols, H, W):
 
 def tiled_spike_plot(
     spikes_exc, spikes_in, spikes_ih, label, run, dataset, num,
-    weights_st_ex, weights_ih_ex, n_groups, **_ignored,
+    weights_st_ex, weights_ih_ex, n_groups, output_dir=None, **_ignored,
 ):
     """Class-tiled spike plot for the grouped/tiled architecture: excitatory and
     inhibitory mean activity re-arranged into a meta-grid of per-class k x k tiles
@@ -176,7 +176,11 @@ def tiled_spike_plot(
 
     fig.suptitle(f"Run {num} — label {label}", fontsize=12)
     ts_spec = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    base = os.path.join(tracking_run_dir(dataset, run), "spikes")
+    # output_dir (harness run_dir_override) keeps spikes/ alongside config.json,
+    # stats/, weights/, results.json; falls back to the legacy tracking_run_dir
+    # scheme (results/<dataset>/<date>/<ts_spec>/) when not given.
+    run_dir = output_dir or tracking_run_dir(dataset, run)
+    base = os.path.join(run_dir, "spikes")
     for sub in (str(label), "all"):
         d = os.path.join(base, sub); os.makedirs(d, exist_ok=True)
         fig.savefig(os.path.join(d, f"{ts_spec}.png"), dpi=100)
@@ -201,6 +205,7 @@ def heatmap_spike_response(
     weights_ex_ih,
     weights_ih_ex,
     n_groups=None,
+    output_dir=None,
 ):
     import matplotlib
     matplotlib.use("Agg")
@@ -212,6 +217,7 @@ def heatmap_spike_response(
             spikes_exc=spikes_exc, spikes_in=spikes_in, spikes_ih=spikes_ih,
             label=label, run=run, dataset=dataset, num=num,
             weights_st_ex=weights_st_ex, weights_ih_ex=weights_ih_ex, n_groups=n_groups,
+            output_dir=output_dir,
         )
         return
 
@@ -282,7 +288,8 @@ def heatmap_spike_response(
     from neurosnn._utils.logger import tracking_run_dir
 
     ts_spec = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base = os.path.join(tracking_run_dir(dataset, run), "spikes")
+    run_dir = output_dir or tracking_run_dir(dataset, run)
+    base = os.path.join(run_dir, "spikes")
     directory = os.path.join(base, str(label))
     os.makedirs(directory, exist_ok=True)
     out_path = os.path.join(directory, f"{ts_spec}.png")
