@@ -96,7 +96,18 @@ def parse_args():
     p.add_argument("--tiled", action="store_true",
                    help="tiled per-class RF centers: each class = a k x k grid tiling the full "
                         "input (block layout, full coverage). Forces N_exc=1000, grouped, block.")
+    p.add_argument("--sigma-se", type=float, default=0.0,
+                   help="RF Gaussian sigma (px) = structural footprint of each SE neuron. 0 = keep the "
+                        "grouped default (3.0 ~ near-global, whole-digit templates). Lower = local patch "
+                        "detectors: ~1.5 -> 6px, ~1.0 -> 3.6px. Sets sigma_se_mean on the weight spec.")
+    p.add_argument("--sigma-se-lognormal", type=float, default=0.0,
+                   help="lognormal spread of per-neuron RF sigma (0 = uniform). >0 gives HETEROGENEOUS RF "
+                        "sizes: a mix of small local-feature and larger holistic detectors.")
     p.add_argument("--use-vogels", action="store_true", help="Vogels iSTDP on I->E (plastic intra-group inhibition)")
+    p.add_argument("--vogels-lr", type=float, default=0.01,
+                   help="Vogels iSTDP learning rate (inhibitory plasticity strength; only used with --use-vogels)")
+    p.add_argument("--vogels-rho0", type=float, default=0.1,
+                   help="Vogels target postsynaptic rate rho_0 (homeostatic setpoint; only used with --use-vogels)")
     p.add_argument("--track-stats", action="store_true", help="enable weight/spike statistics tracking during training")
     p.add_argument("--live-plot", action="store_true", help="save the live class-tiled spike plot during training (grouped/tiled)")
     p.add_argument("--plot-every", type=int, default=1000,
@@ -155,6 +166,13 @@ def main():
             n_orientations=4, orientation_mode="block", **gkw)
     else:
         weights = snn.weights.random(**wkw)
+    # RF-size override: shrink the structural footprint (sigma_se_mean) to force local
+    # patch detectors instead of near-global whole-digit templates, and/or make RF sizes
+    # heterogeneous. Applied to the spec so it flows through _to_factory_kwargs.
+    if a.sigma_se > 0.0 and hasattr(weights, "sigma_se_mean"):
+        weights.sigma_se_mean = a.sigma_se
+    if a.sigma_se_lognormal > 0.0 and hasattr(weights, "sigma_se_lognormal_std"):
+        weights.sigma_se_lognormal_std = a.sigma_se_lognormal
 
     layer = snn.Layer(N_exc=N_exc, N_inh=N_inh, membrane=snn.membrane.LIF(
         tau_m_exc=20.0, tau_m_inh=15.0, tau_syn_exc=10.0, tau_syn_inh=9.0,
@@ -174,7 +192,7 @@ def main():
             mu_weight=0.5, x_tar_mode="mean", update_freq=100, clip_weights=True,
             min_weight_exc=0.01, max_weight_exc=25.0, min_weight_inh=-25.0, max_weight_inh=-0.01)
 
-    inh_learner = snn.learner.VogelsSTDP(learning_rate=0.01, rho_0=0.1) if a.use_vogels else None
+    inh_learner = snn.learner.VogelsSTDP(learning_rate=a.vogels_lr, rho_0=a.vogels_rho0) if a.use_vogels else None
 
     # neuron_class: used for pool_by_label readout and softmax_readout
     if a.rule == "reward" and a.grouped:
@@ -203,7 +221,9 @@ def main():
     input_rate = load_input_rate()
     cfg = dict(tag=a.tag, prior=a.prior, rule=a.rule, ee=a.ee, wta=True,
                grouped=a.grouped, n_groups=a.n_groups, group_layout=a.group_layout,
-               use_vogels=a.use_vogels, n_exc=N_exc, n_inh=N_inh,
+               use_vogels=a.use_vogels, vogels_lr=a.vogels_lr, vogels_rho0=a.vogels_rho0,
+               n_exc=N_exc, n_inh=N_inh,
+               sigma_se=a.sigma_se, sigma_se_lognormal=a.sigma_se_lognormal,
                train_all=a.train_all, seed=a.seed)
     print(f"\n[{a.tag}] prior={a.prior} rule={a.rule} ee={a.ee} grouped={a.grouped} "
           f"vogels={a.use_vogels} train_weights={train_weights}\n", flush=True)

@@ -10,6 +10,76 @@ Keep it scannable — a few bullets, not a transcript.
 
 ---
 
+## 2026-07-16 — RF-size + inhibitory-learning sweeps
+
+**Focus:** Is the RF too large (whole-digit "quintessential" templates), and is static
+uniform inhibition optimal? Two sweeps, both at the tuned config (reward_lr 5e-6,
+readout_lr 0.1, peak_ei 50), 6k images/config, single seed.
+
+**Tooling / harness flags added:** `--sigma-se` (structural RF footprint = sigma_se_mean;
+0 keeps default 3.0), `--sigma-se-lognormal` (heterogeneous RF sizes), `--vogels-lr`,
+`--vogels-rho0` (were hardcoded 0.01/0.1). All recorded in run config. Per-class RF grid
+still overwrites each checkpoint (frames+GIF is a TODO). New: `sweep_rfsize.py`,
+`sweep_inhib.py`. New backlog file `IDEAS.md` (parked pursuits + rationale).
+
+**Key mechanism finding (why RFs are whole-digit):** the tiled init wires each SE neuron
+to ~1/3 of the image (sigma_se=3.0 -> median 257 nonzero syn, ~19px radius), and
+reward-STDP only ever touches STRUCTURAL synapses (`nonzero_pre_idx`), so the footprint is
+bounded by init, not free to spread — but the init footprint is already near-global, so
+reward-STDP paints the class-average template and the spatial tiling is cosmetic.
+sigma_se 1.5 -> 64 syn/6px (local), 1.0 -> 30 syn/3.6px (tight).
+
+**RF-size sweep (results/rstdp_rfsize/rfsize_main/):**
+| config | refit-LR ceiling | learned | uniform pool | dead | win_ent |
+|---|---|---|---|---|---|
+| baseline_3.0 | 0.805 | 0.788 | 0.686 | 0.56 | 0.36 |
+| local_1.5 | 0.797 | 0.778 | 0.575 | 0.37 | 0.40 |
+| tight_1.0 | 0.800 | 0.747 | 0.471 | 0.31 | 0.41 |
+| hetero_2.0ln | 0.825 | 0.772 | 0.344 | 0.78 | 0.13 |
+- **Feature ceiling is ~FLAT (0.80–0.825) across all RF sizes** — local RFs lose no
+  linearly-decodable class info. Ceiling spread is small + single-seed (don't crown hetero).
+- **Smaller RF -> healthier** (dead 0.56->0.31, winners spread) but the simple pooling
+  readouts collapse (uniform 0.69->0.47) because one local patch is weakly class-selective.
+  Gap between ceiling and pooled readout blows open -> the READOUT is the bottleneck.
+- **hetero (lognormal): median RF smaller (106 syn) but a heavy tail up to 784 (whole
+  image).** A few whole-image detectors dominate the WTA (dead 0.78, win_ent 0.13 = most
+  monopolized) -> highest ceiling (few strong templates, easy for a fitted classifier) but
+  WORST uniform pool (0.344) and lowest diversity. Confirms: RF-size variance concentrates
+  class info in few neurons = more separable-for-a-classifier but less representational
+  width. hetero is NOT "best in total" — best only on the (noisy) ceiling.
+- **Interpretation:** two objectives pull opposite ways — max separability-for-a-fitted-
+  classifier favors few large templates (baseline/hetero, ~template-matching, mostly dead);
+  healthy diverse distributed part-code favors small local RFs (tight/local, but needs a
+  compositional readout). Ceiling ~flat means the distributed local code loses nothing real
+  -> **dense readout is the pivotal next step**, not more RF tuning.
+
+**Inhibitory-LR sweep (results/rstdp_inhib/inhib_main/, baseline RF, Vogels rho0=0.1):**
+| vogels_lr | learned | uniform | dead | win_ent | ceiling |
+|---|---|---|---|---|---|
+| off (static) | 0.783 | 0.690 | 0.56 | 0.356 | 0.812 |
+| 0.005 | 0.790 | 0.677 | 0.55 | 0.357 | 0.802 |
+| 0.02 | 0.778 | 0.676 | 0.53 | 0.367 | 0.803 |
+| 0.05 | 0.770 | 0.689 | 0.52 | 0.391 | 0.805 |
+| 0.1 | 0.760 | 0.656 | 0.50 | 0.402 | 0.798 |
+- Proper LR sweep (the old on/off hid this): **monotonic** — plastic inhibition DOES revive
+  neurons + spread winners (dead 0.56->0.50, win_ent 0.356->0.402) but **weakly, at an
+  accuracy cost** (learned 0.783->0.760). No LR gives both better health AND accuracy.
+- **RF locality is ~4x stronger than inhibitory plasticity for the dead-neuron problem**
+  (static 0.56 / Vogels-best 0.50 / local RF 0.31). Vogels rescues marginal neurons, not
+  deeply-dead ones (strong 1:1 E->I hitman + reward-starved RFs still lose the drive).
+- **Verdict:** leave vogels_lr ~0.005 (marginal accuracy peak) or off; don't invest more.
+
+**Open / next (priority order):**
+- **Dense/full readout** (N_exc x 10, delta-rule) — cash in the flat ~0.80 ceiling with the
+  healthy local-RF code; report spectrum uniform->block-diag->full->LR-ceiling.
+- Adaptive-threshold homeostasis (NCG-style) — direct lever on dead neurons + diversity.
+- Test plastic inhibition in the LOCAL-RF regime (only tested at baseline so far).
+- Causal/gated eligibility trace — parked, "not sold"; principled but modest gain expected
+  with rate-coded input, and won't fix dead neurons. See IDEAS.md.
+- Multi-seed everything before any paper claim (all above single-seed).
+
+---
+
 ## 2026-07-16 — Hyperparameter tuning + paper venue/structure
 
 **Focus:** Tune the tiled reward-STDP config (readout_lr, inhibitory drive, cluster
