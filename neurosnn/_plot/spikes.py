@@ -2,6 +2,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
+# accumulates per-class accuracy across live-plot frames within a run, so the
+# per-class panel can draw a growing line graph (reset when a new run starts, num==0).
+_PC_HISTORY = {"x": [], "y": []}
+
 
 def spike_plot(data, labels):
     if len(labels) != data.shape[0]:
@@ -143,8 +147,11 @@ def tiled_spike_plot(
     inp = spikes_in.mean(axis=0)
     iside = int(round(np.sqrt(inp.size)))
 
-    def tiled(ax, vec, title, cmap="viridis", mark_true=None, mark_pred=None):
-        ax.imshow(_tiled_composite(vec, rows, cols, H, W), cmap=cmap, interpolation="nearest")
+    def tiled(ax, vec, title, cmap="viridis", mark_true=None, mark_pred=None, vmin=None):
+        # vmin fixes the low end so a perfectly-uniform map (e.g. static I->E
+        # inhibition) renders as a solid mid/high color instead of degenerate black.
+        ax.imshow(_tiled_composite(vec, rows, cols, H, W), cmap=cmap,
+                  interpolation="nearest", vmin=vmin)
         for c in range(n_groups):
             r0, c0 = (c // meta_c) * k, (c % meta_c) * k
             ec = "#00d000" if c == mark_true else ("red" if c == mark_pred else "white")
@@ -171,18 +178,29 @@ def tiled_spike_plot(
     ax.add_patch(Rectangle((pred % meta_c - 0.5, pred // meta_c - 0.5), 1, 1, fill=False, edgecolor="red", lw=2.5))
     ax.set_title(f"Readout (pooled/class) pred={pred}", fontsize=9); ax.axis("off")
 
-    tiled(fig.add_subplot(gs[1, 0]), inh_in, "I->E inhibition received (|W_ie|/neuron)", cmap="inferno")
-    # per-class classification accuracy (running, from the reward learner's own
-    # training-time decisions) — how well each class is currently decoded. Falls
-    # back to the |W_se| map when accuracy isn't available (non-reward runs).
+    # autoscale to show Vogels-driven variation; if perfectly uniform (static
+    # inhibition), pin vmin=0 so it renders bright rather than degenerate-black.
+    _ie_vmin = 0.0 if float(np.nanstd(inh_in)) < 1e-9 else None
+    tiled(fig.add_subplot(gs[1, 0]), inh_in, "I->E inhibition received (|W_ie|/neuron)",
+          cmap="inferno", vmin=_ie_vmin)
+    # per-class classification accuracy over time (running, from the reward learner's
+    # own training-time decisions): a growing line per class so you watch each class
+    # improve live. Falls back to the |W_se| map when accuracy isn't available.
     axpc = fig.add_subplot(gs[1, 2])
     if pc_acc is not None:
         pc = np.nan_to_num(np.asarray(pc_acc, dtype=float), nan=0.0)
-        axpc.bar(range(len(pc)), pc, color=plt.cm.RdYlGn(pc), edgecolor="k", lw=0.3)
+        if num == 0:                                   # new run -> reset the trace
+            _PC_HISTORY["x"].clear(); _PC_HISTORY["y"].clear()
+        _PC_HISTORY["x"].append(num)
+        _PC_HISTORY["y"].append(pc.copy())
+        hist = np.array(_PC_HISTORY["y"])              # (frames, n_classes)
+        cmap = plt.get_cmap("tab10")
+        for c in range(hist.shape[1]):
+            axpc.plot(_PC_HISTORY["x"], hist[:, c], "-", color=cmap(c), lw=1.2, label=str(c))
         axpc.axhline(0.1, ls=":", lw=0.8, color="k", alpha=0.5)  # chance
-        axpc.set_ylim(0, 1.02); axpc.set_xticks(range(len(pc)))
-        axpc.set_xlabel("class"); axpc.set_ylabel("accuracy")
-        axpc.set_title(f"Per-class accuracy (running)  mean {pc.mean():.2f}", fontsize=9)
+        axpc.set_ylim(0, 1.02); axpc.set_xlabel("frame"); axpc.set_ylabel("accuracy")
+        axpc.set_title(f"Per-class accuracy over time  mean {pc.mean():.2f}", fontsize=9)
+        axpc.legend(fontsize=5, ncol=2, loc="lower right", title="class")
     else:
         tiled(axpc, se_in, "Input weight (|W_se|/neuron)", cmap="cividis")
 

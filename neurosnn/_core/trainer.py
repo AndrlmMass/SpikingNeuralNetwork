@@ -586,6 +586,18 @@ class Trainer:
                     tgt = (int(self._reward_rng.integers(self.reward_learner.n_classes))
                            if self.reward_shuffle_labels else int(spike_labels[t]))
                     weights = self.reward_learner.step(weights, tgt)
+                    # Vogels inhibitory plasticity (reward path). Previously this only
+                    # ran inside the trace-path `update_weights_now` block, which is
+                    # gated off for reward runs -> Vogels never fired with reward.
+                    if self.use_vogels:
+                        weights = self.ilearner.step(weights, spikes[t], spike_trace, inh_trace)
+                        np.clip(
+                            weights[self.ex : self.ih, self.st : self.ex],
+                            self.min_weight_inh, self.max_weight_inh,
+                            out=weights[self.ex : self.ih, self.st : self.ex],
+                        )
+                        if self.ie_struct_mask is not None:
+                            weights[self.ex : self.ih, self.st : self.ex][~self.ie_struct_mask] = 0.0
                     if self.clip_weights:
                         weights = self.clipper.step(weights=weights)
                     if self.normalize_weights:
