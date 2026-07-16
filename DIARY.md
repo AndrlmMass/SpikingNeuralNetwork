@@ -39,6 +39,13 @@ lr; Vogels on/off), and plan the write-up.
   RE-RUN.** (Andreas spotted this from the all-black I->E panel in the live plot.)
   Note: tuned config at 5k still reaches learned ~0.79 / fitted-LR test ~0.83 (that
   part unaffected — it was the reward+readout, not inhibition).
+- **Vogels RE-RUN (fixed, results/rstdp_controls/vogels2_*):** off = learned 0.790 /
+  uniform 0.706 / dead 0.56 / test 0.841; on = learned 0.784 / uniform 0.683 / dead
+  0.54 / test 0.847. **Now valid, and still ~neutral** (within single-seed noise).
+  Vogels DOES act (revives a few dead neurons, spreads winners: dead 0.56->0.54,
+  win_ent 0.358->0.377) but that redistribution slightly HURTS the class-pooled
+  readout (uniform 0.706->0.683). Fixed uniform WTA scaffold already well-matched ->
+  **leave --use-vogels OFF for the final run.** (Multi-seed would firm this up.)
 
 **Tooling:** `tune.py` general sequential sweeper (reward_lr/readout_lr/peak_ei/peak_ie),
 reports learned + uniform + dead + win_ent. `--peak-ei`/`--peak-ie` exposed in harness.
