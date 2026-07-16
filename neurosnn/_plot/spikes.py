@@ -117,7 +117,7 @@ def _tiled_composite(vec, rows, cols, H, W):
 
 def tiled_spike_plot(
     spikes_exc, spikes_in, spikes_ih, label, run, dataset, num,
-    weights_st_ex, weights_ih_ex, n_groups, output_dir=None, **_ignored,
+    weights_st_ex, weights_ih_ex, n_groups, output_dir=None, pc_acc=None, **_ignored,
 ):
     """Class-tiled spike plot for the grouped/tiled architecture: excitatory and
     inhibitory mean activity re-arranged into a meta-grid of per-class k x k tiles
@@ -172,7 +172,19 @@ def tiled_spike_plot(
     ax.set_title(f"Readout (pooled/class) pred={pred}", fontsize=9); ax.axis("off")
 
     tiled(fig.add_subplot(gs[1, 0]), inh_in, "I->E inhibition received (|W_ie|/neuron)", cmap="inferno")
-    tiled(fig.add_subplot(gs[1, 2]), se_in, "Input weight (|W_se|/neuron)", cmap="cividis")
+    # per-class classification accuracy (running, from the reward learner's own
+    # training-time decisions) — how well each class is currently decoded. Falls
+    # back to the |W_se| map when accuracy isn't available (non-reward runs).
+    axpc = fig.add_subplot(gs[1, 2])
+    if pc_acc is not None:
+        pc = np.nan_to_num(np.asarray(pc_acc, dtype=float), nan=0.0)
+        axpc.bar(range(len(pc)), pc, color=plt.cm.RdYlGn(pc), edgecolor="k", lw=0.3)
+        axpc.axhline(0.1, ls=":", lw=0.8, color="k", alpha=0.5)  # chance
+        axpc.set_ylim(0, 1.02); axpc.set_xticks(range(len(pc)))
+        axpc.set_xlabel("class"); axpc.set_ylabel("accuracy")
+        axpc.set_title(f"Per-class accuracy (running)  mean {pc.mean():.2f}", fontsize=9)
+    else:
+        tiled(axpc, se_in, "Input weight (|W_se|/neuron)", cmap="cividis")
 
     fig.suptitle(f"Run {num} — label {label}", fontsize=12)
     ts_spec = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -206,6 +218,7 @@ def heatmap_spike_response(
     weights_ih_ex,
     n_groups=None,
     output_dir=None,
+    pc_acc=None,
 ):
     import matplotlib
     matplotlib.use("Agg")
@@ -217,7 +230,7 @@ def heatmap_spike_response(
             spikes_exc=spikes_exc, spikes_in=spikes_in, spikes_ih=spikes_ih,
             label=label, run=run, dataset=dataset, num=num,
             weights_st_ex=weights_st_ex, weights_ih_ex=weights_ih_ex, n_groups=n_groups,
-            output_dir=output_dir,
+            output_dir=output_dir, pc_acc=pc_acc,
         )
         return
 

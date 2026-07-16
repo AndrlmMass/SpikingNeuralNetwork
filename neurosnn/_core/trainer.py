@@ -412,6 +412,8 @@ class Trainer:
                         self.save_plots,
                         n_groups=self.n_groups,
                         output_dir=self.output_dir,
+                        pc_acc=(self.reward_learner.pc_acc
+                                if self.use_reward and hasattr(self, "reward_learner") else None),
                     )
             # update dynamic arrays if sleep is about to begin 
             if sleep_remaining > 0:

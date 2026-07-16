@@ -423,6 +423,8 @@ class RewardLearner:
         # online efficacy tracking (window since last pop_online_stats)
         self._n = 0
         self._correct = 0
+        # per-class running accuracy (EMA per class) for the live plot; NaN until seen
+        self.pc_acc = np.full(n_classes, np.nan)
         # plastic cluster->class readout: one weight per exc neuron to ITS class
         # neuron (block-diagonal). _A is the (N_exc, n_classes) one-hot assignment
         # so scores = (rates * w_readout) @ _A. Uniform (all 1) until trained.
@@ -474,8 +476,12 @@ class RewardLearner:
                 np.clip(self.w_readout, 0.0, None, out=self.w_readout)  # non-negative reliability
             else:
                 scores = exc @ self._A   # uniform pool
+            correct = int(scores.argmax() == target_label)
             self._n += 1
-            self._correct += int(scores.argmax() == target_label)
+            self._correct += correct
+            c = int(target_label)
+            self.pc_acc[c] = correct if np.isnan(self.pc_acc[c]) else \
+                self.pc_acc[c] + 0.02 * (correct - self.pc_acc[c])
         R = np.where(self.neuron_class == target_label, 1.0, -1.0)
         reward_post = R - self.baseline
         weights = reward_STDP(

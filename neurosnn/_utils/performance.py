@@ -50,6 +50,7 @@ def spawn_plot_thread(
     save_plots,
     n_groups=None,
     output_dir=None,
+    pc_acc=None,
 ):
     if not save_plots:
         return num, None
@@ -58,6 +59,7 @@ def spawn_plot_thread(
         dict(
             n_groups=n_groups,
             output_dir=output_dir,
+            pc_acc=(None if pc_acc is None else pc_acc.copy()),
             spikes_exc=spikes[t - iterations - 1 : t - 1, st:ex].copy(),
             spikes_in=spikes[t - iterations - 1 : t - 1, :st].copy(),
             spikes_ih=spikes[t - iterations - 1 : t - 1, ex:].copy(),
