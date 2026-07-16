@@ -402,6 +402,7 @@ class RewardLearner:
     mu_weight: float
     baseline_decay: float = 0.01
     readout_lr: float = 0.0   # >0 -> plastic cluster->class readout weight per neuron
+    dense_readout: bool = False  # True -> full (N_exc, n_classes) readout, signs free
 
     def __post_init__(self):
         max_len = max(len(x) for x in self.nonzero_pre_idx)
@@ -431,10 +432,17 @@ class RewardLearner:
         self._A = np.zeros((self.N_exc, n_classes))
         self._A[np.arange(self.N_exc), self.neuron_class] = 1.0
         self.w_readout = np.ones(self.N_exc)
+        # dense/full readout: every neuron connects to every class output (signs free).
+        # Warm-started at the block-diagonal one-hot so it begins == uniform pool, then
+        # learns cross-cluster evidence (own-class +, competitors -). N_exc x n_classes.
+        if self.dense_readout:
+            self.W_dense = self._A.copy()
 
     def readout_predict(self, X):
         """Learned-readout predictions for val features X (n_items, N_exc)."""
         Xr = X / (X.max(axis=1, keepdims=True) + 1e-9)
+        if self.dense_readout:
+            return (Xr @ self.W_dense).argmax(1)
         return ((Xr * self.w_readout) @ self._A).argmax(1)
 
     def pop_online_stats(self):
@@ -464,7 +472,16 @@ class RewardLearner:
         # online prediction from this sample's exc activity (before reset).
         exc = self.spike_count[self.N_x:]
         if exc.sum() > 0:
-            if self.readout_lr > 0.0:
+            if self.readout_lr > 0.0 and self.dense_readout:
+                # dense readout: full N_exc x n_classes weights, softmax delta rule.
+                # Every neuron votes on every class; signs unconstrained so it learns
+                # own-class evidence (+) AND competitor evidence (-). No clamp.
+                er = exc / (exc.max() + 1e-9)
+                scores = er @ self.W_dense
+                p = np.exp(scores - scores.max()); p /= p.sum() + 1e-12
+                onehot = np.zeros(self.n_classes); onehot[target_label] = 1.0
+                self.W_dense -= self.readout_lr * np.outer(er, p - onehot)
+            elif self.readout_lr > 0.0:
                 # learned readout: score = (normalized rates * w_readout) pooled per
                 # class; softmax delta-rule update on the block-diagonal readout so
                 # each class neuron learns which of its cluster's neurons to trust.

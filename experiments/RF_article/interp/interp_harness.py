@@ -85,6 +85,10 @@ def parse_args():
                    help="CONTROL: reward on random targets (signal=noise); readout still evaluated on true labels")
     p.add_argument("--readout-lr", type=float, default=0.0,
                    help="plastic cluster->class readout learning rate (0 = fixed uniform pooling)")
+    p.add_argument("--dense-readout", action="store_true",
+                   help="full (N_exc x n_classes) readout: every neuron votes on every class, signs "
+                        "free (own-class +, competitors -). Default is the block-diagonal readout "
+                        "(each neuron -> only its own class). Uses --readout-lr.")
     p.add_argument("--peak-ei", type=float, default=20.0,
                    help="E->I drive INTO interneurons (1:1 WTA; raise if inh barely spike)")
     p.add_argument("--peak-ie", type=float, default=-2.0,
@@ -184,7 +188,8 @@ def main():
     if a.rule == "reward":
         learner = snn.learner.RewardSTDP(learning_rate=a.reward_lr,
             class_assignment=("block" if a.tiled else "mod"), seed=a.seed,
-            shuffle_labels=a.shuffle_labels, readout_lr=a.readout_lr)
+            shuffle_labels=a.shuffle_labels, readout_lr=a.readout_lr,
+            dense_readout=a.dense_readout)
     elif a.rule == "triplet":
         learner = snn.learner.TripletSTDP()
     else:
@@ -224,6 +229,7 @@ def main():
                use_vogels=a.use_vogels, vogels_lr=a.vogels_lr, vogels_rho0=a.vogels_rho0,
                n_exc=N_exc, n_inh=N_inh,
                sigma_se=a.sigma_se, sigma_se_lognormal=a.sigma_se_lognormal,
+               readout_lr=a.readout_lr, dense_readout=a.dense_readout,
                train_all=a.train_all, seed=a.seed)
     print(f"\n[{a.tag}] prior={a.prior} rule={a.rule} ee={a.ee} grouped={a.grouped} "
           f"vogels={a.use_vogels} train_weights={train_weights}\n", flush=True)
