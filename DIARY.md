@@ -10,6 +10,52 @@ Keep it scannable — a few bullets, not a transcript.
 
 ---
 
+## 2026-07-16 — Hyperparameter tuning + paper venue/structure
+
+**Focus:** Tune the tiled reward-STDP config (readout_lr, inhibitory drive, cluster
+lr; Vogels on/off), and plan the write-up.
+
+**Tuning (short 3k-image sweeps, tune.py; results/rstdp_tune/):**
+- `readout_lr`: best ~**0.1** (learned readout 0.742); flat plateau 0.05–0.1, drops
+  at 0.2. Uniform (cluster) flat ~0.64 across — cleanly separable from features.
+- `peak_ei` (E→I drive): best ~**50** (learned 0.756, uniform 0.678, up from 0.63 at
+  default 20). **dead_frac RISES monotonically with drive** (0.45→0.72) — stronger
+  inhibition SHARPENS the WTA (kills more losers, cleaner winners), so "44% dead" is
+  WTA sharpness, not weak drive. Over-inhibition (>=200) hurts. Peak knob alone
+  suffices — no multi-input E→I architecture change needed. (1:1 WTA: density_ei/ie
+  are inert; only the peaks matter.)
+- `reward_lr` (cluster/SE lr): best **≤5e-6** (learned 0.762, uniform 0.721) —
+  **MONOTONIC: gentler is better, over-training DEGRADES** the representation. This is
+  the supervised echo of the trace-STDP instability theme — even reward-STDP erodes
+  the representation when over-applied. Publication-relevant.
+- **Best config: reward_lr 5e-6, readout_lr 0.1, peak_ei 50 → learned 0.762, uniform
+  0.721** (vs ~0.65 at original defaults).
+- **Vogels on/off (PENDING, task b9jf6pzwe):** comparison at the tuned config —
+  TO FILL IN.
+
+**Tooling:** `tune.py` general sequential sweeper (reward_lr/readout_lr/peak_ei/peak_ie),
+reports learned + uniform + dead + win_ent. `--peak-ei`/`--peak-ie` exposed in harness.
+
+**Paper / venue:**
+- **NeurIPS ruled out** — it's a 9-page conference with a novelty/performance bias;
+  SNN+MNIST+~0.75 is a poor fit and would be squeezed. 
+- **Recommended: TMLR** (primary — rigor-first, no page limit, ML-community esteem,
+  tolerant of MNIST scope if owned); Neural Computation / IEEE TNNLS (topical) as
+  alternatives. Nature MI / JMLR high-esteem but poor fit for the scope.
+- **Framing:** mechanism + novel architecture + CONTROLS, NOT performance (we're far
+  below SOTA ~97–99%). Organize Results by CLAIM, not by chronological phases.
+- Two tuning findings feed the paper: over-training degradation (reward_lr) and the
+  inhibition/dead-neuron tradeoff (peak_ei).
+
+**Open / next:**
+- Fill in the Vogels on/off result when b9jf6pzwe finishes.
+- Final full run (~15k) at the optimal config (+Vogels if it helps) → real test-set
+  number + confusion matrices + live class-tiled spikes.
+- Consider a 2nd dataset (Fashion-MNIST/CIFAR) to de-risk the venue submission.
+- Rework the article structure for TMLR (claims-driven, full-length).
+
+---
+
 ## 2026-07-15 — Supervised reward-STDP V1 + tiled per-class architecture
 
 **Focus:** Pivot from unsupervised STDP (which *erodes* the oriented prior) to
