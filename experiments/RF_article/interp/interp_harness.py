@@ -107,6 +107,14 @@ def parse_args():
     p.add_argument("--sigma-se-lognormal", type=float, default=0.0,
                    help="lognormal spread of per-neuron RF sigma (0 = uniform). >0 gives HETEROGENEOUS RF "
                         "sizes: a mix of small local-feature and larger holistic detectors.")
+    p.add_argument("--theta-tau", type=float, default=0.0,
+                   help="adaptive-threshold decay time constant (0 = keep current 200). Diehl-style "
+                        "homeostasis uses ~1e7 (persistent: theta accumulates lifetime firing, "
+                        "equalizing rates across the population). Large = permanent, small = transient fatigue.")
+    p.add_argument("--theta-delta", type=float, default=0.0,
+                   help="adaptive-threshold increment per spike (0 = keep current 0.5). Diehl uses ~0.05 "
+                        "(small, so it accumulates gradually). Tune DOWN if theta blows up (our neurons "
+                        "fire more than Diehl's: no refractory, current-based synapses).")
     p.add_argument("--use-vogels", action="store_true", help="Vogels iSTDP on I->E (plastic intra-group inhibition)")
     p.add_argument("--vogels-lr", type=float, default=0.01,
                    help="Vogels iSTDP learning rate (inhibitory plasticity strength; only used with --use-vogels)")
@@ -183,7 +191,9 @@ def main():
         membrane_resistance_exc=15.0, membrane_resistance_inh=15.0,
         resting_potential=-70.0, reset_potential=-80.0, spike_threshold=-55.0,
         min_mp=-100.0, max_mp=40.0, mean_noise=0.0, var_noise=0.0,
-        spike_adaptation=True, tau_adaptation=200.0, delta_adaptation=0.5), weights=weights)
+        spike_adaptation=True,
+        tau_adaptation=(a.theta_tau if a.theta_tau > 0 else 200.0),
+        delta_adaptation=(a.theta_delta if a.theta_delta > 0 else 0.5)), weights=weights)
 
     if a.rule == "reward":
         learner = snn.learner.RewardSTDP(learning_rate=a.reward_lr,
@@ -230,6 +240,7 @@ def main():
                n_exc=N_exc, n_inh=N_inh,
                sigma_se=a.sigma_se, sigma_se_lognormal=a.sigma_se_lognormal,
                readout_lr=a.readout_lr, dense_readout=a.dense_readout,
+               theta_tau=a.theta_tau, theta_delta=a.theta_delta,
                train_all=a.train_all, seed=a.seed)
     print(f"\n[{a.tag}] prior={a.prior} rule={a.rule} ee={a.ee} grouped={a.grouped} "
           f"vogels={a.use_vogels} train_weights={train_weights}\n", flush=True)

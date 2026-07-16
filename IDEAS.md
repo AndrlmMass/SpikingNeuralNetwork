@@ -7,6 +7,38 @@ Newest ideas at the top of each section. Mark status: `idea` / `testing` / `adop
 
 ---
 
+## Neurodynamics audit vs Diehl & Cook (2015)
+
+Diehl & Cook reach ~95% on MNIST **unsupervised** (STDP + homeostasis), scaling with
+neuron count: 100->82.9%, 400->87%, 1600->91.9%, 6400->95%. Our 1000-neuron setup at
+~0.80-0.83 UNDERPERFORMS their comparable size -> diagnosable headroom. Source code:
+peter-u-diehl/stdp-mnist (Brian). Divergences found (status: audit, fixes not yet made):
+
+| param | Diehl | Ours | impact |
+|---|---|---|---|
+| synapse model | **conductance** g*(V_rev-V), shunting/self-limiting | **current-based** R*I_syn, V-independent | HIGH |
+| membrane tau (exc) | 100 ms | 20 ms | MED-HIGH |
+| refractory (exc) | 5 ms | **none** | MED-HIGH (winners fire every step) |
+| inhibition | conductance, reversal -100mV (divisive) | current, peak -2 | MED |
+| reset | to rest (-65) | -80 (below rest -70) | LOW-MED |
+| adaptive theta | tau=1e7, delta=0.05, **frozen@test** | tau=200, delta=0.5, always-on, **reset@eval** | HIGH |
+| threshold (exc) | -52 | -55 | LOW |
+| dt | 0.5 ms | ~1 ms | LOW |
+| input | Poisson ~64Hz max, re-present w/ higher intensity if <5 spikes | rate-coded, no re-present | MED |
+| weight norm | sum->78 every iter | Normalize freq 1050 | check |
+
+**Top 3 likely ceilings (independent of theta):** (1) current- vs conductance-based synapses
+(no saturation -> runaway winners); (2) no refractory period; (3) fast membrane tau. These
+INTERACT with theta: our neurons fire more per sample, so Diehl's delta=0.05 may need tuning.
+
+**Adaptive threshold — same equation, opposite regime.** Both do
+`a += -a/tau*dt; a += delta on spike; threshold = default + a` (ours neurons.py:179). Ours
+tau=200/delta=0.5 -> decays ~83%/sample = transient within-trial FATIGUE (1-sample memory).
+Diehl tau=1e7/delta=0.05 -> ~no decay = permanent LIFETIME accumulation -> equalizes firing
+rates across the population -> every neuron a distinct used detector (the 95% ingredient).
+Exposed via `--theta-tau` / `--theta-delta` (2026-07-16). TODO for full Diehl fidelity: carry
+trained `a` into val/test and FREEZE it (currently resets to zeros + re-adapts, runner.py:569,657).
+
 ## Learning rule
 
 ### Causal / gated eligibility trace  — status: idea (not sold)
