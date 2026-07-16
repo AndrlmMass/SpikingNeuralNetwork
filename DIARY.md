@@ -31,11 +31,14 @@ lr; Vogels on/off), and plan the write-up.
 - **Best config: reward_lr 5e-6, readout_lr 0.1, peak_ei 50 → learned 0.762, uniform
   0.721** (vs ~0.65 at original defaults).
 - **Vogels on/off (5k imgs, tuned config):** off = learned 0.783 / test 0.827;
-  on = learned 0.789 / test 0.837. **Marginal (+0.006 learned, +0.01 test — within
-  single-seed noise); plastic inhibition adds no meaningful benefit** at this config
-  (fixed peak_ei=50 competition already sufficient). Note: tuned config at 5k reaches
-  learned readout ~0.79 / fitted-LR test ~0.83 — gap to the linear ceiling now ~0.05
-  (was ~0.09 before tuning).
+  on = learned 0.789 / test 0.837. **!! INVALID — a BUG meant Vogels never fired in
+  reward runs** (the ilearner.step lived inside the trace-path `update_weights_now`
+  block, gated off for reward). W_ie stayed perfectly uniform at -2 regardless of
+  --use-vogels. Fixed (Vogels now applied in the reward path at the sample boundary;
+  verified W_ie differentiates, inh_in std 0 -> 0.115). **The Vogels comparison must be
+  RE-RUN.** (Andreas spotted this from the all-black I->E panel in the live plot.)
+  Note: tuned config at 5k still reaches learned ~0.79 / fitted-LR test ~0.83 (that
+  part unaffected — it was the reward+readout, not inhibition).
 
 **Tooling:** `tune.py` general sequential sweeper (reward_lr/readout_lr/peak_ei/peak_ie),
 reports learned + uniform + dead + win_ent. `--peak-ei`/`--peak-ie` exposed in harness.
