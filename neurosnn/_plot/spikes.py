@@ -2,9 +2,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
-# accumulates per-class accuracy across live-plot frames within a run, so the
-# per-class panel can draw a growing line graph (reset when a new run starts, num==0).
-_PC_HISTORY = {"x": [], "y": []}
+# accumulates per-class accuracy across ALL live-plot frames of a run, so the
+# per-class panel draws one continuous growing line per class. Keyed on the run id
+# (ts_spec), NOT the per-batch `num` counter (which resets every batch).
+_PC_HISTORY = {"run": None, "y": []}
 
 
 def spike_plot(data, labels):
@@ -189,16 +190,16 @@ def tiled_spike_plot(
     axpc = fig.add_subplot(gs[1, 2])
     if pc_acc is not None:
         pc = np.nan_to_num(np.asarray(pc_acc, dtype=float), nan=0.0)
-        if num == 0:                                   # new run -> reset the trace
-            _PC_HISTORY["x"].clear(); _PC_HISTORY["y"].clear()
-        _PC_HISTORY["x"].append(num)
+        if _PC_HISTORY["run"] != run:                  # NEW RUN -> reset (not per batch)
+            _PC_HISTORY["run"] = run; _PC_HISTORY["y"] = []
         _PC_HISTORY["y"].append(pc.copy())
         hist = np.array(_PC_HISTORY["y"])              # (frames, n_classes)
+        xs = range(len(hist))                          # monotonic frame index across the run
         cmap = plt.get_cmap("tab10")
         for c in range(hist.shape[1]):
-            axpc.plot(_PC_HISTORY["x"], hist[:, c], "-", color=cmap(c), lw=1.2, label=str(c))
+            axpc.plot(xs, hist[:, c], "-", color=cmap(c), lw=1.2, label=str(c))
         axpc.axhline(0.1, ls=":", lw=0.8, color="k", alpha=0.5)  # chance
-        axpc.set_ylim(0, 1.02); axpc.set_xlabel("frame"); axpc.set_ylabel("accuracy")
+        axpc.set_ylim(0, 1.02); axpc.set_xlabel("frame (whole run)"); axpc.set_ylabel("accuracy")
         axpc.set_title(f"Per-class accuracy over time  mean {pc.mean():.2f}", fontsize=9)
         axpc.legend(fontsize=5, ncol=2, loc="lower right", title="class")
     else:
