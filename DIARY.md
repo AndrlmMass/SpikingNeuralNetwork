@@ -30,8 +30,12 @@ lr; Vogels on/off), and plan the write-up.
   the representation when over-applied. Publication-relevant.
 - **Best config: reward_lr 5e-6, readout_lr 0.1, peak_ei 50 → learned 0.762, uniform
   0.721** (vs ~0.65 at original defaults).
-- **Vogels on/off (PENDING, task b9jf6pzwe):** comparison at the tuned config —
-  TO FILL IN.
+- **Vogels on/off (5k imgs, tuned config):** off = learned 0.783 / test 0.827;
+  on = learned 0.789 / test 0.837. **Marginal (+0.006 learned, +0.01 test — within
+  single-seed noise); plastic inhibition adds no meaningful benefit** at this config
+  (fixed peak_ei=50 competition already sufficient). Note: tuned config at 5k reaches
+  learned readout ~0.79 / fitted-LR test ~0.83 — gap to the linear ceiling now ~0.05
+  (was ~0.09 before tuning).
 
 **Tooling:** `tune.py` general sequential sweeper (reward_lr/readout_lr/peak_ei/peak_ie),
 reports learned + uniform + dead + win_ent. `--peak-ei`/`--peak-ie` exposed in harness.
@@ -48,9 +52,16 @@ reports learned + uniform + dead + win_ent. `--peak-ei`/`--peak-ie` exposed in h
   inhibition/dead-neuron tradeoff (peak_ei).
 
 **Open / next:**
-- Fill in the Vogels on/off result when b9jf6pzwe finishes.
-- Final full run (~15k) at the optimal config (+Vogels if it helps) → real test-set
-  number + confusion matrices + live class-tiled spikes.
+- Final full run (~15k) at the optimal config (reward_lr 5e-6, readout_lr 0.1,
+  peak_ei 50; Vogels optional — marginal) → real test-set number + confusion matrices
+  + live class-tiled spikes.
+- **Full/dense readout option** (Andreas' idea): each class output reads ALL neurons
+  (not just its own cluster), delta-rule trained -> strengthens own-class, weakens
+  competitors' -> should recover most of the 0.79->0.83 ceiling gap via cross-cluster
+  negative evidence. Report the SPECTRUM: uniform (0.65) -> block-diag learned (0.76-79)
+  -> full learned (~0.83) -> external LR ceiling (0.83-85). Optional sign-constrained
+  middle (own cluster +, others -) for a cleaner bio story. ~10-line change to the
+  readout learner (full W_readout N_exc x 10 instead of block-diagonal).
 - Consider a 2nd dataset (Fashion-MNIST/CIFAR) to de-risk the venue submission.
 - Rework the article structure for TMLR (claims-driven, full-length).
 
