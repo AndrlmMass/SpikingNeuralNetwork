@@ -176,6 +176,29 @@ def confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, K: int = 10) -> np.
     return cm
 
 
+def group_rf_diversity(W_se: np.ndarray, group_assignment: np.ndarray, n_groups: int = 10):
+    """Within-group RF redundancy: mean pairwise cosine similarity of the excitatory
+    receptive fields (W_se columns) inside each class group.
+
+    ~1 = neurons in a group learned the SAME thing (consensus collapse);
+    ~0 = orthogonal / diverse. Dead neurons (near-zero RF norm) are excluded.
+
+    Returns (per_group[n_groups], overall_mean). NaN for groups with <2 live neurons.
+    """
+    per = np.full(n_groups, np.nan)
+    for g in range(n_groups):
+        cols = W_se[:, group_assignment == g]              # (N_x, group_size)
+        norms = np.linalg.norm(cols, axis=0)
+        C = cols[:, norms > 1e-6]                           # drop dead neurons
+        if C.shape[1] < 2:
+            continue
+        Cn = C / np.linalg.norm(C, axis=0, keepdims=True)
+        S = Cn.T @ Cn                                        # cosine-similarity matrix
+        iu = np.triu_indices(C.shape[1], k=1)
+        per[g] = float(S[iu].mean())
+    return per, float(np.nanmean(per))
+
+
 def eta_squared(X: np.ndarray, y: np.ndarray) -> float:
     """Multivariate eta-squared: BCSS / (BCSS + WCSS), the fraction of total
     representational variance explained by class structure. Bounded in [0, 1]

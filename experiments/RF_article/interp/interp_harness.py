@@ -31,9 +31,9 @@ from neurosnn._evaluation import evaluation as evalmod
 from neurosnn._evaluation.analysis import (
     class_selectivity, orientation_coherence, current_decomp, w_floor_frac,
     pool_by_label, coverage_stats, softmax_readout,
-    pool_by_label_pred, softmax_readout_pred, confusion_matrix,
+    pool_by_label_pred, softmax_readout_pred, confusion_matrix, group_rf_diversity,
 )
-from neurosnn._plot.weights import save_rf_grid
+from neurosnn._plot.weights import save_rf_grid, plot_group_rfs
 
 import matplotlib
 matplotlib.use("Agg")
@@ -254,6 +254,9 @@ def main():
             sm_acc, ce = softmax_readout(X, y, group_assignment, n_groups=a.n_groups)
             rec["softmax_acc"] = sm_acc
             rec["ce_loss"] = ce
+            # within-group RF redundancy: ~1 = neurons in a group learned the same
+            # thing (consensus collapse), ~0 = diverse/orthogonal.
+            _per, rec["rf_diversity"] = group_rf_diversity(W_se, group_assignment, n_groups=a.n_groups)
         # per-class confusion matrices on the held-out te split: linear classifier
         # (all runs) and the reward/group readout (when a class assignment exists),
         # so we can watch which classes get discriminated / confused over training.
@@ -279,6 +282,12 @@ def main():
         key = "first" if "first" not in rf_saved else "last"
         save_rf_grid(W_se, os.path.join(a.output_dir, "weights", f"rf_{key}.png"))
         rf_saved[key] = batch
+        # per-class RF grid (overwritten each checkpoint) to see whether a group's
+        # neurons learn diverse concepts or collapse to one consensus template.
+        if group_assignment is not None:
+            plot_group_rfs(W_se, group_assignment,
+                           os.path.join(a.output_dir, "weights", "group_rfs.png"),
+                           n_groups=a.n_groups)
         # live progress: write partial results.json + regenerate confusion.png each
         # checkpoint so readout accuracy / grouped clustering / per-class recall
         # update as the run goes (test matrices fill in at the end).

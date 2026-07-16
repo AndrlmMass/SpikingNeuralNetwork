@@ -22,6 +22,36 @@ def save_rf_grid(W_se: np.ndarray, path: str, n: int = 64, input_size: int = Non
     plt.close(fig)
 
 
+def plot_group_rfs(W_se, group_assignment, path, n_per_group=12, input_size=None, n_groups=None):
+    """Per-class receptive-field grid: one row per class group, showing that group's
+    n_per_group most-learned (highest RF-norm) neurons — so you can SEE whether a
+    group's neurons learned DIFFERENT concepts (diverse) or the SAME (consensus
+    collapse). W_se: (N_x, N_exc). Each row shares a symmetric color scale."""
+    if input_size is None:
+        input_size = int(round(np.sqrt(W_se.shape[0])))
+    if n_groups is None:
+        n_groups = int(np.max(group_assignment)) + 1
+    fig, axes = plt.subplots(n_groups, n_per_group,
+                             figsize=(n_per_group * 0.9, n_groups * 0.9))
+    axes = np.atleast_2d(axes)
+    for g in range(n_groups):
+        idx = np.nonzero(group_assignment == g)[0]
+        order = idx[np.argsort(np.linalg.norm(W_se[:, idx], axis=0))[::-1]]  # learned first
+        vmax = float(np.abs(W_se[:, idx]).max()) + 1e-9
+        for j in range(n_per_group):
+            ax = axes[g, j]
+            if j < len(order):
+                ax.imshow(W_se[:, order[j]].reshape(input_size, input_size),
+                          cmap="RdBu_r", vmin=-vmax, vmax=vmax)
+            ax.set_xticks([]); ax.set_yticks([])
+        axes[g, 0].set_ylabel(f"class {g}", rotation=0, ha="right", va="center", fontsize=8)
+    fig.suptitle("Per-class RFs (top neurons by RF norm) — diverse concepts or consensus?", fontsize=10)
+    fig.tight_layout(rect=[0.04, 0, 1, 0.97])
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    fig.savefig(path, dpi=90)
+    plt.close(fig)
+
+
 def create_3D_weights_plot(weights, title, x_label, y_label, axis_flip, H_, W_):
     total_input = weights.sum(axis=axis_flip)
     Z = total_input.reshape(H_, W_)
