@@ -125,11 +125,16 @@ def parse_args():
     p.add_argument("--plot-every", type=int, default=1000,
                    help="timesteps between live spike plots AND stat snapshots (default 1000; "
                         "raise it on full runs, e.g. 35000 = once per 100 images, to limit frame count)")
+    p.add_argument("--no-plots", action="store_true",
+                   help="log metrics to results.json only; skip ALL in-run rendering (confusion.png, "
+                        "group_rfs.png, RF grids). Use for long runs you'll plot yourself afterward.")
     p.add_argument("--plot-rfs", action="store_true", help="save RF grid and (oriented) summary/coverage plots after init")
     p.add_argument("--plot-single-neuron", action="store_true", help="save 2x2 SE/EE/EI/IE panel for one neuron after init")
     p.add_argument("--plot-schematic", action="store_true", help="save force-directed network graph from real weights (grouped only)")
     p.add_argument("--neuron-id", type=int, default=512, help="neuron index for --plot-single-neuron (default 512)")
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--epochs", type=int, default=1,
+                   help="number of passes over the --train-all images (data is re-served each epoch)")
     p.add_argument("--train-all", type=int, default=15000)
     p.add_argument("--val-all", type=int, default=1000)
     p.add_argument("--val-every", type=int, default=1)
@@ -241,7 +246,7 @@ def main():
                sigma_se=a.sigma_se, sigma_se_lognormal=a.sigma_se_lognormal,
                readout_lr=a.readout_lr, dense_readout=a.dense_readout,
                theta_tau=a.theta_tau, theta_delta=a.theta_delta,
-               train_all=a.train_all, seed=a.seed)
+               train_all=a.train_all, epochs=a.epochs, seed=a.seed)
     print(f"\n[{a.tag}] prior={a.prior} rule={a.rule} ee={a.ee} grouped={a.grouped} "
           f"vogels={a.use_vogels} train_weights={train_weights}\n", flush=True)
 
@@ -316,30 +321,32 @@ def main():
         print(f"  [{a.tag}] b{batch:>3} val {rec['val_acc']:.3f} sel {rec['selectivity']:.3f} "
               f"coh {rec['orient_coh']:.3f} refit {refit:.3f} fixed {fixed_acc:.3f} "
               f"EE/SE {rec['ee_se_ratio']:.3f}{extra}", flush=True)
-        key = "first" if "first" not in rf_saved else "last"
-        save_rf_grid(W_se, os.path.join(a.output_dir, "weights", f"rf_{key}.png"))
-        rf_saved[key] = batch
-        # per-class RF grid (overwritten each checkpoint) to see whether a group's
-        # neurons learn diverse concepts or collapse to one consensus template.
-        if group_assignment is not None:
-            plot_group_rfs(W_se, group_assignment,
-                           os.path.join(a.output_dir, "weights", "group_rfs.png"),
-                           n_groups=a.n_groups)
-        # live progress: write partial results.json + regenerate confusion.png each
-        # checkpoint so readout accuracy / grouped clustering / per-class recall
-        # update as the run goes (test matrices fill in at the end).
+        if not a.no_plots:
+            key = "first" if "first" not in rf_saved else "last"
+            save_rf_grid(W_se, os.path.join(a.output_dir, "weights", f"rf_{key}.png"))
+            rf_saved[key] = batch
+            # per-class RF grid (overwritten each checkpoint) to see whether a group's
+            # neurons learn diverse concepts or collapse to one consensus template.
+            if group_assignment is not None:
+                plot_group_rfs(W_se, group_assignment,
+                               os.path.join(a.output_dir, "weights", "group_rfs.png"),
+                               n_groups=a.n_groups)
+        # always persist the metrics time series (accuracy, ce_loss, val_phi, per-class
+        # recall) to results.json for later plotting; only regenerate confusion.png when
+        # plotting is enabled.
         try:
             partial = dict(config=cfg, trajectory=traj)
             with open(os.path.join(a.output_dir, "results.json"), "w") as f:
                 json.dump(partial, f, indent=2)
-            sys.path.insert(0, os.path.dirname(__file__))
-            from plot_confusion import make_confusion_plot
-            make_confusion_plot(partial, a.output_dir)
+            if not a.no_plots:
+                sys.path.insert(0, os.path.dirname(__file__))
+                from plot_confusion import make_confusion_plot
+                make_confusion_plot(partial, a.output_dir)
         except Exception as e:
             print(f"  [live-plot] skipped: {e}", flush=True)
 
     train_kwargs = dict(
-        layers=[layer], learner=learner, regularizer=reg, epochs=1,
+        layers=[layer], learner=learner, regularizer=reg, epochs=a.epochs,
         train_weights=train_weights, save_model=False, accuracy_method="pca_lr",
         use_LR=True, use_phi=True, use_pca=False, track_stats=a.track_stats,
         stat_tracking_frequency=a.plot_every,  # cadence of live spike plots + stat snapshots
@@ -391,10 +398,13 @@ def main():
             )
 
     last_w = None
+    gstep = 0  # monotonic batch index across epochs (r.batch resets each epoch)
     for r in train_gen:
         last_w = r.weights if r.weights is not None else last_w
-        if r.accuracy is not None and r.batch % a.val_every == 0 and last_w is not None:
-            checkpoint(r.batch, last_w)
+        if r.accuracy is not None and last_w is not None:
+            if gstep % a.val_every == 0:
+                checkpoint(gstep, last_w)
+            gstep += 1
 
     if not traj and last_w is not None:
         checkpoint(0, last_w)
