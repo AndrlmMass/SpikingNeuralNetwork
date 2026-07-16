@@ -20,15 +20,18 @@ import matplotlib.pyplot as plt
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 HARNESS = os.path.join(REPO, "experiments", "RF_article", "interp", "interp_harness.py")
-FLAG = {"reward_lr": "--reward-lr", "readout_lr": "--readout-lr"}
+FLAG = {"reward_lr": "--reward-lr", "readout_lr": "--readout-lr",
+        "peak_ei": "--peak-ei", "peak_ie": "--peak-ie"}
 
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--sweep", choices=["reward_lr", "readout_lr"], required=True)
+    p.add_argument("--sweep", choices=list(FLAG), required=True)
     p.add_argument("--values", type=float, nargs="+", required=True)
     p.add_argument("--reward-lr", type=float, default=2e-5, help="fixed cluster lr (unless swept)")
     p.add_argument("--readout-lr", type=float, default=0.02, help="fixed readout lr (unless swept)")
+    p.add_argument("--peak-ei", type=float, default=20.0, help="fixed E->I inh drive (unless swept)")
+    p.add_argument("--peak-ie", type=float, default=-2.0, help="fixed I->E inh strength (unless swept)")
     p.add_argument("--train-all", type=int, default=3000)
     p.add_argument("--val-all", type=int, default=1000)
     p.add_argument("--test-all", type=int, default=1000)
@@ -41,11 +44,13 @@ def run_one(val, out, a):
     if os.path.isfile(os.path.join(out, "results.json")):
         return "skipped"
     os.makedirs(out, exist_ok=True)
-    fixed = {"reward_lr": a.reward_lr, "readout_lr": a.readout_lr}
+    fixed = {"reward_lr": a.reward_lr, "readout_lr": a.readout_lr,
+             "peak_ei": a.peak_ei, "peak_ie": a.peak_ie}
     fixed[a.sweep] = val  # the swept param overrides the fixed default
     cmd = [sys.executable, HARNESS, "--tag", f"{a.sweep}_{val:g}", "--prior", "isotropic",
            "--rule", "reward", "--tiled", "--seed", str(a.seed),
            "--reward-lr", str(fixed["reward_lr"]), "--readout-lr", str(fixed["readout_lr"]),
+           "--peak-ei", str(fixed["peak_ei"]), "--peak-ie", str(fixed["peak_ie"]),
            "--train-all", str(a.train_all), "--val-all", str(a.val_all),
            "--val-every", "1", "--test-all", str(a.test_all), "--output-dir", out]
     env = dict(os.environ, OMP_NUM_THREADS="1", MKL_NUM_THREADS="1",
@@ -79,10 +84,10 @@ def main():
         print(f"  {a.sweep}={v:<9g} {status:<12} {(time.time()-t1)/60:5.1f} min", flush=True)
 
     rows = [(v, final(run_dir, v, a, "readout_learned_acc"), final(run_dir, v, a, "softmax_acc"),
-             final(run_dir, v, a, "dead_frac"), final(run_dir, v, a, "w_floor_frac")) for v in a.values]
-    print(f"\n{a.sweep:>12} {'learned':>9} {'uniform':>9} {'dead':>7} {'w_floor':>8}")
-    for v, le, un, de, wf in rows:
-        print(f"{v:>12g} {le:>9.3f} {un:>9.3f} {de:>7.2f} {wf:>8.3f}")
+             final(run_dir, v, a, "dead_frac"), final(run_dir, v, a, "winner_entropy")) for v in a.values]
+    print(f"\n{a.sweep:>12} {'learned':>9} {'uniform':>9} {'dead':>7} {'win_ent':>8}")
+    for v, le, un, de, we in rows:
+        print(f"{v:>12g} {le:>9.3f} {un:>9.3f} {de:>7.2f} {we:>8.3f}")
     best = max(rows, key=lambda r: (r[1] if np.isfinite(r[1]) else r[2]))
     print(f"\nBEST {a.sweep} = {best[0]:g}  (learned={best[1]:.3f}, uniform={best[2]:.3f})")
 

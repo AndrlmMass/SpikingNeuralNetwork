@@ -85,6 +85,10 @@ def parse_args():
                    help="CONTROL: reward on random targets (signal=noise); readout still evaluated on true labels")
     p.add_argument("--readout-lr", type=float, default=0.0,
                    help="plastic cluster->class readout learning rate (0 = fixed uniform pooling)")
+    p.add_argument("--peak-ei", type=float, default=20.0,
+                   help="E->I drive INTO interneurons (1:1 WTA; raise if inh barely spike)")
+    p.add_argument("--peak-ie", type=float, default=-2.0,
+                   help="I->E inhibition strength onto exc (intra-group WTA)")
     p.add_argument("--ee", action="store_true", help="enable E->E recurrence (default off=feedforward)")
     p.add_argument("--grouped", action="store_true", help="grouped excitatory architecture (intra-class WTA)")
     p.add_argument("--n-groups", type=int, default=10, help="number of excitatory groups (default 10)")
@@ -137,7 +141,7 @@ def main():
     density_ee = 0.01 if a.ee else 0.0
 
     wkw = dict(density_se=0.01, density_ee=density_ee, density_ei=0.03, density_ie=0.05,
-               peak_se=4.0, peak_ee=1.0, peak_ei=20.0, peak_ie=-2.0,
+               peak_se=4.0, peak_ee=1.0, peak_ei=a.peak_ei, peak_ie=a.peak_ie,
                wta_inhibition=True)
     if a.prior == "oriented" and not a.grouped:
         weights = snn.weights.oriented_receptive_fields(n_orientations=4, orientation_mode="block", **wkw)
