@@ -30,7 +30,7 @@ import neurosnn as snn
 from neurosnn._evaluation import evaluation as evalmod
 from neurosnn._evaluation.analysis import (
     class_selectivity, orientation_coherence, current_decomp, w_floor_frac,
-    pool_by_label, coverage_stats, softmax_readout,
+    pool_by_label, coverage_stats, softmax_readout, spike_share_metrics,
     pool_by_label_pred, softmax_readout_pred, confusion_matrix, group_rf_diversity,
 )
 from neurosnn._plot.weights import save_rf_grid, plot_group_rfs
@@ -293,9 +293,15 @@ def main():
             rec["pool_acc"] = pool_by_label(X, y, neuron_class)
             rec["dead_frac"], rec["frac_ever_winner"], rec["winner_entropy"] = coverage_stats(X)
         if group_assignment is not None:
-            sm_acc, ce = softmax_readout(X, y, group_assignment, n_groups=a.n_groups)
+            sm_acc, _ = softmax_readout(X, y, group_assignment, n_groups=a.n_groups)
             rec["softmax_acc"] = sm_acc
-            rec["ce_loss"] = ce
+            # Default distribution-aware readout metrics (share_ce / perplexity /
+            # margin / brier). These replace the old softmax `ce_loss`, which was
+            # pinned at ln(10)=2.303 at EVERY checkpoint: spikes_per_item returns
+            # mean rates ~0.01, and a T=1 softmax over near-equal tiny numbers is
+            # uniform, so it could not tell chance from perfect classification.
+            # The share-based version is scale-invariant and needs no temperature.
+            rec.update(spike_share_metrics(X, y, group_assignment, n_groups=a.n_groups))
             # within-group RF redundancy: ~1 = neurons in a group learned the same
             # thing (consensus collapse), ~0 = diverse/orthogonal.
             _per, rec["rf_diversity"] = group_rf_diversity(W_se, group_assignment, n_groups=a.n_groups)
@@ -317,7 +323,8 @@ def main():
         if "pool_acc" in rec:
             extra += f" pool {rec['pool_acc']:.3f} dead {rec['dead_frac']:.2f} win_ent {rec['winner_entropy']:.2f}"
         if "softmax_acc" in rec:
-            extra += f" softmax {rec['softmax_acc']:.3f} ce {rec['ce_loss']:.3f}"
+            extra += (f" softmax {rec['softmax_acc']:.3f} ce {rec['share_ce']:.3f}"
+                      f" perp {rec['perplexity']:.2f} margin {rec['margin']:+.3f}")
         print(f"  [{a.tag}] b{batch:>3} val {rec['val_acc']:.3f} sel {rec['selectivity']:.3f} "
               f"coh {rec['orient_coh']:.3f} refit {refit:.3f} fixed {fixed_acc:.3f} "
               f"EE/SE {rec['ee_se_ratio']:.3f}{extra}", flush=True)

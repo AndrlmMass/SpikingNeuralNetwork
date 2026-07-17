@@ -146,6 +146,67 @@ def softmax_readout(
     return acc, ce
 
 
+def spike_share_metrics(
+    X: np.ndarray,
+    y: np.ndarray,
+    group_assignment: np.ndarray,
+    n_groups: int = 10,
+) -> dict:
+    """Distribution-aware readout metrics from the group-pooled spike SHARES.
+
+    The class probability is each group's share of the total spikes
+    (p_c = rate_c / sum_c rate_c) — an L1 normalization, NOT a softmax. This is
+    SCALE-INVARIANT: doubling every firing rate leaves the shares unchanged, so it
+    needs no temperature and stays informative regardless of firing-rate magnitude.
+    (A softmax at T=1 on these rates is pinned at ln(K) forever, because
+    spikes_per_item returns mean rates ~0.01 and exp() of near-equal tiny numbers is
+    near-uniform — it cannot distinguish chance from perfect classification.)
+
+    Returns:
+        share_ce   -- -log(share of the correct class), averaged. ln(10)=2.303 at
+                      chance; lower is better. Like all cross-entropy it reads ONLY
+                      the correct class, hence the companion metrics below.
+        perplexity -- exp(entropy of p), averaged: the effective number of classes
+                      still in play. n_groups = fully diffuse, 1 = certain.
+                      Distinguishes "generally uncertain" from "one specific rival".
+        margin     -- correct share minus the best rival's share. Sign is decisive:
+                      < 0 means the item is misclassified.
+        brier      -- squared error over the FULL probability vector. Unlike
+                      share_ce it is sensitive to how the wrong mass is spread.
+
+    Diagnostic use: two runs can share an identical share_ce while one classifies
+    correctly (diffuse competitors) and the other does not (one strong rival) —
+    perplexity/margin separate them, which tells us whether a plateau is a features
+    problem (perplexity ~2, specific confusions) or a capacity problem (perplexity
+    high, never narrows down).
+    """
+    rates = np.stack(
+        [X[:, group_assignment == g].mean(1) for g in range(n_groups)], axis=1
+    )                                                # (n_items, n_groups)
+    rates = np.clip(rates, 0.0, None)                # shares need non-negative mass
+    tot = rates.sum(axis=1, keepdims=True)
+    # items that produced no spikes at all -> uniform (chance), never NaN
+    p = np.where(tot > 1e-12, rates / (tot + 1e-12), 1.0 / n_groups)
+
+    idx = np.arange(len(y))
+    yi = np.asarray(y).astype(int)
+    p_true = p[idx, yi]
+    share_ce = float(-np.log(p_true + 1e-12).mean())
+
+    H = -(p * np.log(p + 1e-12)).sum(axis=1)
+    perplexity = float(np.exp(H).mean())
+
+    p_rival = p.copy()
+    p_rival[idx, yi] = -1.0                          # mask the true class
+    margin = float((p_true - p_rival.max(axis=1)).mean())
+
+    onehot = np.zeros_like(p)
+    onehot[idx, yi] = 1.0
+    brier = float(((p - onehot) ** 2).sum(axis=1).mean())
+
+    return dict(share_ce=share_ce, perplexity=perplexity, margin=margin, brier=brier)
+
+
 def pool_by_label_pred(X: np.ndarray, neuron_class: np.ndarray, K: int = 10) -> np.ndarray:
     """Predictions of the pool-by-label readout (argmax over per-class summed rates)."""
     scores = np.zeros((X.shape[0], K))
