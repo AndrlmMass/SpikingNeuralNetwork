@@ -82,6 +82,43 @@ block-diagonal cluster.
   (~0.83?) → external LR ceiling (~0.80–0.85). Optional sign-constrained middle (own
   cluster +, others −) for a cleaner bio story. ~10-line change to the readout learner.
 
+### Unify the readout on R-STDP (drop the delta rule)  — status: idea
+The readout currently learns by a **softmax delta rule** (exact SGD on cross-entropy),
+while `W_se` learns by reward-STDP. Two different learning rules in one model. The
+original commit (`e6b35750`) justifies adding a *plastic* readout ("features support
+0.85 fitted but uniform pooling extracts only 0.65 → the readout is the bottleneck")
+but records **no rationale for the rule choice** — it went in as the default for a
+linear classifier, uncompared.
+- **Why the delta rule fits anyway:** (a) the readout is not a spiking layer — it's
+  `scores = er @ W` over accumulated counts, so there are no readout spike times and no
+  STDP eligibility term exists to compute; (b) `p − onehot` is graded by how wrong the
+  prediction was and self-anneals to zero, where R-STDP's ±1 reward is constant-magnitude
+  and needs an EMA baseline to centre.
+- **Why it's still a liability:** for a paper leaning on biological plausibility, "we use
+  gradient descent for the classifier" is the obvious point of attack. State it in the
+  methods either way; don't let a reviewer find it.
+- **The unified alternative:** make the readout a spiking layer and use reward-modulated
+  STDP from exc → readout neurons. One rule throughout. Cost: slower, noisier convergence
+  and a weaker teacher signal. Worth an ablation if a reviewer pushes, not before.
+
+---
+
+## Regularization
+
+### `reg_frequency` is dead config in every R-STDP run  — status: idea (test next)
+`trainer.py:380` gates the `reg_frequency` timer behind `and not self.use_reward`, so it
+**never fires** in reward runs. Instead `trainer.py:605` normalizes `W_se` inside the
+sample-boundary block, and `Normalizer` has no internal frequency check of its own.
+- **Net effect:** R-STDP normalizes once **per image**; `reg_frequency=1050` is ignored.
+  That is 3x more often than configured (1050 / 350 steps = every 3 images).
+- **Why it may matter a lot:** per-neuron normalization holds each neuron's total input
+  weight constant. Applied after *every* image it directly opposes reward-STDP's attempt
+  to grow some weights relative to others — a plausible cause of class selectivity sitting
+  flat at ~0.37 regardless of what else we change. Explains the flatness better than
+  anything on the inhibition axis.
+- **Test:** sweep normalization frequency in the reward path (every 1 / 3 / 10 / 50 images,
+  and off) against selectivity trend + accuracy. Queued behind the inhibition sweep.
+
 ---
 
 ## Architecture / receptive fields
