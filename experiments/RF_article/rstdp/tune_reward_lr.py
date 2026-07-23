@@ -25,7 +25,10 @@ def parse_args():
     p.add_argument("--val-all", type=int, default=1000)
     p.add_argument("--val-every", type=int, default=1)
     p.add_argument("--test-all", type=int, default=2000)
-    p.add_argument("--prior", default="oriented", choices=["oriented", "random"])
+    p.add_argument("--prior", default="oriented", choices=["oriented", "isotropic", "random"])
+    p.add_argument("--tiled", action="store_true",
+                   help="tiled per-class excitatory layout (N_exc=1000, 10x10/class); "
+                        "forwarded to the harness")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--run-id", default=None)
     return p.parse_args()
@@ -40,6 +43,8 @@ def run_one(lr, out, a):
            "--train-all", str(a.train_all), "--val-all", str(a.val_all),
            "--val-every", str(a.val_every), "--test-all", str(a.test_all),
            "--output-dir", out]
+    if a.tiled:
+        cmd.append("--tiled")
     env = dict(os.environ, OMP_NUM_THREADS="1", MKL_NUM_THREADS="1",
                OPENBLAS_NUM_THREADS="1", NUMBA_NUM_THREADS="1", PYTHONUTF8="1")
     with open(os.path.join(out, "run.log"), "w", encoding="utf-8") as f:

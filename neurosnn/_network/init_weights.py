@@ -51,6 +51,8 @@ class WeightFactory:
     group_layout: str = "interleaved"   # "interleaved" | "block"
     tiled_centers: bool = False         # per-class tiled RF centers (block layout, full-input
                                         # coverage per class); allows non-square N_exc = n_groups*k^2
+    tiled_center_margin: float = 0.0    # px trimmed per edge when tiling centers (0 = full input);
+                                        # >0 concentrates centers on the central region
 
     def __post_init__(self):
         self.H = int(np.sqrt(self.N_x))
@@ -240,7 +242,9 @@ class WeightFactory:
         only (W_ee = 0), 1:1 WTA hitman + intra-group (block) I->E inhibition. Works for
         non-square N_exc = n_groups * k^2 (bypasses the sheet-grid square asserts)."""
         n_grp = self.n_groups if self.n_groups > 0 else 10
-        centers = group_tiled_centers(self.N_exc, n_grp, self.H)  # (N_exc, 2) input coords
+        centers = group_tiled_centers(
+            self.N_exc, n_grp, self.H, margin=self.tiled_center_margin
+        )  # (N_exc, 2) input coords
 
         if self.oriented_rf:
             W_se = oriented_gaussian_se_weights(
@@ -538,21 +542,29 @@ def make_group_assignment(N_exc: int, n_groups: int, layout: str = "interleaved"
     return a
 
 
-def group_tiled_centers(N_exc: int, n_groups: int, input_size: int) -> np.ndarray:
-    """Per-class-group RF centers that tile the full input on a regular torus grid.
+def group_tiled_centers(N_exc: int, n_groups: int, input_size: int, margin: float = 0.0) -> np.ndarray:
+    """Per-class-group RF centers that tile the input on a regular grid.
 
-    Each group gets g = N_exc // n_groups neurons whose centers form a k x k grid
-    over the input, with the SAME grid for every group, so every class tiles the
-    whole image. Centers use offset spacing ((i+0.5)*input/k), not linspace
-    endpoints, so the torus wrap spacing is uniform — this maximizes the *minimum*
-    inter-center spacing (even coverage), rather than maximizing total pairwise
-    distance (which would clump centers at the edges).
+    Each group gets g = N_exc // n_groups neurons whose centers form a k x k grid,
+    with the SAME grid for every group, so every class tiles the same region.
+    Centers use offset spacing ((i+0.5)*span/k), not linspace endpoints, so the
+    wrap spacing is uniform — this maximizes the *minimum* inter-center spacing
+    (even coverage), rather than maximizing total pairwise distance (which would
+    clump centers at the edges).
+
+    margin (pixels) trims the tiled region to [margin, input_size - margin] on
+    each axis: margin=0 tiles the full input (default), while a positive margin
+    concentrates centers on the central region — useful when the data (e.g.
+    centered MNIST digits) leaves the border blank, so full-coverage tiling wastes
+    corner neurons on always-empty pixels.
 
     Returned in block order (neuron n -> group n // g), matching the block
     assignment np.repeat(arange(n_groups), g). Shape (N_exc, 2), (row, col) coords.
     """
     if N_exc % n_groups != 0:
         raise ValueError(f"N_exc ({N_exc}) must be divisible by n_groups ({n_groups})")
+    if not 0.0 <= margin < input_size / 2.0:
+        raise ValueError(f"margin ({margin}) must be in [0, input_size/2={input_size / 2.0}).")
     g = N_exc // n_groups
     k = int(round(np.sqrt(g)))
     if k * k != g:
@@ -560,8 +572,9 @@ def group_tiled_centers(N_exc: int, n_groups: int, input_size: int) -> np.ndarra
             f"neurons per group ({g}) must be a perfect square for a k x k tile; "
             f"got sqrt={np.sqrt(g):.3f}. Try N_exc = n_groups * k^2 (e.g. 10*100=1000)."
         )
-    step = input_size / k
-    coords = (np.arange(k) + 0.5) * step
+    span = input_size - 2.0 * margin          # margin=0 -> full input (original behavior)
+    step = span / k
+    coords = margin + (np.arange(k) + 0.5) * step
     grid = np.array([(r, c) for r in coords for c in coords], dtype=float)  # (g, 2)
     return np.tile(grid, (n_groups, 1))  # (N_exc, 2) in block order
 
