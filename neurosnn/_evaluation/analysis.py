@@ -8,11 +8,20 @@ import numpy as np
 
 
 def class_selectivity(X: np.ndarray, y: np.ndarray, K: int = 10) -> float:
-    """Mean per-neuron class selectivity: 1 - H / log(K).
+    """DEPRECATED — confounded by firing rate. Use `class_eta_squared` instead.
 
+    Mean per-neuron class selectivity: 1 - H / log(K).
     1.0 = neuron fires exclusively for one class.
     0.0 = uniform response across all classes (maximum entropy).
-    Only active neurons (nonzero total rate) contribute to the mean.
+
+    WHY IT IS BROKEN: normalizing each neuron's class-means into a distribution
+    discards magnitude, so (3e-4, 0, ..., 0) and (0.5, 0, ..., 0) both score 1.0.
+    The `tot > 1e-9` guard only drops EXACTLY dead neurons, not near-silent ones,
+    whose per-class means are sampling noise and therefore peaky by chance. It
+    cannot distinguish "specialist for class 7" from "fired three times, all 7s".
+    See `active_mask` for the measured effect sizes.
+
+    Kept only so old trajectories stay comparable. Do not use for new claims.
     """
     means = np.stack([
         X[y == c].mean(0) if (y == c).any() else np.zeros(X.shape[1])
@@ -24,6 +33,143 @@ def class_selectivity(X: np.ndarray, y: np.ndarray, K: int = 10) -> float:
     sel = 1.0 - H / np.log(K)
     active = tot > 1e-9
     return float(sel[active].mean()) if active.any() else 0.0
+
+
+def active_mask(X: np.ndarray, min_rel: float = 0.02) -> np.ndarray:
+    """Neurons carrying enough evidence to estimate anything from. (N_exc,) bool.
+
+    Keeps neurons whose TOTAL rate is at least `min_rel` times the 90th-percentile
+    total rate — i.e. within ~50x of the strongly-driven population. Relative and
+    scale-free, so it does not depend on timestep count, item count, or sparsity
+    regime; and it targets total evidence, which is what sets estimator noise.
+
+    Needed because `class_selectivity` is CONFOUNDED by firing rate: it keeps any
+    neuron with total rate > 1e-9, and a neuron firing at ~3e-4 has per-class means
+    that are pure sampling noise, hence a peaky class distribution BY CHANCE.
+    Measured on a real run: the least-active quartile of "live" neurons scores 0.65
+    selectivity while the most-active quartile scores 0.045 — 15x higher for firing
+    ~500x less. Across a 12-cell sweep, selectivity correlated +0.91 with dead
+    fraction, and its correlation with linear decodability vanished (-0.74 -> -0.12)
+    once dead fraction was partialled out. It was measuring silence, not structure.
+
+    Threshold chosen empirically against a known answer: on a synthetic population
+    of 40 informative + 40 near-silent noise neurons it keeps exactly the 40, and on
+    real features it drops the entire low-activity quartile that inflated the old
+    metric. A "fired on >=1% of items" rule kept 79/80 of the synthetic case and let
+    52/142 of the bad real neurons through — too permissive to be worth having.
+    """
+    tot = np.asarray(X, dtype=float).sum(0)
+    ref = np.percentile(tot, 90)
+    return tot >= min_rel * ref if ref > 0 else np.zeros(tot.shape, bool)
+
+
+def class_eta_squared(
+    X: np.ndarray,
+    y: np.ndarray,
+    K: int = 10,
+    min_rel: float = 0.02,
+) -> float:
+    """Mean PER-NEURON eta-squared: between-class variance / total variance.
+
+    The replacement for `class_selectivity`. Same question ("is this neuron's
+    response class-informative?") but noise-aware BY CONSTRUCTION: a barely-firing
+    neuron has almost all its variance *within* class, so it scores ~0 instead of
+    ~0.65. Being a variance ratio, absolute firing magnitude cancels, so it is not
+    confounded the other way either. Verified on real features: low-activity
+    quartile 0.021 vs high-activity 0.279 — the correct direction, where
+    class_selectivity gave 0.651 vs 0.044.
+
+    1.0 = the neuron's response is fully determined by class; 0.0 = class explains
+    none of its variance. Averaged over active neurons only.
+    """
+    X = np.asarray(X, dtype=float)
+    m = active_mask(X, min_rel)
+    if not m.any():
+        return 0.0
+    Xa = X[:, m]
+    gm = Xa.mean(0)
+    bcss = np.zeros(Xa.shape[1])
+    for c in range(K):
+        sel = y == c
+        if sel.any():
+            bcss += sel.sum() * (Xa[sel].mean(0) - gm) ** 2
+    tcss = ((Xa - gm) ** 2).sum(0)
+    return float(np.mean(bcss / (tcss + 1e-12)))
+
+
+def response_correlation(
+    X: np.ndarray,
+    group_assignment: "np.ndarray | None" = None,
+    n_groups: int = 10,
+    min_rel: float = 0.02,
+) -> tuple[float, float]:
+    """Mean |pairwise correlation| between neurons' response vectors.
+
+    THE redundancy measure: high = neurons carry the same signal, so the population
+    is low-rank however selective the individuals look. This is the decorrelation
+    objective from the sparse-coding literature, and unlike class_selectivity it is
+    a property of the POPULATION — ten identical perfectly-tuned neurons score 1.0
+    here (correctly: they are redundant) while class_selectivity would also score
+    1.0 (incorrectly: it reads them as ten fine specialists).
+
+    CORRELATION, not raw cosine, because correlation is the *centered* cosine. Our
+    population has a large common mode ("bright image -> everyone fires more") worth
+    ~34% of variance, which is luminance rather than redundancy we could fix. On real
+    features the uncentered version reads 0.82 among active neurons vs 0.57 centered.
+
+    Returns (within_group, overall). within_group is NaN without an assignment.
+    """
+    X = np.asarray(X, dtype=float)
+    m = active_mask(X, min_rel) & (X.std(0) > 1e-12)
+    if m.sum() < 2:
+        return float("nan"), float("nan")
+    Xa = X[:, m]
+    R = np.corrcoef(Xa.T)
+    iu = np.triu_indices(R.shape[0], 1)
+    overall = float(np.nanmean(np.abs(R[iu])))
+    if group_assignment is None:
+        return float("nan"), overall
+    ga = np.asarray(group_assignment)[m]
+    per = []
+    for g in range(n_groups):
+        idx = np.flatnonzero(ga == g)
+        if idx.size >= 2:
+            sub = R[np.ix_(idx, idx)]
+            per.append(np.nanmean(np.abs(sub[np.triu_indices(idx.size, 1)])))
+    return (float(np.mean(per)) if per else float("nan")), overall
+
+
+def participation_ratio(
+    X: np.ndarray,
+    scale_free: bool = True,
+    min_rel: float = 0.02,
+) -> float:
+    """Effective dimensionality of the population code: (sum L)^2 / sum(L^2).
+
+    Rigotti's measure of whether a representation is high-dimensional. The hard
+    interpretable threshold: a linear readout needs at least K-1 dimensions to
+    separate K classes, so anything below ~9 for 10-way MNIST is a ceiling we are
+    sitting under regardless of how good the individual neurons look.
+
+    scale_free=True uses the CORRELATION eigenspectrum (every neuron weighted
+    equally); False uses the COVARIANCE spectrum (weighted by actual variance, so a
+    few loud neurons dominate). They disagree a lot in practice — on one real run,
+    3.2 raw vs 7.6 scale-free out of 563 live neurons — so report which one.
+
+    Near-silent neurons MUST be excluded in scale-free mode: z-scoring amplifies
+    their noise to unit variance, and pure noise dimensions inflate PR. Hence the
+    activity mask applies to both modes.
+    """
+    X = np.asarray(X, dtype=float)
+    m = active_mask(X, min_rel) & (X.std(0) > 1e-12)
+    if m.sum() < 2:
+        return float("nan")
+    Xa = X[:, m]
+    if scale_free:
+        Xa = (Xa - Xa.mean(0)) / Xa.std(0)
+    ev = np.clip(np.linalg.eigvalsh(np.cov(Xa.T)), 0.0, None)
+    s = ev.sum()
+    return float(s * s / (ev ** 2).sum()) if s > 1e-12 else float("nan")
 
 
 def orientation_coherence(W_se: np.ndarray) -> float:
