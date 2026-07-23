@@ -41,6 +41,7 @@ class WeightsSpec:
     n_groups: int = 0                   # 0 = auto (uses 10); ignored unless grouped_inhibition
     group_layout: str = "interleaved"   # "interleaved" | "block"
     tiled_centers: bool = False         # per-class tiled RF centers (block + full coverage)
+    tiled_center_margin: float = 0.0    # px trimmed per edge when tiling centers (0 = full input)
 
     def _to_factory_kwargs(self) -> dict:
         return dict(
@@ -73,6 +74,7 @@ class WeightsSpec:
             n_groups=self.n_groups,
             group_layout=self.group_layout,
             tiled_centers=self.tiled_centers,
+            tiled_center_margin=self.tiled_center_margin,
         )
 
 
@@ -185,6 +187,7 @@ def grouped_excitatory(
     sigma_x: float = 3.0,
     gamma: float = 0.4,
     r_cut_factor: float = 3.0,
+    tiled_center_margin: float = 0.0,
     ablate_ee: bool = False,
     ablate_ie: bool = False,
 ) -> WeightsSpec:
@@ -194,6 +197,8 @@ def grouped_excitatory(
 
     oriented=True  — elliptical Gabor-style RFs (default)
     oriented=False — isotropic 2D Gaussian RFs; orientation params are ignored
+    tiled_center_margin — px trimmed per edge when tiling RF centers (tiled only;
+        0 = full input, >0 concentrates centers on the central region).
     """
     return WeightsSpec(
         density_se=density_se,
@@ -220,6 +225,7 @@ def grouped_excitatory(
         # tiled forces block layout (contiguous class blocks) + tiled RF centers
         group_layout="block" if tiled else group_layout,
         tiled_centers=tiled,
+        tiled_center_margin=tiled_center_margin,
         ablate_ee=ablate_ee,
         ablate_ie=ablate_ie,
     )
