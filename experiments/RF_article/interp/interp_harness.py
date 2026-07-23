@@ -105,6 +105,20 @@ def parse_args():
                    help="RF Gaussian sigma (px) = structural footprint of each SE neuron. 0 = keep the "
                         "grouped default (3.0 ~ near-global, whole-digit templates). Lower = local patch "
                         "detectors: ~1.5 -> 6px, ~1.0 -> 3.6px. Sets sigma_se_mean on the weight spec.")
+    p.add_argument("--rf-length", type=float, default=3.0,
+                   help="ORIENTED RFs: sigma ALONG the bar (major axis) in px = length. "
+                        "The oriented builder reads this (sigma_x), NOT --sigma-se.")
+    p.add_argument("--rf-thickness", type=float, default=1.2,
+                   help="ORIENTED RFs: sigma ACROSS the bar (minor axis) in px = thickness; "
+                        "gamma = thickness/length. Domantas' tuned pair is 3.0 / 1.2 "
+                        "(thin oriented bars), vs the old near-isotropic 3.0 / 1.2*3.0.")
+    p.add_argument("--center-margin", type=float, default=0.0,
+                   help="px trimmed per edge when tiling RF centers (0 = full 28x28). "
+                        ">0 concentrates centers on the central region — MNIST digits are "
+                        "centered, so full tiling wastes the outer tiles on blank border "
+                        "pixels and those neurons die. Domantas uses 4.")
+    p.add_argument("--ablate-ie", action="store_true",
+                   help="zero the I->E block: no intra-group WTA competition at all")
     p.add_argument("--sigma-se-lognormal", type=float, default=0.0,
                    help="lognormal spread of per-neuron RF sigma (0 = uniform). >0 gives HETEROGENEOUS RF "
                         "sizes: a mix of small local-feature and larger holistic detectors.")
@@ -178,16 +192,29 @@ def main():
         weights = snn.weights.receptive_fields(**wkw)
     elif a.prior in ("oriented", "isotropic") and a.grouped:  # grouped handles both RF shapes
         gkw = {k: v for k, v in wkw.items() if k != "wta_inhibition"}
+        # ORIENTED RF geometry comes from sigma_x (length ALONG the bar) and
+        # gamma = thickness/length (minor/major axis ratio) — NOT from sigma_se_mean,
+        # which the factory reads only on the isotropic branch. That is why --sigma-se
+        # is silently a no-op under --prior oriented; use --rf-length/--rf-thickness.
+        # tiled_center_margin trims the tiled region so RF centers concentrate on the
+        # central area: MNIST digits are centered, so full-input tiling puts the outer
+        # tiles on permanently blank border pixels and those neurons die.
         weights = snn.weights.grouped_excitatory(
             n_groups=a.n_groups, group_layout=a.group_layout, tiled=a.tiled,
             oriented=(a.prior == "oriented"),
-            n_orientations=4, orientation_mode="block", **gkw)
+            n_orientations=4, orientation_mode="block",
+            sigma_x=a.rf_length, gamma=(a.rf_thickness / a.rf_length),
+            tiled_center_margin=a.center_margin, ablate_ie=a.ablate_ie, **gkw)
     else:
         weights = snn.weights.random(**wkw)
     # RF-size override: shrink the structural footprint (sigma_se_mean) to force local
     # patch detectors instead of near-global whole-digit templates, and/or make RF sizes
     # heterogeneous. Applied to the spec so it flows through _to_factory_kwargs.
+    # ISOTROPIC ONLY — see the note above; on oriented priors this field is ignored.
     if a.sigma_se > 0.0 and hasattr(weights, "sigma_se_mean"):
+        if a.prior == "oriented":
+            print("  [warn] --sigma-se is ignored on --prior oriented; "
+                  "use --rf-length / --rf-thickness", flush=True)
         weights.sigma_se_mean = a.sigma_se
     if a.sigma_se_lognormal > 0.0 and hasattr(weights, "sigma_se_lognormal_std"):
         weights.sigma_se_lognormal_std = a.sigma_se_lognormal
@@ -245,6 +272,9 @@ def main():
                use_vogels=a.use_vogels, vogels_lr=a.vogels_lr, vogels_rho0=a.vogels_rho0,
                n_exc=N_exc, n_inh=N_inh,
                sigma_se=a.sigma_se, sigma_se_lognormal=a.sigma_se_lognormal,
+               rf_length=a.rf_length, rf_thickness=a.rf_thickness,
+               center_margin=a.center_margin, ablate_ie=a.ablate_ie,
+               peak_ei=a.peak_ei, peak_ie=a.peak_ie,
                readout_lr=a.readout_lr, dense_readout=a.dense_readout,
                theta_tau=a.theta_tau, theta_delta=a.theta_delta,
                train_all=a.train_all, epochs=a.epochs, seed=a.seed)
@@ -301,6 +331,31 @@ def main():
             rec["baseline"] = _os["baseline"]
             if getattr(_rl, "readout_lr", 0.0) > 0.0:
                 rec["readout_learned_acc"] = float((_rl.readout_predict(X) == y).mean())
+                # Uncertainty on the LEARNED readout — the distribution that should
+                # carry any abstention claim, since the reward rule's own softmax
+                # delta rule computes it internally. The pooled `perplexity` below
+                # is near chance (~9 of 10) for a different and uninteresting
+                # reason: with thin local RFs the features (strokes, edges) are
+                # shared across digits, so every class group ends up with a similar
+                # MEAN rate — the least-active group fires at ~32% of the most
+                # active one. Uniform pooling averages away the pattern of WHICH
+                # neurons fired, which is where the class information actually is.
+                # Measured on the same features: pooled perplexity 9.06 vs 1.18
+                # here. Subtracting the additive baseline only moves the pooled
+                # figure to 7.17, so it is not a normalization artifact.
+                try:
+                    sys.path.insert(0, os.path.dirname(__file__))
+                    from uncertainty import learned_readout_scores, softmax_probs
+                    _sc = learned_readout_scores(X, _rl)
+                    if _sc is not None:
+                        _p = softmax_probs(_sc)
+                        _H = -(_p * np.log(_p + 1e-12)).sum(1)
+                        _srt = np.sort(_p, axis=1)[:, ::-1]
+                        rec["entropy_readout"] = float(_H.mean())
+                        rec["perplexity_readout"] = float(np.exp(_H).mean())
+                        rec["margin_readout"] = float((_srt[:, 0] - _srt[:, 1]).mean())
+                except Exception as _e:
+                    print(f"  [readout-uncertainty] skipped: {_e}", flush=True)
         if neuron_class is not None:
             rec["pool_acc"] = pool_by_label(X, y, neuron_class)
             rec["dead_frac"], rec["frac_ever_winner"], rec["winner_entropy"] = coverage_stats(X)
@@ -335,8 +390,14 @@ def main():
         if "pool_acc" in rec:
             extra += f" pool {rec['pool_acc']:.3f} dead {rec['dead_frac']:.2f} win_ent {rec['winner_entropy']:.2f}"
         if "softmax_acc" in rec:
+            # `perp` reports the LEARNED readout when there is one; the pooled figure
+            # sits near chance for reasons unrelated to representation quality (see
+            # the note where perplexity_readout is computed) and is kept in the JSON
+            # under `perplexity` rather than shown here.
+            _pp = rec.get("perplexity_readout", rec.get("perplexity"))
+            _src = "perp" if "perplexity_readout" in rec else "perp(pool)"
             extra += (f" softmax {rec['softmax_acc']:.3f} ce {rec['share_ce']:.3f}"
-                      f" perp {rec['perplexity']:.2f} margin {rec['margin']:+.3f}")
+                      f" {_src} {_pp:.2f} margin {rec['margin']:+.3f}")
         print(f"  [{a.tag}] b{batch:>3} val {rec['val_acc']:.3f} eta2 {rec['eta2']:.3f} "
               f"corr {rec['corr_within']:.3f} PR {rec['pr']:.1f}/{rec['n_active']} "
               f"coh {rec['orient_coh']:.3f} refit {refit:.3f} fixed {fixed_acc:.3f}"
@@ -360,8 +421,23 @@ def main():
                 json.dump(partial, f, indent=2)
             if not a.no_plots:
                 sys.path.insert(0, os.path.dirname(__file__))
+                # Diagnostic figures live in stats/ alongside stats.png rather than
+                # scattered across the run root, which holds only the run's outputs
+                # proper (results.json, config.json, weights/, spikes/).
+                _stats = os.path.join(a.output_dir, "stats")
+                os.makedirs(_stats, exist_ok=True)
                 from plot_confusion import make_confusion_plot
-                make_confusion_plot(partial, a.output_dir)
+                make_confusion_plot(partial, _stats)
+                # metrics.png: the response-space dashboard. Kept separate from the
+                # library's stats.png, which plots WEIGHT-space diagnostics
+                # (rf_participation_ratio / rf_mean_cosine / rf_gini) that are
+                # confounded by RF size and so cannot answer whether the
+                # representation improved.
+                from plot_metrics import make_metrics_plot
+                for _t in traj:
+                    if _t.get("refit_acc") is not None and _t.get("fixed_acc") is not None:
+                        _t["_drift"] = _t["refit_acc"] - _t["fixed_acc"]
+                make_metrics_plot(partial, _stats)
         except Exception as e:
             print(f"  [live-plot] skipped: {e}", flush=True)
 
