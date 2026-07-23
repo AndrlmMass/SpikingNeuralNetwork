@@ -32,6 +32,7 @@ from neurosnn._evaluation.analysis import (
     class_selectivity, orientation_coherence, current_decomp, w_floor_frac,
     pool_by_label, coverage_stats, softmax_readout, spike_share_metrics,
     pool_by_label_pred, softmax_readout_pred, confusion_matrix, group_rf_diversity,
+    class_eta_squared, response_correlation, participation_ratio, active_mask,
 )
 from neurosnn._plot.weights import save_rf_grid, plot_group_rfs
 
@@ -272,10 +273,21 @@ def main():
         if fixed["clf"] is None:
             fixed["sc"], fixed["clf"] = sc, clf
         fixed_acc = score_clf(fixed["sc"], fixed["clf"], X[te], y[te])
+        # `selectivity` is kept only for continuity with old trajectories — it is
+        # confounded by firing rate (see analysis.class_selectivity). The metrics
+        # that should carry claims are eta2 (per-neuron, noise-aware), resp_corr
+        # (population redundancy), and PR (effective dimensionality; needs >= K-1
+        # to separate K classes at all).
+        _corr_within, _corr_all = response_correlation(X, group_assignment, a.n_groups)
         rec = dict(batch=int(batch),
                    val_acc=float(v.accuracy) if v.accuracy is not None else float("nan"),
                    val_phi=float(v.phi) if v.phi is not None else float("nan"),
                    selectivity=class_selectivity(X, y),
+                   eta2=class_eta_squared(X, y),
+                   corr_within=_corr_within, corr_all=_corr_all,
+                   pr=participation_ratio(X, scale_free=True),
+                   pr_cov=participation_ratio(X, scale_free=False),
+                   n_active=int(active_mask(X).sum()),
                    orient_coh=orientation_coherence(W_se),
                    refit_acc=float(refit), fixed_acc=float(fixed_acc),
                    cur_se=se, cur_ee=ee, cur_ie=ie, ee_se_ratio=ee / (se + 1e-12),
@@ -325,9 +337,10 @@ def main():
         if "softmax_acc" in rec:
             extra += (f" softmax {rec['softmax_acc']:.3f} ce {rec['share_ce']:.3f}"
                       f" perp {rec['perplexity']:.2f} margin {rec['margin']:+.3f}")
-        print(f"  [{a.tag}] b{batch:>3} val {rec['val_acc']:.3f} sel {rec['selectivity']:.3f} "
-              f"coh {rec['orient_coh']:.3f} refit {refit:.3f} fixed {fixed_acc:.3f} "
-              f"EE/SE {rec['ee_se_ratio']:.3f}{extra}", flush=True)
+        print(f"  [{a.tag}] b{batch:>3} val {rec['val_acc']:.3f} eta2 {rec['eta2']:.3f} "
+              f"corr {rec['corr_within']:.3f} PR {rec['pr']:.1f}/{rec['n_active']} "
+              f"coh {rec['orient_coh']:.3f} refit {refit:.3f} fixed {fixed_acc:.3f}"
+              f"{extra}", flush=True)
         if not a.no_plots:
             key = "first" if "first" not in rf_saved else "last"
             save_rf_grid(W_se, os.path.join(a.output_dir, "weights", f"rf_{key}.png"))
@@ -435,6 +448,42 @@ def main():
         elif neuron_class is not None:
             out["test_cm_readout"] = confusion_matrix(
                 yt, pool_by_label_pred(Xt, neuron_class, 10), 10).tolist()
+        # --- selective-prediction go/no-go: does uncertainty rank this run's errors?
+        # Calibrate on val, evaluate on test (never on train — the net is atypically
+        # confident there). Cheap, so it runs unconditionally; see uncertainty.py.
+        try:
+            sys.path.insert(0, os.path.dirname(__file__))
+            from uncertainty import run_from_features, format_report, learned_readout_scores
+            assign = group_assignment if group_assignment is not None else neuron_class
+            probe_cal = clf.predict_proba(np.nan_to_num(sc.transform(last_val["X"])))
+            probe_test = clf.predict_proba(np.nan_to_num(sc.transform(Xt)))
+            # the reward rule's own plastic readout, when the run trained one. Its
+            # weights can be negative (evidence AGAINST a class), which uniform
+            # pooling cannot express — so it gets scored as its own readout.
+            _rlu = getattr(getattr(getattr(model, "_runner", None), "_trainer", None),
+                           "reward_learner", None)
+            score_cal = learned_readout_scores(last_val["X"], _rlu)
+            score_test = learned_readout_scores(Xt, _rlu)
+            reports = run_from_features(
+                last_val["X"], last_val["y"], Xt, yt,
+                assignment=assign, n_groups=a.n_groups,
+                probe_cal=probe_cal, probe_test=probe_test, probe_pred=lin_pred,
+                score_cal=score_cal, score_test=score_test)
+            out["uncertainty"] = reports
+            for r in reports:
+                print(format_report(r), flush=True)
+            # dump the raw features so statistics can be re-scored without retraining
+            np.savez_compressed(
+                os.path.join(a.output_dir, "uncertainty_features.npz"),
+                X_cal=last_val["X"].astype(np.float32), y_cal=last_val["y"].astype(np.int16),
+                X_test=Xt.astype(np.float32), y_test=yt.astype(np.int16),
+                probe_cal=probe_cal.astype(np.float32), probe_test=probe_test.astype(np.float32),
+                **({"assignment": np.asarray(assign)} if assign is not None else {}),
+                **({"score_cal": score_cal.astype(np.float32),
+                    "score_test": score_test.astype(np.float32)}
+                   if score_cal is not None else {}))
+        except Exception as e:
+            print(f"  [uncertainty] skipped: {e}", flush=True)
     with open(os.path.join(a.output_dir, "results.json"), "w") as f:
         json.dump(out, f, indent=2)
     print(f"[{a.tag}] DONE test_acc={out['test_acc']:.3f} -> {a.output_dir}", flush=True)
