@@ -193,6 +193,20 @@ def vogels_iSTDP(
     On I spike i:  Δw[i,j] -= lr * (x_post[j] - 2*ρ₀)  (homeostatic target)
 
     Soft bounds: LTP uses (w - w_min)^μ, LTD uses (w_max - w)^μ.
+
+    STRUCTURAL MASK — w == 0.0 means "no synapse here", and is skipped. Without
+    this the rule writes into entries the architecture deliberately left empty:
+    grouped_wta_ie_weights builds a BLOCK-DIAGONAL W_ie (a hitman suppresses only
+    its own class group) and zeroes the diagonal (it spares its own driver E cell).
+    Both are exact zeros, and both got nonzero updates here, because the LTP soft
+    bound (0 - w_min)^μ is large, not small, at w = 0. The effect was to dissolve
+    intra-class WTA into all-to-all inhibition plus self-inhibition, monotonically
+    in the learning rate — which is what the vogels_lr sweep actually measured.
+
+    Exact zero is a safe sentinel: live inhibitory weights are bounded in
+    [w_min, w_max] with w_max = -0.01 < 0, and the LTD bound (w_max - w)^μ vanishes
+    as w -> w_max, so a learned weight approaches -0.01 asymptotically and can
+    never land on 0.0. Structurally-absent and learned-to-silent are distinguishable.
     """
     ex = N_x + N_exc
 
@@ -200,9 +214,11 @@ def vogels_iSTDP(
     for j in range(N_exc):
         if spikes[N_x + j] == 1:
             for i in range(N_inh):
+                w = weights[ex + i, N_x + j]
+                if w == 0.0:      # no synapse — not a silent one
+                    continue
                 x_pre_i = inh_trace[i]
                 dw = -learning_rate * x_pre_i
-                w = weights[ex + i, N_x + j]
                 if dw <= 0.0:  # LTP (more inhibitory)
                     bound = max(w - w_min, 0.0) ** mu_weight
                 else:           # LTD (less inhibitory)
@@ -213,9 +229,11 @@ def vogels_iSTDP(
     for i in range(N_inh):
         if spikes[ex + i] == 1:
             for j in range(N_exc):
+                w = weights[ex + i, N_x + j]
+                if w == 0.0:      # no synapse — not a silent one
+                    continue
                 x_post_j = spike_trace[N_x + j]
                 dw = -learning_rate * (x_post_j - 2.0 * rho_0)
-                w = weights[ex + i, N_x + j]
                 if dw <= 0.0:
                     bound = max(w - w_min, 0.0) ** mu_weight
                 else:
