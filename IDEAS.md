@@ -71,7 +71,16 @@ arXiv:2410.17066, two-compartment adaptive threshold).
 
 ## Readout
 
-### Full / dense readout  — status: idea (motivated by RF-size sweep)
+### Full / dense readout  — status: **ADOPTED** (2026-07-25, worked better than predicted)
+**Result:** 60k x 5ep MNIST -> learned readout **0.9551** test (vs ~0.79 block-diagonal).
+Realised spectrum: uniform pool 0.756 -> dense learned **0.955** -> linear probe given
+enough data 0.949. The dense readout *caught* the linear ceiling, so there is no readout
+headroom left on MNIST — the predicted "~0.83" was itself a probe artefact (see DIARY
+2026-07-25). Further gains must come from the representation, not the readout.
+Sign-constrained variant never tested; no longer motivated.
+
+<details><summary>original entry (motivated by RF-size sweep)</summary>
+
 Each class output reads **all** neurons (N_exc×10 plastic, delta-rule), not just its own
 block-diagonal cluster.
 - **Why now:** the RF-size sweep showed local RFs keep the feature ceiling flat (~0.80,
@@ -81,8 +90,21 @@ block-diagonal cluster.
 - Report the spectrum: uniform (~0.65) → block-diag learned (~0.76–0.79) → full learned
   (~0.83?) → external LR ceiling (~0.80–0.85). Optional sign-constrained middle (own
   cluster +, others −) for a cleaner bio story. ~10-line change to the readout learner.
+</details>
 
-### Unify the readout on R-STDP (drop the delta rule)  — status: idea
+### Unify the readout on R-STDP (drop the delta rule)  — status: **COMMITTED, next major task**
+Promoted from `idea` on 2026-07-25. Now the last substantive piece of work on this
+codebase: convert each class output into a **real LIF neuron**, decode by **spike rate**
+(argmax over per-class firing rates), and train exc -> readout by reward-modulated STDP.
+One rule throughout; removes the "they used gradient descent for the classifier" attack
+surface. **The delta-rule dense readout stays as the fallback and upper-bound control —
+report both**, since we now know it reaches 0.955 and that number is the reference.
+Open questions to settle when building it: rate window (whole 350-step trial vs a late
+window), how to break ties/silence (the delta readout already has `silent_frac`=0 but a
+spiking readout will not), whether the +-1 reward needs the EMA baseline here, and
+whether the abstention machinery still works — the current selective-prediction result
+(AUROC 0.941) is computed on *softmax shape*, and a rate-coded readout has no softmax, so
+entropy/margin have to be redefined over normalised rates and re-validated.
 The readout currently learns by a **softmax delta rule** (exact SGD on cross-entropy),
 while `W_se` learns by reward-STDP. Two different learning rules in one model. The
 original commit (`e6b35750`) justifies adding a *plastic* readout ("features support
@@ -149,3 +171,14 @@ them apart = inherent decorrelation), (c) distance/overlap-weighted inhibition.
 - The `rf_diversity` metric is **confounded** for the tiled arch — it's cosine similarity
   of raw RF columns, so it mechanically drops as RFs shrink (less spatial overlap)
   regardless of feature content. Read the visual RF grids + accuracy as the real signal.
+- **The linear probe is data-starved and must never be quoted as a ceiling** (found
+  2026-07-25). `interp_harness.fit_clf` fits ~10k params on 700–1000 samples in 1000-D
+  (p ~= n). On the 60k x 5ep features the *same* probe goes 0.862 (n=700) -> 0.883
+  (n=1000) -> 0.922 (n=2000) -> **0.9485** (n=7000). Every "learned beats the linear
+  ceiling" claim in earlier diary entries is inflated by roughly this amount. Fix options:
+  fit the probe on a slice of train rather than the 1000-image val set, or log the
+  probe's own n alongside its accuracy. **Rule: when the probe and the readout disagree,
+  refit the probe on more data before reasoning about the representation.**
+- **Name the decoder in every quoted accuracy.** `results.json` holds five: `test_acc` is
+  the `pca_lr` Evaluator, `test_lin_acc` is the probe, and the learned readout is buried
+  in `uncertainty[*].base_acc`. The top-level key is the one nobody wants — rename it.

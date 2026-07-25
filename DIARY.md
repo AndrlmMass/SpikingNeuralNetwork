@@ -10,6 +10,176 @@ Keep it scannable — a few bullets, not a transcript.
 
 ---
 
+## 2026-07-25 — Full 60k x 5-epoch run: 95.5%, and the "linear probe" was the artefact
+
+**Focus:** First full-scale run of the thin-margin oriented prior + dense readout
+(`results/rstdp_thinmargin/run60k_5ep`, 60k images x 5 epochs, seed 0), then an
+exhaustive post-hoc analysis of every statistic we log — 60-checkpoint trajectory,
+300 network-state records, the saved uncertainty features, and the four saved figures.
+
+**Config:** prior `oriented` (rf_length 3.0 / rf_thickness 1.2 / center_margin 4.0),
+rule `reward`, grouped WTA `block` 10x100, N_exc=N_inh=1000, `dense_readout=True`,
+readout_lr 0.1, peak_ei 50 / peak_ie -2, `use_vogels=False`, `ee=False`,
+normalize_weights on, 350 steps/sample.
+
+### HEADLINE: learned readout = 0.9551 on 9000 held-out test images
+
+Up from ~0.79 at 15k with the block-diagonal readout. The dense readout cashed in the
+ceiling exactly as predicted on 2026-07-16. **Naming trap that cost us an hour:**
+`results.json["test_acc"]` = **0.8647** is the harness's own `pca_lr` evaluator, NOT the
+learned readout — that number lives in `uncertainty[1].base_acc`. Five decoders are
+logged per run and the top-level key is the one nobody wants. Rename before the paper.
+
+| decoder | test acc | what it is |
+|---|---|---|
+| **learned readout (dense, online)** | **0.9551** | the model's own answer — 1000x10, softmax delta, 300k samples |
+| linear probe (`test_lin_acc`) | 0.8811 | L1-LR fit on **1000** val images — **data-starved, see below** |
+| `pca_lr` evaluator (`test_acc`) | 0.8647 | harness Evaluator, scaler+PCA+LR |
+| uniform pool | 0.7557 | fixed block-diagonal pooling |
+| online train decisions | 0.9546 | matches the readout — no train/test gap |
+
+### The 7-point learned-vs-linear gap is a CONTROL artefact, not a representation fact
+
+`interp_harness.fit_clf` fits ~10k parameters on **700–1000 samples in 1000-D** (p ~= n).
+Refitting the *byte-identical* probe on the frozen final features, varying only n:
+
+| n_train | 700 | 1000 | 2000 | 4000 | **7000** |
+|---|---|---|---|---|---|
+| probe acc | 0.862 | 0.883 | 0.922 | 0.935 | **0.9485** |
+
+(1000 reproduces the reported 0.8811; 5-fold CV cross-check at 7200/1800 = 0.944 +- 0.006.)
+The gap collapses 7.4 -> 0.7 points. Regularisation is second-order: the whole penalty
+sweep on the 1000-image fit spans 0.864 (unpenalised) to 0.883 (best L2) — ~0.6 points
+vs the ~7 that data volume buys. Corroboration: learned-only-correct **8.7%** vs
+probe-only-correct **1.3%** (6.7:1) = near-strict dominance, i.e. one *weaker* decoder on
+the same information, not two different codes.
+
+**Andreas' hypothesis (peak_ei=50 too strong) is ruled out** — four independent checks:
+exc spike rate flat across all 5 epochs (0.002193 -> 0.002231, +1.7%) with inhibition
+tracking it; `active_frac_exc` **rose** 0.950 -> 0.971 and dead_frac is 2.3% (vs 0.56 in
+the old tiled runs — the thin-margin prior fixed the dead-neuron problem outright);
+`ei_ratio` median 0.53 / p90 2.07 (firm, not crushing); and a linear decoder with enough
+data hits 0.9485, so the class information is intact. **Where inhibition plausibly DOES
+cost us is the pooled readout, not the gap:** all 10 groups peak on their own class, but
+diag:off-diag is only **1.56**, and within-group response correlation (0.121) barely
+exceeds across-group (0.113). Uniform pooling averages that thin margin away -> 0.756.
+**If we sweep `peak_ei` again, the metric to move is pool accuracy and the diagonal
+ratio — not the learned-vs-linear gap.**
+
+### How the representation changed: BENT, not eroded
+
+| metric | start | end | delta |
+|---|---|---|---|
+| orientation coherence | 0.667 | 0.492 | **-26%** |
+| within-group RF diversity | 0.090 | 0.137 | **+52%** |
+| w_floor_frac (pruned synapses) | 0.024 | 0.148 | +14.8pp |
+| rf_mean_cosine | 0.097 | 0.125 | +29% |
+| per-neuron eta2 | 0.169 | 0.161 | -5% |
+| grouped eta2 (val_phi) | 0.178 | 0.275 | **+55%** |
+| pop_sparseness | 0.485 | 0.552 | +14% |
+| participation ratio | 32.1 | 33.7 | +5% |
+| w_se_mean | 0.330175 | 0.330175 | **exactly constant** (L1 norm holding) |
+
+Visually (`weights/rf_first.png` -> `weights/rf_last.png`): oriented Gaussian bars become **curved
+stroke fragments** — arcs, hooks, C-shapes, partial loops. All of it inside a fixed
+synaptic budget, so this is **reallocation**, not decay.
+
+**This is materially different from the trace-STDP result** (`project_mechanism_stdp_erodes_prior`),
+where the prior collapsed to an init-independent attractor. Reward-STDP *bends the prior
+into digit strokes*. Better story for the article: the prior is a useful starting basis
+that supervision refines, not a structure that plasticity destroys.
+
+Counter-current worth owning honestly: per-neuron eta2 FELL 5% and RF pairwise cosine ROSE
+29% while grouped phi rose 55%. Individual neurons got *less* selective and *more* alike;
+the class signal moved into the population. Distributed-code signature — and exactly why
+the dense readout (which reads all 1000) beat pooling (which reads 100).
+
+### Representational drift is the cleanest signal in the run
+
+A probe frozen at ckpt 0 decays **0.797 -> 0.597** while a refit probe holds ~flat at
+0.83. `_drift` goes 0.000 -> 0.237, monotone across all 5 epochs, **still widening at
+epoch 5**, no epoch-boundary discontinuity. Two readings, both important:
+- The code keeps moving under a fixed decoder for the whole run — genuine drift, and we
+  have a clean quantitative handle on it.
+- **The refit probe being FLAT means decodability did not improve.** All 5 epochs of
+  accuracy gain belong to the readout learning to read a code that was already about as
+  decodable as it would ever get. Sobering for "does reward-STDP improve the features?"
+  — on this measure, no. The architecture + prior set the ceiling; reward-STDP + readout
+  reach it.
+
+### Perplexity and confidence
+
+Learned readout perplexity **1.854 -> 1.154** effective classes (per epoch:
+1.227/1.199/1.175/1.148/1.154), margin 0.718 -> 0.928, entropy 0.499 -> 0.107. On test:
+mean perplexity 1.124, entropy 0.063 on correct vs 0.601 on wrong (**9.6x separation**).
+
+**Do not confuse the two perplexities.** Trajectory `perplexity` (9.951 -> 9.333, i.e.
+pinned at chance) is the *pooled* readout's, and measures the pooling, not the code.
+The readout's own is `perplexity_readout`. Reporting the former as a representation
+failure would be plain wrong.
+
+**Selective prediction — the strongest result in the run.** Learned readout entropy-vs-error
+AUROC **0.941**, AURC 0.004, **98.8% accuracy at 90% coverage** and **99.6% at 80%**;
+coverage at 95% accuracy = 1.00 (it is already above 95%). Linear probe AUROC 0.850;
+pooled 0.557 (chance). **Caveat that must ship with the claim:** only *shape* statistics
+work — entropy/perplexity/margin/maxp all ~0.94, but `total_rate` and `topk_sum` sit at
+0.526–0.528, indistinguishable from chance. Abstention rests on the readout's output
+distribution, not on activity level. Worth stating plainly in the paper rather than
+quoting the 0.941 alone.
+
+### Two instrumentation problems found
+
+1. **Plasticity diagnostics are dead under `rule=reward`.** `mean_delta_w`, `mean_ltp`,
+   `mean_ltd`, `ltp_ltd_ratio`, `mean_x_pre`, `mean_x_tar_se` are **exactly 0.0 at all
+   300 records** — the STDP trace path is unused in the reward rule, so the "plasticity
+   balance" panel in `stats/stats.png` is a flat zero line and update magnitudes are
+   *inferred* (from RF change + w_se_std -9.4%), never measured. Agreed 2026-07-25: not
+   worth fixing now, the RF/weight evidence is sufficient.
+2. **Stale figure.** `stats/confusion.png` was written 01:42, before the run finished
+   at 01:55, so both TEST panels still read "pending — end of run"; the matrices *are*
+   in `results.json` (`test_cm_linear`, `test_cm_readout`). Low priority, may not be
+   worth re-plotting at all. `stats/metrics.png` and `stats/stats.png` are current
+   (01:42 = last checkpoint) and are the ones to read. Note the RF grids live in
+   `weights/` (`rf_first.png`, `rf_last.png`, `group_rfs.png`), not the run root.
+   (Separately: `run15k/metrics.png` at the run root is a mid-run leftover superseded by
+   `run15k/stats/metrics.png` — the 60k run writes no root-level metrics.png at all.)
+
+**Analysis artefacts:** full report generator saved next to the run at
+`results/rstdp_thinmargin/run60k_5ep/build_report.py` (self-contained HTML, 14 charts,
+every figure with a table view); published copy at
+https://claude.ai/code/artifact/2cc8773e-802e-4592-9c54-6a35ed9c1e90
+
+### Reflections
+
+- **Our own control was the bottleneck for a whole analysis cycle.** We nearly wrote a
+  causal story about inhibition to explain a number that was just an undertrained probe.
+  New rule: when the probe and the readout disagree, **refit the probe on more data
+  before reasoning about the representation**. `refit_acc` is "a data-limited external
+  control", never a decodability ceiling.
+- **The dense readout was the right call and is now done paying off** (0.79 -> 0.955).
+  The remaining spectrum is pool 0.756 -> learned 0.955 -> probe-with-enough-data 0.949,
+  i.e. the learned readout has *caught* the linear ceiling. There is no readout headroom
+  left to harvest on MNIST; further gains must come from the representation.
+- **The thin-margin prior quietly solved the dead-neuron problem** (0.56 -> 0.023 dead)
+  that we spent two sweeps on in July. Worth a sentence in the paper.
+- **We now have a drift measurement**, which is a paper-grade result in its own right and
+  not one we set out to get.
+
+**Open / next (agreed order):**
+1. **Longer run on MNIST** (main dataset) — how far does 5 epochs -> 15–20 epochs go?
+   Drift was still widening at epoch 5, so the run had not converged in any sense.
+2. **Other datasets, same length** (60k x 5) to test generality vs specialization:
+   Fashion-MNIST, KMNIST/EMNIST, then SVHN and CIFAR-10 (the last two are the real test —
+   colour + natural statistics vs an oriented-bar prior). Launch in parallel on Orion.
+3. **Replace the softmax delta readout with a spiking, reward-modulated readout** —
+   convert each class output into an actual LIF neuron, decode by spike RATE, train it
+   with reward-STDP rather than a delta rule. This is the biological-faithfulness step
+   and matters most for the paper's claim; the current dense readout stays as the
+   fallback/upper-bound control. Report both.
+4. Multi-seed before any published number (everything above is seed 0).
+
+---
+
 ## 2026-07-16 — RF-size + inhibitory-learning sweeps
 
 **Focus:** Is the RF too large (whole-digit "quintessential" templates), and is static
