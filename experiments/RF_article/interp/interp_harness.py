@@ -558,6 +558,14 @@ def main():
                 **({"score_cal": score_cal.astype(np.float32),
                     "score_test": score_test.astype(np.float32)}
                    if score_cal is not None else {}))
+            # full 0->100% risk-coverage figures + the CSV table view. Runs off the
+            # features just written, so it is reproducible standalone later via
+            # plot_risk_coverage.py --run <output_dir>.
+            try:
+                from plot_risk_coverage import make_risk_coverage_plots
+                make_risk_coverage_plots(a.output_dir, tag=a.tag)
+            except Exception as e:
+                print(f"  [risk-coverage] skipped: {e}", flush=True)
         except Exception as e:
             print(f"  [uncertainty] skipped: {e}", flush=True)
     with open(os.path.join(a.output_dir, "results.json"), "w") as f:

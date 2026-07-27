@@ -209,6 +209,78 @@ def risk_coverage(conf, correct):
     return k / len(c), sel_acc, float(np.mean(1.0 - sel_acc))
 
 
+def wilson_lower(hits, n, z=1.96):
+    """Wilson score lower bound on a binomial proportion. Vectorized over arrays.
+
+    Needed because selective accuracy at low coverage is estimated from very few
+    items: "100% accurate over the 30 most confident" is not evidence of a 100%
+    operating point. The Wilson bound is what makes a quoted safe limit defensible
+    (and unlike the normal approximation it stays inside [0, 1] at p = 1).
+    """
+    hits = np.asarray(hits, dtype=float)
+    n = np.maximum(np.asarray(n, dtype=float), 1.0)
+    p = hits / n
+    d = 1.0 + z * z / n
+    centre = (p + z * z / (2.0 * n)) / d
+    half = z * np.sqrt(p * (1.0 - p) / n + z * z / (4.0 * n * n)) / d
+    return np.clip(centre - half, 0.0, 1.0)
+
+
+def selective_curve(conf, correct, z=1.96):
+    """Full risk-coverage curve with a confidence band, answering most-confident first.
+
+    Returns a dict with coverage (1/n ... 1), selective accuracy, the Wilson
+    lower/upper band, and n_kept at every point -- i.e. the whole 0->100% sweep
+    rather than the handful of summary operating points `evaluate_statistic`
+    records. This is what the risk-coverage figures plot.
+    """
+    conf = np.asarray(conf, dtype=float)
+    correct = np.asarray(correct, dtype=float)
+    order = np.argsort(-conf, kind="mergesort")
+    c = correct[order]
+    n_kept = np.arange(1, len(c) + 1)
+    hits = np.cumsum(c)
+    sel_acc = hits / n_kept
+    lo = wilson_lower(hits, n_kept, z)
+    hi = 1.0 - wilson_lower(n_kept - hits, n_kept, z)
+    return dict(coverage=n_kept / len(c), sel_acc=sel_acc, lo=lo, hi=hi,
+                n_kept=n_kept, aurc=float(np.mean(1.0 - sel_acc)),
+                base_acc=float(correct.mean()), n=int(len(c)))
+
+
+def safe_coverage(cur, target, min_kept=MIN_KEPT, conservative=True):
+    """Largest coverage whose selective accuracy meets `target`.
+
+    conservative=True requires the Wilson LOWER bound to clear the target, so the
+    answer is "we are 95% confident accuracy is at least `target` here". That is
+    the number to quote as an operating limit.
+
+    A target of exactly 1.0 is special: no finite sample can put a lower bound at
+    1.0, so it falls back to the empirical zero-error criterion. Read that one
+    together with `lo_at` (the confidence floor actually achieved there) -- see
+    `zero_error_point`.
+    """
+    k = cur["n_kept"]
+    series = cur["sel_acc"] if (not conservative or target >= 1.0) else cur["lo"]
+    ok = (series >= target) & (k >= min_kept)
+    return float(cur["coverage"][ok].max()) if ok.any() else 0.0
+
+
+def zero_error_point(cur, min_kept=MIN_KEPT):
+    """The 100%-accuracy demarcation: how far down the confidence ranking we get
+    before the first mistake, and how well-supported that claim is.
+
+    Returns (coverage, n_kept, wilson_lower). The bound matters: zero errors over
+    40 items only supports "accuracy >= 91%" at 95% confidence, so the honest
+    article claim pairs the two numbers rather than quoting 100% alone.
+    """
+    perfect = (cur["sel_acc"] >= 1.0) & (cur["n_kept"] >= min_kept)
+    if not perfect.any():
+        return 0.0, 0, 0.0
+    i = int(np.flatnonzero(perfect).max())
+    return float(cur["coverage"][i]), int(cur["n_kept"][i]), float(cur["lo"][i])
+
+
 def coverage_at_accuracy(coverage, sel_acc, target):
     """Largest coverage whose selective accuracy still meets `target`.
 
