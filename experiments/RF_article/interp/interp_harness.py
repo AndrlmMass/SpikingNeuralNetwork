@@ -69,9 +69,19 @@ def blocks(weights, st, ex, ih):
     return (weights[:st, st:ex], weights[st:ex, st:ex], weights[ex:ih, st:ex])
 
 
-def load_input_rate():
+# The MNIST family: all 28x28 grayscale, 10-class, so N_x=784 and the oriented-RF
+# architecture is identical across them -- only the task changes. CIFAR/SVHN are
+# 32x32x3 and would need a different input size, so they are deliberately not here.
+_DATASETS = {
+    "mnist": "MNIST", "kmnist": "KMNIST",
+    "fmnist": "FashionMNIST", "fashionmnist": "FashionMNIST",
+}
+
+
+def load_input_rate(dataset="mnist"):
     from torchvision import datasets
-    ds = datasets.MNIST(root=os.path.join(REPO, "data", "torchvision"), train=False, download=False)
+    cls = getattr(datasets, _DATASETS[dataset])
+    ds = cls(root=os.path.join(REPO, "data", "torchvision"), train=False, download=False)
     m = ds.data.numpy().reshape(len(ds), -1).mean(0).astype(np.float64) / 255.0
     return m  # (784,) mean pixel intensity ~ mean input rate
 
@@ -166,6 +176,8 @@ def parse_args():
     p.add_argument("--plot-schematic", action="store_true", help="save force-directed network graph from real weights (grouped only)")
     p.add_argument("--neuron-id", type=int, default=512, help="neuron index for --plot-single-neuron (default 512)")
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--dataset", default="mnist", choices=sorted(_DATASETS),
+                   help="MNIST-family dataset (all 28x28 grayscale, 10-class, N_x=784)")
     p.add_argument("--epochs", type=int, default=1,
                    help="number of passes over the --train-all images (data is re-served each epoch)")
     p.add_argument("--train-all", type=int, default=15000)
@@ -287,10 +299,10 @@ def main():
     model = snn.Model(input_size=784, classes=list(range(10)), random_state=a.seed, num_steps=350,
         all_images_train=a.train_all, batch_image_train=1000, all_images_val=a.val_all,
         batch_image_val=a.val_all, all_images_test=a.test_all, batch_image_test=a.test_all,
-        image_dataset="mnist", max_rate_hz=90.0, gain=1.0, gabor=False)
+        image_dataset=a.dataset, max_rate_hz=90.0, gain=1.0, gabor=False)
 
-    input_rate = load_input_rate()
-    cfg = dict(tag=a.tag, prior=a.prior, rule=a.rule, ee=a.ee, wta=True,
+    input_rate = load_input_rate(a.dataset)
+    cfg = dict(tag=a.tag, dataset=a.dataset, prior=a.prior, rule=a.rule, ee=a.ee, wta=True,
                grouped=a.grouped, n_groups=a.n_groups, group_layout=a.group_layout,
                use_vogels=a.use_vogels, vogels_lr=a.vogels_lr, vogels_rho0=a.vogels_rho0,
                n_exc=N_exc, n_inh=N_inh,
