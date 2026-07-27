@@ -97,6 +97,11 @@ class Trainer:
     reward_shuffle_labels: bool = False  # control: reward on random targets (signal = noise)
     reward_readout_lr: float = 0.0       # >0 -> plastic cluster->class readout weights
     reward_dense_readout: bool = False   # True -> full (N_exc x n_classes) readout, signs free
+    # Spiking readout: a biologically-motivated ALTERNATIVE that runs ALONGSIDE the
+    # delta readout above, never instead of it. Both see the same spikes on the same
+    # trial, so the comparison between them is paired within-sample. dict of
+    # SpikingReadout kwargs, or None to leave it off.
+    spiking_readout_cfg: "dict | None" = None
     record_fn_se: "callable | None" = None
     record_fn_ee: "callable | None" = None
     record_fn_awake_se: "callable | None" = None
@@ -217,6 +222,21 @@ class Trainer:
                 dense_readout=self.reward_dense_readout,
             )
             self._reward_rng = np.random.default_rng(0)
+
+        # spiking readout (optional, runs alongside the delta readout)
+        self.readout = None
+        self.readout_preds = []      # per-item predictions, in presentation order
+        self.readout_labels = []     # the matching targets, for a paired comparison
+        if self.spiking_readout_cfg is not None:
+            if self.neuron_class is None:
+                raise ValueError("spiking_readout_cfg requires neuron_class.")
+            from neurosnn._core.readout import SpikingReadout
+            self.readout = SpikingReadout(
+                n_exc=self.N_exc,
+                n_classes=int(len(np.unique(self.neuron_class))),
+                neuron_class=self.neuron_class,
+                **self.spiking_readout_cfg,
+            )
 
         # initiate clipper object
         self.clipper = Clipper(
@@ -575,6 +595,23 @@ class Trainer:
                 inh_trace = update_inh_trace(
                     spikes[t], inh_trace, self._decay_inh, self.N_x, self.N_exc,
                 )
+
+            # Spiking readout. Dynamics run in EVERY mode -- train, val and test --
+            # because the layer has to be simulated to produce a prediction at all;
+            # only the weight update is gated on training. This is the structural
+            # difference from the delta readout, which is scored offline from
+            # accumulated rates and so needs no simulation at eval time.
+            if self.readout is not None:
+                self.readout.step_dynamics(spikes[t, self.st : self.ex])
+                if (t + 1) % self.time_per_item == 0:
+                    lbl = int(spike_labels[t])
+                    pred = self.readout.apply_reward(
+                        lbl,
+                        train=(training_mode == "train" and bool(train_weights)),
+                    )
+                    self.readout_preds.append(pred)
+                    self.readout_labels.append(lbl)
+                    self.readout.reset_trial()
 
             # reward-modulated STDP: accumulate spike counts every timestep, then
             # apply the reward update ONCE at each sample boundary (every

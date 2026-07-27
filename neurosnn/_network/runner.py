@@ -139,6 +139,7 @@ class Runner:
         reward_shuffle_labels: bool = False,
         reward_readout_lr: float = 0.0,
         reward_dense_readout: bool = False,
+        spiking_readout_cfg: "dict | None" = None,
         output_dir: "str | None" = None,
     ) -> Generator[TrainResult, None, None]:
         if accuracy_method != "pca_lr" and PCA_plot:
@@ -273,6 +274,7 @@ class Runner:
             reward_shuffle_labels=reward_shuffle_labels,
             reward_readout_lr=reward_readout_lr,
             reward_dense_readout=reward_dense_readout,
+            spiking_readout_cfg=spiking_readout_cfg,
         )
 
         self._evaluator = Evaluator(

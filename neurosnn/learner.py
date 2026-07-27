@@ -215,6 +215,9 @@ class RewardSTDP:
     shuffle_labels: bool = False   # control: reward on random targets (signal = noise)
     readout_lr: float = 0.0        # >0 -> plastic cluster->class readout weights
     dense_readout: bool = False    # True -> full (N_exc x n_classes) readout, signs free
+    # Spiking readout: runs ALONGSIDE the delta readout above, not instead of it,
+    # so both see the same spikes on the same trial. dict of SpikingReadout kwargs.
+    spiking_readout: "dict | None" = None
 
     def _to_runner_kwargs(self) -> dict:
         return dict(
@@ -226,4 +229,5 @@ class RewardSTDP:
             reward_shuffle_labels=self.shuffle_labels,
             reward_readout_lr=self.readout_lr,
             reward_dense_readout=self.dense_readout,
+            spiking_readout_cfg=self.spiking_readout,
         )

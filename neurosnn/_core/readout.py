@@ -164,7 +164,16 @@ class SpikingReadout:
     margin: float = 2.0               # desired count offset from the layer mean
     tau_elig: float = 0.0             # 0 = no decay within a trial (integrate all)
     tau_pre: float = 20.0
-    w_min: float = -1.0               # negative => disynaptic inhibitory path
+    # Non-negative by default. Measured 2026-07-27 by replaying the delta rule on
+    # frozen run60k_5ep features, 3 seeds, identical but for the floor: signs free
+    # 0.9397 +/- 0.0033 vs w>=0 0.9336 +/- 0.0043 -- negative weights are worth
+    # 0.61 points, not the ~13 assumed. And w>=0 buys two things: the layer can no
+    # longer be driven silent by its own weights (worst case is zero contribution,
+    # never inhibitory drive), and L1 conservation then does what it should, since
+    # weakening an adversarial synapse hands its budget to the useful ones -- which
+    # it cannot do cleanly when a weight can consume budget by going negative.
+    # Set w_min < 0 to recover the signed variant.
+    w_min: float = 0.0
     w_max: float = 2.0
     mu_weight: float = 0.0            # 0 => hard bounds, as reward_STDP defaults
     renormalize: bool = True

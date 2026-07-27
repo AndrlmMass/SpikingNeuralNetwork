@@ -122,6 +122,24 @@ def parse_args():
     p.add_argument("--sigma-se-lognormal", type=float, default=0.0,
                    help="lognormal spread of per-neuron RF sigma (0 = uniform). >0 gives HETEROGENEOUS RF "
                         "sizes: a mix of small local-feature and larger holistic detectors.")
+    p.add_argument("--spiking-readout", action="store_true",
+                   help="ALSO run the spiking R-STDP readout alongside the delta readout. "
+                        "Both see the same spikes on the same trial, so the comparison is "
+                        "paired within-sample. Does not disable or alter the delta readout.")
+    p.add_argument("--spiking-lr", type=float, default=0.005)
+    p.add_argument("--spiking-margin", type=float, default=2.0,
+                   help="how far the target must lead every competitor before the error "
+                        "goes to zero (in output spike counts)")
+    p.add_argument("--spiking-wmin", type=float, default=0.0,
+                   help="readout weight floor. 0 = non-negative (default; negatives measured "
+                        "worth only 0.6 points and w>=0 removes the silent-output failure "
+                        "mode). Set <0 for the signed variant.")
+    p.add_argument("--spiking-target-count", type=float, default=6.0,
+                   help="output spikes/trial the intrinsic homeostat aims for")
+    p.add_argument("--spiking-lateral-inh", type=float, default=0.0)
+    p.add_argument("--spiking-noise", type=float, default=0.0,
+                   help="membrane noise on the output neurons; R-STDP is a policy-gradient "
+                        "rule and its theory needs trial-to-trial variability")
     p.add_argument("--theta-tau", type=float, default=0.0,
                    help="adaptive-threshold decay time constant (0 = keep current 200). Diehl-style "
                         "homeostasis uses ~1e7 (persistent: theta accumulates lifetime firing, "
@@ -232,7 +250,12 @@ def main():
         learner = snn.learner.RewardSTDP(learning_rate=a.reward_lr,
             class_assignment=("block" if a.tiled else "mod"), seed=a.seed,
             shuffle_labels=a.shuffle_labels, readout_lr=a.readout_lr,
-            dense_readout=a.dense_readout)
+            dense_readout=a.dense_readout,
+            spiking_readout=(dict(
+                lr=a.spiking_lr, margin=a.spiking_margin, w_min=a.spiking_wmin,
+                target_count=a.spiking_target_count, lateral_inh=a.spiking_lateral_inh,
+                noise_std=a.spiking_noise, seed=a.seed,
+            ) if a.spiking_readout else None))
     elif a.rule == "triplet":
         learner = snn.learner.TripletSTDP()
     else:
@@ -324,7 +347,14 @@ def main():
                    w_floor_frac=w_floor_frac(W_se))
         # online efficacy from the reward learner: the net's own training-time
         # decisions (pooled argmax) vs the reward target, + the baseline R̄.
-        _rl = getattr(getattr(getattr(model, "_runner", None), "_trainer", None), "reward_learner", None)
+        _tr = getattr(getattr(model, "_runner", None), "_trainer", None)
+        # Spiking readout, when enabled: its own online accuracy over the window
+        # since the last checkpoint, reported ALONGSIDE the delta readout's so the
+        # two curves can be read against each other.
+        _ro = getattr(_tr, "readout", None)
+        if _ro is not None:
+            rec.update(_ro.pop_stats())
+        _rl = getattr(_tr, "reward_learner", None)
         if _rl is not None:
             _os = _rl.pop_online_stats()
             rec["online_acc"] = _os["online_acc"]
@@ -506,9 +536,22 @@ def main():
         checkpoint(0, last_w)
 
     CAP["rows"].clear()
+    _tr = getattr(getattr(model, "_runner", None), "_trainer", None)
+    _ro = getattr(_tr, "readout", None)
+    if _ro is not None:
+        # the buffers accumulate across train/val/test; clearing here leaves exactly
+        # the test items behind, decoded from the readout's own spikes
+        _tr.readout_preds.clear(); _tr.readout_labels.clear()
     test = model.test()
     out = dict(config=cfg, test_acc=float(test.accuracy) if test.accuracy is not None else float("nan"),
                test_phi=float(test.phi) if test.phi is not None else float("nan"), trajectory=traj)
+    if _ro is not None and _tr.readout_preds:
+        _p = np.asarray(_tr.readout_preds); _y = np.asarray(_tr.readout_labels)
+        out["test_spiking_acc"] = float((_p == _y).mean())
+        out["test_spiking_n"] = int(_p.size)
+        out["test_spiking_cm"] = confusion_matrix(_y, _p, 10).tolist()
+        print(f"  [spiking readout] TEST acc={out['test_spiking_acc']:.4f} "
+              f"on {_p.size} items", flush=True)
     # final test-set confusion matrices: fit the linear readout on the last val
     # features, evaluate on captured test features; readout needs no fit.
     if CAP["rows"] and last_val["X"] is not None:
