@@ -209,8 +209,8 @@ def main_figure(cur_by_readout, T, series, out):
     burned into the image.
     """
     fig = plt.figure(figsize=(10.5, 6.2), facecolor=T["surface"])
-    gs = gridspec.GridSpec(1, 1, figure=fig, left=0.115, right=0.735,
-                           top=0.965, bottom=0.165)
+    gs = gridspec.GridSpec(1, 1, figure=fig, left=0.165, right=0.735,
+                           top=0.965, bottom=0.225)
     ax = fig.add_subplot(gs[0])
     style_axes(ax, T, "Coverage", "Selective accuracy")
 
@@ -280,7 +280,10 @@ def per_class_figure(cur, T, series, out):
         ax.annotate(f"n={cc['n']}   {cc['base_acc']:.1%}", xy=(0.04, 0.06),
                     xycoords="axes fraction", fontsize=FS_PANEL - 3,
                     color=T["muted"], ha="left", va="bottom")
-        ax.xaxis.set_major_formatter(plt.FuncFormatter(pct))
+        # Bare numbers on x, with the unit moved into the axis label. At the main
+        # figure's tick size a "100%" on one panel and a "0%" on the next collide
+        # in the gutter; dropping the sign is the cheapest character to lose.
+        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{100 * v:.0f}"))
         ax.yaxis.set_major_formatter(plt.FuncFormatter(pct))
     for ax in axes[len(classes):]:
         ax.set_visible(False)
@@ -290,10 +293,10 @@ def per_class_figure(cur, T, series, out):
     axes[0].set_yticks(acc_ticks(ymin, 1.0, step=0.05))
     axes[0].set_xticks([0, 0.5, 1.0])
     for ax in axes[:len(classes)]:
-        ax.tick_params(labelsize=FS_PANEL - 1)
+        ax.tick_params(labelsize=FS_TICK)     # match the main figure
     # one axis label for the whole grid rather than ten repetitions
-    fig.supxlabel("coverage", color=T["ink"], fontsize=FS_LABEL, y=0.088)
-    fig.supylabel("selective accuracy", color=T["ink"], fontsize=FS_LABEL, x=0.011)
+    fig.supxlabel("Coverage (%)", color=T["ink"], fontsize=FS_LABEL, y=0.105)
+    fig.supylabel("Selective accuracy", color=T["ink"], fontsize=FS_LABEL, x=0.013)
 
     # One legend for the grid. The swatch is drawn a little more opaque than the
     # band itself -- at legend-handle size the true alpha is invisible.
@@ -304,12 +307,12 @@ def per_class_figure(cur, T, series, out):
                label="all classes"),
     ]
     leg = fig.legend(handles=handles, loc="lower center", ncol=3, frameon=False,
-                     fontsize=FS_PANEL + 1, handlelength=2.4, columnspacing=2.6,
-                     bbox_to_anchor=(0.5, 0.005))
+                     fontsize=FS_TICK, handlelength=2.4, columnspacing=2.6,
+                     bbox_to_anchor=(0.5, 0.004))
     for t_ in leg.get_texts():
         t_.set_color(T["ink2"])
 
-    fig.subplots_adjust(top=0.94, left=0.078, right=0.976, bottom=0.165)
+    fig.subplots_adjust(top=0.94, left=0.098, right=0.976, bottom=0.20)
     for ext in ("png", "pdf"):
         fig.savefig(f"{out}.{ext}", dpi=220, facecolor=T["surface"])
     plt.close(fig)
