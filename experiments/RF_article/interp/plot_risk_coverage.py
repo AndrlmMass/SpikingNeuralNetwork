@@ -43,21 +43,35 @@ from uncertainty import (  # noqa: E402
     safe_coverage, zero_error_point,
 )
 
-# Series palettes, in READOUTS order (learned / probe / pool). All three were run
-# through the CVD + contrast validator on a WHITE print surface, all-pairs:
-#   okabe  Okabe-Ito. Passes every check outright (worst CVD dE 11.0, contrast all
-#          >= 3:1). The colourblind-safe standard in biology/neuroscience.
-#   tol    Paul Tol high-contrast. Passes separation with room (worst CVD dE 16.2)
-#          but the yellow is 2.13:1 on white, so it leans on the direct labels.
-#   ink    Emphasis rather than identity: the network's own readout in near-black,
-#          the two controls subordinate. Deliberately fails the validator's chroma
-#          floor -- that check assumes hue carries identity, and here value does.
-#          Separation is by lightness (worst pair dE 20.9).
+# Series palettes, in READOUTS order (learned / probe / pool). Measured on a WHITE
+# print surface, over all pairs, with a colour-vision-deficiency simulation:
+#
+#   project  THE PROJECT DEFAULT (Andreas' pick, 2026-07-25). Muted rose / slate /
+#            sage. NOTE: rose and sage separate by only dE 3.5 under deuteranopia,
+#            so red-green colourblind readers (~8% of men) see the learned-readout
+#            and uniform-pool curves as nearly the same colour. Acceptable here
+#            ONLY because every curve carries a direct end label, so identity never
+#            rests on hue. Do not reuse it on a chart without direct labels, and do
+#            not extend it to a 4th series.
+#   muted    Paul Tol muted. Same rose/blue/green family, nearly the same feel, but
+#            actually separable: CVD dE 8.7, normal-vision dE 20.0, all >= 3:1
+#            contrast. The drop-in swap if the CVD issue ever matters.
+#   okabe    Okabe-Ito, the colourblind-safe standard in biology. Passes outright
+#            (CVD dE 11.0). Louder than the project default.
+#   tol      Paul Tol high-contrast. Separation to spare (dE 16.2); its yellow is
+#            2.13:1 on white, so it leans on the direct labels.
+#   ink      Emphasis, not identity: the network's readout near-black, the controls
+#            subordinate. Fails the chroma floor by design -- that check assumes hue
+#            carries identity, and here lightness does (worst pair dE 20.9). The
+#            only option that survives greyscale printing.
 PALETTES = {
-    "okabe": ("#0072B2", "#D55E00", "#009E73"),
-    "tol":   ("#004488", "#BB5566", "#DDAA33"),
-    "ink":   ("#1B1B1B", "#A63603", "#9A9A9A"),
+    "project": ("#DB8383", "#6D8BA9", "#6FA885"),
+    "muted":   ("#CC6677", "#4477AA", "#228833"),
+    "okabe":   ("#0072B2", "#D55E00", "#009E73"),
+    "tol":     ("#004488", "#BB5566", "#DDAA33"),
+    "ink":     ("#1B1B1B", "#A63603", "#9A9A9A"),
 }
+DEFAULT_PALETTE = "project"
 THEMES = {
     "light": dict(surface="#ffffff", ink="#1a1a1a", ink2="#333333", muted="#666666",
                   grid="#e6e6e6", axis="#444444", ref="#bbbbbb"),
@@ -66,7 +80,7 @@ THEMES = {
 }
 # Type scale. The figure is drawn large and scaled down into a column, so these
 # are sized to stay legible at ~half size in print.
-FS_LABEL, FS_TICK, FS_SERIES, FS_PANEL = 19, 16, 16, 15
+FS_LABEL, FS_TICK, FS_SERIES, FS_PANEL = 24, 18, 18, 17
 READOUTS = ("learned_readout", "linear_probe", "pool")
 LABELS = {"learned_readout": "learned readout", "linear_probe": "linear probe",
           "pool": "uniform pool"}
@@ -144,9 +158,9 @@ def style_axes(ax, T, xlabel, ylabel, fs_label=FS_LABEL, fs_tick=FS_TICK, grid=T
     ax.tick_params(colors=T["ink2"], labelsize=fs_tick, length=5, width=1.0,
                    direction="out")
     if xlabel:
-        ax.set_xlabel(xlabel, color=T["ink"], fontsize=fs_label, labelpad=10)
+        ax.set_xlabel(xlabel, color=T["ink"], fontsize=fs_label, labelpad=0)
     if ylabel:
-        ax.set_ylabel(ylabel, color=T["ink"], fontsize=fs_label, labelpad=10)
+        ax.set_ylabel(ylabel, color=T["ink"], fontsize=fs_label, labelpad=0)
 
 
 def pct(x, _=None):
@@ -198,7 +212,7 @@ def main_figure(cur_by_readout, T, series, out):
     gs = gridspec.GridSpec(1, 1, figure=fig, left=0.115, right=0.735,
                            top=0.965, bottom=0.165)
     ax = fig.add_subplot(gs[0])
-    style_axes(ax, T, "coverage", "selective accuracy")
+    style_axes(ax, T, "Coverage", "Selective accuracy")
 
     lo_all, ends = [], []
     for i, name in enumerate(READOUTS):
@@ -340,7 +354,7 @@ def print_summary(rows, readout):
 
 
 def make_risk_coverage_plots(run, readout="learned_readout", theme="light",
-                             condition="predicted", palette="okabe",
+                             condition="predicted", palette=DEFAULT_PALETTE,
                              suffix=""):
     f, outdir = load_features(run)
     T = THEMES[theme]
@@ -372,7 +386,7 @@ def main():
     ap.add_argument("--readout", default="learned_readout", choices=READOUTS,
                     help="which readout the per-class panels use")
     ap.add_argument("--theme", default="light", choices=tuple(THEMES))
-    ap.add_argument("--palette", default="okabe", choices=tuple(PALETTES))
+    ap.add_argument("--palette", default=DEFAULT_PALETTE, choices=tuple(PALETTES))
     ap.add_argument("--suffix", default="", help="appended to the output filenames")
     ap.add_argument("--condition", default="predicted", choices=("predicted", "true"),
                     help="slice per-class panels by predicted class (what a deployed "
