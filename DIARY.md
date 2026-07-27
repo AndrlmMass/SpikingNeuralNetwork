@@ -10,6 +10,103 @@ Keep it scannable — a few bullets, not a transcript.
 
 ---
 
+## 2026-07-27 — Spiking readout: two rule bugs, and negative weights cost only 0.6
+
+**Focus:** Build a **biologically-motivated alternative** to the softmax delta
+readout — real LIF output neurons trained by a local three-factor rule — to run
+*alongside* the delta rule, not replace it. The comparison is the deliverable:
+"artificial vs biological readout on identical activity" is worth reporting
+whichever way it lands. Plan at `~/.claude/plans/cheeky-wobbling-avalanche.md`.
+
+**Landed:** `neurosnn/_core/readout.py` (`9748fc9b`) — one LIF neuron per class
+with its own mp / threshold / adaptation, plastic `W_ro`, decoded by **spike
+count**. Standalone only; **not yet wired into the trainer**.
+
+**Literature.** Goupy et al. 2024 (S2-STDP + Paired Competing Neurons) is the
+primary template: error-modulated supervised STDP on the output layer, weights
+renormalised to their initial sum after every update — **which is what
+`post_norm` already does for us**. 98.59% MNIST. Mozafari et al. 2018 is the
+reward/punish-the-winner alternative (first-spike WTA, STDP on correct,
+anti-STDP on wrong), 97.2% MNIST with no external classifier. Both **beat our
+95.5%**, which is the reason to think this is worth doing rather than merely more
+faithful. Frémaux & Gerstner 2016 for the three-factor form (`M = R - b`; the
+baseline is not optional). Legenstein/Pecevski/Maass 2008: R-STDP works as a
+policy-gradient rule *because of* trial-to-trial firing variability —
+`mean_noise`/`var_noise` are **hardcoded to 0.0** in the harness, so we run a
+degenerate deterministic version. Worth exposing.
+
+**TWO RULE BUGS, both caught by synthetic tests before any wiring:**
+1. **The error was not zero-mean.** `+margin` on the target and `-margin` on each
+   of C-1 non-targets leaves a **-(C-2)*margin DC push every sample** (-16 at
+   C=10, margin=2). Walks every weight down until the layer falls silent. This is
+   exactly the drift the three-factor theory warns about, and the plan had
+   asserted the error was "already centred". It was not.
+2. **Target-RATE error is the wrong translation of Goupy.** They rank firing
+   *times*, which has no ceiling; a desired spike *count* invents one. A target
+   correctly firing 20 spikes against a mean of 4 is judged 14 too high and gets
+   **depressed**. Measured: frozen readout **1.00** on a separable task, switching
+   learning on drove it to **0.40** with 87% of the layer silent — the rule was
+   destroying a readout that already worked.
+
+Replaced with a **margin rule**: error is nonzero only while a competitor sits
+within `margin` of the target; `+1` on the target, `-1/n` shared among the n
+offenders. Zero-sum by construction, no cap on the winner, and it stops updating
+once correct. After: frozen 1.00, learning 1.00 (holds), adversarial
+shuffled-mapping task 0.10 -> 0.52.
+
+Also: used an **L1** renorm, not `post_norm` — `post_norm` divides by the
+*signed* sum, which for mixed-sign weights can pass through zero and blow up.
+
+**DECISIVE RESULT — negative readout weights are worth 0.6 points, not 13.**
+Replayed the exact online delta rule on the frozen `run60k_5ep` features, 3 seeds,
+7000 train / 3000 eval, identical except the weight floor:
+
+| readout | test acc |
+|---|---|
+| signs free | **0.9397 +- 0.0033** |
+| non-negative (w >= 0) | **0.9336 +- 0.0043** |
+| gap | **0.61 points** |
+
+The rule *does* use negatives heavily — 50% of trained weights are negative,
+holding 36% of total |w| mass. But the distinction that matters:
+- **delete negatives after training -> 0.881** (-5.9 points)
+- **train with the constraint -> 0.934** (-0.6 points)
+
+The information is **redundant, not unique**: a non-negative readout re-encodes
+it in how it distributes the positive weights. Running only the post-hoc ablation
+would have given exactly the wrong answer. (Absolute numbers sit ~1.5 below the
+run's 95.51% because this is 56k updates on frozen features vs 300k on a
+co-adapting network; the A/B is internally controlled.)
+
+**Consequence — go non-negative.** Andreas' proposal, now backed by measurement.
+`w >= 0` makes the silent-output death mode *structurally impossible* (worst case
+is zero contribution, never inhibitory drive), and it makes per-neuron sum
+conservation do what it should: weakening adversarial synapses automatically
+strengthens the useful ones, which L1 conservation **cannot** do cleanly with
+mixed signs. The two changes need each other. Removes the need to argue that a
+negative feedforward weight stands for a disynaptic inhibitory path.
+
+**Known limitation.** Eligibility is gated on post spikes, so an output that falls
+silent stops accumulating eligibility and cannot be potentiated back. Intrinsic
+threshold homeostasis mitigates but does not remove it. **Non-negative weights
+should make this moot** — the layer can no longer be driven silent by its own
+weights — so verify before building graded eligibility.
+
+**Open question being tested next: why not straight R-STDP?** Answer: we
+essentially are. The existing `reward_STDP` teacher (`+1` target / `-1` non-target,
+baseline `(2-C)/C`) evaluates to **+1.8 / -0.2**, i.e. already zero-sum — the same
+numbers the corrected margin rule uses. The only real difference is **when** it
+fires: straight R-STDP updates *unconditionally* every sample (correlational /
+prototype learning), the margin rule only while the answer is wrong
+(discriminative / error-correcting). Both share the silent-post trap, since
+`#pre x #post` is zero when the post is silent. Which wins is empirical.
+
+**Next:** three-way comparison on identical activity — delta softmax vs straight
+R-STDP (fixed +-1) vs margin R-STDP. Then wire into the trainer for the paired
+in-run comparison.
+
+---
+
 ## 2026-07-25 — Full 60k x 5-epoch run: 95.5%, and the "linear probe" was the artefact
 
 **Focus:** First full-scale run of the thin-margin oriented prior + dense readout
