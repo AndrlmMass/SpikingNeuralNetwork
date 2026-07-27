@@ -295,8 +295,8 @@ def per_class_figure(cur, T, series, out):
     for ax in axes[:len(classes)]:
         ax.tick_params(labelsize=FS_TICK)     # match the main figure
     # one axis label for the whole grid rather than ten repetitions
-    fig.supxlabel("Coverage (%)", color=T["ink"], fontsize=FS_LABEL, y=0.105)
-    fig.supylabel("Selective accuracy", color=T["ink"], fontsize=FS_LABEL, x=0.013)
+    fig.supxlabel("Coverage (%)", color=T["ink"], fontsize=FS_LABEL+5, y=0.085)
+    fig.supylabel("Selective accuracy", color=T["ink"], fontsize=FS_LABEL+5, x=0.013)
 
     # One legend for the grid. The swatch is drawn a little more opaque than the
     # band itself -- at legend-handle size the true alpha is invisible.

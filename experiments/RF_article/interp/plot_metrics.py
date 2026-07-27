@@ -83,13 +83,23 @@ def make_metrics_plot(d, outdir):
 
     # ---- anchor: the three readouts, plus grouped eta-squared on the twin ----
     ax = fig.add_subplot(gs[0, :])
-    for key, lbl, c in [("readout_learned_acc", "readout (learned)", "#7F77DD"),
-                        ("softmax_acc", "pool (uniform)", "#D85A30"),
-                        ("refit_acc", "linear probe, refit (control)", "#888780")]:
+    acc_keys = [("readout_learned_acc", "readout (learned)", "#7F77DD"),
+                ("softmax_acc", "pool (uniform)", "#D85A30"),
+                ("refit_acc", "linear probe, refit (control)", "#888780")]
+    for key, lbl, c in acc_keys:
         if _has(traj, key):
             ax.plot(xs, _ser(traj, key), "-o", ms=4, color=c, label=lbl)
-    ax.axhline(0.1, ls=":", lw=0.8, color="k")
-    ax.set_ylabel("accuracy"); ax.set_ylim(0, 1.02); ax.grid(alpha=0.3)
+    # Autoscale to the accuracies actually present, with a small pad, rather than
+    # pinning [0, 1]. The interesting range is 0.7-0.9, and a fixed [0,1] axis
+    # flattens all three curves into an indistinguishable band near the top. Same
+    # treatment as the grouped-eta twin axis, which has always autoscaled.
+    _vals = np.concatenate([_ser(traj, k) for k, _, _ in acc_keys])
+    _vals = _vals[np.isfinite(_vals)]
+    if _vals.size:
+        lo, hi = float(_vals.min()), float(_vals.max())
+        pad = max(0.01, 0.08 * (hi - lo))
+        ax.set_ylim(lo - pad, hi + pad)
+    ax.set_ylabel("accuracy"); ax.grid(alpha=0.3)
     ax.set_xlabel("checkpoint")
     ax.set_title("Readout accuracy — the probe is a CONTROL (external decoder), "
                  "not something the network does", fontsize=11)
