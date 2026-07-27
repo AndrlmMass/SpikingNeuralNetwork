@@ -209,8 +209,8 @@ def main_figure(cur_by_readout, T, series, out):
     burned into the image.
     """
     fig = plt.figure(figsize=(10.5, 6.2), facecolor=T["surface"])
-    gs = gridspec.GridSpec(1, 1, figure=fig, left=0.165, right=0.735,
-                           top=0.965, bottom=0.225)
+    gs = gridspec.GridSpec(1, 1, figure=fig, left=0.115, right=0.735,
+                           top=0.965, bottom=0.165)
     ax = fig.add_subplot(gs[0])
     style_axes(ax, T, "Coverage", "Selective accuracy")
 
