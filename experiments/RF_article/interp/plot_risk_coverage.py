@@ -164,13 +164,13 @@ def trim(cur, min_frac=0.0):
 
 
 def draw_curve(ax, cur, color, T, label=None, band=True, lw=1.8, z=3,
-               min_frac=0.0, alpha=0.13):
+               min_frac=0.0, alpha=0.13, ls="-"):
     m = trim(cur, min_frac)
     if band:
         ax.fill_between(cur["coverage"][m], cur["lo"][m], cur["hi"][m], color=color,
                         alpha=alpha, lw=0, zorder=z - 1)
     ax.plot(cur["coverage"][m], cur["sel_acc"][m], color=color, lw=lw, label=label,
-            solid_capstyle="round", zorder=z)
+            ls=ls, solid_capstyle="round", zorder=z)
 
 
 def acc_ticks(lo, hi, step=0.05):
@@ -253,10 +253,13 @@ def per_class_figure(cur, T, series, out):
     for ax, c in zip(axes, classes):
         cc = cur["per_class"][c]
         style_axes(ax, T, "", "")
-        # overall curve as the shared reference so each panel is comparable
-        draw_curve(ax, cur["overall"], T["ref"], T, band=False, lw=1.2, z=2,
-                   min_frac=MF)
-        draw_curve(ax, cc, colour, T, z=4, min_frac=MF, alpha=0.12)
+        # The SAME readout's overall curve, repeated in every panel so a class can
+        # be read against the aggregate. Dashed and pale so it cannot be mistaken
+        # for a second data series -- and so the solid curve's confidence band
+        # visibly belongs to the solid curve.
+        draw_curve(ax, cur["overall"], T["ref"], T, band=False, lw=1.4, z=2,
+                   min_frac=MF, ls=(0, (5, 3)))
+        draw_curve(ax, cc, colour, T, z=4, lw=2.4, min_frac=MF, alpha=0.13)
         ax.set_title(f"class {c}", fontsize=FS_PANEL + 2, color=T["ink"], pad=8)
         ax.annotate(f"n={cc['n']}   {cc['base_acc']:.1%}", xy=(0.04, 0.06),
                     xycoords="axes fraction", fontsize=FS_PANEL - 3,
