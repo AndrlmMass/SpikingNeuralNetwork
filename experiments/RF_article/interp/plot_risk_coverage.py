@@ -34,6 +34,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from uncertainty import (  # noqa: E402
@@ -276,10 +278,24 @@ def per_class_figure(cur, T, series, out):
     for ax in axes[:len(classes)]:
         ax.tick_params(labelsize=FS_PANEL - 1)
     # one axis label for the whole grid rather than ten repetitions
-    fig.supxlabel("coverage", color=T["ink"], fontsize=FS_LABEL, y=0.035)
+    fig.supxlabel("coverage", color=T["ink"], fontsize=FS_LABEL, y=0.088)
     fig.supylabel("selective accuracy", color=T["ink"], fontsize=FS_LABEL, x=0.011)
 
-    fig.subplots_adjust(top=0.94, left=0.078, right=0.99, bottom=0.115)
+    # One legend for the grid. The swatch is drawn a little more opaque than the
+    # band itself -- at legend-handle size the true alpha is invisible.
+    handles = [
+        Line2D([], [], color=colour, lw=2.4, label="this class"),
+        Patch(facecolor=colour, alpha=0.22, lw=0, label="95% interval"),
+        Line2D([], [], color=T["ref"], lw=1.4, ls=(0, (5, 3)),
+               label="all classes"),
+    ]
+    leg = fig.legend(handles=handles, loc="lower center", ncol=3, frameon=False,
+                     fontsize=FS_PANEL + 1, handlelength=2.4, columnspacing=2.6,
+                     bbox_to_anchor=(0.5, 0.005))
+    for t_ in leg.get_texts():
+        t_.set_color(T["ink2"])
+
+    fig.subplots_adjust(top=0.94, left=0.078, right=0.976, bottom=0.165)
     for ext in ("png", "pdf"):
         fig.savefig(f"{out}.{ext}", dpi=220, facecolor=T["surface"])
     plt.close(fig)
