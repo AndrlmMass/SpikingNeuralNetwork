@@ -15,14 +15,17 @@ Two figures:
 Plus risk_coverage.csv -- the table view of every operating point, so no number
 is reachable only by reading a color off the plot.
 
-Statistics note: selective accuracy at low coverage is estimated from few items,
-so every curve carries a 95% Wilson band and the quoted safe limits are the
-CONSERVATIVE ones (lower bound clears the target). The 100% line is the single
-exception -- no finite sample bounds a proportion at 1.0 -- so it is reported as
-"zero errors up to X% coverage" alongside the confidence floor actually achieved
-there. Quoting a bare "100% accurate" without that floor is not defensible.
+Selective accuracy at low coverage is estimated from few items, so every curve
+carries a 95% Wilson band and the CSV's quoted limits are the conservative ones
+(lower bound clears the target). These are descriptive: they characterise this
+test set rather than promising anything about future data, and the manuscript
+should word them that way.
+
+The figures carry no title, subtitle or legend -- each curve is named where it
+ends, and the caption belongs in the manuscript text, not burned into the image.
 
   python experiments/RF_article/interp/plot_risk_coverage.py --run <run_dir>
+  python experiments/RF_article/interp/plot_risk_coverage.py --run <run_dir> --palette ink
   python experiments/RF_article/interp/plot_risk_coverage.py --run <run_dir> --readout pool --theme dark
 """
 import argparse, csv, os, sys
@@ -38,18 +41,30 @@ from uncertainty import (  # noqa: E402
     safe_coverage, zero_error_point,
 )
 
-# Validated categorical slots 1-3 (blue / orange / aqua). This set passes the
-# all-pairs CVD and normal-vision gates in both modes; aqua sits below 3:1 on the
-# light surface, which is why every series is also direct-labelled and the CSV
-# table view ships alongside. Do not add a 4th series without re-validating.
-THEMES = {
-    "light": dict(surface="#fcfcfb", ink="#0b0b0b", ink2="#52514e", muted="#898781",
-                  grid="#e1e0d9", axis="#c3c2b7",
-                  series=("#2a78d6", "#eb6834", "#1baf7a"), ref="#c3c2b7"),
-    "dark":  dict(surface="#1a1a19", ink="#ffffff", ink2="#c3c2b7", muted="#898781",
-                  grid="#2c2c2a", axis="#383835",
-                  series=("#3987e5", "#d95926", "#199e70"), ref="#383835"),
+# Series palettes, in READOUTS order (learned / probe / pool). All three were run
+# through the CVD + contrast validator on a WHITE print surface, all-pairs:
+#   okabe  Okabe-Ito. Passes every check outright (worst CVD dE 11.0, contrast all
+#          >= 3:1). The colourblind-safe standard in biology/neuroscience.
+#   tol    Paul Tol high-contrast. Passes separation with room (worst CVD dE 16.2)
+#          but the yellow is 2.13:1 on white, so it leans on the direct labels.
+#   ink    Emphasis rather than identity: the network's own readout in near-black,
+#          the two controls subordinate. Deliberately fails the validator's chroma
+#          floor -- that check assumes hue carries identity, and here value does.
+#          Separation is by lightness (worst pair dE 20.9).
+PALETTES = {
+    "okabe": ("#0072B2", "#D55E00", "#009E73"),
+    "tol":   ("#004488", "#BB5566", "#DDAA33"),
+    "ink":   ("#1B1B1B", "#A63603", "#9A9A9A"),
 }
+THEMES = {
+    "light": dict(surface="#ffffff", ink="#1a1a1a", ink2="#333333", muted="#666666",
+                  grid="#e6e6e6", axis="#444444", ref="#bbbbbb"),
+    "dark":  dict(surface="#1a1a19", ink="#ffffff", ink2="#e0e0e0", muted="#a0a0a0",
+                  grid="#2c2c2a", axis="#888888", ref="#555555"),
+}
+# Type scale. The figure is drawn large and scaled down into a column, so these
+# are sized to stay legible at ~half size in print.
+FS_LABEL, FS_TICK, FS_SERIES, FS_PANEL = 19, 16, 16, 15
 READOUTS = ("learned_readout", "linear_probe", "pool")
 LABELS = {"learned_readout": "learned readout", "linear_probe": "linear probe",
           "pool": "uniform pool"}
@@ -115,19 +130,21 @@ def curves_for(f, name, condition="predicted"):
 
 # ---------------------------------------------------------------------- drawing
 
-def style_axes(ax, T, xlabel, ylabel):
+def style_axes(ax, T, xlabel, ylabel, fs_label=FS_LABEL, fs_tick=FS_TICK, grid=True):
     ax.set_facecolor(T["surface"])
-    ax.grid(True, color=T["grid"], lw=0.6, zorder=0)
+    if grid:
+        ax.grid(True, axis="y", color=T["grid"], lw=0.7, zorder=0)
     ax.set_axisbelow(True)
     for s in ("top", "right"):
         ax.spines[s].set_visible(False)
     for s in ("left", "bottom"):
-        ax.spines[s].set_color(T["axis"]); ax.spines[s].set_linewidth(0.8)
-    ax.tick_params(colors=T["muted"], labelsize=8, length=3, width=0.8)
+        ax.spines[s].set_color(T["axis"]); ax.spines[s].set_linewidth(1.0)
+    ax.tick_params(colors=T["ink2"], labelsize=fs_tick, length=5, width=1.0,
+                   direction="out")
     if xlabel:
-        ax.set_xlabel(xlabel, color=T["ink2"], fontsize=9)
+        ax.set_xlabel(xlabel, color=T["ink"], fontsize=fs_label, labelpad=10)
     if ylabel:
-        ax.set_ylabel(ylabel, color=T["ink2"], fontsize=9)
+        ax.set_ylabel(ylabel, color=T["ink"], fontsize=fs_label, labelpad=10)
 
 
 def pct(x, _=None):
@@ -156,83 +173,75 @@ def draw_curve(ax, cur, color, T, label=None, band=True, lw=1.8, z=3,
             solid_capstyle="round", zorder=z)
 
 
-def acc_ticks(lo, hi, coarse=False):
-    """Ticks doubling as the accuracy reference lines, so no floating rule labels."""
-    cand = ([0.5, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0] if coarse else
-            [0.5, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.98, 0.99, 1.0])
-    return [t for t in cand if lo - 1e-9 <= t <= hi + 1e-9]
+def acc_ticks(lo, hi, step=0.05):
+    """An even ladder of accuracy ticks; the gridlines are the reference rules.
+
+    Uneven ticks (…95, 98, 99, 100) crowd illegibly wherever the curves live, which
+    is exactly the top of the range, so keep the spacing regular and let the caption
+    carry any specific operating point.
+    """
+    n0 = int(np.floor(lo / step + 1e-9))
+    return [round(k * step, 4) for k in range(n0, int(round(hi / step)) + 1)
+            if lo - 1e-9 <= k * step <= hi + 1e-9]
 
 
-def main_figure(cur_by_readout, T, tag, out, condition):
-    fig = plt.figure(figsize=(11, 6.4), facecolor=T["surface"])
-    gs = gridspec.GridSpec(1, 1, figure=fig, left=0.085, right=0.80,
-                           top=0.855, bottom=0.115)
+def main_figure(cur_by_readout, T, series, out):
+    """Bare figure: no title, no subtitle, no legend box.
+
+    Each curve is named where it ends, which is both the legend and the headline
+    number. Caption, run tag and method notes belong in the manuscript text, not
+    burned into the image.
+    """
+    fig = plt.figure(figsize=(10.5, 6.2), facecolor=T["surface"])
+    gs = gridspec.GridSpec(1, 1, figure=fig, left=0.115, right=0.735,
+                           top=0.965, bottom=0.165)
     ax = fig.add_subplot(gs[0])
-    style_axes(ax, T, "coverage — fraction of test images the network answers",
-               "selective accuracy on answered images")
+    style_axes(ax, T, "coverage", "selective accuracy")
 
-    lo_all = []
+    lo_all, ends = [], []
     for i, name in enumerate(READOUTS):
         cur = cur_by_readout.get(name)
         if cur is None:
             continue
-        c = T["series"][i]
-        draw_curve(ax, cur["overall"], c, T, label=LABELS[name], z=3 + i)
+        draw_curve(ax, cur["overall"], series[i], T, z=3 + i, lw=2.2)
         o = cur["overall"]
         lo_all.append(o["sel_acc"][trim(o)].min())
-        # direct end label -- required relief for the sub-3:1 slot, and it puts
-        # the full-coverage accuracy (the headline number) on the figure itself
-        ax.annotate(f"{LABELS[name]}  {o['sel_acc'][-1]:.3f}",
-                    xy=(1.0, o["sel_acc"][-1]), xytext=(6, 0),
-                    textcoords="offset points", va="center", ha="left",
-                    fontsize=8.5, color=T["ink2"], annotation_clip=False)
-
-    # the demarcation the article is after: how far we get with zero errors
-    prim = cur_by_readout.get("learned_readout") or next(iter(cur_by_readout.values()))
-    zc, zn, zlo = zero_error_point(prim["overall"])
-    if zc > 0:
-        ax.axvline(zc, color=T["ink2"], lw=1.0, ls=(0, (4, 3)), zorder=2)
-        ax.annotate(f"zero errors up to {zc:.1%} coverage\n"
-                    f"(n={zn:,}; 95% lower bound {zlo:.1%})",
-                    xy=(zc, 0.06), xycoords=("data", "axes fraction"),
-                    xytext=(8, 0), textcoords="offset points",
-                    fontsize=8.5, color=T["ink2"], va="bottom", ha="left")
+        ends.append((o["sel_acc"][-1], LABELS[name], series[i]))
 
     ymin = max(0.0, min(lo_all) - 0.035) if lo_all else 0.0
     ax.set_xlim(0, 1.0)
     ax.set_ylim(ymin, 1.005)
-    # accuracy targets ride on the y ticks, so the grid IS the reference rule set
     ax.set_yticks(acc_ticks(ymin, 1.0))
     ax.xaxis.set_major_formatter(plt.FuncFormatter(pct))
     ax.yaxis.set_major_formatter(plt.FuncFormatter(pct))
 
-    fig.text(0.085, 0.965, "Accuracy against coverage", fontsize=14,
-             color=T["ink"], ha="left", va="top")
-    fig.text(0.085, 0.922,
-             f"{tag} — 9,000 held-out test images, ranked by each readout's own confidence. "
-             "Bands are 95% Wilson intervals; the sweep starts once 20 images are answered.",
-             fontsize=8.5, color=T["muted"], ha="left", va="top")
-    # legend above the plot: horizontal, out of the curves' way entirely
-    leg = ax.legend(loc="lower left", bbox_to_anchor=(0.0, 1.005), ncol=3,
-                    fontsize=8.5, frameon=False, handlelength=1.6,
-                    columnspacing=1.8, borderpad=0.0)
-    for t_ in leg.get_texts():
-        t_.set_color(T["ink2"])
+    # Name each curve where it ends. Nudge apart only if two finish close enough
+    # that two lines of text would overlap.
+    ends.sort(key=lambda e: -e[0])
+    gap = 0.115 * (1.005 - ymin)
+    ys = []
+    for val, _, _ in ends:
+        y = val if not ys else min(val, ys[-1] - gap)
+        ys.append(y)
+    for (val, lbl, col), y in zip(ends, ys):
+        ax.annotate(f"{lbl}\n{val:.1%}", xy=(1.02, y), xycoords="data",
+                    va="center", ha="left", fontsize=FS_SERIES, color=col,
+                    linespacing=1.35, annotation_clip=False)
     for ext in ("png", "pdf"):
-        fig.savefig(f"{out}.{ext}", dpi=200, facecolor=T["surface"])
+        fig.savefig(f"{out}.{ext}", dpi=220, facecolor=T["surface"])
     plt.close(fig)
     return f"{out}.png"
 
 
-def per_class_figure(cur, T, tag, out, readout, condition):
+def per_class_figure(cur, T, series, out):
     classes = sorted(cur["per_class"])
     ncol = 5
     nrow = int(np.ceil(len(classes) / ncol))
-    fig, axes = plt.subplots(nrow, ncol, figsize=(13, 3.1 * nrow + 1.0),
+    fig, axes = plt.subplots(nrow, ncol, figsize=(15, 3.6 * nrow),
                             facecolor=T["surface"], sharex=True, sharey=True,
-                            gridspec_kw=dict(hspace=0.34, wspace=0.12))
+                            gridspec_kw=dict(hspace=0.28, wspace=0.22))
     axes = np.atleast_1d(axes).ravel()
-    colour = T["series"][0]
+    colour = series[0]
     # Per-class sweeps start at 10% coverage (~90 items). With only ~900 items per
     # class the Wilson band below that is wider than the whole panel, so it stops
     # reading as an interval and just fills the axes. Every zero-error limit here
@@ -247,17 +256,11 @@ def per_class_figure(cur, T, tag, out, readout, condition):
         # overall curve as the shared reference so each panel is comparable
         draw_curve(ax, cur["overall"], T["ref"], T, band=False, lw=1.2, z=2,
                    min_frac=MF)
-        draw_curve(ax, cc, colour, T, z=4, min_frac=MF, alpha=0.10)
-        zc, zn, zlo = zero_error_point(cc)
-        if zc > 0:
-            ax.axvline(zc, color=T["ink2"], lw=0.9, ls=(0, (4, 3)), zorder=3)
-            right = zc > 0.62      # keep the label off the right-hand panel edge
-            ax.annotate(f"{zc:.0%}", xy=(zc, 0.06), xycoords=("data", "axes fraction"),
-                        xytext=(-4 if right else 4, 0), textcoords="offset points",
-                        fontsize=8, color=T["ink2"],
-                        ha="right" if right else "left", va="bottom")
-        ax.set_title(f"class {c}   n={cc['n']}   base {cc['base_acc']:.1%}",
-                     fontsize=9, color=T["ink"], pad=6)
+        draw_curve(ax, cc, colour, T, z=4, min_frac=MF, alpha=0.12)
+        ax.set_title(f"class {c}", fontsize=FS_PANEL + 2, color=T["ink"], pad=8)
+        ax.annotate(f"n={cc['n']}   {cc['base_acc']:.1%}", xy=(0.04, 0.06),
+                    xycoords="axes fraction", fontsize=FS_PANEL - 3,
+                    color=T["muted"], ha="left", va="bottom")
         ax.xaxis.set_major_formatter(plt.FuncFormatter(pct))
         ax.yaxis.set_major_formatter(plt.FuncFormatter(pct))
     for ax in axes[len(classes):]:
@@ -265,24 +268,17 @@ def per_class_figure(cur, T, tag, out, readout, condition):
 
     axes[0].set_xlim(0, 1.0)
     axes[0].set_ylim(ymin, 1.005)
-    axes[0].set_yticks(acc_ticks(ymin, 1.0, coarse=True))
-    for i, ax in enumerate(axes[:len(classes)]):
-        if i % ncol == 0:
-            ax.set_ylabel("selective accuracy", color=T["ink2"], fontsize=8.5)
-        if i >= len(classes) - ncol:
-            ax.set_xlabel("coverage", color=T["ink2"], fontsize=8.5)
+    axes[0].set_yticks(acc_ticks(ymin, 1.0, step=0.05))
+    axes[0].set_xticks([0, 0.5, 1.0])
+    for ax in axes[:len(classes)]:
+        ax.tick_params(labelsize=FS_PANEL - 1)
+    # one axis label for the whole grid rather than ten repetitions
+    fig.supxlabel("coverage", color=T["ink"], fontsize=FS_LABEL, y=0.035)
+    fig.supylabel("selective accuracy", color=T["ink"], fontsize=FS_LABEL, x=0.011)
 
-    fig.text(0.02, 0.975, f"Accuracy against coverage, per class — {LABELS[readout]}",
-             fontsize=14, color=T["ink"], ha="left", va="top")
-    fig.text(0.02, 0.943,
-             f"{tag} — each panel sweeps its own threshold within that class "
-             f"({condition} class), from 10% coverage up. Grey = overall curve. "
-             "Band = 95% Wilson. Dashed = last coverage with zero errors.",
-             fontsize=8.5, color=T["muted"], ha="left", va="top")
-    fig.subplots_adjust(top=0.90 if nrow > 1 else 0.82, left=0.055,
-                        right=0.985, bottom=0.10)
+    fig.subplots_adjust(top=0.94, left=0.078, right=0.99, bottom=0.115)
     for ext in ("png", "pdf"):
-        fig.savefig(f"{out}.{ext}", dpi=200, facecolor=T["surface"])
+        fig.savefig(f"{out}.{ext}", dpi=220, facecolor=T["surface"])
     plt.close(fig)
     return f"{out}.png"
 
@@ -325,10 +321,11 @@ def print_summary(rows, readout):
 
 
 def make_risk_coverage_plots(run, readout="learned_readout", theme="light",
-                             condition="predicted", tag=None):
+                             condition="predicted", palette="okabe",
+                             suffix=""):
     f, outdir = load_features(run)
     T = THEMES[theme]
-    tag = tag or os.path.basename(outdir)
+    series = PALETTES[palette]
     cur_by_readout = {}
     for name in READOUTS:
         c = curves_for(f, name, condition)
@@ -339,11 +336,10 @@ def make_risk_coverage_plots(run, readout="learned_readout", theme="light",
     if readout not in cur_by_readout:
         readout = next(iter(cur_by_readout))
 
-    p1 = main_figure(cur_by_readout, T, tag, os.path.join(outdir, "risk_coverage"),
-                     condition)
-    p2 = per_class_figure(cur_by_readout[readout], T, tag,
-                          os.path.join(outdir, "risk_coverage_per_class"),
-                          readout, condition)
+    p1 = main_figure(cur_by_readout, T, series,
+                     os.path.join(outdir, f"risk_coverage{suffix}"))
+    p2 = per_class_figure(cur_by_readout[readout], T, series,
+                          os.path.join(outdir, f"risk_coverage_per_class{suffix}"))
     csv_path = os.path.join(outdir, "risk_coverage.csv")
     rows = write_table(cur_by_readout, csv_path, condition)
     print_summary(rows, readout)
@@ -357,12 +353,14 @@ def main():
     ap.add_argument("--readout", default="learned_readout", choices=READOUTS,
                     help="which readout the per-class panels use")
     ap.add_argument("--theme", default="light", choices=tuple(THEMES))
+    ap.add_argument("--palette", default="okabe", choices=tuple(PALETTES))
+    ap.add_argument("--suffix", default="", help="appended to the output filenames")
     ap.add_argument("--condition", default="predicted", choices=("predicted", "true"),
                     help="slice per-class panels by predicted class (what a deployed "
                          "threshold sees) or by true class (diagnostic)")
-    ap.add_argument("--tag", default=None)
     a = ap.parse_args()
-    for p in make_risk_coverage_plots(a.run, a.readout, a.theme, a.condition, a.tag):
+    for p in make_risk_coverage_plots(a.run, a.readout, a.theme, a.condition,
+                                      a.palette, a.suffix):
         print("saved ->", p)
 
 

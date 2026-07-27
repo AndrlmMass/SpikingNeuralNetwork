@@ -563,7 +563,7 @@ def main():
             # plot_risk_coverage.py --run <output_dir>.
             try:
                 from plot_risk_coverage import make_risk_coverage_plots
-                make_risk_coverage_plots(a.output_dir, tag=a.tag)
+                make_risk_coverage_plots(a.output_dir)
             except Exception as e:
                 print(f"  [risk-coverage] skipped: {e}", flush=True)
         except Exception as e:
