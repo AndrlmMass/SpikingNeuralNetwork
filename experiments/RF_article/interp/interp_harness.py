@@ -33,6 +33,7 @@ from neurosnn._evaluation.analysis import (
     pool_by_label, coverage_stats, softmax_readout, spike_share_metrics,
     pool_by_label_pred, softmax_readout_pred, confusion_matrix, group_rf_diversity,
     class_eta_squared, response_correlation, participation_ratio, active_mask,
+    rf_gaussian_moments,
 )
 from neurosnn._plot.weights import save_rf_grid, plot_group_rfs
 
@@ -192,6 +193,14 @@ def parse_args():
     p.add_argument("--val-all", type=int, default=1000)
     p.add_argument("--val-every", type=int, default=1)
     p.add_argument("--test-all", type=int, default=3000)
+    p.add_argument("--probe-fit-all", type=int, default=0,
+                   help="fit the FINAL linear probe (test_lin_acc + uncertainty) on this "
+                        "many TRAIN-split features instead of on the ~1k val set. 0 = keep "
+                        "the old val-fit behaviour. The 07-25 finding was that the probe is "
+                        "data-starved at ~1k (88%%) and recovers to ~the dense readout at "
+                        "~7k; set ~5000 so the linear-probe number reflects the representation, "
+                        "not the fit-set size. Calibration/drift still use val; only the "
+                        "classifier's FIT set changes.")
     p.add_argument("--output-dir", default=None,
                    help="run dir (default: results/<dataset>/<date>/<tag>_<uid>/); "
                         "the sweep passes results/<dataset>/<date>/<sweep_id>/<tag>/")
@@ -365,6 +374,15 @@ def main():
                    refit_acc=float(refit), fixed_acc=float(fixed_acc),
                    cur_se=se, cur_ee=ee, cur_ie=ie, ee_se_ratio=ee / (se + 1e-12),
                    w_floor_frac=w_floor_frac(W_se))
+        # Corrected dead fraction: fraction of exc neurons BELOW the relative
+        # activity floor (active_mask), computed for EVERY run -- the coverage_stats
+        # dead_frac below is only emitted when a class assignment exists (grouped/
+        # reward), so the non-grouped phase-1 model would otherwise have no dead
+        # measure. This is the "corrected" version (relative floor, not fired>0).
+        rec["dead_frac_corrected"] = float(1.0 - rec["n_active"] / X.shape[1])
+        # 2D-Gaussian RF geometry: diagonal variance + covariance terms evolving
+        # over training (Hubin), reported next to orientation coherence.
+        rec.update(rf_gaussian_moments(W_se))
         # online efficacy from the reward learner: the net's own training-time
         # decisions (pooled argmax) vs the reward target, + the baseline R̄.
         _tr = getattr(getattr(model, "_runner", None), "_trainer", None)
@@ -577,7 +595,21 @@ def main():
     if CAP["rows"] and last_val["X"] is not None:
         Xt = np.concatenate([x for x, _ in CAP["rows"]], 0)
         yt = np.concatenate([yy for _, yy in CAP["rows"]], 0).astype(int)
-        sc, clf = fit_clf(last_val["X"], last_val["y"], a.seed)
+        # Fit the linear probe on a large TRAIN-feature slice when requested, so
+        # test_lin_acc reflects the representation rather than a starved ~1k fit
+        # (07-25). Calibration (probe_cal) and drift still use val; only the
+        # classifier's FIT set changes. Falls back to val if featurization yields
+        # nothing. CAP is untouched by featurize, so Xt (test features) is intact.
+        probe_X, probe_y = last_val["X"], last_val["y"]
+        if a.probe_fit_all and a.probe_fit_all > 0:
+            _Xp, _yp = model.featurize(a.probe_fit_all, 1000, partition="train")
+            if _Xp is not None and _Xp.size:
+                probe_X, probe_y = _Xp, _yp
+                print(f"  [probe] fit on {len(_yp)} train features "
+                      f"(--probe-fit-all {a.probe_fit_all})", flush=True)
+            else:
+                print("  [probe] featurize returned nothing; fell back to val", flush=True)
+        sc, clf = fit_clf(probe_X, probe_y, a.seed)
         lin_pred = clf.predict(np.nan_to_num(sc.transform(Xt)))
         out["test_lin_acc"] = float((lin_pred == yt).mean())
         out["test_cm_linear"] = confusion_matrix(yt, lin_pred, 10).tolist()

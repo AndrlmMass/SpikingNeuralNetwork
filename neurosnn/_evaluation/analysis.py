@@ -200,6 +200,61 @@ def orientation_coherence(W_se: np.ndarray) -> float:
     return float(np.average(cohs, weights=ens))
 
 
+def rf_gaussian_moments(W_se: np.ndarray) -> dict:
+    """Spatial second moments of each RF column, energy-averaged over neurons.
+
+    Each W_se column is a 2D receptive field (square, inferred from row count).
+    Treating |rf| as a spatial mass distribution, compute the central second
+    moments var_x, var_y and covariance cov_xy about the RF centroid, then average
+    them across neurons weighted by RF energy. Reported alongside
+    orientation_coherence so the paper can show WHAT changes structurally in the
+    2D-Gaussian RF geometry during training (Hubin's request): the diagonal
+    variance terms (RF extent along each axis) and the off-diagonal covariance
+    (tilt), not merely that coherence moved.
+
+    Returns energy-weighted mean var_x, var_y, cov_xy, plus derived mean elongation
+    (sqrt(lambda_max / lambda_min) of the 2x2 moment matrix) and orientation angle
+    (radians, energy-weighted circular mean over 2*theta).
+    """
+    N_x, N = W_se.shape
+    side = int(round(np.sqrt(N_x)))
+    ys, xs = np.mgrid[0:side, 0:side].astype(float)
+    xs = xs.ravel(); ys = ys.ravel()
+    vx = vy = vxy = elong = 0.0
+    c2s = s2s = 0.0  # accumulate cos/sin of 2*theta for a circular mean of orientation
+    wsum = 0.0
+    for i in range(N):
+        m = np.abs(W_se[:, i]).astype(float)
+        e = m.sum()
+        if e < 1e-9:
+            continue
+        cx = (m * xs).sum() / e
+        cy = (m * ys).sum() / e
+        dx = xs - cx; dy = ys - cy
+        mxx = (m * dx * dx).sum() / e
+        myy = (m * dy * dy).sum() / e
+        mxy = (m * dx * dy).sum() / e
+        vx += e * mxx; vy += e * myy; vxy += e * mxy
+        # eigenvalues of the symmetric moment matrix [[mxx, mxy], [mxy, myy]]
+        tr = mxx + myy
+        det = mxx * myy - mxy * mxy
+        root = np.sqrt(max(tr * tr / 4 - det, 0.0))
+        l1 = tr / 2 + root
+        l2 = max(tr / 2 - root, 1e-12)
+        elong += e * np.sqrt(l1 / l2)
+        theta = 0.5 * np.arctan2(2 * mxy, mxx - myy)
+        c2s += e * np.cos(2 * theta); s2s += e * np.sin(2 * theta)
+        wsum += e
+    if wsum < 1e-9:
+        return dict(rf_var_x=0.0, rf_var_y=0.0, rf_cov_xy=0.0,
+                    rf_elongation=0.0, rf_orient=0.0)
+    return dict(
+        rf_var_x=float(vx / wsum), rf_var_y=float(vy / wsum),
+        rf_cov_xy=float(vxy / wsum), rf_elongation=float(elong / wsum),
+        rf_orient=float(0.5 * np.arctan2(s2s, c2s)),
+    )
+
+
 def current_decomp(
     W_se: np.ndarray,
     W_ee: np.ndarray,

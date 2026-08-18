@@ -1,38 +1,42 @@
 #!/bin/bash
-# MNIST-family dataset sweep for the canonical 95% setup: oriented elongated RFs +
+# PHASE 2 -- the SUPERVISED model: oriented elongated RFs vs RANDOM weights, under
 # reward-STDP (R-STDP) on the excitatory layer + the dense softmax-delta readout
-# (the "artificial" readout that reached 95.5% on MNIST 60k x 5ep).
+# (the canonical 95% setup that reached 95.5% on MNIST). The core RF-vs-random
+# comparison of the paper, across the MNIST family.
 #
-# The question: how well does THIS network + prior + reward rule + delta readout
-# carry over from MNIST to the rest of the MNIST family? All three datasets are
-# 28x28 grayscale 10-class, so N_x=784 and the architecture is byte-identical --
-# only the task changes.
+# Every dataset is grayscaled + resized to 28x28, so N_x=784 and the architecture is
+# byte-identical across datasets and across the two priors -- only the task and the
+# W_se init (oriented vs random) change.
 #
-# Grid: 3 datasets x 3 seeds = 9 runs, 5 epochs each.
-#   datasets : mnist kmnist fmnist
-#   seeds    : 0 1 2
+# Grid: 5 datasets x 2 priors x 5 seeds = 50 runs, 3 epochs each.
+#   datasets : mnist fmnist kmnist notmnist svhn   (SVHN last -- slowest; CIFAR-10 DROPPED: at 28x28 grayscale
+#              it collapses to chance for both priors -- a degenerate control.)
+#   priors   : oriented random
+#   seeds    : 0..4
 #
-# Readout: the DENSE softmax-delta readout only (--dense-readout). The spiking
-# R-STDP readout is a separate line of work and is deliberately NOT in this sweep.
+# Readout: the DENSE softmax-delta readout only (--dense-readout). The spiking R-STDP
+# readout is a separate line of work and is deliberately NOT in this sweep.
 #
-# Task ID (SLURM_ARRAY_TASK_ID in 0..8):
-#   seed  = task_id % N_SEEDS
-#   ds    = task_id // N_SEEDS
+# SPLITS respect each dataset's DEDICATED train/test set (see neurosnn/_data/
+# _partition_indices): train/val are drawn from the canonical train split, test is the
+# canonical test split (full), so numbers are comparable to published results and never
+# see a training image. The linear probe is fit on 5000 train features (--probe-fit-all)
+# so its accuracy reflects the representation, not a starved ~1k fit (07-25 finding).
 #
-# RAM note: each array task is an independent process on its own allocation, so
-# seeds do NOT share memory -- 3 vs 5 seeds changes total queue time, not per-node
-# RAM. One task loads one dataset (~60k images) exactly like the local MNIST runs.
+# Task ID encoding (SLURM_ARRAY_TASK_ID in 0..49):
+#   seed      = task_id % N_SEEDS            # 0..4
+#   cell      = task_id // N_SEEDS           # 0..9
+#   prior_idx = cell % N_PRIOR              # 0=oriented, 1=random
+#   ds_idx    = cell // N_PRIOR             # 0..4
 #
 # !! PRE-SUBMISSION (once, on a NETWORKED login node, from PROJECT_ROOT) !!
-#   1. Pre-cache torchvision so concurrent array tasks don't race the download:
-#        for d in MNIST KMNIST FashionMNIST; do
-#          singularity exec noise_env.sif conda run -n noise_env python -c \
-#            "from torchvision import datasets; getattr(datasets,'$d')(root='data/torchvision', train=True, download=True); getattr(datasets,'$d')(root='data/torchvision', train=False, download=True)"
-#        done
+#   1. Pre-cache datasets so concurrent array tasks don't race the download (MNIST,
+#      KMNIST, FashionMNIST, SVHN via torchvision; notMNIST via deeplake -- see
+#      get_data.py, set NOTMNIST_LOCAL for offline nodes).
 #   2. Confirm noise_env.sif exists (reuse from the other sweeps).
 
-#SBATCH --job-name=mnist_family
-#SBATCH --array=0-8
+#SBATCH --job-name=rf_phase2
+#SBATCH --array=0-49
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
@@ -49,21 +53,28 @@ PROJECT_ROOT=/mnt/users/andreama/projects/biosnn3
 cd "${PROJECT_ROOT}"
 
 # ---- grid -----------------------------------------------------------------
-DATASETS=(mnist kmnist fmnist)
-N_SEEDS=3
+# SVHN LAST: dense natural images fire ~3-4x more spikes/epoch than the sparse MNIST
+# family (rate-coded cost scales with total spikes) and it carries the full 26032 test
+# set, so it is decisively the slowest. Highest task IDs -> scheduled last.
+DATASETS=(mnist fmnist kmnist notmnist svhn)
+PRIORS=(oriented random)
+N_SEEDS=5
+N_PRIOR=${#PRIORS[@]}
 N_DS=${#DATASETS[@]}
 
 TASK_ID=${SLURM_ARRAY_TASK_ID}
 SEED=$(( TASK_ID % N_SEEDS ))
-DS_IDX=$(( TASK_ID / N_SEEDS ))
+CELL=$(( TASK_ID / N_SEEDS ))
+PRIOR_IDX=$(( CELL % N_PRIOR ))
+DS_IDX=$(( CELL / N_PRIOR ))
 
 if [ "${DS_IDX}" -ge "${N_DS}" ]; then
     echo "FATAL: DS_IDX=${DS_IDX} out of range (have ${N_DS} datasets); check --array range." >&2
     exit 1
 fi
-
 DATASET=${DATASETS[$DS_IDX]}
-TAG="${DATASET}_5ep_s${SEED}"
+PRIOR=${PRIORS[$PRIOR_IDX]}
+TAG="${DATASET}_${PRIOR}_s${SEED}"
 
 # ---- one results folder per submission, shared by all array tasks ----------
 if [ -z "${RUN_ID:-}" ]; then
@@ -84,50 +95,52 @@ echo "========================================"
 echo "Run  : ${RUN_ID}"
 echo "Job  : ${SLURM_JOB_ID}  Task : ${TASK_ID}"
 echo "Node : $(hostname)  Started : $(date)"
-echo "dataset=${DATASET}  seed=${SEED}  epochs=5"
+echo "dataset=${DATASET}  prior=${PRIOR}  seed=${SEED}  epochs=3"
 echo "output -> ${OUTPUT_DIR}"
 echo "========================================"
 
-# ---- skip if already done (resubmit the array to fill only the gaps) -------
-if [ -f "${OUTPUT_DIR}/results.json" ]; then
-    echo "results.json already present — skipping."
-    exit 0
-fi
+# ---- skip only GENUINELY-complete runs (results.json with a finite test_acc) -----
+is_complete() {
+    conda run --no-capture-output -n noise_env python - "$1" <<'PY' 2>/dev/null
+import json,sys,math
+try:
+    d=json.load(open(sys.argv[1]))
+    a=d.get("test_acc")
+    sys.exit(0 if isinstance(d,dict) and isinstance(a,(int,float)) and math.isfinite(a) else 1)
+except Exception:
+    sys.exit(1)
+PY
+}
 
 SIF="${PROJECT_ROOT}/noise_env.sif"
 if [ ! -f "${SIF}" ]; then
     echo "FATAL: container image not found at ${SIF}" >&2
     exit 1
 fi
+if singularity exec "${SIF}" bash -c "$(declare -f is_complete); is_complete '${OUTPUT_DIR}/results.json'"; then
+    echo "results.json already complete — skipping."
+    exit 0
+fi
 
-# ---- per-dataset split sizes ------------------------------------------------
-# The streamer MERGES torchvision's train and test splits into one pool and carves
-# train/val/test from it, so the budget is (len_train + len_test), NOT len_train:
-#
-#   mnist / fmnist / kmnist   60000 + 10000 = 70000   -> 59000/1000/10000 fits exactly
-#   svhn                      73257 + 26032 = 99289   -> fits
-#   cifar10                   50000 + 10000 = 60000   -> 59000/1000/10000 does NOT fit
-#   notmnist (deeplake)       ~18.7k total            -> does NOT fit
-#
-# Asking for more than the pool holds used to silently produce an EMPTY test split;
-# get_data.py now raises instead. val/test are held at 1000/10000 wherever possible so
-# metrics stay comparable across datasets -- only training volume shrinks. The primary
-# RF-vs-random comparison is WITHIN a dataset (both priors see identical volume), so it
-# stays apples-to-apples; only cross-dataset ABSOLUTE numbers carry the smaller-train caveat.
+# ---- per-dataset dedicated split sizes (see neurosnn/_data/_partition_indices) ---
+# train/val from the dedicated TRAIN split, test = the dedicated TEST split (full).
+#   mnist/fmnist/kmnist : 60000 train / 10000 test -> 59k train + 1k val, FULL 10k test
+#   svhn                : 73257 train / 26032 test -> 59k train + 1k val, FULL 26032 test
+#   notmnist            : no canonical split; 18724 merged -> 15k / 1k / 2724 (seed-fixed)
 TRAIN_ALL=59000; VAL_ALL=1000; TEST_ALL=10000
 case "${DATASET}" in
-    cifar10)  TRAIN_ALL=49000; VAL_ALL=1000; TEST_ALL=10000 ;;
-    notmnist) TRAIN_ALL=14000; VAL_ALL=1500; TEST_ALL=3000  ;;
+    svhn)     TRAIN_ALL=59000; VAL_ALL=1000; TEST_ALL=26032 ;;
+    notmnist) TRAIN_ALL=15000; VAL_ALL=1000; TEST_ALL=2724  ;;
 esac
-echo "Split    : train=${TRAIN_ALL} val=${VAL_ALL} test=${TEST_ALL}  (dataset=${DATASET})"
+echo "Split    : train=${TRAIN_ALL} val=${VAL_ALL} test=${TEST_ALL}  probe-fit=5000  (dataset=${DATASET})"
 
-# ---- run: canonical 95% config, R-STDP + oriented RFs, delta readout, 5 epochs -
+# ---- run: canonical 95% config, R-STDP + {oriented|random} RFs, delta readout ----
 singularity exec "${SIF}" conda run --no-capture-output -n noise_env python -u \
     experiments/RF_article/interp/interp_harness.py \
     --tag           "${TAG}" \
     --dataset       "${DATASET}" \
     --seed          "${SEED}" \
-    --prior         oriented \
+    --prior         "${PRIOR}" \
     --rule          reward \
     --grouped --group-layout block --tiled \
     --dense-readout --readout-lr 0.1 \
@@ -136,10 +149,11 @@ singularity exec "${SIF}" conda run --no-capture-output -n noise_env python -u \
     --rf-length     3.0 \
     --rf-thickness  1.2 \
     --center-margin 4.0 \
-    --epochs        5 \
+    --epochs        3 \
     --train-all     "${TRAIN_ALL}" \
     --val-all       "${VAL_ALL}" \
     --test-all      "${TEST_ALL}" \
+    --probe-fit-all 5000 \
     --output-dir    "${OUTPUT_DIR}"
 
 echo "Finished : $(date)"

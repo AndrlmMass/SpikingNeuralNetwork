@@ -10,6 +10,96 @@ Keep it scannable — a few bullets, not a transcript.
 
 ---
 
+## 2026-08-18 — Split-leakage fix + two-phase HPC run design (5 seeds × 3 epochs)
+
+**Focus:** Prepare to re-run the whole study on Orion with comparable numbers. Fixed a
+train/test **leakage** bug in the data loader, reconstructed the phase-1/phase-2 run plan
+from the Notion diary (the 12-Aug meeting), added the metrics that plan needs, and wrote
+the four driver scripts. **Nothing launched** — staged for HPC upload. Changes are in the
+uncommitted working tree.
+
+### THE BUG — the loader merged train+test and re-carved, contaminating "test"
+
+`ImageDataStreamer` **merged** torchvision's train and test splits into one pool,
+reshuffled, and carved train/val/test from the union. So our reported "test" set was a
+random draw that mixed in training images — **not** the dedicated test set, and **not
+comparable** to any published number. Confirmed live in the old SVHN log: *"Found 99289
+image samples"* (73257 train + 26032 test), test drawn from the merger. This is exactly
+Hubin's 12-Aug task #1 ("use the standard 10k test set; borrow the 1k val from train").
+
+**Fix (core rewrite, not a patch):** new `neurosnn/_data/_partition_indices()` respects
+each dataset's **dedicated** split — train/val drawn ONLY from the canonical train split,
+test ONLY from the canonical test split; the two never mix, and because the seed only
+shuffles train↔val, **the test set is identical across seeds**. notMNIST is the sole
+exception (no published split; deeplake's separation is synthetic) → merge its 18724 and
+carve a seed-fixed 15k/1k/2724. Over-subscription raises loudly (pre-run), keeping the
+07-30 empty-split guard. Unit-tested: zero train/val/test overlap, no leak in the
+dedicated regime, test invariant across seeds while train differs, all guards fire.
+
+**Per-dataset splits (BOTH phases, "same setup"):** mnist/fmnist/kmnist 59000/1000/**10000
+full test**; svhn 59000/1000/**26032 full test**; notmnist 15000/1000/2724. CIFAR-10
+**dropped** (28×28-grayscale → chance for both priors, the degenerate control that also
+nan-crashed last round).
+
+### The run plan (reconstructed from Notion — 12-Aug meeting)
+
+Paper arc: unsupervised model → trace-STDP → recurrency → tune → *show it fails, RFs end
+up worse than random* → literature → strip back → pivot to supervised R-STDP.
+
+- **PHASE 1 — unsupervised ablation** on the recurrent, NON-grouped net (input→exc with
+  E→E→inh→exc, N_exc=N_inh=1024). One departure from a trace-STDP baseline at a time:
+  `base_ori`, `base_rnd` (the RF-vs-random headline), `triplet`, `frozen`, `ee_off`,
+  `ie_off` (`--peak-ie 0`), `vogels`. 7 conds × 5 datasets × 5 seeds = **175 runs**.
+  Metrics: orientation coherence + **new 2D-Gaussian RF variance/covariance trajectory**
+  (Hubin), L1-LR linear-probe acc (fit on 5k), per-neuron η², **corrected dead fraction**,
+  participation ratio.
+- **PHASE 2 — supervised** tiled R-STDP + dense readout, oriented **vs random** × 5
+  datasets × 5 seeds = **50 runs**. Metrics: predictive entropy, readout acc, probe acc,
+  coverage–accuracy, AUROC.
+- **Both: 5 seeds, 3 epochs** (Andreas' call — 07-30 showed convergence well before 3ep;
+  more seeds > more epochs for statistical power). **No PCA** (verified unhelpful; the
+  probe was already `StandardScaler`+L1-LogReg, PCA-free — we just stop quoting the
+  `pca_lr` evaluator).
+
+### Harness / metric additions (all smoke-tested end-to-end)
+
+- **`--probe-fit-all N`** — fits the FINAL linear probe (`test_lin_acc` + uncertainty) on
+  N **train-split** features instead of the ~1k val set, via new `Runner.featurize()` /
+  `Model.featurize()` (a no-update eval pass that doesn't touch the Evaluator/captured
+  features). Set to **5000** in both sweeps — directly fixes the 07-25 "88% probe was
+  data-starved, recovers to ~94.9% with enough fit data" artefact. Per-checkpoint drift
+  probe still uses val (cheap); only the final classifier's fit set changes.
+- **Corrected dead fraction** (`dead_frac_corrected = 1 − n_active/N_exc`, relative
+  activity floor) now logged for EVERY run — previously only emitted when a class
+  assignment existed, so the non-grouped phase-1 model had no dead measure.
+- **`rf_gaussian_moments()`** in `analysis.py` — energy-weighted mean var_x/var_y/cov_xy +
+  elongation + orientation of each RF; unit-verified (vertical bar→high var_y, etc.).
+
+### Scripts (4 files, all `bash -n` clean)
+
+- `interp/phase1_ablation/run_slurm.sh` (array 0-174) + `run_local.sh` twin — NEW.
+- `interp/mnist_family_sweep/run_slurm.sh` (array 0-49) + `run_local.sh` — updated to
+  oriented+random, 5 datasets, 5 seeds, 3 epochs, dedicated splits, `--probe-fit-all 5000`.
+- **SVHN ordered LAST** in all four (highest task IDs / last in each seed pass): dense
+  natural images fire ~3-4× more spikes/epoch (rate-coded cost ∝ total spikes) and it now
+  carries the full 26032 test — decisively the slowest. This is **inherent, not a bug**;
+  nothing to patch, just scheduled last so the fast datasets land first.
+
+**Validation:** phase-1 condition paths smoke-tested on tiny MNIST runs — frozen, random,
+vogels (inh. plasticity), ie_off (peak-ie 0), triplet, oriented-trace — all exit 0 with
+the probe fit on train features and `test_lin_acc` produced.
+
+**Open / next:**
+1. Upload codebase + scripts to Orion; submit phase-1 (175) and phase-2 (50) arrays.
+2. Post-hoc (off saved `uncertainty_features.npz`, no extra compute): bootstrapped 95% CI
+   entropy rule (one-sided), OOD check (train MNIST → feed FMNIST, expect abstain),
+   mixed-effects + multiple-regression of clustering metrics on accuracy (Hubin).
+3. Scale-invariance experiment (normalise active-pixel extent; revisit the inward RF
+   shift) — the diagnosed cause of notMNIST/FMNIST losing.
+4. First draft due **1 Sept** (Andreas at bootcamp 2-10 Sept); TMLR target **1 Oct**.
+
+---
+
 ## 2026-07-30 — 6-dataset sweep running; a silent empty-test-split bug cost 46h
 
 **Focus:** Launched the extended dataset sweep (2026-07-28 12:15, still running) and

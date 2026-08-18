@@ -12,11 +12,16 @@
 # downstream analysis is identical. Swaps `singularity exec noise_env.sif` for the local
 # `noise_env` conda env.
 #
-# Grid: 6 datasets x {oriented, random} x N_SEEDS seeds, 5 epochs each.
-#   datasets : mnist fmnist kmnist cifar10 svhn notmnist   (cifar10/svhn collapsed to
-#              28x28 grayscale; notmnist via deeplake, at REDUCED counts -- see below)
+# Grid: 5 datasets x {oriented, random} x N_SEEDS seeds, 3 epochs each.
+#   datasets : mnist fmnist kmnist svhn notmnist   (svhn collapsed to 28x28 grayscale;
+#              notmnist via deeplake. CIFAR-10 is DROPPED: at 28x28 grayscale it collapses
+#              to chance for both priors -- a degenerate control, not a task.)
 #   priors   : oriented random
 #   seeds    : 0 .. N_SEEDS-1
+#
+# SPLITS respect each dataset's DEDICATED train/test set (see run_one below and
+# neurosnn/_data/_partition_indices): test is the canonical test set, never mixed with
+# training images, so the numbers are comparable to published results.
 #
 # ORDERING is SEED-OUTER: the entire single-seed grid (all datasets x both priors, seed 0)
 # completes FIRST, then seed 1, then seed 2. So even if the machine doesn't get through all
@@ -30,7 +35,7 @@
 #     nohup experiments/RF_article/interp/mnist_family_sweep/run_local.sh \
 #     > experiments/RF_article/interp/mnist_family_sweep/driver.out 2>&1 &
 #
-# Env overrides: N_SEEDS(3) MAX_PAR(6) EPOCHS(5) RUN_ID DATASETS PRIORS
+# Env overrides: N_SEEDS(5) MAX_PAR(6) EPOCHS(3) RUN_ID DATASETS PRIORS
 #   e.g. one-seed first pass:  N_SEEDS=1 run_local.sh
 
 set -uo pipefail
@@ -44,11 +49,13 @@ CONDA_SH="${CONDA_SH:-/home/andreas/anaconda3/etc/profile.d/conda.sh}"
 source "$CONDA_SH"; conda activate noise_env || { echo "FATAL: cannot activate noise_env" >&2; exit 1; }
 
 # ---- grid ------------------------------------------------------------------
-read -r -a DATASETS <<< "${DATASETS:-mnist fmnist kmnist cifar10 svhn notmnist}"
+# SVHN LAST (dense natural images -> ~3-4x more spikes/epoch + full 26032 test); with
+# seed-outer ordering it runs last within each seed pass, so fast datasets land first.
+read -r -a DATASETS <<< "${DATASETS:-mnist fmnist kmnist notmnist svhn}"
 read -r -a PRIORS   <<< "${PRIORS:-oriented random}"
-N_SEEDS=${N_SEEDS:-3}
+N_SEEDS=${N_SEEDS:-5}
 MAX_PAR=${MAX_PAR:-6}
-EPOCHS=${EPOCHS:-5}
+EPOCHS=${EPOCHS:-3}
 
 # per-run thread pinning so MAX_PAR procs don't each spawn 24 BLAS/numba threads
 export OMP_NUM_THREADS=3 OPENBLAS_NUM_THREADS=3 MKL_NUM_THREADS=3 \
@@ -91,12 +98,19 @@ run_one() {
     mkdir -p "$out"
     if is_complete "$out/results.json"; then echo "skip  $tag (already complete)"; return 0; fi
 
-    # notmnist-small (~18.7k total) cannot fill 59k/1k/10k; use a valid reduced split.
-    # (The primary RF-vs-random comparison is WITHIN a dataset -- both priors see the same
-    #  volume -- so this stays apples-to-apples; only cross-dataset absolute numbers carry
-    #  the caveat that notmnist trained on less data.)
+    # Per-dataset split. train/val come from the dedicated TRAIN split, test is the
+    # dedicated TEST split (full), so results are comparable to published numbers.
+    # Sizes differ only because the datasets do:
+    #   mnist/fmnist/kmnist : 60000 train / 10000 test -> 59k train + 1k val, FULL 10k test
+    #   svhn                : 73257 train / 26032 test -> 59k train + 1k val, FULL 26032 test
+    #   notmnist            : no canonical split; 18724 merged -> 15k / 1k / 2724 (seed-fixed).
+    #     Its RF-vs-random comparison is still WITHIN-dataset (both priors, same volume),
+    #     but its absolute number is not cross-paper comparable (no standard test set exists).
     local TR=59000 VA=1000 TE=10000
-    if [ "$ds" = "notmnist" ]; then TR=14000 VA=1500 TE=3000; fi
+    case "$ds" in
+        svhn)     TR=59000 VA=1000 TE=26032 ;;
+        notmnist) TR=15000 VA=1000 TE=2724  ;;
+    esac
 
     echo "START $tag  $(date +%H:%M:%S)"
     python -u experiments/RF_article/interp/interp_harness.py \
@@ -106,6 +120,7 @@ run_one() {
         --dense-readout --readout-lr 0.1 --reward-lr 5e-6 --peak-ei 50 \
         --rf-length 3.0 --rf-thickness 1.2 --center-margin 4.0 \
         --epochs "$EPOCHS" --train-all "$TR" --val-all "$VA" --test-all "$TE" \
+        --probe-fit-all 5000 \
         --no-plots --output-dir "$out" > "$BASE/logs/${tag}.log" 2>&1
     local rc=$?
     if [ $rc -eq 0 ] && is_complete "$out/results.json"; then
