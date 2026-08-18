@@ -322,9 +322,20 @@ class ImageDataStreamer:
             tc = train_count or total
             vc = val_count or 0
             tec = test_count or 0
-            tc = min(tc, total)
-            vc = min(vc, max(0, total - tc))
-            tec = min(tec, max(0, total - tc - vc))
+
+            # FAIL LOUDLY on an over-subscribed request. This used to clamp each count
+            # to whatever was left, which silently yields an EMPTY split rather than an
+            # error: CIFAR-10 (50k train + 10k test = 60k pool) asked for 59k/1k/10k,
+            # got test=0, trained for 46h and only revealed the problem as test_acc=nan
+            # in the final line of the log. Note the pool is the MERGED train+test set,
+            # so the budget is 60k here, not torchvision's 50k train split.
+            if tc + vc + tec > total:
+                raise ValueError(
+                    f"Requested split does not fit dataset {self.dataset!r}: "
+                    f"train={tc} + val={vc} + test={tec} = {tc + vc + tec} exceeds the "
+                    f"{total}-sample pool ({self.len_train} train + {self.len_test} test, "
+                    f"merged and reshuffled). Reduce the counts."
+                )
 
             self.train_indices = self.indices[:tc]
             self.val_indices = self.indices[tc : tc + vc]

@@ -10,6 +10,195 @@ Keep it scannable — a few bullets, not a transcript.
 
 ---
 
+## 2026-07-30 — 6-dataset sweep running; a silent empty-test-split bug cost 46h
+
+**Focus:** Launched the extended dataset sweep (2026-07-28 12:15, still running) and
+audited the first completed cells. Found that CIFAR-10 had been training for ~23h a
+cell and reporting `test_acc=nan`.
+
+**Sweep:** `results/run_local_20260728_121501`, 6 datasets x {oriented, random} x 3
+seeds = 36 cells, 5 epochs, 6-way local parallelism, driven by the untracked
+`run_local.sh` (local no-SLURM twin of `run_slurm.sh`). As of 2026-07-30 12:40:
+**12 cells complete, 6 in flight, CIFAR-10 now failing fast by design.** ETA ~2026-08-02.
+
+### Seed-0 RF-vs-random — mixed, and that is the result
+
+| dataset | oriented | random | delta | eta2 (val, final ckpt) |
+|---|---|---|---|---|
+| mnist | **0.8656** | 0.8215 | **+4.4** | 0.167 / 0.177 |
+| kmnist | **0.7465** | 0.7044 | **+4.2** | 0.117 / 0.101 |
+| fmnist | 0.7194 | **0.7363** | -1.7 | 0.295 / 0.299 |
+| notmnist | 0.8177 | **0.8363** | -1.9 | 0.224 / 0.169 |
+| svhn | 0.2658 | *running* | — | 0.013 |
+| cifar10 | *see below* | *see below* | — | 0.052 / 0.038 |
+
+**SINGLE SEED — do not quote yet.** Seed 1 agrees on mnist so far (oriented 0.8788;
+random still running, val 0.807 vs oriented's 0.890). Read provisionally: the oriented
+prior helps on the digit-like sets and slightly *hurts* on the two harder ones. If that
+survives seeds 1-2 it is a real and reportable boundary on the prior's usefulness — not
+the clean win, but a more honest one. eta2 tracks accuracy across datasets in the
+expected direction (fmnist 0.29 down to svhn 0.013).
+
+### THE BUG — merged-pool splits silently produced an EMPTY test set
+
+`ImageDataStreamer` **merges** torchvision's train and test splits into one pool and
+carves train/val/test from it, so the budget is `len_train + len_test`, NOT `len_train`:
+
+| dataset | pool | requested 59000/1000/10000 |
+|---|---|---|
+| mnist / fmnist / kmnist | 70000 | fits **exactly** |
+| svhn | 99289 | fits |
+| **cifar10** | **60000** (50k+10k) | **test = 0** |
+
+The old code **clamped each count to whatever was left instead of erroring**, so
+CIFAR-10 got `test = min(10000, max(0, 60000-59000-1000)) = 0`. The test phase never ran
+at all (`grep -c "Testing"` = 0 for cifar10 vs 2 for svhn) and it surfaced only as
+`test_acc=nan` in the final line of a 23h log. **Both cifar10 seed-0 cells are lost:**
+no `uncertainty_features.npz`, no weight checkpoints, so **nothing can be scored
+offline** — they must be rerun.
+
+Why it hid: `59000+1000 = 60000` is *exactly* CIFAR-10's pool, so train and val both
+filled completely and only test was starved. notMNIST was already special-cased in
+`run_local.sh` for the same reason; CIFAR-10 was missed because it very nearly fits.
+
+**Fixes (uncommitted working tree):**
+- `neurosnn/_data/get_data.py` — over-subscribed splits now **raise** with the actual
+  numbers instead of truncating. Note `>` not `>=`: mnist/fmnist/kmnist sit at exactly
+  70000 and must still pass.
+- `run_slurm.sh` — had the bug **worse** (hardcoded 59000/1000/10000, no per-dataset
+  branch at all), so on Orion it would have failed cifar10 *and* notmnist. Now
+  dispatches per dataset: cifar10 49000/1000/10000, notmnist 14000/1500/3000. val/test
+  held constant wherever possible so metrics stay comparable; only train volume shrinks.
+- `run_cifar10_fix.sh` — staged, **not launched** (see below). Its `is_complete` also
+  requires `test_acc` to be **finite**, not merely present — the existing check counts
+  `nan` as complete and would skip the broken cells forever.
+- `run_local.sh` **deliberately not edited**: bash reads a running script by byte offset,
+  and the driver (PID 85794) is live. The two edits it needs are recorded in the fix
+  script's header for after it exits.
+
+**Verified in production:** `cifar10_oriented_s1` and `cifar10_random_s1` hit the new
+guard at 12:38/12:39 and failed in ~30s each instead of ~23h. `set -uo pipefail` has no
+`-e`, so the driver logged `FAIL` and carried on. **~96h of compute saved**; those four
+`FAIL` lines in `driver.out` are expected, not new breakage.
+
+**Decision: CIFAR-10 waits for HPC.** Not worth 3 local days at 2 slots. The repair
+script + the SLURM per-dataset splits are ready for Orion.
+
+### Instrumentation gap — the sweep collects NO spiking-readout data
+
+`--spiking-readout` is opt-in (`interp_harness.py:142`) and `run_local.sh` does not pass
+it, so `test_spiking_acc` is `None` for all 36 cells. The dataset-generality sweep and
+the artificial-vs-biological readout comparison (07-27 next-item #3, the one the paper's
+faithfulness claim rests on) are therefore **disjoint** — the spiking numbers need their
+own run. Not a bug; the delta readout is the intended control here. Worth deciding
+whether the HPC round carries `--spiking-readout` so one sweep answers both.
+
+### TRAINING LENGTH — no decay, but epochs 2-5 are wasted compute
+
+Checkpoint-level analysis of the 10 completed cells (one checkpoint per batch, 59/epoch).
+**Noise floor first:** the val set is 1000 items, so 2sd binomial noise is **+-2.53pp** —
+nothing smaller than that is readable.
+
+**No decay anywhere.** Worst final-minus-peak across all 10 cells is **-0.96pp**, i.e.
+every apparent decline is inside noise. Training longer is not destroying anything, and
+the 07-16 "over-training DEGRADES" finding was a **learning-RATE** effect (reward_lr),
+not an epoch-count effect — at reward_lr 5e-6 the two do not reproduce each other.
+
+**But val_acc saturates within the first ~20% of epoch 1** (~11.8k images; that is an
+upper bound — the first checkpoint is already post-training, so it may be earlier):
+
+| prior | epochs 2-5 buy | range |
+|---|---|---|
+| oriented | **+0.03pp** | -0.57 to +0.70 |
+| random | **+0.46pp** | +0.18 to +0.66 |
+
+Both inside the noise floor. **~80% of every 23h cell buys nothing measurable in
+accuracy.** Consistent with 07-25's "refit probe is FLAT — decodability did not improve";
+this is the same result seen from the accuracy side. Note training is still *doing*
+something (eta2 moves monotonically below, and drift was still widening at epoch 5) — it
+just does not cash out.
+
+### eta2 moves in OPPOSITE directions for the two priors (the good finding)
+
+Matched on dataset AND seed (n=4 pairs: fmnist/kmnist/mnist/notmnist, all s0), eta2 from
+epoch 1 -> epoch 5:
+
+| dataset | oriented | random |
+|---|---|---|
+| fmnist | 0.312 -> 0.295 (**-0.018**) | 0.269 -> 0.299 (**+0.030**) |
+| kmnist | 0.119 -> 0.117 (-0.003) | 0.087 -> 0.101 (+0.014) |
+| mnist | 0.171 -> 0.167 (-0.004) | 0.146 -> 0.177 (+0.031) |
+| notmnist | 0.232 -> 0.224 (-0.008) | 0.159 -> 0.168 (+0.010) |
+| **mean** | **-0.008** | **+0.021** |
+
+**4/4 negative and 4/4 positive — perfect separation.** The oriented prior *front-loads*
+per-neuron selectivity and training erodes it; random starts lower, builds it up, and
+**overtakes** (fmnist 0.299 vs 0.295, mnist 0.177 vs 0.167). This is the **random control
+for the "reward-STDP bends the prior" claim** from 07-25 — the counterfactual says the
+erosion is specific to having a structured prior to erode. Seed check: mnist_oriented has
+two seeds and the delta reproduces at -0.005 / -0.004, so seed noise on this quantity is
+~0.001, well clear of the +-0.02-0.03 contrast.
+
+**The accuracy gap is front-loaded too, and shrinks** (oriented - random, pp):
+
+| dataset | 0.2ep | 1ep | 3ep | 5ep |
+|---|---|---|---|---|
+| kmnist | +8.70 | +5.90 | +6.50 | **+2.90** |
+| mnist | +8.30 | +5.40 | +5.40 | **+5.50** |
+| fmnist | +0.00 | -0.50 | -1.70 | **-2.00** |
+| notmnist | -1.93 | -4.20 | -2.93 | **-1.87** |
+| **mean** | **+3.77** | +1.65 | +1.82 | **+1.13** |
+
+**THE DISSOCIATION worth putting in the paper:** random **overtakes oriented on eta2**
+while oriented **still wins on accuracy** (mnist +5.5, kmnist +2.9). So per-neuron
+selectivity is **not** the mechanism behind the oriented prior's advantage — which is
+exactly 07-25's "individual neurons got less selective and more alike; the class signal
+moved into the population", now with a control arm.
+
+**Caveats:** n=4 matched pairs, single seed. A 4/4 sign test is p=0.0625 one-tailed —
+directionally perfect but underpowered. Per-dataset accuracy gaps are mostly within
+noise; only mnist and kmnist clear it. Scripts in scratchpad, not committed.
+
+**RECOMMENDATION: cut 5 epochs -> 2 for the HPC round.** 2.5x cheaper per cell at no
+measurable accuracy cost, and it converts directly into what we actually lack — more
+seeds and a `--spiking-readout` arm. Do **not** go to 1 epoch: svhn/cifar10 have slower
+dynamics and epoch 2 is where the eta2 curves are still visibly separating.
+
+### Metric framing clarified (no code change)
+
+- `class_eta_squared` is **standard**, not homegrown: eta-squared / Pearson's correlation
+  ratio / the R^2 of a one-way ANOVA, and in systems neuroscience it is **PEV**. Cite it
+  that way in the paper rather than defending it from scratch.
+- It is **monotone in Calinski-Harabasz** for a single feature (CH *is* the ANOVA
+  F-statistic; verified numerically to the decimal). The real difference is aggregation:
+  ours is **mean-of-ratios** (every neuron one vote, normalized by its own variance), CH
+  is **ratio-of-sums** (high-variance neurons dominate). On a synthetic 45-informative /
+  5-loud population these give 0.637 vs 0.051 — same data, different question.
+- **Bias floor:** raw eta2 has E[eta2] ~ (K-1)/(n-1) under the null (~0.045 at K=10,
+  n=200). Constant across cells at fixed n and K so trends are safe, but absolute values
+  are inflated. `omega^2` debiases if we ever quote absolutes; omega^2-PEV is the usual
+  choice in the literature.
+- **Entropy and perplexity are one measurement in two units** (`exp` is monotone -> same
+  ranking, same AUROC, same abstention decisions). When the report shows perplexity,
+  margin and maxp all at AUROC ~0.94 that is **not** three converging pieces of evidence.
+  Margin and maxp are genuinely distinct; entropy and perplexity are not.
+
+**Open / next:**
+1. Let the sweep finish (~2026-08-02), then multi-seed the RF-vs-random deltas — the
+   sign flip between digit-like and harder datasets is the claim to nail down.
+2. **HPC round at 2 epochs, not 5** (see training-length section) — spend the 2.5x saving
+   on seeds and a `--spiking-readout` arm. The eta2 divergence is the headline to
+   replicate; it needs seeds, not epochs.
+3. CIFAR-10 repair run on Orion via `run_cifar10_fix.sh` / fixed `run_slurm.sh`.
+4. Decide whether the HPC round carries `--spiking-readout` (see gap above).
+5. Apply the two staged `run_local.sh` edits once the local driver exits.
+6. Filter `nan` before aggregating: the two dead cifar10 cells will poison any plain
+   `mean` over `test_acc`.
+7. Re-run the paired eta2 analysis once random seeds 1-2 land — 4/4 at p=0.0625 wants
+   12 pairs to be quotable.
+
+---
+
 ## 2026-07-27 — Spiking readout: two rule bugs, and negative weights cost only 0.6
 
 **Focus:** Build a **biologically-motivated alternative** to the softmax delta

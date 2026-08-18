@@ -69,21 +69,28 @@ def blocks(weights, st, ex, ih):
     return (weights[:st, st:ex], weights[st:ex, st:ex], weights[ex:ih, st:ex])
 
 
-# The MNIST family: all 28x28 grayscale, 10-class, so N_x=784 and the oriented-RF
-# architecture is identical across them -- only the task changes. CIFAR/SVHN are
-# 32x32x3 and would need a different input size, so they are deliberately not here.
-_DATASETS = {
-    "mnist": "MNIST", "kmnist": "KMNIST",
-    "fmnist": "FashionMNIST", "fashionmnist": "FashionMNIST",
-}
+# The extended MNIST family. All 10-class; the streamer grayscales + resizes every
+# dataset to 28x28 (see ImageDataStreamer's transform), so N_x=784 and the oriented-RF
+# architecture is byte-identical across them -- only the task changes. CIFAR-10 and SVHN
+# are natively 32x32x3 and are collapsed to 28x28 grayscale by that same transform.
+_DATASETS = ["mnist", "kmnist", "fmnist", "fashionmnist", "notmnist", "cifar10", "svhn"]
 
 
-def load_input_rate(dataset="mnist"):
-    from torchvision import datasets
-    cls = getattr(datasets, _DATASETS[dataset])
-    ds = cls(root=os.path.join(REPO, "data", "torchvision"), train=False, download=False)
-    m = ds.data.numpy().reshape(len(ds), -1).mean(0).astype(np.float64) / 255.0
-    return m  # (784,) mean pixel intensity ~ mean input rate
+def load_input_rate(dataset, pixel_size=28):
+    """Mean per-pixel input intensity (784,) ~ mean input rate.
+
+    Read off the same grayscaled+resized train images the model trains on, via the
+    model's own ImageDataStreamer. Correct for every dataset -- including 32x32x3
+    CIFAR/SVHN and deeplake notMNIST -- because that streamer applies the same
+    Grayscale + Resize(28) transform uniformly. (The model builds its streamer lazily
+    inside fit(), and input_rate is needed before fit, so we build a throwaway one.)
+    """
+    from neurosnn._data.get_data import ImageDataStreamer
+    s = ImageDataStreamer(
+        data_dir=os.path.join(REPO, "data"), pixel_size=pixel_size, dataset=dataset
+    )
+    imgs = np.asarray(s.train_images)
+    return imgs.reshape(imgs.shape[0], -1).mean(0, dtype=np.float64)  # (784,)
 
 
 def parse_args():
@@ -177,7 +184,8 @@ def parse_args():
     p.add_argument("--neuron-id", type=int, default=512, help="neuron index for --plot-single-neuron (default 512)")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--dataset", default="mnist", choices=sorted(_DATASETS),
-                   help="MNIST-family dataset (all 28x28 grayscale, 10-class, N_x=784)")
+                   help="dataset (10-class); all grayscaled+resized to 28x28, N_x=784. "
+                        "cifar10/svhn are collapsed from 32x32x3; notmnist via deeplake")
     p.add_argument("--epochs", type=int, default=1,
                    help="number of passes over the --train-all images (data is re-served each epoch)")
     p.add_argument("--train-all", type=int, default=15000)

@@ -100,6 +100,27 @@ if [ ! -f "${SIF}" ]; then
     exit 1
 fi
 
+# ---- per-dataset split sizes ------------------------------------------------
+# The streamer MERGES torchvision's train and test splits into one pool and carves
+# train/val/test from it, so the budget is (len_train + len_test), NOT len_train:
+#
+#   mnist / fmnist / kmnist   60000 + 10000 = 70000   -> 59000/1000/10000 fits exactly
+#   svhn                      73257 + 26032 = 99289   -> fits
+#   cifar10                   50000 + 10000 = 60000   -> 59000/1000/10000 does NOT fit
+#   notmnist (deeplake)       ~18.7k total            -> does NOT fit
+#
+# Asking for more than the pool holds used to silently produce an EMPTY test split;
+# get_data.py now raises instead. val/test are held at 1000/10000 wherever possible so
+# metrics stay comparable across datasets -- only training volume shrinks. The primary
+# RF-vs-random comparison is WITHIN a dataset (both priors see identical volume), so it
+# stays apples-to-apples; only cross-dataset ABSOLUTE numbers carry the smaller-train caveat.
+TRAIN_ALL=59000; VAL_ALL=1000; TEST_ALL=10000
+case "${DATASET}" in
+    cifar10)  TRAIN_ALL=49000; VAL_ALL=1000; TEST_ALL=10000 ;;
+    notmnist) TRAIN_ALL=14000; VAL_ALL=1500; TEST_ALL=3000  ;;
+esac
+echo "Split    : train=${TRAIN_ALL} val=${VAL_ALL} test=${TEST_ALL}  (dataset=${DATASET})"
+
 # ---- run: canonical 95% config, R-STDP + oriented RFs, delta readout, 5 epochs -
 singularity exec "${SIF}" conda run --no-capture-output -n noise_env python -u \
     experiments/RF_article/interp/interp_harness.py \
@@ -116,9 +137,9 @@ singularity exec "${SIF}" conda run --no-capture-output -n noise_env python -u \
     --rf-thickness  1.2 \
     --center-margin 4.0 \
     --epochs        5 \
-    --train-all     59000 \
-    --val-all       1000 \
-    --test-all      10000 \
+    --train-all     "${TRAIN_ALL}" \
+    --val-all       "${VAL_ALL}" \
+    --test-all      "${TEST_ALL}" \
     --output-dir    "${OUTPUT_DIR}"
 
 echo "Finished : $(date)"
