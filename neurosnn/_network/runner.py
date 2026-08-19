@@ -524,6 +524,50 @@ class Runner:
         )
         return EvalResult(accuracy=acc, phi=phi, split="test", spikes=te_spikes)
 
+    def featurize(self, all_images: int, batch: int = 1000, partition: str = "train"):
+        """Run the eval forward pass over `all_images` items from `partition` and
+        return (X, y): per-item excitatory spike-rate features and their labels.
+
+        Used to fit the linear probe on a large slice (e.g. 5000 train images)
+        without paying the per-checkpoint cost of doing so on every batch. Runs in
+        'test' mode so NO weights are updated, and it computes features directly via
+        spikes_per_item rather than through the Evaluator, so it does not disturb the
+        harness's captured val/test features.
+        """
+        if self._trainer is None:
+            raise RuntimeError("call train() before featurize()")
+        model = self.model
+        model.image_streamer.reset_partition(partition)
+        n_batches = max(1, all_images // max(1, batch))
+        Xs, ys = [], []
+        for _ in range(n_batches):
+            data, labels = model.image_streamer.get_batch(0, batch, partition)
+            if data is None:
+                break
+            T = data.shape[0]
+            spikes = np.zeros((T, model.N), dtype=np.int8)
+            spikes[:, : model.st] = data[:, : model.st]
+            del data
+            state = self._init_state(self._spike_threshold_default)
+            (_, spikes_out, _, _, labels_out, _, _, _, _, _) = self._trainer.step(
+                weights=model.weights,
+                mp=state["mp"], spikes=spikes, spike_labels=labels,
+                spike_trace=state["spike_trace"], training_mode="test",
+                spike_threshold=state["spike_threshold"],
+                I_syn_exc=state["I_syn_exc"], I_syn_inh=state["I_syn_inh"], a=state["a"],
+            )
+            del spikes, labels
+            gc.collect()
+            if spikes_out is not None:
+                X, y = model.spikes_per_item(spikes_out[:, model.st : model.ex], labels_out)
+                if X.size > 0:
+                    Xs.append(X); ys.append(y)
+            del spikes_out, labels_out
+            gc.collect()
+        if not Xs:
+            return None, None
+        return np.concatenate(Xs, 0), np.concatenate(ys, 0)
+
     def _init_state(self, spike_threshold_default: float) -> dict:
         m = self.model
         mp = np.full(m.N - m.st, m.resting_potential)

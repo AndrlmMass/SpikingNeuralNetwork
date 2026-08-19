@@ -1,0 +1,131 @@
+nohup: ignoring input
+========================================================
+RUN_ID   : run_local_20260728_121501
+datasets : mnist fmnist kmnist cifar10 svhn notmnist
+priors   : oriented random
+seeds    : 0..2   epochs: 5   max_par: 6
+results  : experiments/RF_article/interp/mnist_family_sweep/results/run_local_20260728_121501
+started  : Tue Jul 28 12:15:01 PM CEST 2026
+========================================================
+---- PASS 1 ----
+START mnist_oriented_s0  12:15:01
+START mnist_random_s0  12:15:01
+START fmnist_oriented_s0  12:15:01
+START kmnist_random_s0  12:15:01
+START kmnist_oriented_s0  12:15:01
+START fmnist_random_s0  12:15:01
+DONE  kmnist_oriented_s0  04:46:28
+START cifar10_oriented_s0  04:46:33
+DONE  mnist_oriented_s0  05:28:40
+START cifar10_random_s0  05:28:49
+DONE  kmnist_random_s0  06:50:50
+START svhn_oriented_s0  06:50:51
+DONE  fmnist_oriented_s0  07:30:08
+START svhn_random_s0  07:30:21
+DONE  mnist_random_s0  07:47:31
+START notmnist_oriented_s0  07:47:37
+DONE  fmnist_random_s0  11:42:41
+START notmnist_random_s0  11:42:42
+DONE  notmnist_oriented_s0  14:11:19
+START mnist_oriented_s1  14:11:30
+DONE  notmnist_random_s0  19:35:36
+START mnist_random_s1  19:35:36
+DONE  cifar10_oriented_s0  04:28:05
+START fmnist_oriented_s1  04:28:17
+DONE  svhn_oriented_s0  06:41:53
+START fmnist_random_s1  06:42:05
+DONE  mnist_oriented_s1  07:41:48
+START kmnist_oriented_s1  07:41:51
+DONE  cifar10_random_s0  11:16:38
+START kmnist_random_s1  11:16:40
+/home/andreas/Documents/GitHub/SpikingNeuralNetwork/experiments/RF_article/interp/mnist_family_sweep/run_local.sh: line 87: 322979 Killed                  python -u experiments/RF_article/interp/interp_harness.py --tag "$tag" --dataset "$ds" --seed "$seed" --prior "$prior" --rule reward --grouped --group-layout block --tiled --dense-readout --readout-lr 0.1 --reward-lr 5e-6 --peak-ei 50 --rf-length 3.0 --rf-thickness 1.2 --center-margin 4.0 --epochs "$EPOCHS" --train-all "$TR" --val-all "$VA" --test-all "$TE" --no-plots --output-dir "$out" > "$BASE/logs/${tag}.log" 2>&1
+FAIL  svhn_random_s0  rc=137  (see experiments/RF_article/interp/mnist_family_sweep/results/run_local_20260728_121501/logs/svhn_random_s0.log)
+START cifar10_oriented_s1  12:38:42
+FAIL  cifar10_oriented_s1  rc=1  (see experiments/RF_article/interp/mnist_family_sweep/results/run_local_20260728_121501/logs/cifar10_oriented_s1.log)
+START cifar10_random_s1  12:39:12
+FAIL  cifar10_random_s1  rc=1  (see experiments/RF_article/interp/mnist_family_sweep/results/run_local_20260728_121501/logs/cifar10_random_s1.log)
+START svhn_oriented_s1  12:39:27
+DONE  mnist_random_s1  15:20:01
+START svhn_random_s1  15:20:15
+/home/andreas/Documents/GitHub/SpikingNeuralNetwork/experiments/RF_article/interp/mnist_family_sweep/run_local.sh: line 87: 513100 Killed                  python -u experiments/RF_article/interp/interp_harness.py --tag "$tag" --dataset "$ds" --seed "$seed" --prior "$prior" --rule reward --grouped --group-layout block --tiled --dense-readout --readout-lr 0.1 --reward-lr 5e-6 --peak-ei 50 --rf-length 3.0 --rf-thickness 1.2 --center-margin 4.0 --epochs "$EPOCHS" --train-all "$TR" --val-all "$VA" --test-all "$TE" --no-plots --output-dir "$out" > "$BASE/logs/${tag}.log" 2>&1
+FAIL  fmnist_oriented_s1  rc=137  (see experiments/RF_article/interp/mnist_family_sweep/results/run_local_20260728_121501/logs/fmnist_oriented_s1.log)
+START notmnist_oriented_s1  23:52:40
+DONE  kmnist_oriented_s1  23:58:27
+START notmnist_random_s1  23:58:40
+DONE  notmnist_oriented_s1  06:11:30
+START mnist_oriented_s2  06:11:33
+DONE  kmnist_random_s1  06:17:50
+START mnist_random_s2  06:18:03
+DONE  fmnist_random_s1  07:12:39
+START fmnist_oriented_s2  07:12:50
+DONE  notmnist_random_s1  07:48:08
+START fmnist_random_s2  07:48:20
+DONE  svhn_oriented_s1  12:13:06
+START kmnist_oriented_s2  12:13:11
+DONE  svhn_random_s1  20:55:11
+START kmnist_random_s2  20:55:21
+DONE  mnist_oriented_s2  23:03:51
+START cifar10_oriented_s2  23:03:53
+FAIL  cifar10_oriented_s2  rc=1  (see experiments/RF_article/interp/mnist_family_sweep/results/run_local_20260728_121501/logs/cifar10_oriented_s2.log)
+START cifar10_random_s2  23:04:08
+FAIL  cifar10_random_s2  rc=1  (see experiments/RF_article/interp/mnist_family_sweep/results/run_local_20260728_121501/logs/cifar10_random_s2.log)
+START svhn_oriented_s2  23:04:23
+DONE  mnist_random_s2  02:03:54
+START svhn_random_s2  02:03:57
+DONE  fmnist_oriented_s2  02:19:27
+START notmnist_oriented_s2  02:19:42
+DONE  kmnist_oriented_s2  04:23:50
+START notmnist_random_s2  04:24:00
+DONE  fmnist_random_s2  07:43:42
+DONE  notmnist_oriented_s2  08:41:02
+DONE  notmnist_random_s2  12:01:54
+DONE  kmnist_random_s2  15:19:00
+DONE  svhn_oriented_s2  20:59:39
+DONE  svhn_random_s2  02:05:51
+---- PASS 2 ----
+skip  mnist_random_s0 (already complete)
+skip  kmnist_random_s0 (already complete)
+skip  mnist_oriented_s0 (already complete)
+skip  fmnist_random_s0 (already complete)
+skip  fmnist_oriented_s0 (already complete)
+skip  kmnist_oriented_s0 (already complete)
+skip  notmnist_oriented_s0 (already complete)
+skip  notmnist_random_s0 (already complete)
+START svhn_random_s0  02:06:06
+skip  cifar10_random_s0 (already complete)
+skip  svhn_oriented_s0 (already complete)
+skip  cifar10_oriented_s0 (already complete)
+skip  kmnist_oriented_s1 (already complete)
+START fmnist_oriented_s1  02:06:21
+skip  mnist_random_s1 (already complete)
+skip  fmnist_random_s1 (already complete)
+skip  mnist_oriented_s1 (already complete)
+START cifar10_random_s1  02:06:36
+START cifar10_oriented_s1  02:06:36
+skip  kmnist_random_s1 (already complete)
+skip  svhn_oriented_s1 (already complete)
+FAIL  cifar10_random_s1  rc=1  (see experiments/RF_article/interp/mnist_family_sweep/results/run_local_20260728_121501/logs/cifar10_random_s1.log)
+FAIL  cifar10_oriented_s1  rc=1  (see experiments/RF_article/interp/mnist_family_sweep/results/run_local_20260728_121501/logs/cifar10_oriented_s1.log)
+skip  notmnist_oriented_s1 (already complete)
+skip  svhn_random_s1 (already complete)
+skip  notmnist_random_s1 (already complete)
+skip  mnist_oriented_s2 (already complete)
+skip  fmnist_random_s2 (already complete)
+skip  mnist_random_s2 (already complete)
+skip  fmnist_oriented_s2 (already complete)
+skip  kmnist_oriented_s2 (already complete)
+START cifar10_oriented_s2  02:07:21
+START cifar10_random_s2  02:07:21
+skip  svhn_oriented_s2 (already complete)
+skip  kmnist_random_s2 (already complete)
+FAIL  cifar10_oriented_s2  rc=1  (see experiments/RF_article/interp/mnist_family_sweep/results/run_local_20260728_121501/logs/cifar10_oriented_s2.log)
+FAIL  cifar10_random_s2  rc=1  (see experiments/RF_article/interp/mnist_family_sweep/results/run_local_20260728_121501/logs/cifar10_random_s2.log)
+skip  notmnist_oriented_s2 (already complete)
+skip  notmnist_random_s2 (already complete)
+skip  svhn_random_s2 (already complete)
+DONE  fmnist_oriented_s1  18:48:02
+DONE  svhn_random_s0  23:07:38
+========================================================
+COMPLETE: 32/36 runs finished (results.json with test_acc)
+finished: Sun Aug  2 11:07:39 PM CEST 2026
+========================================================

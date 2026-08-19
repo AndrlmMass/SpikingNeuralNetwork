@@ -34,13 +34,13 @@ sentence is gone.
 Learned-readout test accuracy, 3 seeds, 5 epochs. Deltas are as printed on the figure;
 absolute values read off the boxplots and therefore approximate.
 
-| dataset | RF | random | delta (pp) |
-|---|---|---|---|
-| SVHN | ~23.5 | ~16.5 | **+7.3** |
-| MNIST | ~95 | ~90.5 | **+4.2** |
-| KMNIST | ~85.5 | ~83.3 | **+2.2** |
-| notMNIST | ~81 | ~86 | **-5.2** |
-| FMNIST | ~70.5 | ~78.8 | **-8.4** |
+| dataset  | RF    | random | delta (pp) |
+| -------- | ----- | ------ | ---------- |
+| SVHN     | ~23.5 | ~16.5  | **+7.3**   |
+| MNIST    | ~95   | ~90.5  | **+4.2**   |
+| KMNIST   | ~85.5 | ~83.3  | **+2.2**   |
+| notMNIST | ~81   | ~86    | **-5.2**   |
+| FMNIST   | ~70.5 | ~78.8  | **-8.4**   |
 
 SVHN is above chance in both conditions (chance 10), so the +7.3 is not a
 near-chance artefact — but it is a gap between two weak models and must be reported
@@ -54,12 +54,12 @@ Ran the project's own `orientation_coherence` on the *images* instead of the wei
 columns, plus stroke-width / fill / registration statistics (2000 imgs each, same
 grayscale-28x28-[0,1] pipeline):
 
-| dataset | gap | img orient coh | stroke width px | fill frac |
-|---|---|---|---|---|
-| SVHN | +7.3 | 0.395 | 4.36 | 0.371 |
-| MNIST | +4.2 | 0.347 | 2.59 | 0.153 |
-| KMNIST | +2.2 | 0.262 | 2.54 | 0.215 |
-| FMNIST | -8.4 | 0.235 | 4.08 | 0.355 |
+| dataset | gap  | img orient coh | stroke width px | fill frac |
+| ------- | ---- | -------------- | --------------- | --------- |
+| SVHN    | +7.3 | 0.395          | 4.36            | 0.371     |
+| MNIST   | +4.2 | 0.347          | 2.59            | 0.153     |
+| KMNIST  | +2.2 | 0.262          | 2.54            | 0.215     |
+| FMNIST  | -8.4 | 0.235          | 4.08            | 0.355     |
 
 **Image-space orientation coherence orders all four perfectly (Spearman +1.00,
 Pearson +0.857).** The stroke-width / registration hypothesis is NOT supported
@@ -78,13 +78,13 @@ easy to confuse and we had been conflating them: trajectory `eta2` is **per-neur
 `Phi`, and `eta_squared` on raw rates is the one whose own docstring warns it
 anti-correlates with accuracy under WTA. Correlating the right one:
 
-| | vs learned acc | vs pool acc | vs refit ceiling |
-|---|---|---|---|
-| grouped eta2 (`val_phi`), 60k within-run | **+0.749** | +0.130 | -0.224 |
-| grouped eta2, rfgeom between-design (n=6) | **+0.657** | +0.314 | +0.029 |
-| grouped eta2, all runs logging it (n=44) | **+0.334** | +0.345 | — |
-| per-neuron eta2, 60k within-run | -0.604 | -0.122 | +0.280 |
-| per-neuron eta2, rfgeom (n=6) | -0.371 | +0.829 | +0.543 |
+|                                           | vs learned acc | vs pool acc | vs refit ceiling |
+| ----------------------------------------- | -------------- | ----------- | ---------------- |
+| grouped eta2 (`val_phi`), 60k within-run  | **+0.749**     | +0.130      | -0.224           |
+| grouped eta2, rfgeom between-design (n=6) | **+0.657**     | +0.314      | +0.029           |
+| grouped eta2, all runs logging it (n=44)  | **+0.334**     | +0.345      | —                |
+| per-neuron eta2, 60k within-run           | -0.604         | -0.122      | +0.280           |
+| per-neuron eta2, rfgeom (n=6)             | -0.371         | +0.829      | +0.543           |
 
 `val_phi` rises 0.178 -> 0.275 over the 60k run and is the only representation metric
 with the right sign in every regime. Per-neuron eta2 carries the **opposite** sign
@@ -112,12 +112,12 @@ at `interp_harness.py:289`). Cheap run, no code change.
 **(1) The structural metrics flip sign depending which knob you turn.** Spearman vs
 learned accuracy, per sweep family:
 
-| metric | rfgeom | rfsize | inhib2d | inhib-lr | theta |
-|---|---|---|---|---|---|
-| dead_frac | -0.20 | +0.40 | -0.53 | +0.80 | +1.00 |
-| orient_coh | +0.31 | +0.60 | +0.64 | -0.80 | +1.00 |
-| rf_diversity | +0.14 | +0.20 | +0.64 | -0.80 | +0.80 |
-| selectivity | +0.60 | +0.40 | -0.57 | +0.50 | -0.40 |
+| metric       | rfgeom | rfsize | inhib2d | inhib-lr | theta |
+| ------------ | ------ | ------ | ------- | -------- | ----- |
+| dead_frac    | -0.20  | +0.40  | -0.53   | +0.80    | +1.00 |
+| orient_coh   | +0.31  | +0.60  | +0.64   | -0.80    | +1.00 |
+| rf_diversity | +0.14  | +0.20  | +0.64   | -0.80    | +0.80 |
+| selectivity  | +0.60  | +0.40  | -0.57   | +0.50    | -0.40 |
 
 Nothing holds its sign. **You cannot tune for any of these and expect accuracy to
 follow** — grouped eta2 above is the exception. Answers Domantas' open question from
@@ -129,13 +129,13 @@ the correlation tables confuse more than they earn).
 60 checkpoints — everything correlates with readout accuracy simply because accuracy
 rises monotonically as the readout learns. Against the refit probe it collapses:
 
-| metric | start -> end | vs readout acc | vs refit probe |
-|---|---|---|---|
-| participation ratio | 32.05 -> 33.70 | +0.681 | -0.266 |
-| orient coherence | 0.667 -> 0.492 | -0.758 | +0.247 |
-| rf_diversity | 0.090 -> 0.137 | +0.753 | -0.248 |
-| per-neuron eta2 | 0.169 -> 0.161 | -0.604 | +0.280 |
-| **selectivity** | 0.318 -> 0.293 | -0.536 | **-0.000** |
+| metric              | start -> end   | vs readout acc | vs refit probe |
+| ------------------- | -------------- | -------------- | -------------- |
+| participation ratio | 32.05 -> 33.70 | +0.681         | -0.266         |
+| orient coherence    | 0.667 -> 0.492 | -0.758         | +0.247         |
+| rf_diversity        | 0.090 -> 0.137 | +0.753         | -0.248         |
+| per-neuron eta2     | 0.169 -> 0.161 | -0.604         | +0.280         |
+| **selectivity**     | 0.318 -> 0.293 | -0.536         | **-0.000**     |
 
 Selectivity at exactly 0.000 against decodability confirms the firing-rate confound
 outright. **Rule: report representation metrics against `refit_acc`, never against
@@ -172,9 +172,9 @@ answer. Nothing appears twice.
 
 **Claim 1 — "does biological realism pay?" OUTCOME METRICS ONLY.**
 
-| metric | question it answers |
-|---|---|
-| readout accuracy | how well does the network's **own** online decision rule classify held-out items? |
+| metric                | question it answers                                                                                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| readout accuracy      | how well does the network's **own** online decision rule classify held-out items?                                                                      |
 | linear-probe accuracy | how much class structure is linearly decodable **at all**, whether or not the readout finds it? (external control; log `n` — data-starved below ~2000) |
 
 Two things to keep straight. The dense readout reads **all 1000 excitatory neurons**
@@ -189,14 +189,14 @@ matched density** — accuracy is the measurement, the contrast is the claim.
 Ordered as a chain (capacity -> health -> redundancy -> prior survival -> usable class
 structure -> did it actually help), not a list:
 
-| metric | question it answers |
-|---|---|
-| participation ratio vs the K-1 threshold | is there enough dimensionality? (need >=9 for 10-way; isotropic sits at 4.3, oriented+margin at 11.8) |
-| dead fraction | are the units alive to carry it? (0.43 -> 0.00) |
+| metric                                           | question it answers                                                                                                                                                        |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| participation ratio vs the K-1 threshold         | is there enough dimensionality? (need >=9 for 10-way; isotropic sits at 4.3, oriented+margin at 11.8)                                                                      |
+| dead fraction                                    | are the units alive to carry it? (0.43 -> 0.00)                                                                                                                            |
 | correlation pair, within vs overall as a **gap** | are the live units carrying different signals, or the same one? (0.121 vs 0.113 = group membership buys almost nothing, which is *why* pooling gets 0.756 and dense 0.955) |
-| orientation coherence, **BOTH rules** | did the prior survive the rule? (trace 0.71->0.39 erosion vs R-STDP 0.667->0.492 bending) |
-| grouped eta2 | did any of that become class structure the readout can use? (0.178 -> 0.275 under R-STDP) |
-| drift, fixed vs refit probe | does the code keep changing — and does any of that change make it more **decodable**? (fixed 0.797->0.597 while refit holds flat ~0.83; answer: no) |
+| orientation coherence, **BOTH rules**            | did the prior survive the rule? (trace 0.71->0.39 erosion vs R-STDP 0.667->0.492 bending)                                                                                  |
+| grouped eta2                                     | did any of that become class structure the readout can use? (0.178 -> 0.275 under R-STDP)                                                                                  |
+| drift, fixed vs refit probe                      | does the code keep changing — and does any of that change make it more **decodable**? (fixed 0.797->0.597 while refit holds flat ~0.83; answer: no)                        |
 
 Two notes on this panel. Orientation coherence must appear for **both** rules — the
 result *is* the contrast, and reporting only the trace-STDP side leaves half a
@@ -209,11 +209,11 @@ the rule climbs to it", which is what Claim 2 ultimately argues.
 Also a chain, not a list — the three are not parallel (a statistic, a way of evaluating
 a statistic, and an operational payoff):
 
-| metric | question it answers |
-|---|---|
-| entropy (perplexity as the readable unit) | how confident is the network, and how many classes remain in contention? |
-| AUROC of entropy and margin | do these statistics separate correct from incorrect items **at all**, before any threshold is chosen? |
-| risk-coverage | what does that buy operationally — how much error is removed per unit of coverage given up? |
+| metric                                    | question it answers                                                                                   |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| entropy (perplexity as the readable unit) | how confident is the network, and how many classes remain in contention?                              |
+| AUROC of entropy and margin               | do these statistics separate correct from incorrect items **at all**, before any threshold is chosen? |
+| risk-coverage                             | what does that buy operationally — how much error is removed per unit of coverage given up?           |
 
 **Terminology to get right: risk is the ERROR rate on the accepted set** (1 - selective
 accuracy), not accuracy — and the curve *characterises* the trade-off rather than
@@ -266,6 +266,282 @@ justifying the panel.
 5. **Re-run trace-STDP with `--grouped`** so grouped eta2 exists on both sides of the
    erosion-vs-bending contrast (currently R-STDP only — see the naming trap above).
 6. Fix the draft errata above.
+## 2026-08-18 — Split-leakage fix + two-phase HPC run design (5 seeds × 3 epochs)
+
+**Focus:** Prepare to re-run the whole study on Orion with comparable numbers. Fixed a
+train/test **leakage** bug in the data loader, reconstructed the phase-1/phase-2 run plan
+from the Notion diary (the 12-Aug meeting), added the metrics that plan needs, and wrote
+the four driver scripts. **Nothing launched** — staged for HPC upload. Changes are in the
+uncommitted working tree.
+
+### THE BUG — the loader merged train+test and re-carved, contaminating "test"
+
+`ImageDataStreamer` **merged** torchvision's train and test splits into one pool,
+reshuffled, and carved train/val/test from the union. So our reported "test" set was a
+random draw that mixed in training images — **not** the dedicated test set, and **not
+comparable** to any published number. Confirmed live in the old SVHN log: *"Found 99289
+image samples"* (73257 train + 26032 test), test drawn from the merger. This is exactly
+Hubin's 12-Aug task #1 ("use the standard 10k test set; borrow the 1k val from train").
+
+**Fix (core rewrite, not a patch):** new `neurosnn/_data/_partition_indices()` respects
+each dataset's **dedicated** split — train/val drawn ONLY from the canonical train split,
+test ONLY from the canonical test split; the two never mix, and because the seed only
+shuffles train↔val, **the test set is identical across seeds**. notMNIST is the sole
+exception (no published split; deeplake's separation is synthetic) → merge its 18724 and
+carve a seed-fixed 15k/1k/2724. Over-subscription raises loudly (pre-run), keeping the
+07-30 empty-split guard. Unit-tested: zero train/val/test overlap, no leak in the
+dedicated regime, test invariant across seeds while train differs, all guards fire.
+
+**Per-dataset splits (BOTH phases, "same setup"):** mnist/fmnist/kmnist 59000/1000/**10000
+full test**; svhn 59000/1000/**26032 full test**; notmnist 15000/1000/2724. CIFAR-10
+**dropped** (28×28-grayscale → chance for both priors, the degenerate control that also
+nan-crashed last round).
+
+### The run plan (reconstructed from Notion — 12-Aug meeting)
+
+Paper arc: unsupervised model → trace-STDP → recurrency → tune → *show it fails, RFs end
+up worse than random* → literature → strip back → pivot to supervised R-STDP.
+
+- **PHASE 1 — unsupervised ablation** on the recurrent, NON-grouped net (input→exc with
+  E→E→inh→exc, N_exc=N_inh=1024). One departure from a trace-STDP baseline at a time:
+  `base_ori`, `base_rnd` (the RF-vs-random headline), `triplet`, `frozen`, `ee_off`,
+  `ie_off` (`--peak-ie 0`), `vogels`. 7 conds × 5 datasets × 5 seeds = **175 runs**.
+  Metrics: orientation coherence + **new 2D-Gaussian RF variance/covariance trajectory**
+  (Hubin), L1-LR linear-probe acc (fit on 5k), per-neuron η², **corrected dead fraction**,
+  participation ratio.
+- **PHASE 2 — supervised** tiled R-STDP + dense readout, oriented **vs random** × 5
+  datasets × 5 seeds = **50 runs**. Metrics: predictive entropy, readout acc, probe acc,
+  coverage–accuracy, AUROC.
+- **Both: 5 seeds, 3 epochs** (Andreas' call — 07-30 showed convergence well before 3ep;
+  more seeds > more epochs for statistical power). **No PCA** (verified unhelpful; the
+  probe was already `StandardScaler`+L1-LogReg, PCA-free — we just stop quoting the
+  `pca_lr` evaluator).
+
+### Harness / metric additions (all smoke-tested end-to-end)
+
+- **`--probe-fit-all N`** — fits the FINAL linear probe (`test_lin_acc` + uncertainty) on
+  N **train-split** features instead of the ~1k val set, via new `Runner.featurize()` /
+  `Model.featurize()` (a no-update eval pass that doesn't touch the Evaluator/captured
+  features). Set to **5000** in both sweeps — directly fixes the 07-25 "88% probe was
+  data-starved, recovers to ~94.9% with enough fit data" artefact. Per-checkpoint drift
+  probe still uses val (cheap); only the final classifier's fit set changes.
+- **Corrected dead fraction** (`dead_frac_corrected = 1 − n_active/N_exc`, relative
+  activity floor) now logged for EVERY run — previously only emitted when a class
+  assignment existed, so the non-grouped phase-1 model had no dead measure.
+- **`rf_gaussian_moments()`** in `analysis.py` — energy-weighted mean var_x/var_y/cov_xy +
+  elongation + orientation of each RF; unit-verified (vertical bar→high var_y, etc.).
+
+### Scripts (4 files, all `bash -n` clean)
+
+- `interp/phase1_ablation/run_slurm.sh` (array 0-174) + `run_local.sh` twin — NEW.
+- `interp/mnist_family_sweep/run_slurm.sh` (array 0-49) + `run_local.sh` — updated to
+  oriented+random, 5 datasets, 5 seeds, 3 epochs, dedicated splits, `--probe-fit-all 5000`.
+- **SVHN ordered LAST** in all four (highest task IDs / last in each seed pass): dense
+  natural images fire ~3-4× more spikes/epoch (rate-coded cost ∝ total spikes) and it now
+  carries the full 26032 test — decisively the slowest. This is **inherent, not a bug**;
+  nothing to patch, just scheduled last so the fast datasets land first.
+
+**Validation:** phase-1 condition paths smoke-tested on tiny MNIST runs — frozen, random,
+vogels (inh. plasticity), ie_off (peak-ie 0), triplet, oriented-trace — all exit 0 with
+the probe fit on train features and `test_lin_acc` produced.
+
+**Open / next:**
+1. Upload codebase + scripts to Orion; submit phase-1 (175) and phase-2 (50) arrays.
+2. Post-hoc (off saved `uncertainty_features.npz`, no extra compute): bootstrapped 95% CI
+   entropy rule (one-sided), OOD check (train MNIST → feed FMNIST, expect abstain),
+   mixed-effects + multiple-regression of clustering metrics on accuracy (Hubin).
+3. Scale-invariance experiment (normalise active-pixel extent; revisit the inward RF
+   shift) — the diagnosed cause of notMNIST/FMNIST losing.
+4. First draft due **1 Sept** (Andreas at bootcamp 2-10 Sept); TMLR target **1 Oct**.
+
+---
+
+## 2026-07-30 — 6-dataset sweep running; a silent empty-test-split bug cost 46h
+
+**Focus:** Launched the extended dataset sweep (2026-07-28 12:15, still running) and
+audited the first completed cells. Found that CIFAR-10 had been training for ~23h a
+cell and reporting `test_acc=nan`.
+
+**Sweep:** `results/run_local_20260728_121501`, 6 datasets x {oriented, random} x 3
+seeds = 36 cells, 5 epochs, 6-way local parallelism, driven by the untracked
+`run_local.sh` (local no-SLURM twin of `run_slurm.sh`). As of 2026-07-30 12:40:
+**12 cells complete, 6 in flight, CIFAR-10 now failing fast by design.** ETA ~2026-08-02.
+
+### Seed-0 RF-vs-random — mixed, and that is the result
+
+| dataset  | oriented    | random      | delta    | eta2 (val, final ckpt) |
+| -------- | ----------- | ----------- | -------- | ---------------------- |
+| mnist    | **0.8656**  | 0.8215      | **+4.4** | 0.167 / 0.177          |
+| kmnist   | **0.7465**  | 0.7044      | **+4.2** | 0.117 / 0.101          |
+| fmnist   | 0.7194      | **0.7363**  | -1.7     | 0.295 / 0.299          |
+| notmnist | 0.8177      | **0.8363**  | -1.9     | 0.224 / 0.169          |
+| svhn     | 0.2658      | *running*   | —        | 0.013                  |
+| cifar10  | *see below* | *see below* | —        | 0.052 / 0.038          |
+
+**SINGLE SEED — do not quote yet.** Seed 1 agrees on mnist so far (oriented 0.8788;
+random still running, val 0.807 vs oriented's 0.890). Read provisionally: the oriented
+prior helps on the digit-like sets and slightly *hurts* on the two harder ones. If that
+survives seeds 1-2 it is a real and reportable boundary on the prior's usefulness — not
+the clean win, but a more honest one. eta2 tracks accuracy across datasets in the
+expected direction (fmnist 0.29 down to svhn 0.013).
+
+### THE BUG — merged-pool splits silently produced an EMPTY test set
+
+`ImageDataStreamer` **merges** torchvision's train and test splits into one pool and
+carves train/val/test from it, so the budget is `len_train + len_test`, NOT `len_train`:
+
+| dataset                 | pool                | requested 59000/1000/10000 |
+| ----------------------- | ------------------- | -------------------------- |
+| mnist / fmnist / kmnist | 70000               | fits **exactly**           |
+| svhn                    | 99289               | fits                       |
+| **cifar10**             | **60000** (50k+10k) | **test = 0**               |
+
+The old code **clamped each count to whatever was left instead of erroring**, so
+CIFAR-10 got `test = min(10000, max(0, 60000-59000-1000)) = 0`. The test phase never ran
+at all (`grep -c "Testing"` = 0 for cifar10 vs 2 for svhn) and it surfaced only as
+`test_acc=nan` in the final line of a 23h log. **Both cifar10 seed-0 cells are lost:**
+no `uncertainty_features.npz`, no weight checkpoints, so **nothing can be scored
+offline** — they must be rerun.
+
+Why it hid: `59000+1000 = 60000` is *exactly* CIFAR-10's pool, so train and val both
+filled completely and only test was starved. notMNIST was already special-cased in
+`run_local.sh` for the same reason; CIFAR-10 was missed because it very nearly fits.
+
+**Fixes (uncommitted working tree):**
+- `neurosnn/_data/get_data.py` — over-subscribed splits now **raise** with the actual
+  numbers instead of truncating. Note `>` not `>=`: mnist/fmnist/kmnist sit at exactly
+  70000 and must still pass.
+- `run_slurm.sh` — had the bug **worse** (hardcoded 59000/1000/10000, no per-dataset
+  branch at all), so on Orion it would have failed cifar10 *and* notmnist. Now
+  dispatches per dataset: cifar10 49000/1000/10000, notmnist 14000/1500/3000. val/test
+  held constant wherever possible so metrics stay comparable; only train volume shrinks.
+- `run_cifar10_fix.sh` — staged, **not launched** (see below). Its `is_complete` also
+  requires `test_acc` to be **finite**, not merely present — the existing check counts
+  `nan` as complete and would skip the broken cells forever.
+- `run_local.sh` **deliberately not edited**: bash reads a running script by byte offset,
+  and the driver (PID 85794) is live. The two edits it needs are recorded in the fix
+  script's header for after it exits.
+
+**Verified in production:** `cifar10_oriented_s1` and `cifar10_random_s1` hit the new
+guard at 12:38/12:39 and failed in ~30s each instead of ~23h. `set -uo pipefail` has no
+`-e`, so the driver logged `FAIL` and carried on. **~96h of compute saved**; those four
+`FAIL` lines in `driver.out` are expected, not new breakage.
+
+**Decision: CIFAR-10 waits for HPC.** Not worth 3 local days at 2 slots. The repair
+script + the SLURM per-dataset splits are ready for Orion.
+
+### Instrumentation gap — the sweep collects NO spiking-readout data
+
+`--spiking-readout` is opt-in (`interp_harness.py:142`) and `run_local.sh` does not pass
+it, so `test_spiking_acc` is `None` for all 36 cells. The dataset-generality sweep and
+the artificial-vs-biological readout comparison (07-27 next-item #3, the one the paper's
+faithfulness claim rests on) are therefore **disjoint** — the spiking numbers need their
+own run. Not a bug; the delta readout is the intended control here. Worth deciding
+whether the HPC round carries `--spiking-readout` so one sweep answers both.
+
+### TRAINING LENGTH — no decay, but epochs 2-5 are wasted compute
+
+Checkpoint-level analysis of the 10 completed cells (one checkpoint per batch, 59/epoch).
+**Noise floor first:** the val set is 1000 items, so 2sd binomial noise is **+-2.53pp** —
+nothing smaller than that is readable.
+
+**No decay anywhere.** Worst final-minus-peak across all 10 cells is **-0.96pp**, i.e.
+every apparent decline is inside noise. Training longer is not destroying anything, and
+the 07-16 "over-training DEGRADES" finding was a **learning-RATE** effect (reward_lr),
+not an epoch-count effect — at reward_lr 5e-6 the two do not reproduce each other.
+
+**But val_acc saturates within the first ~20% of epoch 1** (~11.8k images; that is an
+upper bound — the first checkpoint is already post-training, so it may be earlier):
+
+| prior    | epochs 2-5 buy | range          |
+| -------- | -------------- | -------------- |
+| oriented | **+0.03pp**    | -0.57 to +0.70 |
+| random   | **+0.46pp**    | +0.18 to +0.66 |
+
+Both inside the noise floor. **~80% of every 23h cell buys nothing measurable in
+accuracy.** Consistent with 07-25's "refit probe is FLAT — decodability did not improve";
+this is the same result seen from the accuracy side. Note training is still *doing*
+something (eta2 moves monotonically below, and drift was still widening at epoch 5) — it
+just does not cash out.
+
+### eta2 moves in OPPOSITE directions for the two priors (the good finding)
+
+Matched on dataset AND seed (n=4 pairs: fmnist/kmnist/mnist/notmnist, all s0), eta2 from
+epoch 1 -> epoch 5:
+
+| dataset  | oriented                    | random                      |
+| -------- | --------------------------- | --------------------------- |
+| fmnist   | 0.312 -> 0.295 (**-0.018**) | 0.269 -> 0.299 (**+0.030**) |
+| kmnist   | 0.119 -> 0.117 (-0.003)     | 0.087 -> 0.101 (+0.014)     |
+| mnist    | 0.171 -> 0.167 (-0.004)     | 0.146 -> 0.177 (+0.031)     |
+| notmnist | 0.232 -> 0.224 (-0.008)     | 0.159 -> 0.168 (+0.010)     |
+| **mean** | **-0.008**                  | **+0.021**                  |
+
+**4/4 negative and 4/4 positive — perfect separation.** The oriented prior *front-loads*
+per-neuron selectivity and training erodes it; random starts lower, builds it up, and
+**overtakes** (fmnist 0.299 vs 0.295, mnist 0.177 vs 0.167). This is the **random control
+for the "reward-STDP bends the prior" claim** from 07-25 — the counterfactual says the
+erosion is specific to having a structured prior to erode. Seed check: mnist_oriented has
+two seeds and the delta reproduces at -0.005 / -0.004, so seed noise on this quantity is
+~0.001, well clear of the +-0.02-0.03 contrast.
+
+**The accuracy gap is front-loaded too, and shrinks** (oriented - random, pp):
+
+| dataset  | 0.2ep     | 1ep   | 3ep   | 5ep       |
+| -------- | --------- | ----- | ----- | --------- |
+| kmnist   | +8.70     | +5.90 | +6.50 | **+2.90** |
+| mnist    | +8.30     | +5.40 | +5.40 | **+5.50** |
+| fmnist   | +0.00     | -0.50 | -1.70 | **-2.00** |
+| notmnist | -1.93     | -4.20 | -2.93 | **-1.87** |
+| **mean** | **+3.77** | +1.65 | +1.82 | **+1.13** |
+
+**THE DISSOCIATION worth putting in the paper:** random **overtakes oriented on eta2**
+while oriented **still wins on accuracy** (mnist +5.5, kmnist +2.9). So per-neuron
+selectivity is **not** the mechanism behind the oriented prior's advantage — which is
+exactly 07-25's "individual neurons got less selective and more alike; the class signal
+moved into the population", now with a control arm.
+
+**Caveats:** n=4 matched pairs, single seed. A 4/4 sign test is p=0.0625 one-tailed —
+directionally perfect but underpowered. Per-dataset accuracy gaps are mostly within
+noise; only mnist and kmnist clear it. Scripts in scratchpad, not committed.
+
+**RECOMMENDATION: cut 5 epochs -> 2 for the HPC round.** 2.5x cheaper per cell at no
+measurable accuracy cost, and it converts directly into what we actually lack — more
+seeds and a `--spiking-readout` arm. Do **not** go to 1 epoch: svhn/cifar10 have slower
+dynamics and epoch 2 is where the eta2 curves are still visibly separating.
+
+### Metric framing clarified (no code change)
+
+- `class_eta_squared` is **standard**, not homegrown: eta-squared / Pearson's correlation
+  ratio / the R^2 of a one-way ANOVA, and in systems neuroscience it is **PEV**. Cite it
+  that way in the paper rather than defending it from scratch.
+- It is **monotone in Calinski-Harabasz** for a single feature (CH *is* the ANOVA
+  F-statistic; verified numerically to the decimal). The real difference is aggregation:
+  ours is **mean-of-ratios** (every neuron one vote, normalized by its own variance), CH
+  is **ratio-of-sums** (high-variance neurons dominate). On a synthetic 45-informative /
+  5-loud population these give 0.637 vs 0.051 — same data, different question.
+- **Bias floor:** raw eta2 has E[eta2] ~ (K-1)/(n-1) under the null (~0.045 at K=10,
+  n=200). Constant across cells at fixed n and K so trends are safe, but absolute values
+  are inflated. `omega^2` debiases if we ever quote absolutes; omega^2-PEV is the usual
+  choice in the literature.
+- **Entropy and perplexity are one measurement in two units** (`exp` is monotone -> same
+  ranking, same AUROC, same abstention decisions). When the report shows perplexity,
+  margin and maxp all at AUROC ~0.94 that is **not** three converging pieces of evidence.
+  Margin and maxp are genuinely distinct; entropy and perplexity are not.
+
+**Open / next:**
+1. Let the sweep finish (~2026-08-02), then multi-seed the RF-vs-random deltas — the
+   sign flip between digit-like and harder datasets is the claim to nail down.
+2. **HPC round at 2 epochs, not 5** (see training-length section) — spend the 2.5x saving
+   on seeds and a `--spiking-readout` arm. The eta2 divergence is the headline to
+   replicate; it needs seeds, not epochs.
+3. CIFAR-10 repair run on Orion via `run_cifar10_fix.sh` / fixed `run_slurm.sh`.
+4. Decide whether the HPC round carries `--spiking-readout` (see gap above).
+5. Apply the two staged `run_local.sh` edits once the local driver exits.
+6. Filter `nan` before aggregating: the two dead cifar10 cells will poison any plain
+   `mean` over `test_acc`.
+7. Re-run the paired eta2 analysis once random seeds 1-2 land — 4/4 at p=0.0625 wants
+   12 pairs to be quotable.
 
 ---
 
@@ -320,11 +596,11 @@ Also: used an **L1** renorm, not `post_norm` — `post_norm` divides by the
 Replayed the exact online delta rule on the frozen `run60k_5ep` features, 3 seeds,
 7000 train / 3000 eval, identical except the weight floor:
 
-| readout | test acc |
-|---|---|
-| signs free | **0.9397 +- 0.0033** |
+| readout               | test acc             |
+| --------------------- | -------------------- |
+| signs free            | **0.9397 +- 0.0033** |
 | non-negative (w >= 0) | **0.9336 +- 0.0043** |
-| gap | **0.61 points** |
+| gap                   | **0.61 points**      |
 
 The rule *does* use negatives heavily — 50% of trained weights are negative,
 holding 36% of total |w| mass. But the distinction that matters:
@@ -386,21 +662,21 @@ ceiling exactly as predicted on 2026-07-16. **Naming trap that cost us an hour:*
 learned readout — that number lives in `uncertainty[1].base_acc`. Five decoders are
 logged per run and the top-level key is the one nobody wants. Rename before the paper.
 
-| decoder | test acc | what it is |
-|---|---|---|
-| **learned readout (dense, online)** | **0.9551** | the model's own answer — 1000x10, softmax delta, 300k samples |
-| linear probe (`test_lin_acc`) | 0.8811 | L1-LR fit on **1000** val images — **data-starved, see below** |
-| `pca_lr` evaluator (`test_acc`) | 0.8647 | harness Evaluator, scaler+PCA+LR |
-| uniform pool | 0.7557 | fixed block-diagonal pooling |
-| online train decisions | 0.9546 | matches the readout — no train/test gap |
+| decoder                             | test acc   | what it is                                                     |
+| ----------------------------------- | ---------- | -------------------------------------------------------------- |
+| **learned readout (dense, online)** | **0.9551** | the model's own answer — 1000x10, softmax delta, 300k samples  |
+| linear probe (`test_lin_acc`)       | 0.8811     | L1-LR fit on **1000** val images — **data-starved, see below** |
+| `pca_lr` evaluator (`test_acc`)     | 0.8647     | harness Evaluator, scaler+PCA+LR                               |
+| uniform pool                        | 0.7557     | fixed block-diagonal pooling                                   |
+| online train decisions              | 0.9546     | matches the readout — no train/test gap                        |
 
 ### The 7-point learned-vs-linear gap is a CONTROL artefact, not a representation fact
 
 `interp_harness.fit_clf` fits ~10k parameters on **700–1000 samples in 1000-D** (p ~= n).
 Refitting the *byte-identical* probe on the frozen final features, varying only n:
 
-| n_train | 700 | 1000 | 2000 | 4000 | **7000** |
-|---|---|---|---|---|---|
+| n_train   | 700   | 1000  | 2000  | 4000  | **7000**   |
+| --------- | ----- | ----- | ----- | ----- | ---------- |
 | probe acc | 0.862 | 0.883 | 0.922 | 0.935 | **0.9485** |
 
 (1000 reproduces the reported 0.8811; 5-fold CV cross-check at 7200/1800 = 0.944 +- 0.006.)
@@ -424,17 +700,17 @@ ratio — not the learned-vs-linear gap.**
 
 ### How the representation changed: BENT, not eroded
 
-| metric | start | end | delta |
-|---|---|---|---|
-| orientation coherence | 0.667 | 0.492 | **-26%** |
-| within-group RF diversity | 0.090 | 0.137 | **+52%** |
-| w_floor_frac (pruned synapses) | 0.024 | 0.148 | +14.8pp |
-| rf_mean_cosine | 0.097 | 0.125 | +29% |
-| per-neuron eta2 | 0.169 | 0.161 | -5% |
-| grouped eta2 (val_phi) | 0.178 | 0.275 | **+55%** |
-| pop_sparseness | 0.485 | 0.552 | +14% |
-| participation ratio | 32.1 | 33.7 | +5% |
-| w_se_mean | 0.330175 | 0.330175 | **exactly constant** (L1 norm holding) |
+| metric                         | start    | end      | delta                                  |
+| ------------------------------ | -------- | -------- | -------------------------------------- |
+| orientation coherence          | 0.667    | 0.492    | **-26%**                               |
+| within-group RF diversity      | 0.090    | 0.137    | **+52%**                               |
+| w_floor_frac (pruned synapses) | 0.024    | 0.148    | +14.8pp                                |
+| rf_mean_cosine                 | 0.097    | 0.125    | +29%                                   |
+| per-neuron eta2                | 0.169    | 0.161    | -5%                                    |
+| grouped eta2 (val_phi)         | 0.178    | 0.275    | **+55%**                               |
+| pop_sparseness                 | 0.485    | 0.552    | +14%                                   |
+| participation ratio            | 32.1     | 33.7     | +5%                                    |
+| w_se_mean                      | 0.330175 | 0.330175 | **exactly constant** (L1 norm holding) |
 
 Visually (`weights/rf_first.png` -> `weights/rf_last.png`): oriented Gaussian bars become **curved
 stroke fragments** — arcs, hooks, C-shapes, partial loops. All of it inside a fixed
@@ -556,12 +832,12 @@ reward-STDP paints the class-average template and the spatial tiling is cosmetic
 sigma_se 1.5 -> 64 syn/6px (local), 1.0 -> 30 syn/3.6px (tight).
 
 **RF-size sweep (results/rstdp_rfsize/rfsize_main/):**
-| config | refit-LR ceiling | learned | uniform pool | dead | win_ent |
-|---|---|---|---|---|---|
-| baseline_3.0 | 0.805 | 0.788 | 0.686 | 0.56 | 0.36 |
-| local_1.5 | 0.797 | 0.778 | 0.575 | 0.37 | 0.40 |
-| tight_1.0 | 0.800 | 0.747 | 0.471 | 0.31 | 0.41 |
-| hetero_2.0ln | 0.825 | 0.772 | 0.344 | 0.78 | 0.13 |
+| config       | refit-LR ceiling | learned | uniform pool | dead | win_ent |
+| ------------ | ---------------- | ------- | ------------ | ---- | ------- |
+| baseline_3.0 | 0.805            | 0.788   | 0.686        | 0.56 | 0.36    |
+| local_1.5    | 0.797            | 0.778   | 0.575        | 0.37 | 0.40    |
+| tight_1.0    | 0.800            | 0.747   | 0.471        | 0.31 | 0.41    |
+| hetero_2.0ln | 0.825            | 0.772   | 0.344        | 0.78 | 0.13    |
 - **Feature ceiling is ~FLAT (0.80–0.825) across all RF sizes** — local RFs lose no
   linearly-decodable class info. Ceiling spread is small + single-seed (don't crown hetero).
 - **Smaller RF -> healthier** (dead 0.56->0.31, winners spread) but the simple pooling
@@ -580,13 +856,13 @@ sigma_se 1.5 -> 64 syn/6px (local), 1.0 -> 30 syn/3.6px (tight).
   -> **dense readout is the pivotal next step**, not more RF tuning.
 
 **Inhibitory-LR sweep (results/rstdp_inhib/inhib_main/, baseline RF, Vogels rho0=0.1):**
-| vogels_lr | learned | uniform | dead | win_ent | ceiling |
-|---|---|---|---|---|---|
-| off (static) | 0.783 | 0.690 | 0.56 | 0.356 | 0.812 |
-| 0.005 | 0.790 | 0.677 | 0.55 | 0.357 | 0.802 |
-| 0.02 | 0.778 | 0.676 | 0.53 | 0.367 | 0.803 |
-| 0.05 | 0.770 | 0.689 | 0.52 | 0.391 | 0.805 |
-| 0.1 | 0.760 | 0.656 | 0.50 | 0.402 | 0.798 |
+| vogels_lr    | learned | uniform | dead | win_ent | ceiling |
+| ------------ | ------- | ------- | ---- | ------- | ------- |
+| off (static) | 0.783   | 0.690   | 0.56 | 0.356   | 0.812   |
+| 0.005        | 0.790   | 0.677   | 0.55 | 0.357   | 0.802   |
+| 0.02         | 0.778   | 0.676   | 0.53 | 0.367   | 0.803   |
+| 0.05         | 0.770   | 0.689   | 0.52 | 0.391   | 0.805   |
+| 0.1          | 0.760   | 0.656   | 0.50 | 0.402   | 0.798   |
 - Proper LR sweep (the old on/off hid this): **monotonic** — plastic inhibition DOES revive
   neurons + spread winners (dead 0.56->0.50, win_ent 0.356->0.402) but **weakly, at an
   accuracy cost** (learned 0.783->0.760). No LR gives both better health AND accuracy.

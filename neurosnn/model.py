@@ -210,3 +210,12 @@ class Model:
         if self._runner is None:
             raise RuntimeError("call train() before test()")
         return self._runner.test(return_spikes=return_spikes)
+
+    def featurize(self, all_images: int, batch: int = 1000, partition: str = "train"):
+        """Featurize a slice of a partition (default train) for probe fitting.
+
+        Returns (X, y) per-item excitatory features + labels. Call after train().
+        """
+        if self._runner is None:
+            raise RuntimeError("call train() before featurize()")
+        return self._runner.featurize(all_images, batch, partition)

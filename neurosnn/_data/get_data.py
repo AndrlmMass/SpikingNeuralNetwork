@@ -181,6 +181,95 @@ def _get_torchvision_splits(dataset_name, transform, torch_root):
     return train_ds, test_ds
 
 
+def _partition_indices(
+    len_train,
+    len_test,
+    train_count,
+    val_count,
+    test_count,
+    seed,
+    respect_canonical_split,
+):
+    """Carve train/val/test index arrays out of a dataset's canonical splits.
+
+    Returns three GLOBAL index arrays. The convention (which get_batch depends on):
+    indices ``0 .. len_train-1`` address the canonical TRAIN split
+    (``ImageDataStreamer.train_images``); indices ``len_train .. len_train+len_test-1``
+    address the canonical TEST split (``test_images``).
+
+    Two regimes:
+
+    * ``respect_canonical_split=True`` -- datasets that ship a dedicated, published
+      test set (MNIST / FMNIST / KMNIST / SVHN / CIFAR / ...). Train and val are drawn
+      ONLY from the canonical train split; test is drawn ONLY from the canonical test
+      split. The two never mix. THIS IS WHAT MAKES OUR NUMBERS COMPARABLE to other
+      papers: the evaluated test set is exactly the dataset's dedicated test set (or a
+      seed-fixed subsample of it), never contaminated with training images. Because the
+      seed only shuffles which train images land in train vs val, the test set is
+      IDENTICAL across seeds -- seed variance reflects train/val sampling alone.
+
+    * ``respect_canonical_split=False`` -- datasets with NO published split (notMNIST,
+      whose train/test separation is synthetic). Cross-paper comparability is impossible
+      regardless, so the train and test pools are merged and a seed-fixed partition is
+      carved from the union. This is the ONLY regime that crosses the train/test line.
+
+    A count of ``None`` means "use everything available": all of train for
+    ``train_count``, zero for ``val_count``; for ``test_count`` it means the entire
+    canonical test split (dedicated regime) or all samples left after train+val (merged
+    regime).
+
+    Raises ``ValueError`` -- loudly, before any multi-hour run starts -- when the
+    requested counts do not fit the available samples.
+    """
+    rng = np.random.default_rng(seed)
+    train_pool = np.arange(len_train)
+    test_pool = np.arange(len_train, len_train + len_test)
+
+    if not respect_canonical_split:
+        # No dedicated test set: merge and carve a seed-fixed partition from the union.
+        pool = np.concatenate([train_pool, test_pool])
+        rng.shuffle(pool)
+        n = len(pool)
+        tc = n if train_count is None else int(train_count)
+        vc = 0 if val_count is None else int(val_count)
+        tec = (n - tc - vc) if test_count is None else int(test_count)
+        if tc < 0 or vc < 0 or tec < 0 or tc + vc + tec > n:
+            raise ValueError(
+                f"Requested split train={tc} + val={vc} + test={tec} = {tc + vc + tec} "
+                f"does not fit the {n}-sample pool (dataset has no canonical split, so "
+                f"train+test were merged). Reduce the counts."
+            )
+        return pool[:tc], pool[tc : tc + vc], pool[tc + vc : tc + vc + tec]
+
+    # Dedicated-split regime: train/val from the train split, test from the test split.
+    rng.shuffle(train_pool)
+    tc = len_train if train_count is None else int(train_count)
+    vc = 0 if val_count is None else int(val_count)
+    if tc < 0 or vc < 0 or tc + vc > len_train:
+        raise ValueError(
+            f"train={tc} + val={vc} = {tc + vc} exceeds the {len_train}-sample dedicated "
+            f"TRAIN split. Reduce train/val counts -- the test set is drawn separately "
+            f"from the {len_test}-sample dedicated TEST split and does not share this budget."
+        )
+    train_idx = train_pool[:tc]
+    val_idx = train_pool[tc : tc + vc]
+
+    tec = len_test if test_count is None else int(test_count)
+    if tec < 0 or tec > len_test:
+        raise ValueError(
+            f"test={tec} exceeds the {len_test}-sample dedicated TEST split. Use "
+            f"test_count <= {len_test} (or None for the full, canonical test set)."
+        )
+    if tec < len_test:
+        # Subsampling the test set: shuffle so the subsample is representative & seed-fixed.
+        rng.shuffle(test_pool)
+        test_idx = test_pool[:tec]
+    else:
+        # Full canonical test set -- keep natural order (order is irrelevant to eval).
+        test_idx = test_pool
+    return train_idx, val_idx, test_idx
+
+
 class ImageDataStreamer:
     """
     Eagerly loads and preprocesses the configured dataset into RAM so the
@@ -313,28 +402,40 @@ class ImageDataStreamer:
         self.indices = np.arange(total)
 
         if self.dataset != "fcx1":
-            # Merge torchvision's fixed train/test split so we can define our own partition sizes
-            _split_rng = np.random.default_rng(random_seed)
-            _split_rng.shuffle(self.indices)
+            # Partition into train/val/test while RESPECTING the dataset's dedicated
+            # train/test split. train/val are drawn only from the canonical train split
+            # and test only from the canonical test split, so our reported test numbers
+            # are comparable to other papers and never see a training image. (The old
+            # code merged train+test into one pool and re-carved -- a leak that put
+            # training images into "test", e.g. SVHN drew its test set from the merged
+            # 99289 pool. See _partition_indices for the full rationale.)
+            #
+            # notMNIST is the sole exception: it has NO published test split (the deeplake
+            # copy's separation is synthetic), so comparability is off the table and we
+            # merge its 18724 samples and carve a seed-fixed partition.
+            respect_canonical_split = self.dataset != "notmnist"
 
-            # Carve train/val/test from the shuffled pool; unclaimed samples are ignored
-            total = len(self.indices)
-            tc = train_count or total
-            vc = val_count or 0
-            tec = test_count or 0
-            tc = min(tc, total)
-            vc = min(vc, max(0, total - tc))
-            tec = min(tec, max(0, total - tc - vc))
-
-            self.train_indices = self.indices[:tc]
-            self.val_indices = self.indices[tc : tc + vc]
-            self.test_indices = self.indices[tc + vc : tc + vc + tec]
+            self.train_indices, self.val_indices, self.test_indices = _partition_indices(
+                self.len_train,
+                self.len_test,
+                train_count,
+                val_count,
+                test_count,
+                seed=random_seed,
+                respect_canonical_split=respect_canonical_split,
+            )
             self.ptr_train = 0
             self.ptr_val = 0
             self.ptr_test = 0
 
             # Lightweight summary (use dataset targets if available)
-            print(f"Found {total} image samples")
+            regime = "dedicated splits" if respect_canonical_split else "merged (no canonical split)"
+            print(
+                f"Found {total} image samples "
+                f"({self.len_train} train + {self.len_test} test). "
+                f"Split [{regime}]: train={len(self.train_indices)} "
+                f"val={len(self.val_indices)} test={len(self.test_indices)}"
+            )
             try:
                 tr_t = np.array(train_label_targets)
                 te_t = np.array(test_label_targets)
