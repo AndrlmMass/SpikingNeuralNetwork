@@ -40,7 +40,7 @@
 
 set -uo pipefail
 
-PROJECT_ROOT=/mnt/users/andreama/projects/biosnn3
+PROJECT_ROOT=/mnt/users/andreama/projects/biosnn4
 cd "${PROJECT_ROOT}"
 
 # ---- grid definition ------------------------------------------------------
