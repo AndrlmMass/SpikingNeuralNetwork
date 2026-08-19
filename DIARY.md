@@ -10,6 +10,265 @@ Keep it scannable — a few bullets, not a transcript.
 
 ---
 
+## 2026-08-10 — Article framing, the Phase-2 dataset gap, and a metric audit
+
+**Focus:** Decide what the article actually claims, then test the claim against the
+saved runs. Two analyses written and run this session (scratchpad only, not yet in
+the repo — promote to `experiments/` if we re-run): `metric_corr.py` /
+`metric_corr2.py` (which metrics predict accuracy, 60 runs with trajectories) and
+`data_stats.py` (data-side statistics vs the RF-minus-random gap).
+
+### Framing decision — "does biological realism pay?"
+
+Chosen over "we close the SNN performance gap", which the numbers do not support
+(Goupy et al. 2024: MNIST 98.59 / FMNIST 87.12 / CIFAR-10 62.81 against our 95.5 /
+~75 / ~21). Realism becomes an empirical variable measured on three axes —
+structure (RF vs random, oriented vs isotropic), rule (frozen / trace-STDP /
+R-STDP), task (5 datasets) — with the mechanism claim ("the prior needs a rule that
+protects it") as the spine and selective prediction as a headline result rather than
+the frame. **Abstract rewritten accordingly and now in the draft.** The old SOTA-parity
+sentence is gone.
+
+### Phase-2 RF vs random: the gap changes SIGN across datasets
+
+Learned-readout test accuracy, 3 seeds, 5 epochs. Deltas are as printed on the figure;
+absolute values read off the boxplots and therefore approximate.
+
+| dataset | RF | random | delta (pp) |
+|---|---|---|---|
+| SVHN | ~23.5 | ~16.5 | **+7.3** |
+| MNIST | ~95 | ~90.5 | **+4.2** |
+| KMNIST | ~85.5 | ~83.3 | **+2.2** |
+| notMNIST | ~81 | ~86 | **-5.2** |
+| FMNIST | ~70.5 | ~78.8 | **-8.4** |
+
+SVHN is above chance in both conditions (chance 10), so the +7.3 is not a
+near-chance artefact — but it is a gap between two weak models and must be reported
+as such. **Raw Phase-2 outputs are not on this machine**; only the figure. Same for
+notMNIST generally — `data/datasets/notmnist/image_cache` is empty and the dataset
+sweep script does not accept `notmnist` in `--dataset` choices.
+
+### What predicts the gap: orientation content, NOT scale
+
+Ran the project's own `orientation_coherence` on the *images* instead of the weight
+columns, plus stroke-width / fill / registration statistics (2000 imgs each, same
+grayscale-28x28-[0,1] pipeline):
+
+| dataset | gap | img orient coh | stroke width px | fill frac |
+|---|---|---|---|---|
+| SVHN | +7.3 | 0.395 | 4.36 | 0.371 |
+| MNIST | +4.2 | 0.347 | 2.59 | 0.153 |
+| KMNIST | +2.2 | 0.262 | 2.54 | 0.215 |
+| FMNIST | -8.4 | 0.235 | 4.08 | 0.355 |
+
+**Image-space orientation coherence orders all four perfectly (Spearman +1.00,
+Pearson +0.857).** The stroke-width / registration hypothesis is NOT supported
+(+0.40; SVHN has the widest strokes and the largest gain). n=4 with 7 statistics
+tested, so this is hypothesis-generating, not a finding — and **notMNIST is the
+decisive missing point**, since it is the case that intuitively should break the
+orientation story. Regenerating that cache is the single highest-value open item: it
+either yields a data-side predictor of when the prior pays (computable before
+training) or kills the idea.
+
+### Metric audit — grouped eta2 works, the structural metrics do not
+
+**(0) THE ONE THAT WORKS: grouped eta2 (`val_phi`).** Three different quantities are
+easy to confuse and we had been conflating them: trajectory `eta2` is **per-neuron**
+`class_eta_squared` (the `class_selectivity` replacement), `val_phi` is the evaluator's
+`Phi`, and `eta_squared` on raw rates is the one whose own docstring warns it
+anti-correlates with accuracy under WTA. Correlating the right one:
+
+| | vs learned acc | vs pool acc | vs refit ceiling |
+|---|---|---|---|
+| grouped eta2 (`val_phi`), 60k within-run | **+0.749** | +0.130 | -0.224 |
+| grouped eta2, rfgeom between-design (n=6) | **+0.657** | +0.314 | +0.029 |
+| grouped eta2, all runs logging it (n=44) | **+0.334** | +0.345 | — |
+| per-neuron eta2, 60k within-run | -0.604 | -0.122 | +0.280 |
+| per-neuron eta2, rfgeom (n=6) | -0.371 | +0.829 | +0.543 |
+
+`val_phi` rises 0.178 -> 0.275 over the 60k run and is the only representation metric
+with the right sign in every regime. Per-neuron eta2 carries the **opposite** sign
+against learned accuracy, exactly as `group_eta_squared`'s docstring predicts.
+
+**Clean division of labour that follows:** grouped eta2 tracks **achieved** accuracy
+(it is measured in the pooled space the readout uses), while PR and the correlation
+pair track the **decodability ceiling**. They are complementary, not competing — two
+metrics with two different jobs, which is a much simpler story than the panel we had.
+
+**NAMING TRAP — `val_phi` is TWO different quantities** (same class of trap as
+`test_acc` being the pca_lr evaluator). `Phi.score` (`_evaluation/evaluation.py:34-40`)
+branches on `group_assignment`: **grouped** runs get `group_eta_squared` (the article's
+metric), **ungrouped** runs get raw multivariate `eta_squared` — the one that
+anti-correlates with accuracy under WTA. `interp_harness.py:291-295` only sets
+`group_assignment` when `a.grouped`, so **every trace-STDP mechanism cell (A1/A2/B1/B2/B3)
+logs raw eta2 under the name `val_phi`**, and its rise (B1: 0.159 -> 0.230) is NOT
+comparable to the reward runs' grouped values. The correlations in the table above are
+all from runs with a learned readout, i.e. grouped, so they are genuinely grouped eta2
+and stand — but any trace-vs-reward comparison on `val_phi` from existing runs would be
+wrong. **To get grouped eta2 for the erosion-vs-bending contrast, re-run trace-STDP with
+`--grouped`** (the harness supports it; grouping is independent of rule, per the comment
+at `interp_harness.py:289`). Cheap run, no code change.
+
+**(1) The structural metrics flip sign depending which knob you turn.** Spearman vs
+learned accuracy, per sweep family:
+
+| metric | rfgeom | rfsize | inhib2d | inhib-lr | theta |
+|---|---|---|---|---|---|
+| dead_frac | -0.20 | +0.40 | -0.53 | +0.80 | +1.00 |
+| orient_coh | +0.31 | +0.60 | +0.64 | -0.80 | +1.00 |
+| rf_diversity | +0.14 | +0.20 | +0.64 | -0.80 | +0.80 |
+| selectivity | +0.60 | +0.40 | -0.57 | +0.50 | -0.40 |
+
+Nothing holds its sign. **You cannot tune for any of these and expect accuracy to
+follow** — grouped eta2 above is the exception. Answers Domantas' open question from
+the 05.08 meeting, but is a metrics audit rather than a claim about SNNs, so it
+belongs in a footnote justifying the panel, **not** in Results (decided 2026-08-10:
+the correlation tables confuse more than they earn).
+
+**(2) Within-run correlation against accuracy measures TIME, not quality.** 60k run,
+60 checkpoints — everything correlates with readout accuracy simply because accuracy
+rises monotonically as the readout learns. Against the refit probe it collapses:
+
+| metric | start -> end | vs readout acc | vs refit probe |
+|---|---|---|---|
+| participation ratio | 32.05 -> 33.70 | +0.681 | -0.266 |
+| orient coherence | 0.667 -> 0.492 | -0.758 | +0.247 |
+| rf_diversity | 0.090 -> 0.137 | +0.753 | -0.248 |
+| per-neuron eta2 | 0.169 -> 0.161 | -0.604 | +0.280 |
+| **selectivity** | 0.318 -> 0.293 | -0.536 | **-0.000** |
+
+Selectivity at exactly 0.000 against decodability confirms the firing-rate confound
+outright. **Rule: report representation metrics against `refit_acc`, never against
+readout accuracy.**
+
+**(3) Representation metrics predict the CEILING, not the achieved accuracy.** Across
+the 6 rfgeom cells: `pr` +0.257 vs learned but **+0.600 vs refit ceiling**;
+`corr_within`/`corr_all` -0.600 vs ceiling; `orient_coh` +0.657. The `dom` cell is the
+vivid case — **highest ceiling of all six (0.867) and the lowest achieved accuracy
+(0.683)**. This is the "prior sets the ceiling, rule + readout climb to it" thesis,
+now measured across designs rather than within one run. Vindicates Andreas' PR
+intuition, but about the ceiling.
+
+Only **9 of 60 runs** log >=5 of `pr / pr_cov / eta2 / corr_within / corr_all /
+dead_frac / orient_coh` (the 60k run, spiking_15k, run15k, and the 6 rfgeom cells).
+Everything else predates the instrumentation — which is why the pooled between-design
+analysis had to fall back on the older keys.
+
+### Spiking readout — keep it, as one sentence
+
+`results/rstdp_spiking/spiking_15k`: pool **0.725** -> spiking readout **0.811** ->
+delta readout **0.915** (refit probe 0.837). Better than pooling by 8.6pp, worse than
+the delta rule by 10.4pp, as remembered. The number that explains it:
+`spiking_tie_frac = 0.126` — an eighth of trials tie, an intrinsic consequence of
+decoding integer spike counts, and the real reason it trails. **Decision:** three
+numbers in one sentence of Results + an appendix subsection, not a section. It
+pre-empts the strongest attack on the paper ("you used gradient descent for the
+classifier") for almost no space.
+
+### Metric panel — FINAL, organised by claim (supersedes the 05.08 cut)
+
+Metrics are assigned to the claim they answer, each with the question it is there to
+answer. Nothing appears twice.
+
+**Claim 1 — "does biological realism pay?" OUTCOME METRICS ONLY.**
+
+| metric | question it answers |
+|---|---|
+| readout accuracy | how well does the network's **own** online decision rule classify held-out items? |
+| linear-probe accuracy | how much class structure is linearly decodable **at all**, whether or not the readout finds it? (external control; log `n` — data-starved below ~2000) |
+
+Two things to keep straight. The dense readout reads **all 1000 excitatory neurons**
+(positive evidence for its class, negative against competitors) — *not* its own class
+pool; that is the block-diagonal design we replaced, and the difference is the whole
+0.79 -> 0.955 ladder, so "extracted from the class pools" would be wrong. And neither
+number alone is the claim: **the metric for Claim 1 is the RF-minus-random delta at
+matched density** — accuracy is the measurement, the contrast is the claim.
+**No representation metric here** — see the placement note below.
+
+**Claim 2 — "the prior fixes the representation, but only under the right rule."**
+Ordered as a chain (capacity -> health -> redundancy -> prior survival -> usable class
+structure -> did it actually help), not a list:
+
+| metric | question it answers |
+|---|---|
+| participation ratio vs the K-1 threshold | is there enough dimensionality? (need >=9 for 10-way; isotropic sits at 4.3, oriented+margin at 11.8) |
+| dead fraction | are the units alive to carry it? (0.43 -> 0.00) |
+| correlation pair, within vs overall as a **gap** | are the live units carrying different signals, or the same one? (0.121 vs 0.113 = group membership buys almost nothing, which is *why* pooling gets 0.756 and dense 0.955) |
+| orientation coherence, **BOTH rules** | did the prior survive the rule? (trace 0.71->0.39 erosion vs R-STDP 0.667->0.492 bending) |
+| grouped eta2 | did any of that become class structure the readout can use? (0.178 -> 0.275 under R-STDP) |
+| drift, fixed vs refit probe | does the code keep changing — and does any of that change make it more **decodable**? (fixed 0.797->0.597 while refit holds flat ~0.83; answer: no) |
+
+Two notes on this panel. Orientation coherence must appear for **both** rules — the
+result *is* the contrast, and reporting only the trace-STDP side leaves half a
+comparison and no evidence that rule choice is what matters. And drift must be reported
+as the **pair**: the frozen-probe decay alone reads as a stability complaint, whereas
+frozen-decays-while-refit-holds-flat is the evidence for "the prior set the ceiling and
+the rule climbs to it", which is what Claim 2 ultimately argues.
+
+**Claim 3 — "a local learner that knows when it doesn't know."**
+Also a chain, not a list — the three are not parallel (a statistic, a way of evaluating
+a statistic, and an operational payoff):
+
+| metric | question it answers |
+|---|---|
+| entropy (perplexity as the readable unit) | how confident is the network, and how many classes remain in contention? |
+| AUROC of entropy and margin | do these statistics separate correct from incorrect items **at all**, before any threshold is chosen? |
+| risk-coverage | what does that buy operationally — how much error is removed per unit of coverage given up? |
+
+**Terminology to get right: risk is the ERROR rate on the accepted set** (1 - selective
+accuracy), not accuracy — and the curve *characterises* the trade-off rather than
+locating an optimum, since there is no optimum without pricing an abstention.
+**Perplexity is a monotone rescaling of entropy**, so the two give *identical* abstention
+decisions: report entropy as the statistic and perplexity as the interpretable unit, not
+as two pieces of evidence. **Margin beats entropy empirically** (0.726 vs 0.637 on the
+network-native readout, 0.888 vs 0.873 on the probe) — entropy is the one to *report*
+(Ellingsen baseline, Hubin's ask), margin is the one to *use*.
+Ship the caveat with the number: only *shape* statistics work
+(entropy/perplexity/margin/maxp ~0.94) while `total_rate` and `topk_sum` sit at
+0.526-0.528, indistinguishable from chance.
+
+**PLACEMENT NOTE — why grouped eta2 sits in Claim 2, not Claim 1.** It is measured on
+the representation but in the *readout's* coordinate system, which is why it tracks
+achieved accuracy (+0.657 between designs) and not the ceiling (+0.029). Per Domantas'
+own argument on 05.08 — if clustering tracks accuracy closely it tells us little that
+accuracy did not — putting it beside accuracy in Claim 1 reads as saying the same thing
+twice. In Claim 2 it is the terminal link that connects the representation story back to
+the accuracy story, which is the join Claim 2 needs in order not to read as a detour.
+
+**Cut:** `selectivity` (confounded, deprecated in code), `rf_diversity` as a swept
+quantity (falls mechanically as RFs shrink), Gini (not implemented; duplicates
+dead_frac + w_floor_frac), `winner_entropy`, `frac_ever_winner`, `w_floor_frac`,
+`share_ce`, `brier`, `cur_*`. Also cut the metric-vs-accuracy correlation tables from
+Results — they are a metrics audit, not a claim about SNNs, and belong in a footnote
+justifying the panel.
+
+### Draft errata found while reading
+
+- R-STDP subsection says "we train the readout" but indexes j as the excitatory unit
+  — R-STDP trains `W_se`, the readout is the delta rule. The whole
+  biological-plausibility argument turns on this split.
+- Oriented-RF exponentials still missing their minus signs; the rotation equation now
+  defines only `x'` and has **lost `y'` entirely** (regressed vs the previous version).
+- Phase-2 text says Vogels iSTDP is a ladder rung; Figure 3 shows "Pool-layout" in that
+  slot. Text and figure disagree. (Agreed to drop the Vogels *method* subsection but
+  keep the finding as one sentence + appendix — it is step 4 of the agreed red thread.)
+- `rfgeom` learned accuracies disagree between `summary.json` (base 0.739 /
+  thin_margin 0.819) and trajectory final checkpoint (0.717 / 0.785). **Resolve which
+  is canonical before quoting either.**
+
+**Open / next:**
+1. **Regenerate the notMNIST cache and complete the 5-dataset predictor test** —
+   the one item standing between this and a Section 3 that makes a real claim.
+2. Get the Phase-2 raw outputs onto the repo (currently figure-only).
+3. Run the 5-dataset sweep on the 4-layer supervised model (the older sweep is the
+   3-layer trace-STDP net, so the scope claim currently rests on a different model).
+4. Recurrence on/off under STDP for the mechanistic erosion explanation (05.08 task).
+5. **Re-run trace-STDP with `--grouped`** so grouped eta2 exists on both sides of the
+   erosion-vs-bending contrast (currently R-STDP only — see the naming trap above).
+6. Fix the draft errata above.
+
+---
+
 ## 2026-07-27 — Spiking readout: two rule bugs, and negative weights cost only 0.6
 
 **Focus:** Build a **biologically-motivated alternative** to the softmax delta
