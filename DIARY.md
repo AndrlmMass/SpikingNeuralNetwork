@@ -10,6 +10,151 @@ Keep it scannable — a few bullets, not a transcript.
 
 ---
 
+## 2026-08-25 — HPC sweeps landed: RF geometry plots, a decoder naming trap, and a Results-plan rethink
+
+**Focus:** Pull the two finished HPC sweeps, build the 2D-Gaussian RF geometry plots
+Hubin asked for, then stress-test the proposed Results-section ordering against the
+numbers. Two scripts added to `experiments/RF_article/interp/`:
+`plot_rf_geometry.py` (appendix figures) and `plot_coherence_retention.py` (main-text
+figure). Outputs in `results/interp/` (gitignored).
+
+**Both sweeps are complete**: phase 1 `run_20260819_112254` 175/175, phase 2
+`run_20260819_112250` 50/50, every run with a finite `test_acc`, 5 seeds/cell, 3 epochs.
+HPC paths are `/mnt/users/andreama/projects/biosnn4/experiments/RF_article/interp/
+{phase1_ablation,mnist_family_sweep}/results/<RUN_ID>/<tag>/`.
+
+### NAMING TRAP — there are THREE decoders and `test_acc` is none of the good ones
+
+Same class of trap as the `val_phi` one from 08-10, and it bit the whole first pass of
+this session's analysis:
+
+| key                        | what it actually is                                       |
+| -------------------------- | --------------------------------------------------------- |
+| `test_acc`                 | the **PCA+LR evaluator** probe — in BOTH phases            |
+| `test_lin_acc`             | L1-LR probe, fit on 5000 train features                    |
+| `test_cm_readout`          | the **pooled/softmax** readout (mnist 0.760) — NOT learned |
+| `risk_coverage.csv` `base_acc` / traj `readout_learned_acc` | the **learned delta readout** — the article's number |
+
+MNIST oriented, same runs: 0.884 (pca probe) / 0.935 (L1) / 0.760 (pooled) / **0.9455
+±0.0067 (learned readout, full 10k test, 5 seeds)**. The abstract's 95.5 is the
+online/val figure; **the test-set number across seeds is 94.6** — reconcile before
+submission. Any phase1-vs-phase2 comparison must name its decoder, and phase 1 has no
+learned readout at all.
+
+### RF geometry (Hubin request) — what the moments add, and what they do not
+
+`rf_gaussian_moments` was already logging var_x / var_y / cov_xy / elongation at every
+checkpoint; only the aggregation was missing. Findings:
+
+**(1) Coherence and the moments dissociate — this is the payoff.** MNIST trace-STDP
+drops coherence 33% (0.710 -> 0.479) *before the first logged checkpoint* while
+`var_x` moves 1.7% (4.06 -> 3.99). Structure-tensor coherence reacts to
+high-spatial-frequency weight noise; the mass moments track the RF **envelope**.
+Reporting coherence alone overstates how fast the geometry itself moves.
+
+**(2) The erosion is purely feedforward.** `ee_off`, `ie_off` and `vogels` change final
+coherence by **<1e-3** — three orders below the erosion itself. Not a null run: the
+ablations verifiably bite (`cur_ee`->0, `cur_ie`->0, `cur_ie`->41.8 respectively) and
+move accuracy by up to 1.8pp. The recurrent circuit changes the **responses** and
+leaves `W_se` alone. One sentence in Results, not a figure.
+
+**(3) Coherence retention is the number that carries the claim** (init 0.710, from the
+`frozen` cell — the only no-plasticity view of t=0):
+
+| condition                  | final coh | retained | per-dataset |
+| -------------------------- | --------- | -------- | ----------- |
+| oriented RF + trace-STDP   | 0.382     | **54%**  | 44–58%      |
+| oriented RF + R-STDP       | 0.488     | **69%**  | 65–71%      |
+| oriented RF + triplet-STDP | 0.658     | **93%**  | 87–97%      |
+| random weights (floor)     | 0.081     | n/a      | 0.022–0.160 |
+
+Dose-response: the rule that retains most prior (triplet, 93%) is also the best plastic
+rule. **Every plastic rule still loses to frozen** (base_ori -1.27 to -3.86pp paired).
+
+**(4) DROPPED CLAIM — "eroded vs expanded" does not survive.** Measured from the true
+init, RF size *grows* under trace-STDP on 4 of 5 datasets (-9% MNIST, +6 to +36%
+elsewhere). Both rules grow the envelope; only coherence separates them. The framing is
+**eroded vs largely preserved**, not eroded vs expanded.
+
+**(5) `rf_elongation` is broken — do not plot it.** sqrt(l_max/l_min) with l_min floored
+at 1e-12, so any near-collinear RF blows up: every random-prior run reports ~2e4 where
+the truth is ~1. Figures use a derived bounded `rf_anisotropy` =
+sqrt((vx-vy)^2+4cxy^2)/(vx+vy) instead. Anisotropy reads near-zero **by construction**
+because it is computed on the tensor-of-means and near-uniform preferred orientations
+cancel — the informative version is the mean of *per-neuron* anisotropies, which is what
+elongation was meant to be. Not recoverable from these runs (raw `W_se` not saved);
+fix in `analysis.py` before the next sweep.
+
+**(6) The first checkpoint already contains plasticity.** ~2/3 of the MNIST-family
+coherence loss happens before it. SVHN is the exception and erodes gradually (0.694 at
+ckpt 0 -> 0.311). **Do not claim erosion rates** off these runs; next sweep needs a
+checkpoint before the first weight update.
+
+### Results-section plan — pushed back on 3 of 6 steps
+
+Proposed order was: RF-vs-random -> supervised beats unsupervised -> because the prior
+erodes -> abstention -> OOD. What the numbers say:
+
+**"Supervised is better across the board" is FALSE.** Best unsupervised condition is
+`frozen` on **all five** datasets. Against it (learned readout vs frozen's L1 probe):
+MNIST +1.78, KMNIST +3.46, SVHN +3.70, **FMNIST -5.66, notMNIST -8.53**. Also biased by
+construction — max-over-7-conditions vs max-over-2 — and phase1->phase2 changes **six
+things at once** (rule, `grouped`, `n_exc` 1024->1000, `peak_ei` 20->50,
+`center_margin` 0->4, readout), so nothing is attributable to supervision. Contradicts
+our own "phase 1 diagnostic / phase 2 confirmatory" design. A model-level claim has to
+come from the beta-binomial with model as a factor (§2.6.3 equation still empty).
+
+**"Supervised wins BECAUSE unsupervised erodes the prior" does not connect.** R-STDP
+erodes too (69% vs 54%) — erosion is not what separates the models. The defensible
+causal claim is entirely **within phase 1**: plasticity erodes the prior AND every
+plastic rule loses to frozen, with triplet retaining most and performing best.
+
+**DRAFT §3.3 IS CONTRADICTED.** "around 99% accuracy or more ... across the five
+datasets" — coverage at 99% accuracy is MNIST 0.838, notMNIST 0.179, KMNIST 0.162,
+**FMNIST 0.009, SVHN 0.000**. The abstention result is a **MNIST result**. Fix the
+sentence.
+
+**RF-vs-random is the strongest opener, and the sign differs by phase** — which is more
+interesting than the plan assumed:
+
+| dataset  | phase 1 (probe) | phase 2 (probe) | phase 2 (learned readout) |
+| -------- | --------------- | --------------- | ------------------------- |
+| mnist    | +0.50 ±0.52     | +5.77 ±0.74     | +3.02                     |
+| fmnist   | **+2.32** ±0.15 | **-1.05** ±0.40 | **-3.20**                 |
+| kmnist   | +4.34 ±0.92     | +5.93 ±1.17     | +3.39                     |
+| notmnist | **+1.52** ±0.64 | **-2.80** ±0.73 | **-6.31**                 |
+| svhn     | +2.24 ±0.62     | +12.49 ±0.37    | +6.53                     |
+
+Under trace-STDP the prior helps on **all five**; under R-STDP it reverses on FMNIST and
+notMNIST. The abstract currently describes only the phase-2 pattern. **Phase-2 signs
+replicate the 08-10 figure** (3 seeds/5 epochs: SVHN +7.3, MNIST +4.2, KMNIST +2.2,
+notMNIST -5.2, FMNIST -8.4) — independent runs, same ordering.
+
+### Proposed Results order (organise by FACTOR, not by model)
+
+1. Does the prior help? (both phases, one relative plot — the table above)
+2. Does learning help? No: frozen beats every plastic rule, all 5 datasets
+3. Why: the prior is eroded (retention table + ablations in one sentence)
+4. Supervision changes the sign: R-STDP retains 69% **and is the only configuration
+   with a working internal readout at all** — that is the honest supervised claim, not
+   "higher accuracy"
+5. Abstention (scoped to MNIST, with the coverage table)
+6. OOD MNIST->FMNIST
+
+### Open items
+
+- [ ] Re-run one phase-1 cell **without `--no-plots`** (`run_slurm.sh:178`) — phase 1 has
+      no `rf_first/rf_last` images, so there is no before/after RF picture for the
+      unsupervised model. One run.
+- [ ] Phase 2 has **no frozen control** and differs in 4 config params, so its "69% of
+      0.710" borrows phase 1's init. Instantiate the phase-2 model and measure coherence
+      at init with no training — seconds, makes the headline comparison clean.
+- [ ] Fix `rf_elongation` -> bounded per-neuron anisotropy in `analysis.py`.
+- [ ] Reconcile abstract 95.5 vs test-set 94.6; fix draft §3.3 coverage sentence.
+- [ ] Write the beta-binomial spec for the RF-vs-random effect (§2.6.3).
+
+---
+
 ## 2026-08-10 — Article framing, the Phase-2 dataset gap, and a metric audit
 
 **Focus:** Decide what the article actually claims, then test the claim against the
