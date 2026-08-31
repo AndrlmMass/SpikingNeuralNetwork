@@ -94,6 +94,66 @@ def load_input_rate(dataset, pixel_size=28):
     return imgs.reshape(imgs.shape[0], -1).mean(0, dtype=np.float64)  # (784,)
 
 
+def featurize_ood(model, dataset, n_images, batch=1000):
+    """Exc-rate features for `dataset`'s TEST split, through the ALREADY-TRAINED net.
+
+    The out-of-distribution probe. We swap the runner's ImageDataStreamer for one built
+    on `dataset`, run runner.featurize, and put the original streamer back. Safe because
+    featurize runs trainer.step with training_mode="test", and the reward rule + its
+    delta readout are both gated on `training_mode == "train"` (trainer.py:620, :390) --
+    so no weight can move no matter what the OOD images do to the network.
+
+    Every dataset is grayscaled and resized to 28x28 by the streamer's own transform, so
+    N_x=784 holds and the same network can be fed all of them without reshaping.
+
+    test_count=None asks the streamer for the ENTIRE canonical test split (or, for
+    notMNIST, everything left over from its merged pool); featurize then stops early
+    when get_batch runs dry, so `n_images` larger than the split is harmless.
+
+    Returns (X, n_requested_shortfall) -- X is (n, N_exc), or None if nothing came back.
+    """
+    from neurosnn._data.get_data import ImageDataStreamer
+    runner = model._runner
+    inner = runner.model                       # the _network.model.Model that owns the streamer
+    original = inner.image_streamer
+    try:
+        inner.image_streamer = ImageDataStreamer(
+            data_dir="data", pixel_size=inner.pixel_size, num_steps=inner.num_steps,
+            max_rate_hz=original.max_rate_hz, gain=original.gain, gabor=original.gabor,
+            train_count=1, val_count=0, test_count=None,
+            dataset=dataset, random_seed=inner.random_state)
+        # featurize walks whole batches, so an n_images below one batch would still
+        # pull a full batch; clamp so `--ood-all` means what it says on small probes.
+        X, _ = runner.featurize(n_images, min(batch, max(1, n_images)), partition="test")
+    finally:
+        inner.image_streamer = original        # restore even if the OOD load blew up
+    return X
+
+
+def save_weight_checkpoint(path, weights, st, ex, reward_learner, assignment, cfg):
+    """Persist W_se + the readout so this model can be re-probed without retraining.
+
+    The harness runs with save_model=False and never wrote weights anywhere, which is
+    exactly why the 60k/5ep run cannot be fed OOD data today. Small file: W_se is
+    (784, N_exc) and the dense readout (N_exc, 10).
+    """
+    blob = dict(W_se=np.asarray(weights[:st, st:ex], dtype=np.float32),
+                config=json.dumps(cfg))
+    if assignment is not None:
+        blob["assignment"] = np.asarray(assignment)
+    rl = reward_learner
+    if rl is not None:
+        if getattr(rl, "dense_readout", False) and getattr(rl, "W_dense", None) is not None:
+            blob["W_dense"] = np.asarray(rl.W_dense, dtype=np.float32)
+        if getattr(rl, "w_readout", None) is not None:
+            blob["w_readout"] = np.asarray(rl.w_readout, dtype=np.float32)
+        if getattr(rl, "_A", None) is not None:
+            blob["readout_A"] = np.asarray(rl._A, dtype=np.float32)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    np.savez_compressed(path, **blob)
+    return path
+
+
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--tag", required=True)
@@ -191,6 +251,12 @@ def parse_args():
                    help="number of passes over the --train-all images (data is re-served each epoch)")
     p.add_argument("--train-all", type=int, default=15000)
     p.add_argument("--val-all", type=int, default=1000)
+    p.add_argument("--val-batch", type=int, default=1000,
+                   help="images per validation BATCH (default 1000). Kept separate from "
+                        "--val-all because the eval pass allocates a (batch*num_steps, N) "
+                        "int8 spike buffer: a 5000-image batch is ~4.9 GB and OOMs, while "
+                        "5 batches of 1000 is ~1 GB. Validation still covers all --val-all "
+                        "images; only the chunking changes.")
     p.add_argument("--val-every", type=int, default=1)
     p.add_argument("--test-all", type=int, default=3000)
     p.add_argument("--probe-fit-all", type=int, default=0,
@@ -201,6 +267,21 @@ def parse_args():
                         "~7k; set ~5000 so the linear-probe number reflects the representation, "
                         "not the fit-set size. Calibration/drift still use val; only the "
                         "classifier's FIT set changes.")
+    p.add_argument("--ood-dataset", action="append", default=[],
+                   metavar="NAME", choices=sorted(_DATASETS),
+                   help="repeatable: after the in-distribution test, run a forward pass over "
+                        "this dataset's TEST split and dump its features as X_ood_<name> in "
+                        "uncertainty_features.npz. Nothing is trained on it and its labels are "
+                        "discarded -- it is the OUT-OF-DISTRIBUTION probe: the question is "
+                        "whether the network's own confidence falls low enough to abstain. "
+                        "Uses runner.featurize (training_mode='test'), so no weight can move.")
+    p.add_argument("--ood-all", type=int, default=10000,
+                   help="images per --ood-dataset (capped by that dataset's test split)")
+    p.add_argument("--save-weights", action="store_true",
+                   help="save W_se + the readout weights to weights/checkpoint.npz so the "
+                        "trained model can be re-probed later without retraining. The harness "
+                        "otherwise persists NOTHING (save_model=False), which is why the "
+                        "60k/5ep run cannot be reused for OOD.")
     p.add_argument("--output-dir", default=None,
                    help="run dir (default: results/<dataset>/<date>/<tag>_<uid>/); "
                         "the sweep passes results/<dataset>/<date>/<sweep_id>/<tag>/")
@@ -315,7 +396,7 @@ def main():
 
     model = snn.Model(input_size=784, classes=list(range(10)), random_state=a.seed, num_steps=350,
         all_images_train=a.train_all, batch_image_train=1000, all_images_val=a.val_all,
-        batch_image_val=a.val_all, all_images_test=a.test_all, batch_image_test=a.test_all,
+        batch_image_val=min(a.val_batch, a.val_all), all_images_test=a.test_all, batch_image_test=a.test_all,
         image_dataset=a.dataset, max_rate_hz=90.0, gain=1.0, gabor=False)
 
     input_rate = load_input_rate(a.dataset)
@@ -590,6 +671,54 @@ def main():
         out["test_spiking_cm"] = confusion_matrix(_y, _p, 10).tolist()
         print(f"  [spiking readout] TEST acc={out['test_spiking_acc']:.4f} "
               f"on {_p.size} items", flush=True)
+    _rlw = getattr(_tr, "reward_learner", None)
+
+    # --- weight checkpoint. Runs BEFORE the OOD passes so the saved state is the
+    # end-of-training one, and so a crash in an OOD load still leaves the model on disk.
+    if a.save_weights and last_w is not None:
+        _ckpt = save_weight_checkpoint(
+            os.path.join(a.output_dir, "weights", "checkpoint.npz"),
+            last_w, st, ex, _rlw, group_assignment if group_assignment is not None else neuron_class, cfg)
+        print(f"  [checkpoint] saved -> {_ckpt}", flush=True)
+
+    # --- out-of-distribution probes. The trained network sees a dataset it was never
+    # trained on; we keep only its exc-rate features, because the question is whether
+    # its own confidence collapses far enough to abstain (scored later in ood.py).
+    # Weights are hashed either side: featurize is read-only by construction, and this
+    # asserts it rather than trusting it.
+    ood_feats = {}
+    if a.ood_dataset:
+        _w_before = hash(last_w.tobytes()) if last_w is not None else None
+        _ro_before = (hash(_rlw.W_dense.tobytes())
+                      if _rlw is not None and getattr(_rlw, "dense_readout", False) else None)
+        for _ds in a.ood_dataset:
+            if _ds == a.dataset:
+                print(f"  [ood] skipping {_ds}: it is the in-distribution dataset", flush=True)
+                continue
+            try:
+                _Xo = featurize_ood(model, _ds, a.ood_all, batch=1000)
+            except Exception as e:
+                print(f"  [ood] {_ds} FAILED: {type(e).__name__}: {e}", flush=True)
+                continue
+            if _Xo is None or not _Xo.size:
+                print(f"  [ood] {_ds}: featurize returned nothing", flush=True)
+                continue
+            ood_feats[_ds] = _Xo.astype(np.float32)
+            # A network that goes SILENT on OOD input makes every shape statistic
+            # vacuous (uniform p by fiat), so report the silent fraction here rather
+            # than discovering it inside the AUROC later.
+            _sil = float((_Xo.sum(1) <= 1e-12).mean())
+            print(f"  [ood] {_ds}: n={_Xo.shape[0]} mean_rate={_Xo.mean():.4f} "
+                  f"silent_frac={_sil:.4f}", flush=True)
+            out.setdefault("ood", {})[_ds] = dict(n=int(_Xo.shape[0]),
+                                                  mean_rate=float(_Xo.mean()),
+                                                  silent_frac=_sil)
+        _w_after = hash(last_w.tobytes()) if last_w is not None else None
+        _ro_after = (hash(_rlw.W_dense.tobytes())
+                     if _rlw is not None and getattr(_rlw, "dense_readout", False) else None)
+        assert _w_before == _w_after, "OOD featurize mutated the network weights"
+        assert _ro_before == _ro_after, "OOD featurize mutated the readout weights"
+
     # final test-set confusion matrices: fit the linear readout on the last val
     # features, evaluate on captured test features; readout needs no fit.
     if CAP["rows"] and last_val["X"] is not None:
@@ -652,7 +781,8 @@ def main():
                 **({"assignment": np.asarray(assign)} if assign is not None else {}),
                 **({"score_cal": score_cal.astype(np.float32),
                     "score_test": score_test.astype(np.float32)}
-                   if score_cal is not None else {}))
+                   if score_cal is not None else {}),
+                **{f"X_ood_{k}": v for k, v in ood_feats.items()})
             # full 0->100% risk-coverage figures + the CSV table view. Runs off the
             # features just written, so it is reproducible standalone later via
             # plot_risk_coverage.py --run <output_dir>.

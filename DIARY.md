@@ -10,6 +10,145 @@ Keep it scannable — a few bullets, not a transcript.
 
 ---
 
+## 2026-08-29 — Frozen supervised control, a bootstrapped abstention threshold, and OOD rejection
+
+**Focus:** the three items the 08-25 Results plan listed with no runs behind them — the
+missing phase-2 frozen control (step 2), error bars on the abstention threshold (step 5),
+and OOD rejection (step 6). All three now have numbers. Two of them change what the
+article can claim.
+
+New, **uncommitted**: `experiments/RF_article/frozen_supervised/` (run_frozen.py,
+run_all.py, aggregate_frozen.py) and `experiments/RF_article/interp/`
+{threshold.py, input_density.py, ood.py, plot_threshold.py}. `interp_harness.py` gained
+`--val-batch`, `--ood-dataset`, `--ood-all`, `--save-weights` — it previously persisted
+NOTHING (`save_model=False`), which is why the 60k/5ep model could not be re-probed.
+
+### 1. The frozen control FLIPS step 2 for the supervised model
+
+Phase 2 had no frozen cell at all. It does now — the byte-identical phase-2 architecture
+with `--reward-lr 0`, five datasets, 3 seeds. **All 15 cells complete.**
+
+| dataset  | frozen, learned readout | L1 probe | pooled |
+| -------- | ----------------------- | -------- | ------ |
+| mnist    | **0.8566** ±0.0061      | 0.8724   | 0.0980 |
+| fmnist   | **0.6327** ±0.0060      | 0.7122   | 0.1000 |
+| kmnist   | **0.5278** ±0.0084      | 0.5801   | 0.1000 |
+| notmnist | **0.7221** ±0.0125      | 0.7861   | 0.0988 |
+| svhn     | **0.2215** ±0.0154      | 0.4004   | 0.0670 |
+
+**MNIST: frozen 0.8566 vs phase-2 plastic 0.9455 ±0.0067 → plasticity wins by +8.9pp.**
+The Results-plan line *"does learning help? No: frozen beats every plastic rule, all 5
+datasets"* is a PHASE-1 / unsupervised statement and must not be carried over to R-STDP.
+Same sign on all five against the (approximate) 08-10 phase-2 figures.
+
+SVHN's seed spread (±0.0154) is ~3x every other dataset's, on an accuracy barely
+above the 10% floor — read it as "frozen SVHN is near-degenerate", not as a measured
+0.22.
+
+**The L1 probe beats the network's own readout on all five frozen datasets** — the frozen
+representation carries more class information than the delta rule extracts from it.
+
+**Pooled readout is at chance BY CONSTRUCTION, now verified.** `group_tiled_centers` gives
+every class group the same centre grid, and the tiled path assigns orientations as
+`arange(N_exc) % 4` — period 4 into groups of 100 — so all ten groups are byte-identical
+at init: measured max|W_g0 − W_g9| = **0.0**. A fully-frozen model (readout frozen too)
+would sit at 10% by fiat, which is why the frozen cell keeps the readout plastic. Worth
+one sentence in the article.
+
+**Phase-2 init coherence = 0.6878** (phase 1's was 0.710). Closes the 08-25 open item —
+the 69%-retention headline no longer borrows phase 1's init.
+
+### 2. Abstention: only the learned readout supports the 99% claim
+
+On the 60k/5ep MNIST model, calibration re-split from test (n_cal = n_eval = 4500):
+
+| readout         | acc    | AUROC | 99% target                                           |
+| --------------- | ------ | ----- | ---------------------------------------------------- |
+| learned readout | 0.9567 | 0.934 | **α=0.20 → 82% coverage, sel_acc 0.9946, LB 0.9922** |
+| linear probe    | 0.8858 | 0.850 | not reachable at any α                               |
+| uniform pool    | 0.7593 | 0.557 | not reachable at any α                               |
+
+τ is well pinned at n_cal=4500 (95% CI width 0.104 at α=0.025). `total_rate` — the
+PRE-ACT analogue — is useless everywhere (AUROC 0.52–0.56), matching Ellingsen et al.'s
+own MNIST finding that plain ENT beats PRE-ACT.
+
+**The percentile bootstrap UNDER-COVERS on tail quantiles**: measured 0.895–0.930 against
+a nominal 0.95 at n_cal=1000 (0.90–0.96 at 5000). An exact distribution-free
+order-statistic CI is now reported beside it; where they disagree, trust the exact one.
+B=2000 is converged (CI width stable from B=1000).
+
+### 3. OOD: the network does NOT refuse, and is beaten by raw pixels
+
+MNIST-trained (learned readout 0.9458, reproducing the canonical 0.9455 ±0.0067), probed
+with four OOD sets. AUROC, best of both tails:
+
+| detector                          | fmnist | kmnist    | notmnist | svhn  |
+| --------------------------------- | ------ | --------- | -------- | ----- |
+| network confidence (entropy)      | 0.694  | **0.870** | 0.762    | 0.772 |
+| raw mean intensity — NO NETWORK   | 0.877  | 0.745     | 0.966    | 0.980 |
+| **pixel PCA subspace residual**   | 0.983  | 0.994     | 0.999    | 0.971 |
+| same residual on network features | 0.841  | 0.859     | 0.952    | 0.748 |
+
+At the deployable τ (α=0.025, ID cost 2.6%) the network rejects only **12.7 / 26.8 / 18.1
+/ 16.6%** of FMNIST / KMNIST / notMNIST / SVHN. The oracle threshold — fitted USING the
+OOD sample, so not shippable — reaches 59–83% but discards 23–29% of valid MNIST.
+
+**The one genuine positive is KMNIST**, and it is the interesting one: KMNIST evokes the
+same firing rate as MNIST (0.00213 vs 0.00225), so brightness collapses to 0.745 and every
+feature-space density model to 0.51–0.86, while the network holds **0.870** — its best
+score of the four. The network contributes SEMANTIC novelty detection exactly where
+low-level cues are unavailable. Only visible because KMNIST/notMNIST were added as
+statistics-matched near-OOD controls instead of testing FMNIST alone.
+
+Passing images through the network LOSES information for this task (pixel residual 0.983
+→ 0.841 on FMNIST): the representation is trained to classify, not to model p(x).
+
+**Both tails are required.** `total_rate` scores 0.273 / 0.231 / 0.362 on FMNIST /
+notMNIST / SVHN — inverted, because those images drive higher firing. The one-sided
+lower-tail test uncertainty.py uses would call it useless.
+
+**Draft §3.3 / step 6 must be rewritten as a qualified negative.**
+
+### Method corrections — read before re-running anything
+
+- **The input encoding is POISSON, so features are NOT reproducible.** Featurizing the
+  same 300 images twice, one process, byte-identical frozen weights → correlation
+  **0.968**, not 1.0. BUT it does not matter: `draws=1` 0.7245 vs `draws=3` 0.7215 on an
+  identical test set = **0.3 SE**. One draw is fine. (An earlier "the replay is invalid"
+  call was made on a 300-item comparison where the 2.3pp gap was ~1 SE — underpowered.)
+- **`runner.featurize` SILENTLY TRUNCATES**: `n_batches = all_images // batch`, so
+  notMNIST's 2724-item test set became 2000 and SVHN's 26032 → 26000. That scored two
+  routes on different test sets and manufactured a bogus 3.5pp gap. Fixed locally by
+  `featurize_all()` (ceil to whole batches); **the library function still truncates for
+  every other caller.**
+- **Frozen is genuinely frozen**, asserted not assumed: W_se relative drift 3.2e-10 on
+  every cell (float rounding from Normalize's no-op rescale — per-neuron sum ratio
+  1.000000 ± 1.5e-16, zero support change), and W_se byte-identical across two runs of
+  different length.
+- **Cost model, measured**: training 0.1355 s/img vs featurize 0.0617 s/img — turning
+  learning off buys only **2.2×**. The real saving is not re-presenting data: the harness
+  spends 260k presentations per 55k MNIST cell (110k on epochs 2–3, 85k on repeated
+  validation) where a frozen measurement needs 70k. Cheap route validated against a full
+  harness cell: 0.7493 vs 0.7592 (**1.2 SE**), pooled identical to 4 dp, ~6× faster
+  (25 min vs 2–3 h).
+- **`nohup ... &` from a short-lived shell does NOT survive** — a grid lost 1h45 when all
+  three cells were killed together mid-line with no traceback. Use a persistent background
+  mechanism; each cell only stamps `test_acc` at the very end, so a late kill loses it all.
+- deeplake **3.9.52**, not the requirements.txt pin of 4.4.3 (which does not exist for
+  this Python); 3.x is the API `_load_notmnist_deeplake` actually calls.
+
+### Open items
+
+- [ ] Fix the truncation in `runner.featurize` itself, not just run_frozen's wrapper.
+- [ ] OOD at more seeds (only seed 0 so far) before those numbers go in the paper.
+- [ ] Frozen-vs-plastic on the other four datasets needs the phase-2 numbers re-read from
+      the raw runs; the 08-10 absolutes were read off boxplots and are approximate.
+- [ ] Rewrite §3.3 (abstention is a MNIST result) and step 6 (OOD is a qualified negative).
+- [ ] Carry over from 08-25: `rf_elongation` → bounded per-neuron anisotropy; reconcile
+      abstract 95.5 vs test-set 94.6; beta-binomial spec for RF-vs-random (§2.6.3).
+
+---
+
 ## 2026-08-25 — HPC sweeps landed: RF geometry plots, a decoder naming trap, and a Results-plan rethink
 
 **Focus:** Pull the two finished HPC sweeps, build the 2D-Gaussian RF geometry plots
