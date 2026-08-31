@@ -1,0 +1,35 @@
+\subsubsection{Beta-binomial mixed-effect models}
+
+To quantify each ablation and to test the contribution of the spatial prior, we fit
+beta-binomial generalized linear mixed models to the test-set classification counts. The
+binomial component reflects the sampling process directly, since each test item is a
+Bernoulli trial, while the beta component lets the success probability vary between runs
+and absorbs the overdispersion that a plain binomial model would misattribute to sampling
+noise. Both parts earn their place here: test-set sizes differ by an order of magnitude
+across datasets ($2{,}500$ for notMNIST against $25{,}000$ for SVHN), so equal accuracies
+carry unequal certainty, and repeated seeds of a single configuration vary more than
+binomial sampling alone predicts.
+
+Both phases share one specification, and we state it once. Writing $y_i$ for the number of
+correctly classified test items out of $n_i$ in run $i$,
+\begin{align}
+y_i &\sim \mathrm{BetaBinomial}\!\left(n_i, \mu_i, \phi\right), \\
+\operatorname{logit}\!\left(\mu_i\right)
+&= \beta_0 + \gamma_{c(i)} + \delta_{d(i)} + (\gamma\delta)_{c(i)d(i)}
+   + b_{\mathrm{seed}(i)},
+\end{align}
+where $c(i)$ indexes the configuration, $d(i)$ the dataset, $(\gamma\delta)$ their
+interaction, $b_{\mathrm{seed}(i)} \sim \mathcal{N}(0, \sigma^2_{\mathrm{seed}})$ a
+per-seed random intercept, and $\phi > 0$ the dispersion parameter, with the binomial case
+recovered as $\phi \to \infty$. The phases differ only in what $c$ encodes and in which
+decoder supplies $y_i$. In Phase 1, $c$ is the seven-level ablation factor referenced to
+the frozen configuration, and $y_i$ comes from the linear probe, which is the only decoder
+the ungrouped unsupervised architecture admits. In Phase 2, $c$ is the prior, oriented or
+random and referenced to random, and we fit the model separately to the learned readout and
+to the probe. In both cases we test the configuration $\times$ dataset interaction by a
+likelihood-ratio test against the corresponding additive model.\footnote{In Phase 1 the prior varies only between the two trace-STDP conditions, so it
+is aliased with the ablation factor and is recovered as a contrast within $c$ rather than
+estimated as a main effect. Neither phase includes a randomly initialized frozen
+configuration, so no prior $\times$ rule interaction is identifiable in either. Phase 2
+crosses the prior with dataset and does support a main effect and a prior $\times$ dataset
+interaction, which is why we treat it as confirmatory and Phase 1 as diagnostic.}

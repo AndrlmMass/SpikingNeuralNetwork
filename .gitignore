@@ -5,6 +5,21 @@ figures/
 profile/
 plots/
 
+# Paper deliverables, re-included from the TOP-LEVEL results/ only. The prose (.tex)
+# exists nowhere else and is not regenerable; the figures and tables are what the article
+# compiles against. Everything else under results/ -- run JSON, feature npz, weight
+# checkpoints, ~625 MB of it -- stays ignored, as do the nested experiments/*/results/
+# directories still caught by the unanchored `results/` rule above.
+#
+# Order matters twice: git cannot re-include a file whose parent directory is excluded, so
+# `!/results/` has to un-exclude the directory before `/results/*` filters its contents;
+# and `!/results/figures/` has to sit after `figures/`, which would otherwise match it.
+!/results/
+/results/*
+!/results/*.tex
+!/results/tables/
+!/results/figures/
+
 # Data
 data/
 sdata/

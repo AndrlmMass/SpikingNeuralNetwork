@@ -1,0 +1,25 @@
+\begin{table}[t]
+\centering
+\caption{Oriented receptive fields against random initialization under R-STDP, by
+decoder. The learned readout is the network's own decoder; the linear probe is an
+external control fitted on the same features. The two do not agree in magnitude and, on
+Fashion-MNIST, not in significance either, so any statement of this contrast has to name
+its decoder. Dispersion is allowed to vary by dataset for the learned readout
+($\phi \sim$ dataset), because the seed spread differs roughly fifteen-fold across datasets.}
+\label{tab:phase2_prior}
+\begin{tabular}{lrrrr}
+\toprule
+& \multicolumn{2}{c}{Learned readout} & \multicolumn{2}{c}{Linear probe} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5}
+Dataset & $\Delta$ (pp) & $95\%$ CI & $\Delta$ (pp) & $95\%$ CI \\
+\midrule
+MNIST & $+3.04^{***}$ & $[+2.34,\, +3.75]$ & $+4.92^{***}$ & $[+4.54,\, +5.30]$ \\
+Fashion & $-3.32$ & $[-7.99,\, +1.40]$ & $-1.09^{***}$ & $[-1.66,\, -0.51]$ \\
+KMNIST & $+3.39^{***}$ & $[+2.45,\, +4.31]$ & $+5.31^{***}$ & $[+4.68,\, +5.94]$ \\
+notMNIST & $-6.28^{***}$ & $[-8.21,\, -4.30]$ & $-2.64^{***}$ & $[-3.54,\, -1.79]$ \\
+SVHN & $+6.75^{**}$ & $[+2.85,\, +10.61]$ & $+14.37^{***}$ & $[+13.96,\, +14.79]$ \\
+\bottomrule
+\end{tabular}
+
+\footnotesize $^{*}p<0.05$, $^{**}p<0.01$, $^{***}p<0.001$.
+\end{table}

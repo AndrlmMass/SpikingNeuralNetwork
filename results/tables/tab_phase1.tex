@@ -1,0 +1,27 @@
+\begin{table}[t]
+\centering
+\caption{Unsupervised model, in percentage points of accuracy on the linear probe.
+The upper block compares each plastic configuration against frozen weights, holding the
+oriented prior fixed, so every row changes one mechanism. The lower block is the
+receptive-field contrast, holding trace-STDP fixed and changing only the initialization;
+it is reported separately because its reference is random connectivity rather than frozen
+weights. Entries without a marker have intervals spanning zero.}
+\label{tab:phase1}
+\begin{tabular}{lrrrrr}
+\toprule
+& MNIST & Fashion & KMNIST & notMNIST & SVHN \\
+\midrule
+\multicolumn{6}{l}{\emph{against frozen weights, oriented prior}} \\
+trace-STDP & $-2.19^{***}$ & $-0.38$ & $-4.27^{***}$ & $-2.78^{***}$ & $-2.11^{***}$ \\
+triplet-STDP & $-1.86^{***}$ & $-1.60^{***}$ & $-1.19^{***}$ & $-0.41$ & $-1.03^{***}$ \\
++ iSTDP (Vogels) & $-2.18^{***}$ & $-1.40^{***}$ & $-5.39^{***}$ & $-4.04^{***}$ & $-3.71^{***}$ \\
+no E$\to$E recurrence & $-1.52^{***}$ & $-0.47$ & $-3.61^{***}$ & $-2.88^{***}$ & $-1.94^{***}$ \\
+no I$\to$E inhibition & $-4.09^{***}$ & $-0.91^{**}$ & $-5.54^{***}$ & $-3.31^{***}$ & $-0.66^{**}$ \\
+\midrule
+\multicolumn{6}{l}{\emph{against random connectivity, trace-STDP}} \\
+oriented receptive fields & $+0.64^{**}$ & $+3.12^{***}$ & $+3.48^{***}$ & $+3.24^{***}$ & $+2.50^{***}$ \\
+\bottomrule
+\end{tabular}
+
+\footnotesize $^{*}p<0.05$, $^{**}p<0.01$, $^{***}p<0.001$.
+\end{table}
