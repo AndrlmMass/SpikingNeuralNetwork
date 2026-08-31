@@ -10,6 +10,98 @@ Keep it scannable — a few bullets, not a transcript.
 
 ---
 
+## 2026-08-31 — Results figures: coverage anchors, a merged OOD operating point, and the overlap plot
+
+**Focus:** presentation, not new runs. Every number below comes from runs already on disk
+(phase-2 `run_20260819_112250`, `results/ood_mnist/run1/mnist_ood_s0`). Two figure changes
+surfaced findings the earlier plots had hidden.
+
+### The OOD story is worse than the two-panel figure showed
+
+`plot_ood.py`'s right panel used to plot the network alone, with the ID cost as a single
+dashed line. It now carries **all three detectors × both error directions** — solid bar =
+OOD correctly rejected, hatched = in-distribution wrongly rejected, hue = detector. At the
+deployable τ (α = 0.025):
+
+| detector                        | kmnist | notmnist | fmnist | svhn  | ID cost |
+| ------------------------------- | ------ | -------- | ------ | ----- | ------- |
+| network confidence              | 0.268  | 0.181    | 0.127  | 0.166 | 0.026   |
+| mean intensity — NO NETWORK     | 0.198  | 0.838    | 0.594  | 0.880 | 0.031   |
+| **pixel PCA residual**          | 0.946  | 0.994    | 0.879  | 0.905 | 0.024   |
+
+The AUROC panel already implied this, but nobody had put the baselines at an operating
+point: **the pixel residual rejects 88–99% of OOD for the same ~2.4% of valid MNIST that
+buys the network 13–27%.** The 08-29 entry's "the one genuine positive is KMNIST" survives
+only against *mean intensity* (0.198), not against the residual (0.946).
+
+**Extending the ID cost to all detectors reveals no trade-off, and cannot**: every τ is the
+α-quantile of ID data, so all three ID bars land at 2.4–3.1% by construction. They are a
+calibration check — nobody is buying rejection by refusing valid input — not a discriminator.
+Worth saying in the caption so a reader does not go looking for a difference that the
+calibration forbids.
+
+### New figure: `plot_confidence_overlap.py` — why the decision is hard, per item
+
+Per-test-item entropy for MNIST and each probe, KDE + filled area, with the α thresholds as
+vertical cuts and a subsampled rug of the raw scores underneath. `--all` gives the 2×2.
+
+| α (MNIST refused) | Fashion | KMNIST | notMNIST | SVHN |
+| ----------------- | ------- | ------ | -------- | ---- |
+| 0.01              | 5.7%    | 13.2%  | 9.4%     | 7.9% |
+| 0.025             | 12.7%   | 26.8%  | 18.1%    | 16.6% |
+| 0.05              | 20.4%   | 39.6%  | 27.7%    | 25.7% |
+| 0.10              | 34.0%   | 57.4%  | 42.9%    | 40.7% |
+
+The curves are **nested — there is no knee**, so no α is "correct" and the choice is a
+policy call. Even refusing a tenth of valid MNIST still answers two thirds of Fashion.
+KMNIST separates *best* of the four, against intuition, and its density is visibly the
+tightest and most right-shifted.
+
+**The axis has to be log entropy.** MNIST's median entropy is 0.005 and a quarter of items
+sit below 1e-4; on a linear axis both distributions collapse into one spike at H = 0 and the
+overlap — the whole point — is invisible. KDE is fitted on log10(H), floored at 1e-4.
+
+### Coverage figure: anchors and a target line
+
+`plot_risk_coverage_datasets.py` now prints each dataset's accuracy beside its coverage-1
+anchor (0.949 / 0.815 / 0.760 / 0.720 / 0.223) and marks with a diamond where each curve
+still meets a target accuracy, against a dotted reference line (`--target`, default 0.95).
+KMNIST crosses at coverage 0.512, notMNIST at 0.642; Fashion and SVHN never do.
+
+**MNIST is the awkward case**: base accuracy 0.949 sits just *under* 95%, so it crosses at
+coverage 0.999 and the marker would print on top of the anchor. Crossings above 0.988 are
+suppressed and the anchor value carries it — but a reader could misread the missing diamond
+as "MNIST never reaches 95%", so the caption has to say so.
+
+Two placement bugs fixed while there: matplotlib does not clip text, so labels written to
+both axes of the broken pair escaped the one that could not show them and dragged the saved
+bbox out (the figure came out portrait); and a series label whose anchor cleared the band
+could still have its *text* drawn outside the frame.
+
+### Prose and tables
+
+- Selective-prediction paragraph rewritten to cover all five datasets and then halved on
+  request. Every figure now read from the five-seed aggregate behind `tab_selective.tex`
+  rather than transcribed — the draft had AUROC 0.934 (vs 0.933) and coverage@99% 0.179 /
+  0.162 for notMNIST / KMNIST (vs 0.183 / 0.161).
+- The GLMM identifiability limitation in `results/methods_glmm.tex` is now a footnote (98
+  words → 66), keeping all three honesty points. The diagnostic/confirmatory framing now
+  lives *only* there, and is load-bearing for how the Results read.
+- SVHN coverage@99% is 0.0002, not a structural zero — it rounds to 0.000 in the table but
+  a reader checking the raw sweep will find a nonzero entry.
+
+### Open items
+
+- [ ] The new overlap figure shows only the network. Next to a claim that OOD detection is
+      hard, a reader will take "hard" as general when it is hard *for the network* —
+      the pixel residual has no curve on it.
+- [ ] Still seed 0 only for everything OOD, this figure included.
+- [ ] Carried from 08-29: `runner.featurize` truncation; more OOD seeds; phase-2 absolutes
+      re-read from raw runs; §3.3 and step-6 rewrites; `rf_elongation`; abstract 95.5 vs
+      94.6.
+
+---
+
 ## 2026-08-29 — Frozen supervised control, a bootstrapped abstention threshold, and OOD rejection
 
 **Focus:** the three items the 08-25 Results plan listed with no runs behind them — the
