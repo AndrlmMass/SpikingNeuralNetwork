@@ -335,6 +335,14 @@ def main():
             tiled_center_margin=a.center_margin, ablate_ie=a.ablate_ie, **gkw)
     else:
         weights = snn.weights.random(**wkw)
+        # A grouped random arm must get the same block-diagonal I->E inhibition as the
+        # grouped RF arm; without this it silently fell back to global WTA, confounding
+        # the RF-vs-random contrast with a change in inhibition.
+        if a.grouped:
+            weights.grouped_inhibition = True
+            weights.n_groups = a.n_groups
+            weights.group_layout = a.group_layout
+            weights.ablate_ie = a.ablate_ie
     # RF-size override: shrink the structural footprint (sigma_se_mean) to force local
     # patch detectors instead of near-global whole-digit templates, and/or make RF sizes
     # heterogeneous. Applied to the spec so it flows through _to_factory_kwargs.
