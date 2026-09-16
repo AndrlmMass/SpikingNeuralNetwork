@@ -1,0 +1,47 @@
+\subsection{Reward-modulated STDP}
+
+Learning acts only on the feedforward input-to-excitatory weights $w_{ij}$, and the
+update is applied once per sample rather than at every timestep. Each excitatory
+neuron $i$ carries a fixed class label $c(i) \in \{1, \dots, C\}$, assigned in
+contiguous blocks so that exactly $N_E / C$ neurons represent each class. Over the
+$T$ timesteps of a sample we accumulate spike counts $n_k = \sum_{t=1}^{T} S_k(t)$
+for every input and excitatory unit, and form the symmetric count-product
+eligibility
+\begin{equation}
+  e_{ij} = n_i \, n_j \;\geq\; 0 ,
+\end{equation}
+which vanishes whenever the postsynaptic neuron is silent, so that only neurons
+that responded to the sample are eligible for modification.
+
+The supervised direction comes from a per-neuron modulation $M_i$ that depends
+only on whether the neuron's class label matches the label $y$ of the current
+sample,
+\begin{equation}
+  M_i =
+  \begin{cases}
+    +1.8, & c(i) = y, \\[2pt]
+    -0.2, & c(i) \neq y .
+  \end{cases}
+\end{equation}
+These are the teacher values $R_i = \pm 1$ shifted by the population mean
+$\bar{R} = -0.8$, which centers the update so that the single target class is not
+outweighed by net depression from the nine non-target classes. Because the class
+assignment is balanced and fixed, the same two values apply on every trial.
+
+The weight update combines the eligibility and the modulation with a soft bound
+that keeps the weights inside $[w_{\min}, w_{\max}]$,
+\begin{equation}
+  \Delta w_{ij} \;=\; \eta_r \, M_i \, e_{ij} \, B_{ij},
+  \qquad
+  B_{ij} =
+  \begin{cases}
+    (w_{\max} - w_{ij})^{\mu}, & M_i > 0, \\[2pt]
+    (w_{ij} - w_{\min})^{\mu}, & M_i < 0,
+  \end{cases}
+\end{equation}
+where the sign of $\Delta w_{ij}$ follows the sign of $M_i$ because $\eta_r > 0$ and
+$e_{ij} \geq 0$. Target-class neurons therefore potentiate the inputs that drove
+them, non-target neurons depress theirs at one ninth of that rate, and the
+population-level update is zero-mean by construction. We use $\eta_r = 5 \times 10^{-6}$ and $\mu = 0.6$, with weights confined to
+$[w_{\min}, w_{\max}] = [0.01,\, 25]$, $N_E = 1000$ excitatory neurons, and $T = 350$
+timesteps per sample.

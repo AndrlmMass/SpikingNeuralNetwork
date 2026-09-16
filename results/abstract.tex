@@ -1,0 +1,25 @@
+\begin{abstract}
+Spiking Neural Networks (SNNs) are frequently motivated by an appeal to biological
+realism, on the assumption that mechanisms closer to their cortical counterparts will
+perform better. We treat that assumption as a hypothesis to be measured rather than a
+design principle to be followed. We introduce a spatially aware connectivity scheme in
+which input-to-excitatory projections are elongated, orientation-tuned two-dimensional
+Gaussian \textit{receptive fields} (RFs), and combine it with supervised reward-modulated
+spike-timing-dependent plasticity (R-STDP), which assigns each excitatory neuron to a
+class and reshapes its field through a baseline-corrected teaching signal. Varying the
+connectivity, the learning rule, and the dataset independently, we find that the
+structural prior contributes conditionally, and that the rule acting on it decides how
+much. Under unsupervised plasticity the prior is worth between $0.6$ and $3.5$ percentage
+points on all five datasets, yet no unsupervised rule improves on simply freezing the
+weights, and the rules differ sharply in how much of the prior they leave standing, from
+$93\%$ of the initial orientation coherence under triplet-STDP to $54\%$ under
+trace-STDP. Under R-STDP the same contrast grows to $+4.9$ points on MNIST and $+5.3$ on
+KMNIST, and reverses to $-2.6$ on notMNIST, whose class-relevant information does not
+reside in local oriented structure. The model reaches $94.6\%$ on MNIST through its own
+online readout, and its predictive entropy separates correct from incorrect predictions
+well enough to reach $98.1\%$ accuracy at $90\%$ coverage---but only where the readout is
+already accurate, the separation falling from $\mathrm{AUROC}$ $0.933$ on MNIST to
+$0.595$ on SVHN. Biological realism is therefore better understood not as a scalar to be
+maximized, but as an alignment between a structural assumption, the plasticity rule that
+acts on it, and the statistical structure of the data.
+\end{abstract}

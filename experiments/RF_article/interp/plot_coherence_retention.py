@@ -13,21 +13,28 @@ no-plasticity phase-2 cell to remove that assumption.
   python experiments/RF_article/interp/plot_coherence_retention.py \
       --phase1 <run_dir> --phase2 <run_dir> --out-dir <dir>
 """
-import argparse, glob, json, os
+import argparse, glob, json, os, sys
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from plot_risk_coverage import PALETTES  # noqa: E402
+
+ROSE, SLATE, SAGE = PALETTES["project"]
 
 DATASETS = ["mnist", "fmnist", "kmnist", "notmnist", "svhn"]
 INK, MUTED, GRID, INIT = "#0b0b0b", "#52514e", "#d8d7d2", "#9a9892"
 # rows ordered by how much prior survives, so the figure reads top-to-bottom.
 # `base_rnd` is deliberately NOT a row: random weights never carried the prior, so a
 # "retained" fraction is undefined for them. They appear as the floor band instead.
-ROWS = [("p1", "base_ori", "oriented RF", "trace-STDP",   "#2a78d6"),
-        ("p2", "oriented", "oriented RF", "R-STDP",       "#1baf7a"),
-        ("p1", "triplet",  "oriented RF", "triplet-STDP", "#4a3aa7")]
-FLOOR = "#eb6834"
+ROWS = [("p1", "base_ori", "oriented RF", "trace-STDP",   SLATE),
+        ("p2", "oriented", "oriented RF", "R-STDP",       ROSE),
+        ("p1", "triplet",  "oriented RF", "triplet-STDP", SAGE)]
+# The random floor is context, not a result: it is the only band without a retained
+# fraction, so it is drawn in neutral grey and never competes with the three rules.
+FLOOR = "#8d8b86"
 
 
 def load(run_dir):

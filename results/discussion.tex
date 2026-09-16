@@ -1,0 +1,114 @@
+\section{Discussion}
+
+\subsection{Where the benefit of spatially aware wiring lies}
+
+Taken together, the two unsupervised findings identify where the benefit of spatially
+aware wiring actually lies, and they temper what can be expected of unsupervised
+plasticity acting on it. Because the oriented fields already supply much of the structure
+these tasks require, an unsupervised rule has relatively little left to contribute and a
+good deal that it can disturb, so any rule that modifies these weights must recover more
+structure than it removes before it improves on leaving them untouched. None of the
+unsupervised rules we tested managed that, and the shortfall was consistent enough across
+datasets and conditions that we understand it as a consequence of how much the
+initialization already provides rather than a deficiency particular to any one rule.
+
+That the erosion of the fields does not predict accuracy suggests orientation coherence
+is better read as a description of what plasticity does to the representation than as an
+account of why one configuration outperforms another. Two conditions with identical
+coherence differ by three percentage points, and the supervised model reaches its best
+results while retaining roughly seventy percent of the initial value, so we do not treat
+retention as a quantity to be maximized.
+
+\subsection{Supervision and the structural prior}
+
+Supervision does not free the network from its structural assumption; it sharpens it.
+Read by the same external probe in both phases, the advantage of oriented fields over
+random connectivity of matched density grows from $+0.64$ to $+4.92$ percentage points on
+MNIST and from $+3.48$ to $+5.31$ on KMNIST once the rule carries a teaching signal, while
+on notMNIST the identical shift turns a $+3.24$ advantage into a $-2.64$ cost. Through its
+own readout the supervised network reaches $94.6\%$ on MNIST and $75.5\%$ on KMNIST, the
+two datasets on which the prior and the rule agree. We read this as the reward signal
+amplifying whatever the initialization already encodes rather than replacing it: the prior
+functions as an inductive bias in the ordinary sense, narrowing what the network can
+represent in exchange for aligning it with a hypothesis about the input, so that the
+supervised objective sharpens both the benefit and the cost of that trade.
+
+What changes between the two phases is not the amount of plasticity but whether it is
+directed. Holding the architecture and the prior fixed and setting the reward rate to
+zero, R-STDP improves on frozen weights on all five datasets, by $8.9$ percentage points
+on MNIST and $22.7$ on KMNIST, where every unsupervised rule we tested fell below the
+same reference. We therefore read the phase-1 result as a statement about undirected
+local plasticity rather than about plasticity as such: a rule that receives no
+information about the task can only rearrange a prior that was already close to what the
+task needed, while a rule that receives such information can improve on it.
+
+We do not, however, claim that the supervised model is more accurate than the
+unsupervised one. Six factors change between the two phases, so no single difference is
+attributable to supervision, and the frozen comparison above is valid only within
+phase~2. What supervision demonstrably adds is a decoder internal to the network, which
+the unsupervised model lacks entirely.
+
+\subsection{Scope of the abstention result}
+
+Abstention is useful where the model is already accurate and its confidence is
+calibrated, and it offers little where either condition fails. The separation between
+correct and incorrect predictions weakens in step with accuracy across the five datasets,
+so at a fixed accuracy target the usable fraction of the test set falls from most of
+MNIST to a few percent of Fashion-MNIST and none of SVHN. Reporting abstention as a
+general capability of the architecture would overstate what the mechanism provides; on
+the present evidence it is a property of the MNIST-trained model rather than of the
+architecture.
+
+\subsection{Where novelty is represented}
+
+The out-of-distribution result separates two things the abstention analysis treats as
+one. Predictive entropy is a statement about the readout's output distribution, and it
+identifies novel input poorly; the same trial, read as a point in the excitatory rate
+space, separates novel from familiar input considerably better. The information was in
+the representation throughout and the readout discarded it, which bounds the preceding
+section rather than contradicting it: a calibrated confidence signal reports when the
+network is likely to be wrong about a class, not when the input belongs to no class at
+all.
+
+The second observation is structural. We adopted the class-grouped layout so that reward
+could be assigned to a fixed population per class, and it turns out to supply a novelty
+signal at no additional cost, since familiar input concentrates activity in one group
+while novel input spreads it across the ten and no parameters need to be fitted to
+measure that. A choice made for credit assignment paying a second dividend elsewhere is
+the same pattern we report for the receptive-field prior. What the network does not
+provide is a model of the input distribution, and a linear subspace fitted to raw pixels
+detects novelty better than any score we read from the network---which, on a benchmark of
+centred grayscale images, is what we would expect.
+
+\subsection{Limitations}
+
+The prior is manipulated only under trace-STDP in the unsupervised phase, so we cannot
+say whether receptive fields would help under triplet-STDP or under frozen weights. A
+frozen random-weight condition would separate the contribution of the oriented geometry
+from that of freezing the weights, and its absence is the main gap in the present design.
+The supervised contrast also depends on which decoder reads the representation: on
+Fashion-MNIST the learned readout and the external probe disagree in significance, and
+the two differ in magnitude on every dataset, so each statement of that contrast has to
+name its decoder. The out-of-distribution analysis rests on one trained network at a
+single seed, and the two feature-space scores it compares were selected after seeing the
+probes, so we report it as a characterisation rather than a benchmarked result.
+
+\subsection{Conclusion and outlook}
+
+Biological realism is not a single property that a network either has or lacks, and our
+results separate its components rather than endorsing or rejecting it as a whole.
+Spatially structured connectivity pays where the data carry the structure it assumes and
+costs accuracy where they do not; undirected local plasticity improves on that structure
+on none of the five datasets; and the same plasticity, once modulated by reward, improves
+on it on all of them while amplifying the prior's advantage and its disadvantage alike.
+The resulting model is accurate enough on MNIST for its own confidence to support a
+usable abstention policy and not accurate enough elsewhere for that policy to mean much,
+which we take as the honest scope of the approach at this scale.
+
+Two directions follow from this. The sign of the receptive-field effect should be
+predictable from a statistic of the images rather than recovered after training, which
+would turn the choice of prior into a design decision. The second concerns the rule
+itself: preservation of the prior and task performance came apart in our comparisons,
+since the rule that preserved the most was not the one that performed best, and the rule
+that performed best was the one carrying a teaching signal. Combining the two properties
+is therefore more promising than trading one against the other.

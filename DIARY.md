@@ -10,6 +10,66 @@ Keep it scannable — a few bullets, not a transcript.
 
 ---
 
+## 2026-09-16 — Paper draft, and a confound in the supervised random arm
+
+**Focus:** finalising the TMLR first draft (prose, figures, architecture TikZ). Checking a
+Methods sentence ("the resulting inhibition … depends on the connectivity scheme") against
+the code turned up a bug that confounds the phase-2 RF-vs-random contrast.
+
+### The bug: grouped random runs silently got global inhibition
+
+In `interp_harness.py` only `--prior oriented|isotropic` reached `grouped_excitatory()`.
+`--prior random` fell through to `snn.weights.random(**wkw)`, which never sets
+`grouped_inhibition`, so the `--grouped --tiled` flags had no effect on I→E. The saved
+config still says `grouped: True`, which is why this went unnoticed. The branching
+predates the sweep (present in `759139ed`, 08-18), so **all 25 random runs in
+`mnist_family_sweep/run_20260819_112250` are affected**.
+
+I→E actually built per arm (E→I is the identity × `peak_ei` everywhere, never differs):
+
+| arm                     | targets / interneuron | weight | row sum |
+| ----------------------- | --------------------- | ------ | ------- |
+| unsupervised, RF        | 1023 (global)         | −0.10  | −102.4  |
+| unsupervised, random    | 1023 (global)         | −0.10  | −102.4  |
+| supervised, RF          | 99 (own group)        | −2.0   | −198    |
+| **supervised, random**  | **999 (global)**      | **−0.10** | **−100** |
+
+So the supervised random arm had cross-class inhibition, half the total inhibition, and 20×
+weaker within-class synapses. Consequences:
+
+- **Phase 1 (+0.64 to +3.48) is clean**: both arms share identical global inhibition.
+- **Phase 2 contrast (+4.9 MNIST, +5.3 KMNIST, −2.6 notMNIST) is confounded** with an
+  inhibition change until the random arm is rerun. Abstract, Results §3.2 and Discussion
+  all lean on these numbers.
+- The Methods sentence is wrong in both directions: false for phase 1, and for phase 2 it
+  attributes to the connectivity scheme what is an implementation artefact.
+- Side correction: unsupervised I→E is ≈ −0.1 per synapse after `weight_compliance`
+  (frac 0.05), not −2.0 as I had been assuming for the hyperparameter table.
+
+### Fix
+
+**Commit `9159d743`**: in the random branch, a grouped run now sets `grouped_inhibition`,
+`n_groups`, `group_layout` and `ablate_ie` on the spec. `_fill_random_weights` already
+handled grouped inhibition. Verified by building both supervised arms: I→E blocks are
+byte-identical (99 targets at −2.0). Ungrouped runs unchanged.
+
+Rerun only the random arm (odd cells in `run_slurm.sh`), after `git pull` on the cluster:
+
+    sbatch --array=5-9,15-19,25-29,35-39,45-49 experiments/RF_article/interp/mnist_family_sweep/run_slurm.sh
+
+New submission → new `run_<timestamp>` folder; compare against the oriented runs in
+`run_20260819_112250`, which are unaffected.
+
+### Open
+
+- [ ] Push `9159d743`, submit the 25 reruns.
+- [ ] Refit the GLMM / rederive the phase-2 contrasts, probe gaps, and coverage numbers
+      that use the random arm; update abstract, §3.2, Discussion.
+- [ ] Rewrite the Methods inhibition sentence; fix I→E rows in the hyperparameter table.
+- [ ] If the contrast shrinks, the "supervision amplifies the prior" framing needs revisiting.
+
+---
+
 ## 2026-08-31 — Results figures: coverage anchors, a merged OOD operating point, and the overlap plot
 
 **Focus:** presentation, not new runs. Every number below comes from runs already on disk

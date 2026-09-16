@@ -1,0 +1,82 @@
+\section{Hyperparameters}
+\label{sec::app:hyperparameters}
+
+\begin{longtable}{m{2.4cm}m{1.9cm}m{4.3cm}m{2.1cm}m{2.1cm}}
+\caption{Configuration of the two main runs. The unsupervised column is the recurrent,
+non-grouped network trained with trace-STDP (Section~\ref{sec:met:design:p1}); the supervised
+column is the tiled, class-grouped network trained with R-STDP and the learned readout
+(Section~\ref{sec:met:desing:p2}). A dash marks a parameter that does not apply to that model.
+Both models were run for five seeds and three epochs on identical data splits.}
+\label{tab:hparams}\\
+\toprule
+Component & Parameter & Descriptor & Unsupervised & Supervised \\
+\midrule
+\endfirsthead
+
+\toprule
+Component & Parameter & Descriptor & Unsupervised & Supervised \\
+\midrule
+\endhead
+
+Network           &&&&\\
+  & $N_{\text{in}}$  & Input neurons        & 784 & 784 \\
+  & $N_{\text{exc}}$ & Excitatory neurons   & 1024 & 1000 \\
+  & $N_{\text{inh}}$ & Inhibitory neurons   & 225 & 1000 \\
+  & $G$ & Population groups& --- & 10 \\
+  & $\rho_{\text{in}\to\text{exc}}$  & Connection density & 1\% & 1\% \\
+  & $\rho_{\text{exc}\to\text{exc}}$ & Connection density & 1\% & --- \\
+  & $\rho_{\text{exc}\to\text{inh}}$ & Connection density & 3\% & 1\% \\
+  & $\rho_{\text{inh}\to\text{exc}}$ & Connection density & 5\% & 99\% \\
+  & $\mathcal{W}_{\text{in}\to\text{exc}}$  & Peak synaptic weight & $4.0$ & $4.0$ \\
+  & $\mathcal{W}_{\text{exc}\to\text{exc}}$ & Peak synaptic weight & $1.0$ & --- \\
+  & $\mathcal{W}_{\text{exc}\to\text{inh}}$ & Peak synaptic weight & $20$ & $50$ \\
+  & $\mathcal{W}_{\text{inh}\to\text{exc}}$ & Peak synaptic weight & $-2.0$ & $-2.0$ \\
+Receptive fields  &&&&\\
+  & $n_{\theta}$      & Preferred orientations & 4 & 4 \\
+  & $\sigma_{x}$      & RF elongation length & 3.0 px & 3.0 px \\
+  & $\gamma$          & Thick-to-length ratio & 0.4 & 0.4 \\
+  & $m$               & Tiling centre margin & 0 px & 4 px \\
+Plasticity        &&&&\\
+  & rule              & Learning rule & trace-STDP & R-STDP \\
+  & $\eta$            & Learning rate & $4\times10^{-4}$ & $5\times10^{-6}$ \\
+  & $\mu_{\text{weight}}$ & Soft-bound exponent & $0.5$ & $0.6$ \\
+  & $w_{\max}$        & Soft-bound ceiling & $10$ & $25$ \\
+  & $[w_{\min}, w_{\max}]$ & Excitatory weight clip & $[0.01,\,25]$ & $[0.01,\,25]$ \\
+  & $\tau_{\text{trace}}$ & Trace time constant & 20 ms & --- \\
+  & $\nu_{\text{weight}}$ & Weight update interval & 100 ms & 350 ms \\
+  & $\bar{R}$         & Reward baseline & --- & $-0.8$ \\
+  & $\eta_{\text{out}}$ & Readout learning rate & --- & $0.1$ \\
+Regularization    &&&&\\
+  & $\nu_{\text{reg}}$ & Normalization interval & 1050 ms & 350 ms \\
+  & mode              & Normalization target & per-neuron & per-neuron \\
+Neurodynamics     &&&&\\
+  & $\Delta t$        & Simulation timestep & \multicolumn{2}{c}{1 ms} \\
+  & $\tau_m^{exc}$    & Membrane time const & \multicolumn{2}{c}{20 ms} \\
+  & $\tau_m^{inh}$    & Membrane time const & \multicolumn{2}{c}{15 ms} \\
+  & $\tau_{syn}^{exc}$ & Synaptic current const & \multicolumn{2}{c}{10 ms} \\
+  & $\tau_{syn}^{inh}$ & Synaptic current const & \multicolumn{2}{c}{9 ms} \\
+  & $U_{\text{rest}}$ & Resting potential & \multicolumn{2}{c}{$-70$ mV} \\
+  & $U_{\text{reset}}$& Reset potential & \multicolumn{2}{c}{$-80$ mV} \\
+  & $U_{\max}$        & Max potential & \multicolumn{2}{c}{$40$ mV} \\
+  & $U_{\min}$        & Min potential & \multicolumn{2}{c}{$-100$ mV} \\
+  & $U_{th}$          & Spiking threshold & \multicolumn{2}{c}{$-55$ mV} \\
+  & $R_m$             & Membrane resistance & \multicolumn{2}{c}{$15$ M$\Omega$} \\
+  & $\tau_{\text{th}}$ & Adaptive thresh const & \multicolumn{2}{c}{200 ms} \\
+  & $\delta$          & Threshold jump & \multicolumn{2}{c}{0.5 mV} \\
+Data prep   &&&&\\
+  & $S_{\text{image}}$ & Image dimensions & \multicolumn{2}{c}{$(28, 28)$} \\
+  & $f_{\max}$        & Max spiking rate & \multicolumn{2}{c}{90 Hz} \\
+  & $T_{\text{image}}$ & Stimulus duration & \multicolumn{2}{c}{350 ms} \\
+  & $N_{\text{train}}$ & Training samples & \multicolumn{2}{c}{59000} \\
+  & $N_{\text{val}}$  & Validation samples & \multicolumn{2}{c}{1000} \\
+  & $N_{\text{test}}$ & Test samples & \multicolumn{2}{c}{10000} \\
+  & $B$               & Batch size & \multicolumn{2}{c}{1000} \\
+  & $E$               & Epochs & \multicolumn{2}{c}{3} \\
+  & $N_{\text{probe}}$ & Probe fitting samples & \multicolumn{2}{c}{5000} \\
+  & $S$               & Seeds & \multicolumn{2}{c}{5} \\
+\bottomrule
+\multicolumn{5}{p{12.8cm}}{\footnotesize Split sizes are those of MNIST, Fashion-MNIST,
+and KMNIST. SVHN uses its full dedicated test set ($N_{\text{test}} = 25000$); notMNIST
+has no canonical split, so its 18724 images are divided seed-consistently into
+$15000 / 1000 / 2500$.} \\
+\end{longtable}
