@@ -34,8 +34,8 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 6000, 100, 2000
-        b_tr, b_va, b_te = 400, 100, 200
+        img_tr, img_va, img_te = 4000, 100, 1000
+        b_tr, b_va, b_te = 1000, 100, 200
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -213,13 +213,13 @@ def main():
     parser.add_argument(
         "--no-sleep",
         action="store_true",
-        default=False,
+        default=True,
         help="disable sleep during training (default: sleep enabled)",
     )
     parser.add_argument(
         "--normalize-weights",
         action="store_true",
-        default=False,
+        default=True,
         help="enable per-group weight-sum normalization (may slow training)",
     )
     parser.add_argument(

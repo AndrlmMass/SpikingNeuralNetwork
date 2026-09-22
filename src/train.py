@@ -559,7 +559,6 @@ def train_network(
         leave=False,
         unit="step",
     )
-    last_sample = 0
     last_sleep_flag = -1  # unknown
     last_stats_update_t = -1000
     # Initial snapshot (only if tracking enabled)
@@ -864,15 +863,6 @@ def train_network(
                         dt=dt,
                     )
 
-                # Optional normalization at every step if enabled
-                if normalize_weights and initial_sum_exc is not None:
-                    cur_exc = np.sum(np.abs(weights[:ex, st:ih]))
-                    if cur_exc > 1e-10:
-                        weights[:ex, st:ih] *= initial_sum_exc / cur_exc
-                    cur_inh = np.sum(np.abs(weights[ex:ih, st:ex]))
-                    if cur_inh > 1e-10:
-                        weights[ex:ih, st:ex] *= initial_sum_inh / cur_inh
-
                 # Record decimated snapshots during sleep (only if tracking enabled)
                 if track_weights and (sleep_iter % sleep_record_every) == 0:
                     _record_snapshot()
@@ -903,6 +893,7 @@ def train_network(
             # End hard-pause sleep; do not advance real t here (the loop continues below)
             # Update cached transpose after sleep modified weights
             weights_T_cache = weights[:, st:ih].T.copy()
+            slept_this_step = True  # mark that we slept during this real timestep
 
         # update membrane potential (use maintained previous state)
         mp[t], I_syn = update_membrane_potential(
@@ -1004,6 +995,17 @@ def train_network(
                 dt=dt,
             )
 
+            # Optional normalization at equal intervals as sleep. 
+            if normalize_weights and t % check_sleep_interval == 0:
+                print("Norm!")
+                cur_exc = np.sum(np.abs(weights[:ex, st:ih]))
+                if cur_exc > 1e-10:
+                    weights[:ex, st:ih] *= initial_sum_exc / cur_exc
+                cur_inh = np.sum(np.abs(weights[ex:ih, st:ex]))
+                if cur_inh > 1e-10:
+                    weights[ex:ih, st:ex] *= initial_sum_inh / cur_inh
+                slept_this_step = False  # reset flag after normalization
+
             if not sleep:
                 # Prevent excitatory weights from becoming negative and inhibitory weights from becoming positive
                 np.maximum(weights[:ex, st:ih], 0.0, out=weights[:ex, st:ih])
@@ -1031,7 +1033,6 @@ def train_network(
 
         # Mark sleep status and update progress bar
         if sleep and (sleep_now_exc or sleep_now_inh or slept_this_step):
-
             if t < T - 1 and spike_labels is not None:
                 spike_labels[t] = -2
                 sleep_amount += 1
