@@ -211,10 +211,26 @@ def _load_notmnist_deeplake(transform):
             "Install it via 'pip install deeplake'."
         ) from exc
 
+    # Prefer a locally cached copy so compute nodes never need network access.
+    # The cache is produced once on a login node by the precache script; without
+    # it, concurrent SLURM array tasks all pull from the hub and race the same
+    # download. Override the location with NOTMNIST_LOCAL.
+    notmnist_hub = "hub://activeloop/not-mnist-small"
+    notmnist_local = os.environ.get(
+        "NOTMNIST_LOCAL", os.path.join("data", "datasets", "notmnist_dl")
+    )
+    use_local = os.path.isdir(notmnist_local) and bool(os.listdir(notmnist_local))
+    source = notmnist_local if use_local else notmnist_hub
     try:
-        ds = deeplake.load("hub://activeloop/not-mnist-small", read_only=True)
+        ds = deeplake.load(source, read_only=True)
     except Exception as exc:
-        raise RuntimeError(f"Failed to load NotMNIST from Deeplake ({exc})") from exc
+        # A corrupt or half-written local cache should not be silently masked by
+        # falling back to the network: that reintroduces the race this avoids.
+        where = "local cache" if use_local else "Deeplake hub"
+        raise RuntimeError(
+            f"Failed to load NotMNIST from {where} ({source}): {exc}"
+        ) from exc
+    print(f"NotMNIST loaded from {'local cache' if use_local else 'hub'}: {source}")
 
     train_images = []
     train_labels = []

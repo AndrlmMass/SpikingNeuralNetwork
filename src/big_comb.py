@@ -1570,6 +1570,14 @@ class snn_sleepy:
         on_timeout="scale_to_target",
         sleep_tol_frac=1e-3,
         sleep_mode="static",
+        # --- conventional stabilization baselines (R3.1) -------------------
+        decay_enabled=False,
+        decay_rate_exc=0.0,
+        decay_rate_inh=0.0,
+        norm_mode="layer",
+        reg_interval=None,
+        clip_always=False,
+        sleep_termination="band",
     ):
         self.dt = dt
         self.pca_variance = pca_variance
@@ -1698,6 +1706,28 @@ class snn_sleepy:
             initial_sum_inh = sum_weights_inh
             initial_sum_total = sum_weights
 
+            # Per-postsynaptic-neuron initial |w| sums, for synaptic scaling
+            # (norm_mode="neuron"). Indexed by absolute column so the kernel
+            # can look them up directly from the nonzero column indices.
+            _nzr_exc, _nzc_exc = np.nonzero(self.weights[: self.ex, : self.ih])
+            _nzr_inh, _nzc_inh = np.nonzero(
+                self.weights[self.ex : self.ih, self.st : self.ex]
+            )
+            _nzr_inh = _nzr_inh + self.ex
+            _nzc_inh = _nzc_inh + self.st
+            initial_sum_post_exc = np.zeros(self.weights.shape[1])
+            initial_sum_post_inh = np.zeros(self.weights.shape[1])
+            np.add.at(
+                initial_sum_post_exc,
+                _nzc_exc,
+                np.abs(self.weights[_nzr_exc, _nzc_exc]),
+            )
+            np.add.at(
+                initial_sum_post_inh,
+                _nzc_inh,
+                np.abs(self.weights[_nzr_inh, _nzc_inh]),
+            )
+
             baseline_sum_exc = sum_weights_exc * beta
             baseline_sum_inh = sum_weights_inh * beta
             baseline_sum = sum_weights * beta
@@ -1782,6 +1812,16 @@ class snn_sleepy:
                 initial_sum_exc=initial_sum_exc,
                 initial_sum_inh=initial_sum_inh,
                 initial_sum_total=initial_sum_total,
+                # conventional stabilization baselines (R3.1)
+                decay_enabled=decay_enabled,
+                decay_rate_exc=decay_rate_exc,
+                decay_rate_inh=decay_rate_inh,
+                norm_mode=norm_mode,
+                reg_interval=reg_interval,
+                clip_always=clip_always,
+                sleep_termination=sleep_termination,
+                initial_sum_post_exc=initial_sum_post_exc,
+                initial_sum_post_inh=initial_sum_post_inh,
                 # pass hard-pause knobs
                 sleep_max_iters=sleep_max_iters,
                 on_timeout=on_timeout,

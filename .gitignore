@@ -6,3 +6,16 @@ sdata/
 pycache/
 *.pkl
 *.pyc
+# Experiment outputs -- regenerable, and large enough to bloat the history
+results/
+slurm/logs/
+*.prof
+*.jsonl
+
+# Numba JIT cache and editor state
+__pycache__/
+.vscode/
+.history/
+
+# Singularity images
+*.sif

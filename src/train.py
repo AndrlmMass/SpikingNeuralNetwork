@@ -2,7 +2,14 @@ from numba.typed import List
 from numba import njit
 from tqdm import tqdm
 import numpy as np
-from weight_funcs import sleep_func, spike_timing, vectorized_trace_func
+from weight_funcs import (
+    sleep_func,
+    spike_timing,
+    vectorized_trace_func,
+    continuous_decay,
+    norm_layer,
+    norm_neuron,
+)
 
 
 def report_numba_status():
@@ -60,6 +67,7 @@ def update_weights(
     nonzero_pre_idx,
     weight_decay_rate_exc,
     weight_decay_rate_inh,
+    clip_always,
     noisy_weights,
     weight_mean_noise,
     weight_var_noise,
@@ -113,8 +121,11 @@ def update_weights(
     Returns:
     - Updated weights.
     """
-    # Clip weights only when any form of sleep is active
-    if sleep:
+    # Clip weights when sleep is active OR when clipping is requested
+    # independently. Gating clipping on `sleep` alone makes any sleep-vs-other
+    # comparison confounded: the sleep arm gets a hard [min, max] bound on every
+    # timestep while a decay or normalization arm gets only sign clamping.
+    if sleep or clip_always:
         weights = clip_weights(
             weights=weights,
             nz_cols_exc=nz_cols_exc,
@@ -343,15 +354,36 @@ def train_network(
     weight_track_samples_inh=8,
     train_snapshot_interval=None,
     sleep_snapshot_interval=None,
+    # --- conventional stabilization baselines (R3.1) -----------------------
+    # Continuous multiplicative decay, applied every timestep. Defaults to
+    # disabled so the submitted sleep/no-sleep code path is unchanged.
+    decay_enabled: bool = False,
+    decay_rate_exc: float = 0.0,
+    decay_rate_inh: float = 0.0,
+    # Which instantaneous normalization to use when normalize_weights=True:
+    # "layer" rescales each block as a whole, "neuron" rescales per post
+    # neuron (synaptic scaling).
+    norm_mode: str = "layer",
+    # Interval between instantaneous normalization events. None means "use
+    # check_sleep_interval", so normalization fires on the same schedule sleep
+    # would have -- required for the comparison to be controlled.
+    reg_interval=None,
+    # Per-postsynaptic-neuron initial |w| sums, indexed by absolute column.
+    # Only needed for norm_mode="neuron".
+    initial_sum_post_exc=None,
+    initial_sum_post_inh=None,
+    # Apply weight clipping regardless of whether sleep is active, so that
+    # every regularization arm is bounded identically.
+    clip_always: bool = False,
+    # How a sleep episode decides it is finished: "below_target" is the
+    # published one-sided criterion (Eq. 6), "band" the historical two-sided
+    # tolerance window. Defaults to the historical behaviour.
+    sleep_termination: str = "band",
 ):
 
     st = N_x  # stimulation
     ex = st + N_exc  # excitatory
     ih = ex + N_inh  # inhibitory
-    exc_interval = np.arange(st, ex)
-    inh_interval = np.arange(ex, ih)
-    idx_exc = np.random.choice(exc_interval, size=num_exc, replace=False)
-    idx_inh = np.random.choice(inh_interval, size=num_inh, replace=False)
 
     # Disable training-time plotting snapshots for performance
     plot_positions = np.array([1])
@@ -365,6 +397,35 @@ def train_network(
     nz_rows_inh += ex
     nz_cols_inh += st
     nz_rows, nz_cols = np.nonzero(weights)
+
+    # --- conventional stabilization baselines (R3.1) -----------------------
+    # Regularization interval: default to the sleep schedule so that sleep,
+    # layer normalization and synaptic scaling all fire at the same cadence.
+    reg_interval_eff = (
+        int(reg_interval)
+        if (reg_interval is not None and int(reg_interval) > 0)
+        else int(check_sleep_interval)
+    )
+    # Per-timestep retention factors for continuous decay
+    gamma_exc = 1.0 - float(decay_rate_exc)
+    gamma_inh = 1.0 - float(decay_rate_inh)
+    # Per-post-neuron initial sums for synaptic scaling. Computed here if the
+    # caller did not supply them, so the baseline works standalone.
+    if normalize_weights and norm_mode == "neuron":
+        if initial_sum_post_exc is None:
+            initial_sum_post_exc = np.zeros(weights.shape[1])
+            np.add.at(
+                initial_sum_post_exc,
+                nz_cols_exc,
+                np.abs(weights[nz_rows_exc, nz_cols_exc]),
+            )
+        if initial_sum_post_inh is None:
+            initial_sum_post_inh = np.zeros(weights.shape[1])
+            np.add.at(
+                initial_sum_post_inh,
+                nz_cols_inh,
+                np.abs(weights[nz_rows_inh, nz_cols_inh]),
+            )
     sleep_now_inh = False
     sleep_now_exc = False
 
@@ -377,13 +438,6 @@ def train_network(
         sleep_window = max(1, int(round(check_sleep_interval * sleep_ratio)))
     else:
         sleep_window = 0
-
-    # Print sleep configuration
-    if sleep and sleep_window > 0:
-        expected_sleep_pct = (sleep_window / check_sleep_interval) * 100
-        print(
-            f"Sleep scheduled: {sleep_window}/{check_sleep_interval} timesteps per interval ({expected_sleep_pct:.1f}%)"
-        )
 
     # Suppose weights is your initial 2D numpy array of weights.
     # Here, we assume that the columns correspond to post-neurons.
@@ -669,25 +723,42 @@ def train_network(
                 current_sum_exc = np.sum(np.abs(weights[:ex, st:ih]))
                 current_sum_inh = np.sum(np.abs(weights[ex:ih, st:ex]))
 
-                # Check convergence to targets using fractional tolerance if targets exist
-                eps_exc = (
-                    sleep_tol_frac * target_exc
-                    if (target_exc is not None)
-                    else sleep_epsilon
-                )
-                eps_inh = (
-                    sleep_tol_frac * target_inh
-                    if (target_inh is not None)
-                    else sleep_epsilon
-                )
-                reached_exc = (
-                    target_exc is None
-                    or np.abs(current_sum_exc - target_exc) <= eps_exc
-                )
-                reached_inh = (
-                    target_inh is None
-                    or np.abs(current_sum_inh - target_inh) <= eps_inh
-                )
+                # Termination criterion.
+                #
+                # "below_target" is the published criterion, Eq. 6:
+                #     W_x(t) <= w_min_x = alpha_base * W_x(0)
+                # one-sided, so sleep ends the moment total weight is at or
+                # under the threshold and nothing constrains it from below.
+                #
+                # "band" is the historical code behaviour: a two-sided
+                # +/- sleep_tol_frac window around the target. With
+                # sleep_tol_frac = 1e-3 that is +/-0.1% of a sum in the
+                # thousands, and the power law pulls each weight toward
+                # w_target rather than steering the sum, so the window is
+                # routinely overshot and the criterion effectively never fires
+                # -- every episode runs to its window cap instead.
+                if sleep_termination == "below_target":
+                    reached_exc = target_exc is None or current_sum_exc <= target_exc
+                    reached_inh = target_inh is None or current_sum_inh <= target_inh
+                else:
+                    eps_exc = (
+                        sleep_tol_frac * target_exc
+                        if (target_exc is not None)
+                        else sleep_epsilon
+                    )
+                    eps_inh = (
+                        sleep_tol_frac * target_inh
+                        if (target_inh is not None)
+                        else sleep_epsilon
+                    )
+                    reached_exc = (
+                        target_exc is None
+                        or np.abs(current_sum_exc - target_exc) <= eps_exc
+                    )
+                    reached_inh = (
+                        target_inh is None
+                        or np.abs(current_sum_inh - target_inh) <= eps_inh
+                    )
                 if reached_exc and reached_inh:
                     break
 
@@ -831,6 +902,7 @@ def train_network(
                         spike_times=spike_times,
                         weight_decay_rate_exc=weight_decay_rate_exc,
                         weight_decay_rate_inh=weight_decay_rate_inh,
+                        clip_always=clip_always,
                         min_weight_exc=min_weight_exc,
                         max_weight_exc=max_weight_exc,
                         min_weight_inh=min_weight_inh,
@@ -963,6 +1035,7 @@ def train_network(
                 spike_times=spike_times,
                 weight_decay_rate_exc=weight_decay_rate_exc,
                 weight_decay_rate_inh=weight_decay_rate_inh,
+                clip_always=clip_always,
                 min_weight_exc=min_weight_exc,
                 max_weight_exc=max_weight_exc,
                 min_weight_inh=min_weight_inh,
@@ -995,16 +1068,61 @@ def train_network(
                 dt=dt,
             )
 
-            # Optional normalization at equal intervals as sleep. 
-            if normalize_weights and t % check_sleep_interval == 0:
-                print("Norm!")
-                cur_exc = np.sum(np.abs(weights[:ex, st:ih]))
-                if cur_exc > 1e-10:
-                    weights[:ex, st:ih] *= initial_sum_exc / cur_exc
-                cur_inh = np.sum(np.abs(weights[ex:ih, st:ex]))
-                if cur_inh > 1e-10:
-                    weights[ex:ih, st:ex] *= initial_sum_inh / cur_inh
-                slept_this_step = False  # reset flag after normalization
+            # Instantaneous weight normalization, on the same schedule sleep
+            # would use. Two modes: "layer" rescales each block as a whole,
+            # "neuron" restores each postsynaptic neuron's incoming drive
+            # individually (synaptic scaling). Both act on the same nonzero
+            # index sets the sleep operator uses, so the three regularizers
+            # touch exactly the same synapses.
+            if normalize_weights and (t % reg_interval_eff) == 0:
+                if norm_mode == "neuron":
+                    weights = norm_neuron(
+                        weights,
+                        initial_sum_post_exc,
+                        nz_rows_exc,
+                        nz_cols_exc,
+                        weights.shape[1],
+                    )
+                    weights = norm_neuron(
+                        weights,
+                        initial_sum_post_inh,
+                        nz_rows_inh,
+                        nz_cols_inh,
+                        weights.shape[1],
+                    )
+                else:
+                    if initial_sum_exc is not None:
+                        weights = norm_layer(
+                            weights, initial_sum_exc, nz_rows_exc, nz_cols_exc
+                        )
+                    if initial_sum_inh is not None:
+                        weights = norm_layer(
+                            weights, initial_sum_inh, nz_rows_inh, nz_cols_inh
+                        )
+                # Normalization is a discontinuous jump, so the cached
+                # transpose must be rebuilt rather than left to the periodic
+                # refresh below.
+                weights_T_cache = weights[:, st:ih].T.copy()
+
+            # Continuous weight decay: a small multiplicative shrinkage on
+            # every timestep, with no target. Applied after the STDP update so
+            # potentiation and decay compete within the same timestep.
+            if decay_enabled:
+                weights = continuous_decay(
+                    weights,
+                    gamma_exc,
+                    gamma_inh,
+                    nz_rows_exc,
+                    nz_cols_exc,
+                    nz_rows_inh,
+                    nz_cols_inh,
+                )
+                # Decay is a uniform scalar per block, so the cached transpose
+                # can be scaled in place instead of rebuilt. Cache rows are
+                # postsynaptic (st:ih) and columns presynaptic, so excitatory
+                # presynaptic sources are columns :ex and inhibitory ex:ih.
+                weights_T_cache[:, :ex] *= gamma_exc
+                weights_T_cache[:, ex:ih] *= gamma_inh
 
             if not sleep:
                 # Prevent excitatory weights from becoming negative and inhibitory weights from becoming positive

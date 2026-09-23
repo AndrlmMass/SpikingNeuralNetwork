@@ -30,6 +30,7 @@ dependencies:
   - pip:
       - contourpy==1.3.1
       - cycler==0.12.1
+      - deeplake==3.9.52
       - filelock==3.17.0
       - fonttools==4.56.0
       - fsspec==2025.3.0

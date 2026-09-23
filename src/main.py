@@ -1,3 +1,10 @@
+import os
+import matplotlib
+
+# Selected before any pyplot import: compute nodes have no display, and the
+# backend is not pinned anywhere else in the codebase.
+matplotlib.use(os.environ.get("MPLBACKEND", "Agg"))
+
 from big_comb import snn_sleepy
 from platform_utils import PLATFORM_NAME, IS_WINDOWS, safe_cpu_count
 import argparse
@@ -12,8 +19,11 @@ import pstats
 
 def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False):
     print(f"\n===== RUN {run_idx + 1}/{total_runs} =====")
-    # set seeds for run-to-run variance control
-    seed = 42 + run_idx
+    # set seeds for run-to-run variance control. An explicit --seed pins the
+    # value (used by experiment.py so each grid cell is reproducible);
+    # otherwise the historical 42 + run_idx scheme applies.
+    _explicit = getattr(args, "seed", None)
+    seed = int(_explicit) if _explicit is not None else 42 + run_idx
     np.random.seed(seed)
     random.seed(seed)
 
@@ -96,13 +106,35 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
     if getattr(args, "profile", False):
         pr = cProfile.Profile()
         pr.enable()
+    # ---- resolve the regularization condition -----------------------------
+    # --reg-method is the single switch used by experiment.py. When it is left
+    # at "legacy" the older --no-sleep / --normalize-weights flags decide, so
+    # existing invocations behave exactly as before.
+    reg_method = str(getattr(args, "reg_method", "legacy"))
+    if reg_method == "legacy":
+        _sleep = not args.no_sleep
+        _normalize = bool(args.normalize_weights)
+        _decay = False
+        _norm_mode = "layer"
+    else:
+        _sleep = reg_method == "sleep"
+        _normalize = reg_method in ("norm_layer", "norm_neuron")
+        _decay = reg_method == "decay"
+        _norm_mode = "neuron" if reg_method == "norm_neuron" else "layer"
+    _decay_rate = float(getattr(args, "decay_rate", 0.0))
+    print(
+        f"Regularization: method={reg_method} sleep={_sleep} "
+        f"normalize={_normalize}({_norm_mode}) decay={_decay}"
+        + (f" rate={_decay_rate:g}" if _decay else "")
+    )
+
     snn_N.train_network(
         train_weights=True,
         noisy_potential=True,
         compare_decay_rates=False,
         check_sleep_interval=35000,
-        weight_decay_rate_exc=[0.99997],
-        weight_decay_rate_inh=[0.99997],
+        weight_decay_rate_exc=[float(getattr(args, "sleep_decay_rate", 0.99997))],
+        weight_decay_rate_inh=[float(getattr(args, "sleep_decay_rate", 0.99997))],
         samples=10,
         force_train=True,
         plot_spikes_train=False,
@@ -125,7 +157,7 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         var_noise=2,
         max_weight_exc=25,
         min_weight_inh=-25,
-        sleep=not args.no_sleep,
+        sleep=_sleep,
         sleep_mode=str(args.sleep_mode),
         tau_syn=30,
         narrow_top=0.2,
@@ -143,7 +175,18 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         sleep_ratio=float(args.sleep_rate),
         sleep_max_iters=int(args.sleep_max_iters),
         on_timeout=str(args.on_timeout),
-        normalize_weights=bool(args.normalize_weights),
+        normalize_weights=_normalize,
+        norm_mode=_norm_mode,
+        decay_enabled=_decay,
+        decay_rate_exc=_decay_rate,
+        decay_rate_inh=_decay_rate,
+        reg_interval=(
+            int(args.reg_interval)
+            if getattr(args, "reg_interval", 0)
+            else None
+        ),
+        clip_always=bool(getattr(args, "clip_always", False)),
+        sleep_termination=str(getattr(args, "sleep_termination", "band")),
     )
 
     if getattr(args, "profile", False):
@@ -185,6 +228,78 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", type=int, default=1, help="number of repeated runs")
+    parser.add_argument(
+        "--reg-method",
+        type=str,
+        default="legacy",
+        choices=["legacy", "none", "sleep", "decay", "norm_layer", "norm_neuron"],
+        help=(
+            "regularization condition: 'sleep' (this paper), 'decay' "
+            "(continuous multiplicative decay), 'norm_layer' (instantaneous "
+            "layer-wise normalization), 'norm_neuron' (synaptic scaling), "
+            "'none' (unregularized STDP), or 'legacy' to defer to "
+            "--no-sleep/--normalize-weights"
+        ),
+    )
+    parser.add_argument(
+        "--decay-rate",
+        type=float,
+        default=1e-5,
+        help="per-timestep multiplicative decay rate for --reg-method decay",
+    )
+    parser.add_argument(
+        "--reg-interval",
+        type=int,
+        default=0,
+        help="timesteps between normalization events (0 = use check_sleep_interval)",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="explicit random seed (default: 42 + run index)",
+    )
+    parser.add_argument(
+        "--out-tag",
+        type=str,
+        default=None,
+        help="deterministic suffix for the results filename (results_<tag>.json)",
+    )
+    parser.add_argument(
+        "--sleep-termination",
+        type=str,
+        default="band",
+        choices=["band", "below_target"],
+        help=(
+            "when a sleep episode ends: 'below_target' is the published "
+            "one-sided criterion W(t) <= alpha_base*W(0); 'band' is the "
+            "historical two-sided tolerance window"
+        ),
+    )
+    parser.add_argument(
+        "--no-plots",
+        action="store_true",
+        help="skip t-SNE and figure generation (for batch/HPC runs)",
+    )
+    parser.add_argument(
+        "--clip-always",
+        action="store_true",
+        help=(
+            "clip weights to [min_weight, max_weight] on every timestep even "
+            "when sleep is off; without it clipping is gated on the sleep flag, "
+            "so sleep-vs-other comparisons are confounded"
+        ),
+    )
+    parser.add_argument(
+        "--sleep-decay-rate",
+        type=float,
+        default=0.99997,
+        help=(
+            "exponent of the sleep power law w <- w_tgt (w/w_tgt)^lambda. "
+            "The published table gives 0.9997; this default (0.99997) is the "
+            "historical value main.py used"
+        ),
+    )
     parser.add_argument(
         "--sleep-rate",
         type=float,
@@ -270,7 +385,7 @@ def main():
         "--geom-jitter-amount",
         type=float,
         default=0.05,
-        help="relative jitter amount for geomfig size/thickness (0.05 = ±5%)",
+        help="relative jitter amount for geomfig size/thickness (0.05 = +/-5%%)",
     )
     parser.add_argument(
         "--geom-gain",
@@ -356,13 +471,27 @@ def main():
     datasets = args.dataset if isinstance(args.dataset, list) else [args.dataset]
 
     all_results = []  # Store (dataset, sleep_rate, run_idx, result)
-    disable_plotting = args.runs > 1 or len(sleep_rates) > 1 or len(datasets) > 1
+    disable_plotting = (
+        args.runs > 1
+        or len(sleep_rates) > 1
+        or len(datasets) > 1
+        # A single-cell batch run (one dataset, one sleep rate, one seed) would
+        # otherwise fall through to the plotting branch and spend time on t-SNE
+        # and figure writing on a headless node.
+        or bool(getattr(args, "no_plots", False))
+    )
 
     # Initialize results file at the start
     output_dir = "results"
     os.makedirs(output_dir, exist_ok=True)
     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    results_filename = f"{output_dir}/results_{timestamp_str}.json"
+    # --out-tag gives a deterministic filename so a SLURM array task knows
+    # exactly where its own result landed and cannot collide with siblings.
+    _tag = getattr(args, "out_tag", None)
+    if _tag:
+        results_filename = f"{output_dir}/results_{_tag}.json"
+    else:
+        results_filename = f"{output_dir}/results_{timestamp_str}.json"
 
     # Helper function to safely convert values
     def safe_float(val):
@@ -389,6 +518,11 @@ def main():
             "early_stopping": args.early_stopping,
             "no_sleep": args.no_sleep,
             "normalize_weights": args.normalize_weights,
+            "reg_method": getattr(args, "reg_method", "legacy"),
+            "sleep_decay_rate": getattr(args, "sleep_decay_rate", None),
+            "decay_rate": getattr(args, "decay_rate", None),
+            "reg_interval": getattr(args, "reg_interval", 0),
+            "seed": getattr(args, "seed", None),
         },
         "results_by_dataset": {ds: {} for ds in datasets},
     }

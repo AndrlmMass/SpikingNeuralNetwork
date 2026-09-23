@@ -347,3 +347,87 @@ def spike_timing(
                     weights[j, i] += math.exp(dt / tau_LTD) * learning_rate_inh
 
     return weights
+
+
+# ---------------------------------------------------------------------------
+# Conventional stabilization baselines (Reviewer 3, Major Point 1)
+#
+# These are the comparators for the sleep mechanism. All three act on the same
+# nonzero index arrays the sleep operator uses, so they regularize exactly the
+# same synapses and differ only in *how* the magnitude is chosen:
+#
+#   continuous_decay : passive multiplicative shrinkage every timestep, no
+#                      target at all. Equilibrium is set by the balance between
+#                      STDP potentiation and decay.
+#   norm_layer       : instantaneous rescale of the whole block so its total
+#                      |w| returns to the value it had at initialization.
+#   norm_neuron      : synaptic scaling -- same, but per postsynaptic neuron,
+#                      so each neuron's incoming drive is restored individually.
+#
+# norm_layer and norm_neuron are multiplicative, so both preserve the relative
+# ordering of weights within whatever they rescale. continuous_decay applies a
+# single common factor and therefore preserves all relative structure exactly;
+# this distinguishes it from the sleep operator, which pulls toward an absolute
+# target and so contracts the spread of the distribution.
+# ---------------------------------------------------------------------------
+
+
+@njit(cache=True)
+def continuous_decay(
+    weights,
+    gamma_exc,
+    gamma_inh,
+    nz_rows_exc,
+    nz_cols_exc,
+    nz_rows_inh,
+    nz_cols_inh,
+):
+    """Apply one timestep of multiplicative weight decay.
+
+    gamma_exc / gamma_inh are the per-timestep retention factors (1 - rate).
+    Signs are preserved because the update is a pure multiplication, so
+    inhibitory weights stay negative without needing a separate branch.
+    """
+    for i in range(nz_rows_exc.size):
+        weights[nz_rows_exc[i], nz_cols_exc[i]] *= gamma_exc
+    for i in range(nz_rows_inh.size):
+        weights[nz_rows_inh[i], nz_cols_inh[i]] *= gamma_inh
+    return weights
+
+
+@njit(cache=True)
+def norm_layer(weights, initial_sum, nz_rows, nz_cols):
+    """Rescale a whole weight block so its total |w| matches initial_sum.
+
+    This is the classical instantaneous weight normalization: one common
+    factor for every synapse in the block, applied in a single step.
+    """
+    current = 0.0
+    for i in range(nz_rows.size):
+        current += abs(weights[nz_rows[i], nz_cols[i]])
+    # Nothing to rescale if the block has collapsed to zero
+    if current < 1e-12:
+        return weights
+    scale = initial_sum / current
+    for i in range(nz_rows.size):
+        weights[nz_rows[i], nz_cols[i]] *= scale
+    return weights
+
+
+@njit(cache=True)
+def norm_neuron(weights, initial_sum_post, nz_rows, nz_cols, n_post):
+    """Synaptic scaling: restore each postsynaptic neuron's incoming |w| sum.
+
+    initial_sum_post is indexed by absolute column (postsynaptic neuron) and
+    holds that neuron's summed incoming |w| at initialization. Neurons whose
+    incoming drive has collapsed, or that had no incoming weight to begin
+    with, are left untouched rather than rescaled by a huge factor.
+    """
+    current = np.zeros(n_post)
+    for i in range(nz_rows.size):
+        current[nz_cols[i]] += abs(weights[nz_rows[i], nz_cols[i]])
+    for i in range(nz_rows.size):
+        c = nz_cols[i]
+        if current[c] > 1e-12 and initial_sum_post[c] > 1e-12:
+            weights[nz_rows[i], nz_cols[i]] *= initial_sum_post[c] / current[c]
+    return weights
