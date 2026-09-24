@@ -253,6 +253,63 @@ reproduce the published configuration:
   Bears directly on R3.7's challenge to the "negligible overhead" claim.
 - **`min_weight_exc = 0.01`** means no arm can prune to zero.
 
+### Committed results confirm the cap, decisively
+
+Per-dataset means from the committed `results/results_*.json` show a cliff at the
+`sleep_max_iters` boundary and then a flat band:
+
+| rate | notMNIST | fmnist | MNIST |
+|---|---|---|---|
+| 0.10 | .6463 | .5645 | .7151 |
+| 0.20 | .6371 | .5525 | .7329 |
+| **0.30** | **.2831** | **.3534** | .7106 |
+| 0.40-1.00 | .2707-.2894 | .3058-.3412 | .6850-.7106 |
+
+notMNIST's rates 0.30-1.00 span **1.8 percentage points across eight
+conditions**. Eight genuinely different sleep durations from 30% to 100% would
+not do that.
+
+### Three study drivers, one shared configuration
+
+| driver | grid | purpose |
+|---|---|---|
+| `src/sweep.py` | 11 ratios x 4 datasets x 5 seeds = 220 | re-run the main result; find the true optimum |
+| `src/experiment.py` | 5 methods x 4 datasets x 5 seeds = 100 | R3.1 conventional-stabilization baselines |
+| `src/ablation.py` | (2^4 + 1) x MNIST x 5 seeds = 85 | R3.2 sleep component factorial |
+
+Run order matters: **sweep first**. `experiment.py` and `ablation.py` both read
+the sleep ratio from `results/sweep/` via `experiment.resolve_sleep_ratio()`,
+excluding ratio 0, and warn loudly if the sweep has not been run. So the optimum
+propagates automatically instead of being copied by hand.
+
+lambda is **0.997 everywhere** — `sweep.py`, `experiment.py`, `main.py`'s call
+site and argparse default, and `big_comb.py`'s signature default. Before this
+there were four different values live (0.9999 / 0.99997 / 0.9997 / 0.997), so any
+of them could silently override another.
+
+The four sleep components are now independently switchable via
+`--sleep-components downscale,noise,stdp,suppress` (name a component to keep it
+ON; `none` ablates all four). Verified that each gate changes behaviour rather
+than only parsing, over 9 sleep episodes at T=35000:
+
+| condition | exc \|w\| ratio | sd(log w) |
+|---|---|---|
+| 1111 full | 1.209 | 0.213 |
+| 0111 no downscale | 6.063 | 0.983 |
+| 1011 no noise | 1.206 | 0.212 |
+| 1101 no stdp | 1.077 | 0.345 |
+| 1110 no suppress | 1.209 | 0.213 |
+| 0000 all off | 1.727 | 0.601 |
+
+Downscaling dominates the weight metric; noise and input suppression barely move
+it. Whether they matter for *accuracy* is a different question — weight-level and
+accuracy-level effects have already diverged elsewhere in this codebase — and is
+exactly what the factorial exists to answer.
+
+One semantic caveat: with `suppress` off, real time is frozen so there is no
+fresh input to stream in; the last presented spike vector is *held* for the whole
+window. The contrast is "no sensory drive" vs "one frame repeated".
+
 ### Landed in this session
 
 `src/weight_funcs.py` (+84), `src/train.py` (+204/-…), `src/big_comb.py` (+40),
@@ -273,11 +330,32 @@ decay     1.6e-5 per timestep
 shared    reg interval 35000, clip_always, no plots
 ```
 
-Measured **73 min per cell** (one real cell-0 run, mnist/none/seed42, test acc
-0.6271, train 0.9155) — so ~122 core-hours total, ~73 min wall-clock as a
-100-task array. Note the simulation itself accounts for only a few minutes of
-that, so something downstream dominates (most likely the per-epoch L1 multinomial
-LR fit). Worth a `--profile` run if the cost matters.
+### CORRECTION — num_steps: the paper is right, the worktree default is not
+
+An earlier note in this entry claimed the code "ran 10x longer per stimulus than
+the paper reports". **That was wrong.** `git log -L` on the `num_steps` default:
+
+    b05e88b  2025-01-13  added as 1000
+    1367c00  2025-12-05  1000 -> 100
+    cd0315a  2025-12-08  100 -> 1000     <- this worktree is branched from here
+
+The MNIST-family results are dated 1 Nov - 7 Dec 2025, i.e. almost entirely
+before the switch back to 1000. So the published runs used 100 ms, the paper's
+methods are accurate, and the 1000 default is a late change this worktree
+happens to sit on. All three drivers now pass `--num-steps 100` explicitly.
+
+Measured cost, same cell (mnist / none / seed 42):
+
+| num_steps | wall-clock | peak RSS | test acc |
+|---|---|---|---|
+| 1000 | 73 min | — | 0.6271 |
+| 100 | **2 min 18 s** | 1.5 GB | 0.3034 |
+
+The accuracy difference is not a 100 ms penalty: 0% sleep is the *worst*
+condition in the committed data (MNIST 0.4253 at rate 0, 0.7151 at rate 0.1), and
+this cell is the unregularized arm. `--num-steps` and `--check-sleep-interval`
+are now both exposed, because the latter is measured in timesteps and must
+co-scale or the episode count per image changes 10-fold.
 
 ### Open items
 
@@ -304,3 +382,85 @@ LR fit). Worth a `--profile` run if the cost matters.
 7. Reconcile the four paper/code hyperparameter mismatches above.
 8. Define `alpha` (α_trig) for R3.6 and state that it is bypassed under
    scheduled triggering; remove the paper's β/`beta` symbol collision.
+
+## 2026-09-24 — Sleep-phase plasticity is a dead end: neither the sign of the STDP window nor the noise dose matters
+
+### Anti-STDP (Thiele et al. 2017) at the operating point: null
+
+Ratio 0.1 (the sweep optimum), MNIST, λ = 0.9999576013637494, 5 seeds, paired.
+`--sleep-anti-stdp` negates the sleep-phase learning rates only; wake plasticity
+is untouched.
+
+| seed | normal | anti | diff |
+|------|--------|------|------|
+| 42 | 0.7657 | 0.7829 | +0.0171 |
+| 43 | 0.7337 | 0.7554 | +0.0217 |
+| 44 | 0.7740 | 0.7797 | +0.0056 |
+| 45 | 0.7663 | 0.7609 | −0.0054 |
+| 46 | 0.7880 | 0.7609 | −0.0272 |
+| mean | 0.7656 ± 0.0200 | 0.7679 ± 0.0124 | +0.0024 |
+
+Paired t = 0.27 on 4 df (p ≈ 0.80); the sign flips across seeds. Inverting the
+STDP window neither rescues the component nor worsens it.
+
+### The noise dose does not matter either, over a 17-fold range
+
+`var_noise` was hardcoded at `main.py:187`; it is now `--sleep-noise-var`
+(default 2.0, unchanged) and is recorded in each result's `args`. Grid:
+σ ∈ {2, 4, 8, 16} × {normal, anti} × 5 seeds = 40 runs, σ = 2 reusing the
+comparison above.
+
+| σ | normal | anti | anti − normal | paired t |
+|---|--------|------|---------------|----------|
+| 2 | 0.7656 ± 0.0200 | 0.7679 ± 0.0124 | +0.0024 | 0.27 |
+| 4 | 0.7724 ± 0.0216 | 0.7679 ± 0.0219 | −0.0045 | −0.84 |
+| 8 | 0.7746 ± 0.0175 | 0.7734 ± 0.0231 | −0.0012 | −0.16 |
+| 16 | 0.7710 ± 0.0134 | 0.7778 ± 0.0268 | +0.0068 | 0.54 |
+
+`acc ~ log2(σ) * arm + (1|seed)`, Beta: σ slope +0.011 per doubling (p = 0.39),
+arm −0.018 (p = 0.71), interaction +0.009 (p = 0.60). Dropping both arm terms
+costs nothing: LRT χ² = 0.33 on 2 df, p = 0.85. No run collapsed anywhere in the
+grid (min accuracy 0.7337), so σ = 16 does not even destabilize.
+
+### CORRECTION — σ = 2 is not subthreshold, as I first assumed
+
+I initially reasoned that σ = 2 mV against the 15 mV rest-to-threshold gap
+(−70 → −55) could never evoke a spike, and that this explained the ablation's
+null noise coefficient (−0.011, p = 0.85). That is wrong. The noise is injected
+every timestep while the leak removes only `dt/tau_m` = 1/30 of the membrane
+deviation, so the process is AR(1) with stationary sd `σ/sqrt(1-(1-dt/tau_m)^2)`
+≈ 3.9 σ. Simulating the sleep-phase dynamics with sensory drive suppressed:
+
+| σ | stationary sd | gap in sd | sleep spikes/neuron | rate/step |
+|---|---------------|-----------|---------------------|-----------|
+| 2 | 7.8 | 1.92 | 26 | 0.0026 |
+| 4 | 15.6 | 0.96 | 105 | 0.0107 |
+| 8 | 31.2 | 0.48 | 233 | 0.0238 |
+| 16 | 62.5 | 0.24 | 428 | 0.0437 |
+
+So the default already evokes spontaneous spiking, and the sweep spans a 17-fold
+range in sleep-phase firing rate. (This simulation sets `I_syn = 0`, ignoring
+recurrent drive and the adaptive threshold, so it is a lower bound on the rate.)
+
+### What this establishes
+
+The manipulation was effective and the outcome was flat, which makes this a
+strong negative result rather than an inconclusive one: sleep-phase spontaneous
+activity does not affect the outcome at **any** dose from silent to 17× the
+default, under plasticity of **either** sign. Only the downscaling component
+carries the effect (ablation: downscale +1.291; stdp −0.134 with downscaling
+present).
+
+The parsimonious reading is that unstructured activity carries no information to
+consolidate, so the sign of the rule is irrelevant — you cannot fix the learning
+rule when the problem is its input. One plausible contributing mechanism, not
+tested: the adaptive threshold homeostatically absorbs the extra drive, which
+would explain why even σ = 16 neither helps nor destabilizes.
+
+This is the empirical case for compressed replay (feeding time-compressed recent
+input during sleep instead of noise) as the next step, and it is a much stronger
+case than the σ = 2 test alone, because it rules out "we did not drive enough
+activity."
+
+Artifacts: `results/noise_sweep_summary.csv`, `results/results_noise_s*.json`,
+`results/results_anti_*.json`.

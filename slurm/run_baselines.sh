@@ -68,9 +68,12 @@ echo "========================================"
 
 # ---- singularity env (no-op if already built) -----------------------------
 if [ ! -f noise_env.sif ]; then
-    echo "Building noise_env.sif ..."
-    singularity build --fakeroot noise_env.sif docker://continuumio/miniconda3
-    singularity exec noise_env.sif conda env create -f environment_linux.yml -n noise_env
+    echo "ERROR: noise_env.sif not found." >&2
+    echo "Build it ONCE on the login node before submitting an array —" >&2
+    echo "letting 100 tasks race the same build corrupts it:" >&2
+    echo "  singularity build --fakeroot noise_env.sif docker://continuumio/miniconda3" >&2
+    echo "  singularity exec noise_env.sif conda env create -f environment_linux.yml -n noise_env" >&2
+    exit 1
 fi
 
 # ---- run one grid cell ----------------------------------------------------

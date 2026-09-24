@@ -37,39 +37,94 @@ import subprocess
 import sys
 from datetime import datetime
 
+# Shared configuration lives in sweep.py. The baseline grid MUST match the sweep
+# that supplied its sleep ratio — a different stimulus duration or episode
+# cadence would make the carried-over optimum meaningless.
+from sweep import (
+    NUM_STEPS,
+    CHECK_SLEEP_INTERVAL,
+    lambda_for_ratio,
+    SLEEP_MAX_ITERS,
+    SLEEP_ON_TIMEOUT,
+    SLEEP_TERMINATION,
+)
+
 # --- grid definition -------------------------------------------------------
 # Five seeds, reused across every condition, matching the paper's design.
 METHODS = ["none", "sleep", "decay", "norm_layer", "norm_neuron"]
 DATASETS = ["mnist", "fmnist", "kmnist", "notmnist"]
 SEEDS = [42, 43, 44, 45, 46]
 
-# Sleep ratio for the "sleep" arm. 0.1 is the optimum reported in the paper;
-# the other arms ignore it.
-SLEEP_RATIO = 0.1
-
-# Power-law exponent for the sleep operator. The published table gives 0.9997
-# and main.py historically passed 0.99997; neither bounds weight growth well
-# under window-limited stopping. Measured on MNIST at T=105k with clipping
-# equalized across arms (total exc |w| relative to initialization):
-#     lambda=0.9997 -> 5.08x    lambda=0.999 -> 3.04x    lambda=0.997 -> 2.32x
-# 0.997 brings sleep into the same range as the conventional baselines
-# (1.76-2.93x), which is what makes the comparison a test of mechanism rather
-# than of how much shrinkage each method happens to apply.
-SLEEP_DECAY_RATE = 0.997
-
-# On-timeout behaviour. The convergence criterion is never met inside a sleep
-# window, so this branch is the normal operating regime, not an edge case.
+# Sleep ratio for the "sleep" arm; the other arms ignore it.
 #
-# "give_up" simply stops at the end of the window and keeps whatever the power
-# law achieved -- the graded, per-weight approach toward the target that is the
-# mechanism under study.
+# This is NOT hardcoded. It is read from the sleep-ratio sweep in
+# results/sweep/, because the paper's reported 10% optimum came from a sweep in
+# which every ratio at or above 28.6% was silently capped to 28.57% — so the
+# true optimum was never measured. resolve_sleep_ratio() below picks the
+# accuracy-maximising ratio, excluding 0 (which is the unregularized reference,
+# not a sleep condition).
 #
-# "scale_to_target" instead applies one uniform factor target/current across the
-# whole block. That is *identical* to layer-wise normalization, i.e. to the
-# norm_layer baseline, so using it would partly compare the sleep arm against
-# itself. We therefore use give_up with a strong enough exponent (see above)
-# that the window does the downscaling on its own.
-SLEEP_ON_TIMEOUT = "give_up"
+# Used only if the sweep has not been run, and warned about loudly:
+SLEEP_RATIO_FALLBACK = 0.1
+
+SWEEP_DIR = None  # set after OUT_DIR is defined
+
+
+def resolve_sleep_ratio(override=None):
+    """Return (ratio, provenance) for the sleep arm.
+
+    Pools test accuracy across datasets and seeds per ratio and takes the
+    argmax over ratios > 0. Also reports the per-dataset optima, since a
+    single global ratio is only defensible if the datasets roughly agree.
+    """
+    if override is not None:
+        return float(override), {"source": "--sleep-ratio override"}
+
+    import collections
+    sweep_dir = os.path.join(REPO, "results", "sweep")
+    pooled = collections.defaultdict(list)
+    per_ds = collections.defaultdict(lambda: collections.defaultdict(list))
+    n_cells = 0
+    if os.path.isdir(sweep_dir):
+        for fn in os.listdir(sweep_dir):
+            if not fn.endswith(".json"):
+                continue
+            try:
+                r = json.load(open(os.path.join(sweep_dir, fn)))
+            except Exception:
+                continue
+            acc, rate = r.get("test_accuracy"), r.get("sleep_rate")
+            if acc is None or rate is None:
+                continue
+            n_cells += 1
+            pooled[float(rate)].append(acc)
+            per_ds[r.get("dataset", "?")][float(rate)].append(acc)
+
+    # Exclude 0: it is the reference condition, not a sleep duration.
+    candidates = {k: v for k, v in pooled.items() if k > 0}
+    if not candidates:
+        return SLEEP_RATIO_FALLBACK, {
+            "source": "FALLBACK — no sweep results found",
+            "sweep_dir": sweep_dir,
+            "n_cells": n_cells,
+        }
+
+    means = {k: sum(v) / len(v) for k, v in candidates.items()}
+    best = max(means, key=means.get)
+    ds_opt = {
+        d: max((k for k in m if k > 0), key=lambda k: sum(m[k]) / len(m[k]))
+        for d, m in per_ds.items()
+        if any(k > 0 for k in m)
+    }
+    return best, {
+        "source": "sweep",
+        "n_cells": n_cells,
+        "pooled_mean_by_ratio": {k: round(means[k], 4) for k in sorted(means)},
+        "per_dataset_optimum": ds_opt,
+        "agree_across_datasets": len(set(ds_opt.values())) == 1,
+    }
+
+
 
 # Per-timestep decay rate for the "decay" arm, calibrated rather than guessed.
 #
@@ -93,19 +148,17 @@ SLEEP_ON_TIMEOUT = "give_up"
 # instead would want ~2.4e-5.
 DECAY_RATE = 1.6e-5
 
-# Regularization cadence, shared by sleep and both normalization arms so the
-# comparison is controlled. Matches the value main.py already uses.
-REG_INTERVAL = 35000
+# Regularization cadence comes from CHECK_SLEEP_INTERVAL, so sleep and both
+# normalization arms fire on the same schedule as in the sweep. Not passed as
+# --reg-interval: train.py falls back to check_sleep_interval when that is
+# unset, so one knob controls every arm and they cannot diverge.
 
 # Hard cap on virtual iterations per sleep episode. Must exceed
-# round(REG_INTERVAL * SLEEP_RATIO) or it, not the sleep ratio, sets the
+# round(CHECK_SLEEP_INTERVAL * ratio) or it, not the sleep ratio, sets the
 # realized sleep duration.
-SLEEP_MAX_ITERS = 10000
 
-# Sleep ends when total weight is at or below threshold (Eq. 6), one-sided.
-# The historical 'band' criterion is a +/-0.1% window that is routinely
-# overshot, so episodes never terminate early and always run the full window.
-SLEEP_TERMINATION = "below_target"
+
+RESOLVED_RATIO = (SLEEP_RATIO_FALLBACK, {"source": "unresolved"})
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
@@ -160,8 +213,10 @@ def build_command(cell, extra=None):
         "1",
         "--out-tag",
         tag,
-        "--reg-interval",
-        str(REG_INTERVAL),
+        "--num-steps",
+        str(NUM_STEPS),
+        "--check-sleep-interval",
+        str(CHECK_SLEEP_INTERVAL),
         # Weight clipping is gated on the `sleep` flag in train.py, so without
         # this the sleep arm alone would be hard-bounded to [min,max] while the
         # decay and normalization arms got only sign clamping. Measured effect
@@ -173,14 +228,15 @@ def build_command(cell, extra=None):
     ]
     # The sleep arm needs its ratio; every other arm must be pinned to 0 so a
     # stray sleep episode cannot contaminate a non-sleep condition.
-    cmd += ["--sleep-rate", str(SLEEP_RATIO if cell["method"] == "sleep" else 0.0)]
+    ratio, _prov = RESOLVED_RATIO
+    cmd += ["--sleep-rate", str(ratio if cell["method"] == "sleep" else 0.0)]
     if cell["method"] == "sleep":
         # Explicit, because main.py's --on-timeout default (give_up) makes the
         # sleep phase anti-regularizing. See SLEEP_ON_TIMEOUT above.
         cmd += ["--on-timeout", SLEEP_ON_TIMEOUT]
-        cmd += ["--sleep-decay-rate", str(SLEEP_DECAY_RATE)]
+        cmd += ["--sleep-decay-rate", str(lambda_for_ratio(ratio))]
         # Passed explicitly so the realized sleep duration cannot be silently
-        # clipped. The window is round(REG_INTERVAL * SLEEP_RATIO) iterations
+        # clipped. The window is round(CHECK_SLEEP_INTERVAL * ratio) iterations
         # and the loop breaks at min(window, sleep_max_iters); at ratio 0.1 that
         # is 3500, so this cap is inert here -- but leaving it implicit is how
         # the published sweep ended up with every ratio >= 30% realizing 28.57%.
@@ -210,7 +266,7 @@ def run_cell(cell, extra=None, dry_run=False):
     env.setdefault("OMP_NUM_THREADS", "1")
     env.setdefault("OPENBLAS_NUM_THREADS", "1")
     env.setdefault("MKL_NUM_THREADS", "1")
-    env.setdefault("NUMBA_NUM_THREADS", env.get("SLURM_CPUS_PER_TASK", "4"))
+    env.setdefault("NUMBA_NUM_THREADS", env.get("SLURM_CPUS_PER_TASK", "1"))
     env.setdefault("MPLBACKEND", "Agg")
 
     proc = subprocess.run(cmd, cwd=REPO, env=env)
@@ -225,10 +281,12 @@ def run_cell(cell, extra=None, dry_run=False):
         {
             "returncode": proc.returncode,
             "elapsed_s": elapsed,
-            "sleep_ratio": SLEEP_RATIO if cell["method"] == "sleep" else 0.0,
+            "sleep_ratio": RESOLVED_RATIO[0] if cell["method"] == "sleep" else 0.0,
+            "sleep_ratio_provenance": RESOLVED_RATIO[1],
             "sleep_on_timeout": SLEEP_ON_TIMEOUT if cell["method"] == "sleep" else None,
             "decay_rate": DECAY_RATE if cell["method"] == "decay" else None,
-            "reg_interval": REG_INTERVAL,
+            "num_steps": NUM_STEPS,
+            "check_sleep_interval": CHECK_SLEEP_INTERVAL,
             "finished": datetime.now().isoformat(),
             "raw_results": os.path.relpath(src, REPO),
         }
@@ -264,13 +322,19 @@ def collect():
     """Merge every finished cell into one CSV for the GLMM fit."""
     grid = build_grid()
     rows, missing = [], []
+    corrupt = []
     for cell in grid:
         path = cell_path(cell)
         if not os.path.exists(path):
             missing.append(cell["cell_id"])
             continue
-        with open(path) as f:
-            rows.append(json.load(f))
+        try:
+            with open(path) as f:
+                rows.append(json.load(f))
+        except Exception as exc:
+            # See sweep.py: one truncated record must not abort the summary.
+            corrupt.append((cell["cell_id"], str(exc)))
+            missing.append(cell["cell_id"])
 
     if not rows:
         print("No finished cells found in", OUT_DIR)
@@ -287,7 +351,8 @@ def collect():
         "final_test_phi",
         "sleep_ratio",
         "decay_rate",
-        "reg_interval",
+        "num_steps",
+        "check_sleep_interval",
         "elapsed_s",
         "returncode",
     ]
@@ -299,6 +364,10 @@ def collect():
                 ",".join("" if r.get(c) is None else str(r.get(c)) for c in cols) + "\n"
             )
     print(f"Wrote {len(rows)}/{len(grid)} cells to {out}")
+    if corrupt:
+        print(f"\n{len(corrupt)} unreadable record(s) — delete and rerun those ids:")
+        for cid, err in corrupt:
+            print(f"  {cid}: {err}")
     if missing:
         print(f"Missing {len(missing)} cells: {missing}")
         print("Rerun them with:  --task-id <id>")
@@ -337,6 +406,12 @@ def main():
         help="explain how to choose the decay rate",
     )
     ap.add_argument(
+        "--sleep-ratio",
+        type=float,
+        default=None,
+        help="override the sweep-derived sleep ratio (for reproducibility)",
+    )
+    ap.add_argument(
         "--dry-run", action="store_true", help="print commands without running them"
     )
     ap.add_argument(
@@ -350,6 +425,25 @@ def main():
         help="additional flags passed straight through to main.py",
     )
     args = ap.parse_args()
+
+    global RESOLVED_RATIO
+    RESOLVED_RATIO = resolve_sleep_ratio(args.sleep_ratio)
+    ratio, prov = RESOLVED_RATIO
+    print(f"Sleep ratio for the sleep arm: {ratio}  ({prov['source']})")
+    if prov["source"].startswith("FALLBACK"):
+        print("  WARNING: no sweep results in results/sweep/. The sleep arm will")
+        print(f"  use the fallback {SLEEP_RATIO_FALLBACK}, which is the paper's")
+        print("  reported optimum from the sweep that was capped at 28.57%. Run")
+        print("  src/sweep.py first, or pass --sleep-ratio explicitly.")
+    else:
+        print(f"  from {prov['n_cells']} sweep cells; "
+              f"pooled means {prov['pooled_mean_by_ratio']}")
+        print(f"  per-dataset optima {prov['per_dataset_optimum']}"
+              f"  (agree: {prov['agree_across_datasets']})")
+        if not prov["agree_across_datasets"]:
+            print("  NOTE: datasets disagree on the optimum; a single pooled "
+                  "ratio is a simplification worth stating in the paper.")
+    print()
 
     grid = build_grid()
 

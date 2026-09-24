@@ -379,6 +379,20 @@ def train_network(
     # published one-sided criterion (Eq. 6), "band" the historical two-sided
     # tolerance window. Defaults to the historical behaviour.
     sleep_termination: str = "band",
+    # --- sleep component ablation (R3.2) ----------------------------------
+    # The sleep protocol bundles four mechanisms. These switch them
+    # independently so their separate contributions can be measured. All
+    # default True, i.e. the full protocol.
+    sleep_downscale: bool = True,      # power-law pull toward the target
+    sleep_noise: bool = True,          # Gaussian membrane noise during sleep
+    sleep_stdp: bool = True,           # STDP active during sleep ("replay")
+    sleep_suppress_input: bool = True, # zero the sensory drive
+    # Invert the STDP window during sleep (depression-dominant). Noise-driven
+    # coincidences are spurious by construction, so punishing them prunes noise
+    # instead of imprinting it -- the mechanism Thiele et al. (2017) use to
+    # unlearn spurious attractors. Implemented by negating the sleep-phase
+    # learning rates, leaving the wake rule untouched.
+    sleep_anti_stdp: bool = False,
 ):
 
     st = N_x  # stimulation
@@ -800,7 +814,12 @@ def train_network(
                 slept_this_step = True
 
                 # Zero sensory input (do not consume data)
-                spikes_prev[:st] = 0
+                # Zero sensory input (do not consume data). With
+                # suppression off, the last presented frame is held for the
+                # window instead -- real time is frozen, so there is no
+                # fresh input to stream in.
+                if sleep_suppress_input:
+                    spikes_prev[:st] = 0
 
                 # Update membrane potentials using previous step spikes
                 mp_prev, I_syn = update_membrane_potential(
@@ -811,7 +830,7 @@ def train_network(
                     membrane_resistance=membrane_resistance,
                     tau_m=tau_m,
                     dt=dt,
-                    noisy_potential=noisy_potential,
+                    noisy_potential=(noisy_potential and sleep_noise),
                     mean_noise=mean_noise,
                     var_noise=var_noise,
                     I_syn=I_syn,
@@ -856,31 +875,35 @@ def train_network(
                 # Update weights once per internal sleep iteration (use previous spikes_prev)
                 if train_weights:
                     # First apply the slow exponential decay toward targets
-                    weights, sleep_now_inh, sleep_now_exc = sleep_func(
-                        weights=weights,
-                        max_sum=max_sum,
-                        max_sum_exc=max_sum_exc,
-                        max_sum_inh=max_sum_inh,
-                        sleep_now_inh=True,
-                        sleep_now_exc=True,
-                        w_target_exc=w_target_exc_cur,
-                        w_target_inh=w_target_inh_cur,
-                        use_post_targets=use_post_targets,
-                        w_target_exc_vec=w_target_exc_vec,
-                        w_target_inh_vec=w_target_inh_vec,
-                        weight_decay_rate_exc=weight_decay_rate_exc,
-                        weight_decay_rate_inh=weight_decay_rate_inh,
-                        baseline_sum_exc=baseline_sum_exc,
-                        baseline_sum_inh=baseline_sum_inh,
-                        sleep_synchronized=sleep_synchronized,
-                        nz_rows=nz_rows,
-                        nz_cols=nz_cols,
-                        baseline_sum=baseline_sum,
-                        nz_rows_exc=nz_rows_exc,
-                        nz_rows_inh=nz_rows_inh,
-                        nz_cols_exc=nz_cols_exc,
-                        nz_cols_inh=nz_cols_inh,
-                    )
+                    # Synaptic downscaling. Gated for the component
+                    # ablation; when off, the sleep phase still runs its
+                    # iterations but applies no homeostatic pull.
+                    if sleep_downscale:
+                        weights, sleep_now_inh, sleep_now_exc = sleep_func(
+                            weights=weights,
+                            max_sum=max_sum,
+                            max_sum_exc=max_sum_exc,
+                            max_sum_inh=max_sum_inh,
+                            sleep_now_inh=True,
+                            sleep_now_exc=True,
+                            w_target_exc=w_target_exc_cur,
+                            w_target_inh=w_target_inh_cur,
+                            use_post_targets=use_post_targets,
+                            w_target_exc_vec=w_target_exc_vec,
+                            w_target_inh_vec=w_target_inh_vec,
+                            weight_decay_rate_exc=weight_decay_rate_exc,
+                            weight_decay_rate_inh=weight_decay_rate_inh,
+                            baseline_sum_exc=baseline_sum_exc,
+                            baseline_sum_inh=baseline_sum_inh,
+                            sleep_synchronized=sleep_synchronized,
+                            nz_rows=nz_rows,
+                            nz_cols=nz_cols,
+                            baseline_sum=baseline_sum,
+                            nz_rows_exc=nz_rows_exc,
+                            nz_rows_inh=nz_rows_inh,
+                            nz_cols_exc=nz_cols_exc,
+                            nz_cols_inh=nz_cols_inh,
+                        )
 
                     # Then apply STDP/noisy updates to capture jitter after decay
                     weights, _, _ = update_weights(
@@ -894,10 +917,10 @@ def train_network(
                         sleep=True,
                         nonzero_pre_idx=nonzero_pre_idx,
                         N_x=N_x,
-                        vectorized_trace=vectorized_trace,
+                        vectorized_trace=(vectorized_trace and sleep_stdp),
                         delta_w=delta_w,
                         N_exc=N_exc,
-                        timing_update=timing_update,
+                        timing_update=(timing_update and sleep_stdp),
                         trace_update=trace_update,
                         spike_times=spike_times,
                         weight_decay_rate_exc=weight_decay_rate_exc,
@@ -928,8 +951,8 @@ def train_network(
                         N_inh=N_inh,
                         A_plus=A_plus,
                         A_minus=A_minus,
-                        learning_rate_exc=learning_rate_exc,
-                        learning_rate_inh=learning_rate_inh,
+                        learning_rate_exc=(-learning_rate_exc if sleep_anti_stdp else learning_rate_exc),
+                        learning_rate_inh=(-learning_rate_inh if sleep_anti_stdp else learning_rate_inh),
                         tau_LTP=tau_LTP,
                         tau_LTD=tau_LTD,
                         dt=dt,

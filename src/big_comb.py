@@ -1494,8 +1494,8 @@ class snn_sleepy:
         force_train=False,
         save_model=True,
         weight_decay=False,
-        weight_decay_rate_exc=[0.9999],
-        weight_decay_rate_inh=[0.9999],
+        weight_decay_rate_exc=[0.997],
+        weight_decay_rate_inh=[0.997],
         compare_decay_rates=True,
         noisy_potential=True,
         noisy_threshold=False,
@@ -1578,6 +1578,11 @@ class snn_sleepy:
         reg_interval=None,
         clip_always=False,
         sleep_termination="band",
+        sleep_downscale=True,
+        sleep_noise=True,
+        sleep_stdp=True,
+        sleep_suppress_input=True,
+        sleep_anti_stdp=False,
     ):
         self.dt = dt
         self.pca_variance = pca_variance
@@ -1820,6 +1825,11 @@ class snn_sleepy:
                 reg_interval=reg_interval,
                 clip_always=clip_always,
                 sleep_termination=sleep_termination,
+                sleep_downscale=sleep_downscale,
+                sleep_noise=sleep_noise,
+                sleep_stdp=sleep_stdp,
+                sleep_suppress_input=sleep_suppress_input,
+                sleep_anti_stdp=sleep_anti_stdp,
                 initial_sum_post_exc=initial_sum_post_exc,
                 initial_sum_post_inh=initial_sum_post_inh,
                 # pass hard-pause knobs

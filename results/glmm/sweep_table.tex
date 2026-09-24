@@ -1,0 +1,34 @@
+{
+\setlength{\tabcolsep}{15pt} % Only affects this table
+\begin{longtable}{lrrrrl}
+    \caption{Mixed effect model with beta regression \label{tab:betareg}}\\
+    \toprule
+    Effect  & Estimate & Std. Error & \textit{z} value & \textit{p}-value & \\
+    \endfirsthead
+
+    \toprule
+    Effect  & Estimate & Std. Error & \textit{z} value & \textit{p}-value & \\
+    \endhead
+        Intercept & -.121 & .216 & -.562 & .574 \\[6pt]
+        \multicolumn{6}{l}{\textit{Main effect of sleep duration}}\\
+        $\beta_{j=10}$ & .681 & .259 & 2.629 & .009 & **\\
+        $\beta_{j=20}$ & -.083 & .255 & -.324 & .746 & \\
+        $\beta_{j=30}$ & -.675 & .263 & -2.569 & .010 & *\\
+        $\beta_{j=40}$ & -.233 & .259 & -.900 & .368 & \\
+        $\beta_{j=50}$ & -.382 & .258 & -1.478 & .139 & \\
+        $\beta_{j=60}$ & -.637 & .259 & -2.458 & .014 & *\\
+        $\beta_{j=70}$ & -.890 & .262 & -3.403 & $<.001$ & ***\\
+        $\beta_{j=80}$ & -.823 & .261 & -3.157 & .002 & **\\
+        $\beta_{j=90}$ & -.826 & .261 & -3.165 & .002 & **\\
+        $\beta_{j=100}$ & -.790 & .261 & -3.025 & .002 & **\\
+        \midrule
+        \multicolumn{2}{l}{Random effect variance}\\
+        Groups & Name & Variance & Std.Dev.& &\\
+        Dataset & (Intercept) & .015 & .120 & &\\
+        Seed & (Intercept) & .050 & .223 & &\\
+        Dataset:Seed & (Intercept) & $< .001$ & $< .001$ & &\\
+
+        \bottomrule
+    %\caption*{Significance levels: * $p<.05$, ** $p<.01$, *** $p<.001$.}
+\end{longtable}
+}

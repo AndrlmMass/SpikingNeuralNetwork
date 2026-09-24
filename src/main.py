@@ -9,6 +9,7 @@ from big_comb import snn_sleepy
 from platform_utils import PLATFORM_NAME, IS_WINDOWS, safe_cpu_count
 import argparse
 import numpy as np
+import torch
 import random
 import json
 from datetime import datetime
@@ -26,6 +27,13 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
     seed = int(_explicit) if _explicit is not None else 42 + run_idx
     np.random.seed(seed)
     random.seed(seed)
+    # The torch RNG must be seeded too. spikegen.rate() draws the Bernoulli
+    # spike trains from it, so without this every run sees a different input
+    # encoding regardless of --seed: two invocations with identical arguments
+    # were measured at 0.7771 and 0.7943 test accuracy. It also means conditions
+    # at "the same seed" were not seeing the same spike trains, which is what
+    # reusing a fixed seed set across conditions is supposed to guarantee.
+    torch.manual_seed(seed)
 
     # init class
     snn_N = (
@@ -60,6 +68,7 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         batch_image_test=b_te,
         all_images_val=img_va,
         batch_image_val=b_va,
+        num_steps=int(getattr(args, "num_steps", 1000)),
         add_breaks=False,
         force_recreate=force_recreate_flag,
         noisy_data=False,
@@ -106,6 +115,27 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
     if getattr(args, "profile", False):
         pr = cProfile.Profile()
         pr.enable()
+    # ---- resolve which sleep components are active ------------------------
+    # The sleep protocol bundles four mechanisms; R3.2 asks for their separate
+    # contributions. A component named in --sleep-components is ON.
+    _ALL_COMPONENTS = ("downscale", "noise", "stdp", "suppress")
+    _spec = str(getattr(args, "sleep_components", ",".join(_ALL_COMPONENTS)))
+    _named = {c.strip() for c in _spec.split(",") if c.strip()}
+    # "none" (or an empty value) means ablate every component. Spelled
+    # explicitly so a lost/empty argument cannot be mistaken for the default.
+    if _named in ({"none"}, set()):
+        _named = set()
+    _unknown = _named - set(_ALL_COMPONENTS)
+    if _unknown:
+        raise SystemExit(
+            f"unknown sleep component(s) {sorted(_unknown)}; "
+            f"choose from {list(_ALL_COMPONENTS)}"
+        )
+    _components = {c: (c in _named) for c in _ALL_COMPONENTS}
+    if set(_components.values()) != {True}:
+        print("Sleep components: " + ", ".join(
+            f"{c}={'on' if v else 'OFF'}" for c, v in _components.items()))
+
     # ---- resolve the regularization condition -----------------------------
     # --reg-method is the single switch used by experiment.py. When it is left
     # at "legacy" the older --no-sleep / --normalize-weights flags decide, so
@@ -132,9 +162,9 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         train_weights=True,
         noisy_potential=True,
         compare_decay_rates=False,
-        check_sleep_interval=35000,
-        weight_decay_rate_exc=[float(getattr(args, "sleep_decay_rate", 0.99997))],
-        weight_decay_rate_inh=[float(getattr(args, "sleep_decay_rate", 0.99997))],
+        check_sleep_interval=int(getattr(args, "check_sleep_interval", 35000)),
+        weight_decay_rate_exc=[float(getattr(args, "sleep_decay_rate", 0.997))],
+        weight_decay_rate_inh=[float(getattr(args, "sleep_decay_rate", 0.997))],
         samples=10,
         force_train=True,
         plot_spikes_train=False,
@@ -154,7 +184,7 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         tsne_plot_interval=1,
         plot_spectrograms=False,
         use_validation_data=False,
-        var_noise=2,
+        var_noise=float(args.sleep_noise_var),
         max_weight_exc=25,
         min_weight_inh=-25,
         sleep=_sleep,
@@ -187,6 +217,11 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         ),
         clip_always=bool(getattr(args, "clip_always", False)),
         sleep_termination=str(getattr(args, "sleep_termination", "band")),
+        sleep_downscale=_components["downscale"],
+        sleep_noise=_components["noise"],
+        sleep_stdp=_components["stdp"],
+        sleep_suppress_input=_components["suppress"],
+        sleep_anti_stdp=bool(getattr(args, "sleep_anti_stdp", False)),
     )
 
     if getattr(args, "profile", False):
@@ -277,6 +312,55 @@ def main():
         ),
     )
     parser.add_argument(
+        "--sleep-anti-stdp",
+        action="store_true",
+        help=("invert the STDP window during sleep (depression-dominant), "
+              "after Thiele et al. 2017; wake plasticity is unchanged"),
+    )
+    parser.add_argument(
+        "--sleep-noise-var",
+        type=float,
+        default=2.0,
+        help=(
+            "standard deviation (mV) of the Gaussian added to the membrane "
+            "potential during sleep. The rest-to-threshold gap is 15 mV "
+            "(-70 to -55), so the 2.0 default is a 0.13 fraction of it. Raise "
+            "to drive spontaneous sleep-phase spiking. Only active when the "
+            "'noise' sleep component is enabled"
+        ),
+    )
+    parser.add_argument(
+        "--sleep-components",
+        type=str,
+        default="downscale,noise,stdp,suppress",
+        help=(
+            "comma-separated list of sleep components to keep ACTIVE: "
+            "downscale (power-law pull toward target), noise (Gaussian membrane "
+            "noise), stdp (plasticity during sleep), suppress (zero sensory "
+            "drive). Omit one to ablate it; pass 'none' to ablate all four. "
+            "Default: all four, the full protocol"
+        ),
+    )
+    parser.add_argument(
+        "--num-steps",
+        type=int,
+        default=1000,
+        help=(
+            "timesteps each stimulus is presented for. The code default is 1000; "
+            "the published MNIST-family methods report 100 ms"
+        ),
+    )
+    parser.add_argument(
+        "--check-sleep-interval",
+        type=int,
+        default=35000,
+        help=(
+            "timesteps between sleep onsets. Measured in timesteps, so it must "
+            "be scaled alongside --num-steps to keep the number of sleep "
+            "episodes per image constant"
+        ),
+    )
+    parser.add_argument(
         "--no-plots",
         action="store_true",
         help="skip t-SNE and figure generation (for batch/HPC runs)",
@@ -293,11 +377,12 @@ def main():
     parser.add_argument(
         "--sleep-decay-rate",
         type=float,
-        default=0.99997,
+        default=0.997,
         help=(
             "exponent of the sleep power law w <- w_tgt (w/w_tgt)^lambda. "
-            "The published table gives 0.9997; this default (0.99997) is the "
-            "historical value main.py used"
+            "0.997 is the project-wide value; the published table gives 0.9997 "
+            "and main.py historically passed 0.99997, neither of which bounds "
+            "weight growth under window-limited stopping"
         ),
     )
     parser.add_argument(
@@ -519,6 +604,11 @@ def main():
             "no_sleep": args.no_sleep,
             "normalize_weights": args.normalize_weights,
             "reg_method": getattr(args, "reg_method", "legacy"),
+            "sleep_components": getattr(args, "sleep_components", None),
+            "sleep_anti_stdp": getattr(args, "sleep_anti_stdp", False),
+            "sleep_noise_var": getattr(args, "sleep_noise_var", 2.0),
+            "num_steps": getattr(args, "num_steps", None),
+            "check_sleep_interval": getattr(args, "check_sleep_interval", None),
             "sleep_decay_rate": getattr(args, "sleep_decay_rate", None),
             "decay_rate": getattr(args, "decay_rate", None),
             "reg_interval": getattr(args, "reg_interval", 0),
