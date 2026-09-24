@@ -464,3 +464,186 @@ activity."
 
 Artifacts: `results/noise_sweep_summary.csv`, `results/results_noise_s*.json`,
 `results/results_anti_*.json`.
+
+## 2026-09-24 (later) — The sleep-ratio "crash" is a collapse rate, not a loss of accuracy; the reported model cannot represent it
+
+### The dip at 20–30% sleep is the onset of all-or-nothing failure
+
+Counting runs below 0.20 accuracy per sleep level, out of 20 (4 datasets × 5
+seeds), against the mean accuracy of the runs that survived:
+
+| sleep % | collapsed | survivors' mean |
+|---------|-----------|-----------------|
+| 0 | 1/20 | 0.48 |
+| 10 | 1/20 | 0.69 |
+| 20 | 5/20 | 0.58 |
+| 30 | 10/20 | 0.47 |
+| 40 | 6/20 | 0.51 |
+| 50 | 7/20 | 0.52 |
+| 60 | 9/20 | 0.55 |
+| 70 | 12/20 | 0.54 |
+| 80 | 11/20 | 0.52 |
+| 90 | 11/20 | 0.52 |
+| 100 | 11/20 | 0.50 |
+
+Survivors barely degrade: MNIST survivors score 0.766 at 10%, 0.777 at 20%, and
+still 0.700 at 100%. What changes with sleep duration is how many runs die. The
+plotted mean is the mean of a two-component mixture, so it tracks the collapse
+fraction — which is why the curve dips at 30% and partly "recovers" at 40–60%
+rather than declining smoothly. At n = 5 per cell the mixing proportion is a
+coarse, noisy step, and that noise is the non-monotonicity.
+
+### Mechanism: the sweep's own design isolates sleep-phase STDP
+
+Sweep B holds total downscaling constant by construction — every ratio reaches
+exactly ρ = 0.66 via its own λ (verified: λ^N = 0.6600 at every level). So
+downscaling cannot be the cause. The only quantity that scales with ratio is the
+sleep-phase STDP dose, N = 28 episodes × (3500 × ratio): 9,800 steps at 10%,
+29,400 at 30%, 98,000 at 100%.
+
+    corr(sleep-STDP dose N, collapsed count) = +0.824   (10 ratios, 0% excluded)
+
+This agrees with the ablation (STDP is the harmful component, −0.134 with
+downscaling present and catastrophic without), with the anti-STDP null (the sign
+of the window is irrelevant), and with the noise-dose null. Beyond ~30% the
+hazard saturates near 50% rather than continuing to rise.
+
+### The reported GLMM cannot represent these cells
+
+The Beta family assumes one unimodal distribution per cell. Checking the fitted
+95% intervals against the runs they are supposed to describe:
+
+- **9 of 44 cells have an interval containing no observation at all.**
+- Across the figure the intervals cover **140/220 individual runs (64%)**.
+
+Worked example, MNIST at 60%: predicted 0.235, CI [0.144, 0.361]; the five runs
+were 0.082, 0.114, 0.124, 0.130, 0.766. Four dead, one healthy, and the model
+reports a central tendency no run came near.
+
+Two separate points here, and they should not be conflated in the write-up:
+a CI on the *mean* is legitimately much narrower than the spread of runs, so
+narrowness alone is not a defect. Containing **zero** observations is.
+
+**Recommended fix, not yet implemented:** a two-part model — P(collapse) ~ ratio
+(logistic) and accuracy | survived ~ ratio (Beta). Two panels, both
+interpretable, no means in empty gaps. It also states the actual result more
+strongly: 10% sleep is the only setting that reliably does not kill the network.
+
+### Candidate interventions for the collapse (all untested)
+
+1. **Disable sleep-phase STDP** (`--sleep-components downscale,noise,suppress`).
+   Decisive test: ratios 0.3/0.5/0.7/1.0 × 2 datasets × 5 seeds, ~12 min. If
+   collapse goes to zero it is both proof and fix. Risk: removes a component the
+   manuscript may describe — the paper's claim was not verifiable from here
+   (the `.tex` in `~/Documents/GitHub/67862a3583ed6fdf242ba54f` is the other
+   article).
+2. **Cap the dose** — apply plasticity only for the first K steps of each
+   episode. Scientifically the better option: it breaks the confound that sleep
+   duration and accumulated plasticity are currently the same variable.
+3. **Scale the sleep learning rate down** rather than to zero; keeps the
+   mechanism and gives a dose-response.
+4. `--sleep-termination below_target` cuts dose adaptively, but fires almost
+   immediately at interval 3500 and would erase the manipulation — needs the
+   interval rescaled first.
+5. **Weight bounds.** Collapse is *presumed* to be runaway weights pinning
+   against the clip bounds. Still unverified — no run has logged final weight
+   statistics. One instrumented run would settle it before tuning
+   `max_weight_exc` on a guess.
+
+### Sweep model: a dataset × ratio interaction is required for the panel figure
+
+The main-effect model's dataset random intercept fits to SD 0.0145, so it
+predicts the same ratio profile in all four panels while the observed profiles
+differ sharply (MNIST peaks at 20% and recovers at 100%; notMNIST peaks at 30%
+and floors from 80%). Those are dataset-specific shapes, not level shifts.
+
+    fit_sw     acc ~ ratio_f + (1|dataset) + (1|seed) + (1|dataset:seed)   AIC -108.98
+    fit_sw_int acc ~ ratio_f * dataset + (1|seed) + (1|dataset:seed)       AIC -204.13
+    LRT: chi2(32) = 159.14, p < 2.2e-16
+
+Both are kept: the main-effect fit is the table, the interaction fit backs the
+figure. **The write-up must say so explicitly** — otherwise a reviewer notices
+the tabulated model cannot produce the plotted panels. This also supplies direct
+evidence for R3.7's request to moderate the monotonicity claim.
+
+### Regression table
+
+`src/glmm/fit_glmms.R` now emits the table in the manuscript's own format
+(`longtable`, `tabcolsep 15pt`, `$\beta_{j=..}$` labels, separate significance
+column, APA numbers) to `results/glmm/sweep_table.tex`, plus `sweep_table.csv`
+and `sweep_table_random.csv`.
+
+Main-effect fit, N = 220: only **10% is a significant improvement**
+(β = +0.681, p = .009). 20%, 40% and 50% are not significant. 30%, 60%, 70%,
+80%, 90% and 100% are significantly **worse** than no sleep. Random-effect SDs
+(logit): dataset 0.1204, seed 0.2233, dataset:seed 0.0000 — the last is a
+singular fit, at the boundary; it is retained for comparability with the
+submitted model and should be disclosed. Dispersion φ = 5.16.
+
+Contrast with the submitted table, where every level was p < .001 with estimates
+0.78–1.59, all positive: those β₃₀–β₁₀₀ were eight estimates of the same
+`sleep_max_iters`-capped condition, which is why they were near-identical. They
+are not any more. Given the collapse finding, the honest reading of the negative
+coefficients is that they measure a rise in failure rate, not graded accuracy
+loss.
+
+### Figures
+
+All in `figures/`, generated by `src/glmm/plot_glmms_bw.py` (fonts 25/20/19,
+conventional boxed legends):
+
+- `sweep_ratio_BW` — four per-dataset panels mirroring the submitted layout;
+  predicted mean with the only CI in the figure, all runs as small dots on the
+  tick. `OUTLIER_RULE` in the script switches the dots between `all`,
+  `collapse` (< 0.20), `tukey` and `none`, per figure. Tukey is a poor fit at
+  n = 5 — it flags 15% of runs, including both ends of tight clusters, while
+  returning no fliers for the genuinely bimodal cells.
+- `baselines_methods_BW` — grouped bars by dataset, observed means with 95%
+  intervals, single-row legend. Bars hide the bimodality the earlier box version
+  showed (NotMNIST/sleep: mean 0.60, interval 0.37–0.84, four seeds ~0.70 and
+  one at 0.125). The box version is recoverable from git history.
+- `ablation_components_BW` plus three alternatives from
+  `src/glmm/plot_ablation_alts.py`: `_A_interaction` (the 2×2 that carries the
+  result, plus evidence the two collapsed factors are null), `_B_forest` (all 15
+  coefficients with CIs; only STDP, downscale and their interaction clear zero),
+  `_C_matrix` (all 16 cells, condition read off a dot matrix). **Still to
+  decide which becomes canonical.** A marginal-effect variant was written and
+  then removed at request.
+
+### Repository and handoff state
+
+Committed as `abdf2f4` on branch **`plots-dec08`** (not `main`), 44 files,
++3125 lines. Not yet pushed.
+
+Tracked, deliberately force-added past `.gitignore`: the four summary CSVs
+(sweep 220 rows, baselines 100, ablation 85, noise 40 — all verified complete),
+all 14 files in `results/glmm/`, all 12 BW figures, and the code. That is
+sufficient to refit every model and redraw every figure without re-running a
+cell.
+
+Still ignored: the ~400 per-cell JSONs, `results/results_anti_*`,
+`results/results_noise_s*`, and `pipeline*.log`. Note `results/` is in
+`.gitignore` but **743 result files from before that line was added remain
+tracked**, so the directory is half in and half out of version control — worth
+untangling in its own commit.
+
+To reproduce the experiments elsewhere: `environment_{linux,windows}.yml` are
+tracked, but `data/` is not. MNIST/KMNIST/Fashion-MNIST auto-download;
+**notMNIST will not** — it needs the deeplake cache at `NOTMNIST_LOCAL`
+(default `data/datasets/notmnist_dl`), and a failed local load raises by design
+rather than silently hitting the network. Measured cost from `elapsed_s`:
+
+| study | cells | median/cell | total |
+|-------|-------|-------------|-------|
+| sweep | 220 | 7.1 min | 27.8 core-h |
+| baselines | 100 | 3.5 min | 6.7 core-h |
+| ablation | 85 | 2.8 min | 4.4 core-h |
+| all | 405 | — | **39.0 core-h** (~4 h wall at concurrency 10) |
+
+`run_local.sh` is resumable and skips cells that already have result files.
+
+**Reproducibility caveat:** torch is now seeded, so re-runs are bit-identical on
+the same machine with the same library versions. Across machines, numba and BLAS
+version differences can shift results slightly. Every number in this diary and
+in the committed tables comes from this machine; keep one machine's results
+canonical rather than mixing them.
