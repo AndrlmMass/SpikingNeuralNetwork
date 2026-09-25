@@ -24,7 +24,7 @@ from plot_risk_coverage import PALETTES  # noqa: E402
 
 ROSE, SLATE, SAGE = PALETTES["project"]
 
-DATASETS = ["mnist", "fmnist", "kmnist", "notmnist", "svhn"]
+DATASETS = ["mnist", "fmnist", "kmnist", "notmnist"]
 INK, MUTED, GRID, INIT = "#0b0b0b", "#52514e", "#d8d7d2", "#9a9892"
 # rows ordered by how much prior survives, so the figure reads top-to-bottom.
 # `base_rnd` is deliberately NOT a row: random weights never carried the prior, so a

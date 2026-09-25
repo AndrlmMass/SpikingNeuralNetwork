@@ -36,13 +36,19 @@ F_LABEL, F_TICK, F_SERIES = (int(round(v * TEXT_SCALE))
 
 PHASE2 = os.path.join(REPO, "results", "interp", "json", "experiments", "RF_article",
                       "interp", "mnist_family_sweep", "results", "run_20260819_112250")
+# The 08-19 random arm silently got global instead of within-group I->E inhibition
+# (fixed in 9159d743); its rerun lives in its own run folder and replaces it.
+PHASE2_RANDOM = os.path.join(os.path.dirname(PHASE2), "run_20260916_105832")
 FROZEN = os.path.join(REPO, "results", "frozen_supervised", "run_cheap")
-DATASETS = ["mnist", "fmnist", "kmnist", "notmnist", "svhn"]
+DATASETS = ["mnist", "kmnist", "fmnist", "notmnist"]
+PRETTY = {"mnist": "MNIST", "fmnist": "Fashion-MNIST", "kmnist": "KMNIST",
+          "notmnist": "notMNIST"}
 LABELS = {"oriented": "RF prior\n+ R-STDP", "random": "random init\n+ R-STDP",
           "frozen": "RF prior\nFROZEN"}
 FLAT = {"oriented": "RF prior + R-STDP", "random": "random init + R-STDP",
-        "frozen": "RF prior, FROZEN"}          # single-line, for the stdout table
+        "frozen": "RF prior, frozen"}          # single-line, for the stdout table
 ORDER = ["frozen", "random", "oriented"]     # weakest-claim first, left to right
+N_YTICKS = 5                                 # same tick count in every panel
 
 
 def learned_readout(path):
@@ -60,7 +66,9 @@ def learned_readout(path):
 def collect():
     """{dataset: {condition: [per-seed accuracies]}}"""
     out = {ds: {c: [] for c in ORDER} for ds in DATASETS}
-    for p in sorted(glob.glob(os.path.join(PHASE2, "*", "results.json"))):
+    paths = (glob.glob(os.path.join(PHASE2, "*_oriented_s*", "results.json"))
+             + glob.glob(os.path.join(PHASE2_RANDOM, "*_random_s*", "results.json")))
+    for p in sorted(paths):
         tag = os.path.basename(os.path.dirname(p))
         ds, prior, _ = tag.rsplit("_", 2)
         a = learned_readout(p)
@@ -77,102 +85,65 @@ def collect():
     return out
 
 
-def figure(data, out_path, theme="light", palette="project",
-           lo_band=(0.08, 0.30), hi_band=(0.48, 1.00)):
-    """Broken y-axis: SVHN sits near the 10% floor while everything else is above 50%.
+def figure(data, out_path, theme="light", palette="project"):
+    """One panel per dataset, each on its own y-range (black and white, legend on top).
 
-    On a single continuous axis the 18 percentage points between SVHN's best arm and
-    KMNIST's worst are empty, and that gap consumes roughly a third of the panel while
-    compressing the differences the figure exists to show. Splitting the axis spends the
-    vertical space where the data is.
-
-    The break is drawn explicitly with diagonal marks on both broken spines, because a
-    reader who misses it reads SVHN as competitive with the MNIST family. Both bands keep
-    the SAME percentage-point-per-inch scale as far as the band widths allow, so box
-    heights remain visually comparable across the break.
+    On a single shared axis (52-95%) the 5-seed boxes are ~1 pp tall and their fill/hatch
+    cannot be told apart in greyscale. Per-dataset ranges make every box several times
+    taller. The price is that absolute heights are no longer comparable across panels, so
+    each panel keeps its own labelled y-ticks.
     """
-    T, cols = THEMES[theme], PALETTES[palette]
-    colour = {"frozen": cols[2], "random": cols[1], "oriented": cols[0]}
-    # height ratio follows the band spans, so a given accuracy difference occupies the
-    # same vertical distance above and below the break
-    h_hi, h_lo = hi_band[1] - hi_band[0], lo_band[1] - lo_band[0]
-    fig, (ax, axb) = plt.subplots(
-        2, 1, sharex=True, figsize=(16, 8.8), facecolor=T["surface"],
-        gridspec_kw=dict(height_ratios=[h_hi, h_lo], hspace=0.07))
-
-    width, gap = 0.24, 1.0
-    for i, ds in enumerate(DATASETS):
+    T = THEMES[theme]
+    FILL = {"frozen": ("#d9d9d9", ""), "random": ("white", "///"), "oriented": ("none", "")}
+    MARK = {"frozen": "s", "random": "^", "oriented": "o"}
+    SHORT = {"frozen": "frozen", "random": "random", "oriented": "RF"}
+    plt.rcParams["hatch.linewidth"] = 1.1
+    nds = len(DATASETS)
+    fig, axes = plt.subplots(1, nds, figsize=(6.2 * nds, 5.6), facecolor=T["surface"])
+    width = 0.62
+    for ax, ds in zip(axes, DATASETS):
+        allv = []
         for j, cond in enumerate(ORDER):
             vals = data[ds][cond]
             if not vals:
                 continue
-            x = i * gap + (j - 1) * width
-            for a in (ax, axb):           # draw on both; each shows only its own band
-                # median in the SERIES colour: a black bar reads as a separate mark and,
-                # at this type scale, competes with the box it belongs to
-                bp = a.boxplot([vals], positions=[x], widths=width * 0.82,
-                               patch_artist=True,
-                               medianprops=dict(color=colour[cond], lw=3.0),
-                               whiskerprops=dict(color=colour[cond], lw=1.4),
-                               capprops=dict(color=colour[cond], lw=1.4),
-                               flierprops=dict(marker="", ms=0), zorder=3)
-                for b in bp["boxes"]:
-                    b.set(facecolor=colour[cond], alpha=0.35,
-                          edgecolor=colour[cond], lw=1.6)
-                # every seed as a dot: with 3-5 seeds a box alone hides how much of its
-                # spread is one outlier, and SVHN's frozen arm is exactly that case
-                a.scatter(np.full(len(vals), x) + np.linspace(-0.04, 0.04, len(vals)),
-                          vals, s=30, color=colour[cond], zorder=4,
-                          edgecolors=T["surface"], linewidths=0.6)
+            allv += vals
+            fc, hatch = FILL[cond]
+            bp = ax.boxplot([vals], positions=[j], widths=width, patch_artist=True,
+                            medianprops=dict(color="black", lw=2.4),
+                            whiskerprops=dict(color="black", lw=1.2),
+                            capprops=dict(color="black", lw=1.2),
+                            flierprops=dict(marker="", ms=0), zorder=3)
+            for b in bp["boxes"]:
+                b.set(facecolor=fc, hatch=hatch, edgecolor="black", lw=1.4)
+            # seeds on the box, spread slightly so coincident values stay visible
+            ax.scatter(j + np.linspace(-0.12, 0.12, len(vals)), vals, s=30,
+                       marker=MARK[cond], facecolors="white", edgecolors="black",
+                       linewidths=1.0, zorder=4, clip_on=False)
+        # Exactly N_YTICKS ticks in every panel, on whole percents: the smallest step whose
+        # N_YTICKS-1 intervals cover the data, with the data centred between the end ticks.
+        lo, hi = 100 * min(allv), 100 * max(allv)
+        step = next(s for s in (1, 2, 3, 4, 5, 6, 8, 10, 15, 20)
+                    if (N_YTICKS - 1) * s >= np.ceil(hi) - np.floor(lo))
+        start = np.floor((lo + hi) / 2 - (N_YTICKS - 1) * step / 2)
+        start = min(max(start, np.ceil(hi) - (N_YTICKS - 1) * step), np.floor(lo))
+        ticks = (start + step * np.arange(N_YTICKS)) / 100
+        edge = 0.04 * (ticks[-1] - ticks[0])
+        style_axes(ax, T, "", "", fs_label=F_TICK, fs_tick=F_TICK - 4)
+        ax.set_yticks(ticks)
+        ax.set_ylim(ticks[0] - edge, ticks[-1] + edge)
+        ax.set_xticks([])   # identity comes from hatch + marker, named in the legend
+        ax.set_xlim(-0.6, len(ORDER) - 0.4)   # symmetric, so the title centres on the boxes
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(pct))
+        ax.set_title(PRETTY[ds], fontsize=F_TICK - 2, color=T["ink"], pad=8)
+    axes[0].set_ylabel("Accuracy", fontsize=(F_TICK - 3) * 1.2, color=T["ink"], labelpad=8)
 
-    # chance floor lives in the lower band, where SVHN is
-    axb.axhline(0.10, color=T["ref"], lw=1.2, ls=(0, (4, 4)), zorder=1)
-    axb.text(-0.45, 0.105, " chance", color=T["muted"], fontsize=F_TICK,
-             va="bottom", ha="left")
-
-    # Direct condition labels, one per condition, each anchored on a DIFFERENT dataset
-    # group with a leader line. Stacking all three over the first group collides -- the
-    # boxes are 0.24 apart and the labels are wider than that at this type scale -- and a
-    # legend is not an option, because this palette separates rose from sage by only
-    # dE 3.5 under deuteranopia and so cannot carry identity by hue.
-    top = max(max(v) for d in data.values() for v in d.values() if v)
-    anchor_group = {"frozen": 0, "random": 1, "oriented": 2}
-    for cond, gi in anchor_group.items():
-        vals = data[DATASETS[gi]][cond]
-        if not vals:
-            continue
-        x = gi * gap + (ORDER.index(cond) - 1) * width
-        y_lab = top + 0.055
-        ax.plot([x, x], [max(vals) + 0.008, y_lab - 0.008], color=colour[cond], lw=1.0,
-                zorder=2)
-        ax.text(x, y_lab, LABELS[cond], color=colour[cond], fontsize=F_SERIES,
-                ha="center", va="bottom", linespacing=1.1)
-
-    ax.set_ylim(*hi_band)
-    axb.set_ylim(*lo_band)
-    axb.set_xticks([i * gap for i in range(len(DATASETS))])
-    axb.set_xticklabels(DATASETS, fontsize=F_TICK)
-    axb.set_xlim(-0.55, len(DATASETS) - 1 + 0.55)
-    for a in (ax, axb):
-        style_axes(a, T, "", "", fs_label=F_LABEL, fs_tick=F_TICK)
-        a.yaxis.set_major_formatter(plt.FuncFormatter(pct))
-    # one y label for the pair, centred on the break
-    fig.supylabel("learned-readout test accuracy", fontsize=F_LABEL, color=T["ink"],
-                  x=0.005)
-
-    # hide the facing spines and mark the break
-    ax.spines["bottom"].set_visible(False)
-    axb.spines["top"].set_visible(False)
-    ax.tick_params(bottom=False)
-    d = 0.9
-    kw = dict(marker=[(-1, -d), (1, d)], markersize=13, linestyle="none",
-              color=T["axis"], mec=T["axis"], mew=1.4, clip_on=False)
-    ax.plot([0], [0], transform=ax.transAxes, **kw)
-    axb.plot([0], [1], transform=axb.transAxes, **kw)
-
-    # NOT tight_layout: it cannot handle the broken-axis pair (it warns that results may
-    # be incorrect) and it would override the hspace that sets the break gap. bbox_inches
-    # trims the margins without touching the subplot geometry.
+    from matplotlib.patches import Patch
+    handles = [Patch(facecolor=FILL[c][0], hatch=FILL[c][1], edgecolor="black", lw=1.2,
+                     label=FLAT[c]) for c in ORDER[::-1]]   # strongest claim first
+    fig.subplots_adjust(left=0.07, right=0.80, bottom=0.06, top=0.90, wspace=0.62)
+    fig.legend(handles=handles, loc="center left", bbox_to_anchor=(0.815, 0.5),
+               fontsize=F_TICK - 4, frameon=True, edgecolor="#666666", fancybox=False)
     for ext in ("png", "pdf"):
         fig.savefig(f"{out_path}.{ext}", dpi=200, facecolor=T["surface"],
                     bbox_inches="tight", pad_inches=0.15)

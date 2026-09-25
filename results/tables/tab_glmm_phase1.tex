@@ -1,0 +1,31 @@
+\footnotesize{
+\begin{longtable}{lrrrr}
+    \caption{Phase 1 beta-binomial GLMM of linear-probe accuracy: fixed-effect estimates
+    on the logit scale. The reference cell is frozen weights on MNIST. The MNIST column
+    gives each configuration's main effect; the remaining columns give its interaction
+    with that dataset, i.e.\ how much the effect shifts there.\label{tab:glmm_phase1}}\\
+    \toprule
+    \textbf{Fixed effect} & MNIST & Fashion & KMNIST & notMNIST\\
+    \midrule
+    \endfirsthead
+    \toprule
+    Fixed effect & MNIST & Fashion & KMNIST & notMNIST\\
+    \midrule
+    \endhead
+    Intercept / dataset & {\scriptsize$\hat{\beta}_{0}$:} 2.552$^{***}$ & {\scriptsize$\hat{\beta}_{7}$:} $-$1.288$^{***}$ & {\scriptsize$\hat{\beta}_{8}$:} $-$1.604$^{***}$ & {\scriptsize$\hat{\beta}_{9}$:} $-$.469$^{***}$\\
+    \multicolumn{5}{l}{\textit{Configuration (vs.\ frozen weights)}}\\
+    trace-STDP & {\scriptsize$\hat{\beta}_{1}$:} $-$.290$^{***}$ & {\scriptsize$\hat{\beta}_{10}$:} .267$^{***}$ & {\scriptsize$\hat{\beta}_{16}$:} .085$^{**}$ & {\scriptsize$\hat{\beta}_{22}$:} .036\\
+    triplet-STDP & {\scriptsize$\hat{\beta}_{5}$:} $-$.249$^{***}$ & {\scriptsize$\hat{\beta}_{14}$:} .158$^{***}$ & {\scriptsize$\hat{\beta}_{20}$:} .190$^{***}$ & {\scriptsize$\hat{\beta}_{26}$:} .209$^{***}$\\
+    + iSTDP & {\scriptsize$\hat{\beta}_{6}$:} $-$.287$^{***}$ & {\scriptsize$\hat{\beta}_{15}$:} .207$^{***}$ & {\scriptsize$\hat{\beta}_{21}$:} .032 & {\scriptsize$\hat{\beta}_{27}$:} $-$.070\\
+    no E$\to$E & {\scriptsize$\hat{\beta}_{3}$:} $-$.208$^{***}$ & {\scriptsize$\hat{\beta}_{12}$:} .181$^{***}$ & {\scriptsize$\hat{\beta}_{18}$:} .035 & {\scriptsize$\hat{\beta}_{24}$:} $-$.055\\
+    no I$\to$E & {\scriptsize$\hat{\beta}_{4}$:} $-$.493$^{***}$ & {\scriptsize$\hat{\beta}_{13}$:} .441$^{***}$ & {\scriptsize$\hat{\beta}_{19}$:} .232$^{***}$ & {\scriptsize$\hat{\beta}_{25}$:} .195$^{***}$\\
+    random & {\scriptsize$\hat{\beta}_{2}$:} $-$.362$^{***}$ & {\scriptsize$\hat{\beta}_{11}$:} .168$^{***}$ & {\scriptsize$\hat{\beta}_{17}$:} .003 & {\scriptsize$\hat{\beta}_{23}$:} $-$.142$^{**}$\\
+    \midrule
+    \multicolumn{5}{l}{\textbf{Random effect variance}}\\
+    Seed & \multicolumn{2}{r}{---} & &\\
+    \multicolumn{5}{l}{\textbf{Dispersion}}\\
+    Model & \multicolumn{2}{r}{$\hat{\phi}=1.8\times 10^{5}$} & &\\
+    \bottomrule
+    \caption*{The intercept row gives the intercept and the dataset main effects. Significance: * $p<.05$, ** $p<.01$, *** $p<.001$. The seed intercept was singular and was dropped. The estimated dispersion is large, so the fit is effectively binomial.}
+\end{longtable}
+}

@@ -35,7 +35,7 @@ MODEL = os.path.join(REPO, "results", "interp", "model")
 PHASE2 = os.path.join(REPO, "results", "interp", "json", "experiments", "RF_article",
                       "interp", "mnist_family_sweep", "results", "run_20260819_112250")
 OUT = os.path.join(REPO, "results", "tables")
-DS = ["mnist", "fmnist", "kmnist", "notmnist", "svhn"]
+DS = ["mnist", "fmnist", "kmnist", "notmnist"]
 PRETTY = {"mnist": "MNIST", "fmnist": "Fashion", "kmnist": "KMNIST",
           "notmnist": "notMNIST", "svhn": "SVHN"}
 COND = {"base_ori": "trace-STDP", "triplet": "triplet-STDP", "vogels": "+ iSTDP (Vogels)",
@@ -130,14 +130,14 @@ receptive-field contrast, holding trace-STDP fixed and changing only the initial
 it is reported separately because its reference is random connectivity rather than frozen
 weights. Entries without a marker have intervals spanning zero.}}
 \label{{tab:phase1}}
-\begin{{tabular}}{{lrrrrr}}
+\begin{{tabular}}{{lrrrr}}
 \toprule
 & {header} \\
 \midrule
-\multicolumn{{6}}{{l}}{{\emph{{against frozen weights, oriented prior}}}} \\
+\multicolumn{{5}}{{l}}{{\emph{{against frozen weights, oriented prior}}}} \\
 {chr(10).join(rows)}
 \midrule
-\multicolumn{{6}}{{l}}{{\emph{{against random connectivity, trace-STDP}}}} \\
+\multicolumn{{5}}{{l}}{{\emph{{against random connectivity, trace-STDP}}}} \\
 oriented receptive fields & {" & ".join(prior)} \\
 \bottomrule
 \end{{tabular}}
@@ -170,10 +170,10 @@ def tab_phase2_prior():
 \\centering
 \\caption{{Oriented receptive fields against random initialization under R-STDP, by
 decoder. The learned readout is the network's own decoder; the linear probe is an
-external control fitted on the same features. The two do not agree in magnitude and, on
-Fashion-MNIST, not in significance either, so any statement of this contrast has to name
-its decoder. Dispersion is allowed to vary by dataset for the learned readout
-($\\phi \\sim$ dataset), because the seed spread differs roughly fifteen-fold across datasets.}}
+external control fitted on the same features. The two agree in sign on every dataset but
+not in magnitude, so any statement of this contrast has to name its decoder. Dispersion
+is allowed to vary by dataset for the learned readout ($\\phi \\sim$ dataset); for the probe
+the seed variance is not identifiable, so that model omits the seed intercept.}}
 \\label{{tab:phase2_prior}}
 \\begin{{tabular}}{{lrrrr}}
 \\toprule
@@ -220,8 +220,7 @@ def tab_selective():
 Coverage is the largest fraction of the test set that can be answered while holding
 selective accuracy at the stated target; AUROC measures how well entropy separates correct
 from incorrect predictions. Values are means over five seeds. Abstention buys a usable
-operating point on MNIST alone: on SVHN the readout is near chance, so no threshold reaches
-any of the targets.}}
+operating point on MNIST alone.}}
 \\label{{tab:selective}}
 \\begin{{tabular}}{{lrrrrr}}
 \\toprule

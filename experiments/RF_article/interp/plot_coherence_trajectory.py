@@ -30,7 +30,7 @@ INK, MUTED, GRID = "#1a1a1a", "#666666", "#e6e6e6"
 # notMNIST runs a shorter schedule (40 batches against 175), so including it would
 # change the composition of the mean part-way along the x axis. It is excluded here
 # and the caption says so; the retention percentages quoted in the text use all five.
-DS = ["mnist", "fmnist", "kmnist", "svhn"]
+DS = ["mnist", "fmnist", "kmnist"]
 F_LABEL, F_TICK, F_SERIES = 13, 11, 12
 
 
@@ -66,9 +66,10 @@ def main():
     p2 = a.phase2 or sorted(glob.glob(f"{base}/mnist_family_sweep/results/*"))[0]
 
     init = load(p1, "frozen")[1][0]        # frozen cell: the only no-plasticity t=0
-    series = [("trace-STDP", load(p1, "base_ori"), SLATE),
-              ("R-STDP", load(p2, "oriented"), ROSE),
-              ("triplet-STDP", load(p1, "triplet"), SAGE)]
+    # Greyscale for print: identity by line style, named in a legend (09-17 feedback).
+    series = [("R-STDP", load(p2, "oriented"), "solid"),
+              ("trace-STDP", load(p1, "base_ori"), (0, (6, 2.5))),
+              ("triplet-STDP", load(p1, "triplet"), (0, (1, 1.6)))]
     series = [(n, b, m, s, c) for n, (b, m, s), c in series if m is not None]
 
     print(f"initialisation (frozen) = {init:.3f}")
@@ -81,19 +82,19 @@ def main():
 
     fig, ax = plt.subplots(figsize=(7.2, 4.4))
     ax.axvspan(pre, 0, color=INK, alpha=.05, lw=0, zorder=0)
-    ax.axhline(100, color=INK, lw=1.0, ls=(0, (4, 3)), zorder=2)
+    ax.axhline(100, color="#9a9a9a", lw=1.0, zorder=2)   # solid grey: dashes mean trace-STDP
 
-    for name, b, m, sd, col in series:
+    for name, b, m, sd, ls in series:
         y, e = 100 * m / init, 100 * sd / init
-        ax.plot([pre, b[0]], [100, y[0]], color=col, lw=1.6, ls=(0, (2, 2)), zorder=3)
-        ax.fill_between(b, y - e, y + e, color=col, alpha=.18, lw=0, zorder=2)
-        ax.plot(b, y, color=col, lw=2.2, zorder=4)
-        ax.annotate(f"{name}  {y[-1]:.0f}%", (b[-1], y[-1]), xytext=(8, 0),
-                    textcoords="offset points", fontsize=F_SERIES, color=col,
-                    va="center")
+        ax.plot([pre, b[0]], [100, y[0]], color="#9a9a9a", lw=1.2, ls=ls, zorder=3)
+        ax.fill_between(b, y - e, y + e, color="black", alpha=.08, lw=0, zorder=2)
+        ax.plot(b, y, color="black", lw=2.4, ls=ls, zorder=4,
+                label=f"{name} ({y[-1]:.0f}%)")
 
     ax.scatter([pre], [100], s=52, color=INK, zorder=6)
-    ax.set_xlim(pre * 1.9, xmax * 1.30)
+    ax.set_xlim(pre * 1.9, xmax * 1.04)
+    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=3, fontsize=F_SERIES,
+              frameon=True, edgecolor=MUTED, fancybox=False, handlelength=3.4)
     ax.set_ylim(45, 108)
     ax.set_xlabel("batch (1000 images)", fontsize=F_LABEL)
     ax.set_ylabel("orientation coherence\n(\\% of initialisation)".replace("\\", ""),

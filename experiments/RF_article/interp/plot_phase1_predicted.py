@@ -31,13 +31,17 @@ for r in read(os.path.join(OUT,"prediction_draws.csv")):
 for r in read(os.path.join(OUT,"model_data.csv")):
     O[(int(r["phase"]),r["response"],r["dataset"],r["cond"])].append(float(r["acc"]))
 
-def box(ax,x,vals,color,w=.50):
+# Greyscale for print (09-17 feedback): oriented = white box + open circles, random =
+# grey box + open triangles, frozen = black dashed reference; all named in a legend.
+STYLE={"oriented":("white","",  "o"),"random":("white","","o")}
+def box(ax,x,vals,kind,w=.50):
+    fc,hatch,_=STYLE[kind]
     b=ax.boxplot([vals],positions=[x],widths=w,patch_artist=True,whis=(2.5,97.5),
                  showfliers=False,zorder=3)
-    for p in b["boxes"]:   p.set(facecolor=color,alpha=.30,edgecolor=color,linewidth=.9)
+    for p in b["boxes"]:   p.set(facecolor=fc,hatch=hatch,edgecolor="black",linewidth=1.0)
     for k in ("whiskers","caps"):
-        for p in b[k]:     p.set(color=color,linewidth=.9)
-    for p in b["medians"]: p.set(color=color,linewidth=2.0)
+        for p in b[k]:     p.set(color="black",linewidth=.9)
+    for p in b["medians"]: p.set(color="black",linewidth=2.0)
 
 def glyph(ax,x,y,c,label,fs,hw=.055,bh=.030,wh=.058):
     kw=dict(transform=ax.transAxes,clip_on=False,zorder=6)
@@ -48,7 +52,7 @@ def glyph(ax,x,y,c,label,fs,hw=.055,bh=.030,wh=.058):
     ax.plot([x-hw,x+hw],[y]*2,color=c,lw=2.0,**kw)
     ax.text(x+hw+.07,y,label,transform=ax.transAxes,fontsize=fs,va="center",ha="left",color=INK)
 
-DS=["mnist","kmnist","notmnist","fmnist","svhn"]
+DS=["mnist","kmnist","notmnist","fmnist"]
 NICE={"mnist":"MNIST","kmnist":"KMNIST","notmnist":"notMNIST","fmnist":"Fashion","svhn":"SVHN"}
 # frozen is the dashed reference line only -- drawing it as a box too would show the same
 # cell twice. Colour then carries the one thing the x labels do not say: which weight
@@ -56,9 +60,9 @@ NICE={"mnist":"MNIST","kmnist":"KMNIST","notmnist":"notMNIST","fmnist":"Fashion"
 ORDER=["triplet","base_ori","ee_off","ie_off","vogels","base_rnd"]
 LBL={"triplet":"triplet","base_ori":"trace","ee_off":"no E–E","ie_off":"no I–E",
      "vogels":"+ Vogels","base_rnd":"random"}
-COL={c:(SLATE if c=="base_rnd" else ROSE) for c in ORDER}
+COL={c:("random" if c=="base_rnd" else "oriented") for c in ORDER}
 
-fig,axes=plt.subplots(2,3,figsize=(11.0,7.4))
+fig,axes=plt.subplots(1,4,figsize=(15.5,4.3))
 flat=axes.ravel()
 for j,(ax,ds) in enumerate(zip(flat,DS)):
     fz=np.mean(D[(1,"probe",ds,"frozen")])
@@ -67,32 +71,31 @@ for j,(ax,ds) in enumerate(zip(flat,DS)):
         if not v: continue
         box(ax,i,v,COL[cd])
         o=O[(1,"probe",ds,cd)]
-        ax.scatter(np.full(len(o),i),o,s=11,facecolors="none",edgecolors=COL[cd],
-                   linewidths=.9,zorder=5)
+        ax.scatter(np.full(len(o),i),o,s=16,marker=STYLE[COL[cd]][2],facecolors="white",
+                   edgecolors="black",linewidths=.8,zorder=5)
     # Where the frozen value lands on a y-tick (KMNIST 0.7199 against the 0.72 tick,
     # Fashion 0.7799 against 0.78) the sage dashes and the grey gridline sit two pixels
     # apart and blur into one grey rule at print size. A white casing under the reference
     # clears the gridline locally; both sit below the boxes, which draw over them.
     ax.axhline(fz,color="white",lw=5.0,ls="-",zorder=2.4)
-    ax.axhline(fz,color=SAGE,lw=1.4,ls=(0,(4,3)),zorder=2.5)
+    ax.axhline(fz,color="black",lw=1.4,ls=(0,(4,3)),zorder=2.5)
     # Autoscale puts the reference flush with the top of the axes; pad so it clears.
     lo,hi=ax.get_ylim(); span=max(hi,fz)-min(lo,fz)
     ax.set_ylim(min(lo,fz)-.06*span, max(hi,fz)+.10*span)
     ax.set_xticks(range(len(ORDER)))
-    ax.set_xticklabels([LBL[c] for c in ORDER],rotation=48,ha="right",fontsize=BASE-4)
+    ax.set_xticklabels([LBL[c] for c in ORDER],rotation=45,ha="right",rotation_mode="anchor",fontsize=BASE-0.5)
     ax.set_xlim(-.7,len(ORDER)-.3)
     ax.tick_params(axis="y",labelsize=BASE-3)
     ax.yaxis.grid(True,color=RULE,lw=.5,alpha=.55); ax.set_axisbelow(True)
     ax.set_title(NICE[ds],fontsize=BASE,pad=6)
-    if j%3==0: ax.set_ylabel("predicted accuracy",fontsize=BASE-2)
+    if j==0: ax.set_ylabel("predicted accuracy",fontsize=(BASE-2)*1.2)
 
-leg=flat[5]; leg.axis("off")
-glyph(leg,.10,.66,ROSE ,"oriented RF",    BASE-2)
-glyph(leg,.10,.48,SLATE,"random weights", BASE-2)
-leg.plot([.045,.155],[.30,.30],color=SAGE,lw=1.4,ls=(0,(4,3)),
-         transform=leg.transAxes,clip_on=False,zorder=6)
-leg.text(.225,.30,"frozen\n(no plasticity)",transform=leg.transAxes,
-         fontsize=BASE-2,color=INK,ha="left",va="center")
+# No legend: the x labels name each box, and the dashed reference is labelled once,
+# to the right of the last panel.
+last=flat[len(DS)-1]; fz_last=np.mean(D[(1,"probe",DS[-1],"frozen")])
+last.annotate("frozen weights",xy=(1.0,fz_last),xycoords=("axes fraction","data"),
+              xytext=(6,0),textcoords="offset points",ha="left",va="center",
+              fontsize=BASE-1,annotation_clip=False)
 fig.tight_layout()
 for ext in ("png","pdf"):   # pdf is what the manuscript includes; png for quick viewing
     fig.savefig(os.path.join(OUT,f"fig_phase1_predicted.{ext}"),bbox_inches="tight")

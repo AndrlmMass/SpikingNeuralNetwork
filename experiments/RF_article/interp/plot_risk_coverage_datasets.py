@@ -42,7 +42,7 @@ import matplotlib.patheffects as pe
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 PHASE2 = os.path.join(REPO, "results", "interp", "json", "experiments", "RF_article",
                       "interp", "mnist_family_sweep", "results", "run_20260819_112250")
-DS = ["mnist", "notmnist", "kmnist", "fmnist", "svhn"]      # by how much abstention buys
+DS = ["mnist", "notmnist", "kmnist", "fmnist"]      # by how much abstention buys
 PRETTY = {"mnist": "MNIST", "fmnist": "Fashion", "kmnist": "KMNIST",
           "notmnist": "notMNIST", "svhn": "SVHN"}
 # The project's three-colour palette, paired by tier, with line style carrying the split
@@ -52,12 +52,13 @@ PRETTY = {"mnist": "MNIST", "fmnist": "Fashion", "kmnist": "KMNIST",
 # dE ~10-12, under the 15 floor. (The three base colours already fail on their own -- sage
 # against slate is dE 11.5 -- which is why plot_risk_coverage.py leans on direct labels.)
 # Hue + dash + direct label carries identity without inventing two more weak hues.
-COLOR = {"mnist": "#DB8383", "notmnist": "#DB8383",
-         "kmnist": "#6D8BA9", "fmnist": "#6D8BA9",
-         "svhn": "#6FA885"}
-DASH = {"mnist": "solid", "notmnist": (0, (5, 2)),
-        "kmnist": "solid", "fmnist": (0, (5, 2)),
-        "svhn": "solid"}
+# Greyscale for print (supervisor feedback, 09-17): identity is carried by line style and
+# anchor marker, and a legend replaces the direct labels.
+COLOR = {"mnist": "#000000", "notmnist": "#000000", "kmnist": "#000000",
+         "fmnist": "#000000", "svhn": "#000000"}
+DASH = {"mnist": "solid", "notmnist": (0, (6, 2.5)), "kmnist": (0, (1, 1.8)),
+        "fmnist": (0, (7, 2, 1.5, 2)), "svhn": "solid"}
+MARK = {"mnist": "o", "notmnist": "s", "kmnist": "^", "fmnist": "v", "svhn": "o"}
 INK, MUTED, GRID, AXIS = "#1a1a1a", "#666666", "#e6e6e6", "#444444"
 # 1.5x the original 13/11/11: this runs at column width in print, where the
 # earlier sizes were legible on screen but not on the page.
@@ -218,12 +219,13 @@ def panel(axes, data, title=None, yaxis="accuracy", bands=None, target=0.95,
         c, med = cov[o], np.median(y, axis=0)[o]
         lo, hi = y.min(axis=0)[o], y.max(axis=0)[o]
         for ax in axes:
-            ax.fill_between(c, lo, hi, color=COLOR[ds], alpha=0.16, lw=0, zorder=2)
-            ax.plot(c, med, color=COLOR[ds], lw=2.0, zorder=3, solid_capstyle="round",
-                    linestyle=DASH[ds])
+            ax.fill_between(c, lo, hi, color="#000000", alpha=0.07, lw=0, zorder=2)
+            ax.plot(c, med, color=COLOR[ds], lw=2.2, zorder=3, linestyle=DASH[ds],
+                    marker=MARK[ds], markevery=[len(c) - 1], ms=8, mec="black",
+                    mfc="white", mew=1.4, label=PRETTY[ds])
             # anchor: at coverage 1 selective accuracy IS overall accuracy
-            ax.plot([1.0], [b], marker=("o" if DASH[ds] == "solid" else "s"), ms=8,
-                    color=COLOR[ds], mec="white", mew=1.4, zorder=4)
+            ax.plot([1.0], [b], marker=MARK[ds], ms=8,
+                    color="white", mec="black", mew=1.4, zorder=4)
         curves[ds] = (c, med)
         anchors.append((b, ds))
 
@@ -243,8 +245,13 @@ def panel(axes, data, title=None, yaxis="accuracy", bands=None, target=0.95,
         if log:
             ax.set_yscale("log")
         else:
-            ax.set_ylim(*(bands[i] if bands else (0.0, 1.02)))
+            ax.set_ylim(*(bands[i] if bands else (0.66, 1.02)))  # SVHN dropped: all curves sit above 0.69
         ax.set_xlim(X_MIN, X_MAX)
+        # Coverage cannot exceed 1: the axis line and ticks stop there, and the space to
+        # the right only holds the printed full-coverage accuracies.
+        ax.set_xticks(np.round(np.arange(X_MIN, 1.0001, 0.1), 2))
+        ax.spines["bottom"].set_bounds(X_MIN, 1.0)
+        ax.grid(False, axis="x")
         ax.grid(True, which="major", color=GRID, lw=0.7)
         ax.grid(True, which="minor", color=GRID, lw=0.4, alpha=0.6)
         ax.set_axisbelow(True)
@@ -268,7 +275,7 @@ def panel(axes, data, title=None, yaxis="accuracy", bands=None, target=0.95,
     sep = MIN_SEP[yaxis]
     step = (lambda v, s: v * 10.0 ** (s * 0.5 * sep)) if log else \
            (lambda v, s: v + s * 0.5 * sep)
-    for x, y, ds, side in place_labels(curves, tf):
+    for x, y, ds, side in ([] if True else place_labels(curves, tf)):  # legend instead
         host, (b0, b1) = host_for(y)
         y_lab = step(y, side)
         # 1.6 rather than 1.0: the anchor point clearing the band is not enough, the text
@@ -305,6 +312,8 @@ def panel(axes, data, title=None, yaxis="accuracy", bands=None, target=0.95,
                     fontsize=FS_ANCHOR, ha="left", va="bottom", zorder=6)
             break
 
+    axes[0].legend(loc="lower left", bbox_to_anchor=(0.04, 0.05), fontsize=FS_ANCHOR + 1, frameon=True,
+                   edgecolor=AXIS, fancybox=False, handlelength=3.2)
     axes[-1].set_xlabel("coverage (fraction answered)", fontsize=FS_LABEL, color=INK)
     if title:
         axes[0].set_title(title, fontsize=FS_LABEL, color=MUTED, loc="left", pad=8)
@@ -330,12 +339,13 @@ def main():
                          "relative error reduction but compresses the high-accuracy end")
     ap.add_argument("--no-break", action="store_true",
                     help="single continuous accuracy axis instead of the broken pair")
-    ap.add_argument("--target", type=float, default=0.95,
+    ap.add_argument("--target", type=float, default=0.0,
                     help="mark where each curve still meets this selective accuracy; "
                          "0 to disable")
     ap.add_argument("--no-anchor-labels", action="store_true",
                     help="omit the printed accuracy beside each coverage-1 anchor")
     ap.add_argument("--out", default=None)
+    ap.set_defaults(no_break=True)   # the break only existed for SVHN, now dropped
     a = ap.parse_args()
 
     global X_MAX

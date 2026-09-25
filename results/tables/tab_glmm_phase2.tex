@@ -1,0 +1,38 @@
+\footnotesize{
+\setlength{\tabcolsep}{4pt}
+\begin{longtable}{l rrr rrr}
+    \caption{Phase 2 beta-binomial GLMM of supervised accuracy under R-STDP, by decoder:
+    fixed-effect estimates on the logit scale. The reference cell is random connectivity
+    on MNIST, so \textit{oriented RF} is the receptive-field effect on MNIST and each
+    interaction row is how it changes on the named dataset.\label{tab:glmm_phase2}}\\
+    \toprule
+    & \multicolumn{3}{c}{\textit{Learned readout}} & \multicolumn{3}{c}{\textit{Linear probe}}\\
+    \cmidrule(lr){2-4}\cmidrule(lr){5-7}
+    \textbf{Fixed effect} & Est. & \textit{z} & \textit{p} & Est. & \textit{z} & \textit{p}\\
+    \midrule
+    \endfirsthead
+    \toprule
+    & \multicolumn{3}{c}{\textit{Learned readout}} & \multicolumn{3}{c}{\textit{Linear probe}}\\
+    \cmidrule(lr){2-4}\cmidrule(lr){5-7}
+    Fixed effect & Est. & \textit{z} & \textit{p} & Est. & \textit{z} & \textit{p}\\
+    \midrule
+    \endhead
+    $\hat{\beta}_0$ (intercept) & 2.216$^{***}$ & 59.32 & $<.001$ & 1.932$^{***}$ & 136.00 & $<.001$\\
+    \multicolumn{7}{l}{\textit{Main effects}}\\
+    $\hat{\beta}_{1}$ (oriented RF) & .640$^{***}$ & 10.55 & $<.001$ & .737$^{***}$ & 30.88 & $<.001$\\
+    $\hat{\beta}_{2}$ (Fashion) & $-$1.048$^{***}$ & $-$15.87 & $<.001$ & $-$.771$^{***}$ & $-$42.82 & $<.001$\\
+    $\hat{\beta}_{3}$ (KMNIST) & $-$1.271$^{***}$ & $-$31.27 & $<.001$ & $-$1.290$^{***}$ & $-$74.44 & $<.001$\\
+    $\hat{\beta}_{4}$ (notMNIST) & $-$.184$^{**}$ & $-$2.80 & $.005$ & $-$.054 & $-$1.84 & $.065$\\
+    \multicolumn{7}{l}{\textit{Two-way interactions}}\\
+    $\hat{\beta}_{5}$ (oriented RF$\times$Fashion) & $-$.848$^{***}$ & $-$8.74 & $<.001$ & $-$.779$^{***}$ & $-$27.34 & $<.001$\\
+    $\hat{\beta}_{6}$ (oriented RF$\times$KMNIST) & $-$.458$^{***}$ & $-$6.98 & $<.001$ & $-$.432$^{***}$ & $-$15.48 & $<.001$\\
+    $\hat{\beta}_{7}$ (oriented RF$\times$notMNIST) & $-$1.259$^{***}$ & $-$13.51 & $<.001$ & $-$.953$^{***}$ & $-$22.20 & $<.001$\\
+    \midrule
+    \multicolumn{7}{l}{\textbf{Random effect variance}}\\
+    Seed & \multicolumn{3}{c}{.0002} & \multicolumn{3}{c}{--- (singular)}\\
+    \multicolumn{7}{l}{\textbf{Dispersion}}\\
+    Model & \multicolumn{3}{c}{by dataset (see caption)} & \multicolumn{3}{c}{$\hat{\phi}=8.7\times 10^{4}$}\\
+    \bottomrule
+    \caption*{Significance: * $p<.05$, ** $p<.01$, *** $p<.001$. Reference cell = random connectivity on MNIST. The learned readout is fitted with one dispersion per dataset: $\hat{\phi}_{\text{MNIST}} = 1993$, $\hat{\phi}_{\text{Fashion}} = 380$, $\hat{\phi}_{\text{KMNIST}} = 5016$, $\hat{\phi}_{\text{notMNIST}} = 852$. The probe's seed intercept was singular and was dropped.}
+\end{longtable}
+\setlength{\tabcolsep}{6pt}}
