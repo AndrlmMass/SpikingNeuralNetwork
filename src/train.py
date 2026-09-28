@@ -270,6 +270,99 @@ def update_spikes(
     return mp, spikes, spike_times, spike_threshold, a
 
 
+# =============================================================================
+# Sleep-episode distribution metrics
+# =============================================================================
+# These describe how the synaptic weight DISTRIBUTION changes across one sleep
+# episode. They are recorded as before/after pairs so each episode is its own
+# paired observation.
+#
+# Three quantities, deliberately measuring different things:
+#
+#   variance  the scale of the distribution -- how spread out the weights are.
+#             This is what the homeostatic pull is expected to shrink.
+#
+#   entropy   the shape. Shannon entropy of p_i = |w_i| / sum_j |w_j|,
+#             normalised by log(n) so it sits in [0, 1]. It says how evenly the
+#             total synaptic mass is spread across synapses, and is NOT a
+#             function of the variance: a distribution can be rescaled to any
+#             variance without changing it. 1 = every synapse carries an equal
+#             share, near 0 = a few synapses carry everything. This is the
+#             quantity that speaks to "loss of representational diversity".
+#             (Note: the Gaussian differential entropy 0.5*log(2*pi*e*var) is a
+#             monotone function of the variance and would add nothing here.)
+#
+#   spearman  rank preservation between before and after, over a fixed synapse
+#             set. Eq. 5's power law is monotone in w, so decay ALONE gives
+#             rho = 1 exactly. Any departure from 1 therefore isolates the
+#             reordering caused by STDP during sleep, by clipping at the bounds,
+#             and by noise-driven spontaneous spiking -- i.e. it measures
+#             whether sleep reorganises which synapses are strong, or merely
+#             rescales them.
+def _rankdata(x):
+    """Ranks of x with ties averaged. Ties matter here: clipping at the weight
+    bounds pins many synapses to the same value."""
+    order = np.argsort(x, kind="mergesort")
+    ranks = np.empty(x.shape[0], dtype=np.float64)
+    ranks[order] = np.arange(1, x.shape[0] + 1, dtype=np.float64)
+    xs = x[order]
+    i = 0
+    n = xs.shape[0]
+    while i < n:
+        j = i + 1
+        while j < n and xs[j] == xs[i]:
+            j += 1
+        if j - i > 1:
+            ranks[order[i:j]] = (i + 1 + j) / 2.0
+        i = j
+    return ranks
+
+
+def _spearman(a, b):
+    """Spearman rho, computed as Pearson on tie-averaged ranks. Implemented
+    here rather than via scipy to keep the simulator's dependencies unchanged."""
+    if a.shape[0] < 3:
+        return float("nan")
+    ra, rb = _rankdata(a), _rankdata(b)
+    ra = ra - ra.mean()
+    rb = rb - rb.mean()
+    denom = np.sqrt(np.sum(ra * ra) * np.sum(rb * rb))
+    if denom <= 0:
+        return float("nan")
+    return float(np.sum(ra * rb) / denom)
+
+
+def _dist_metrics(w):
+    """variance / normalised entropy / effective synapse count for one group.
+
+    w is a 1-D array of signed weights over a fixed synapse set.
+    """
+    n = w.shape[0]
+    out = {
+        "n": int(n),
+        "mean": float("nan"),
+        "var": float("nan"),
+        "sum_abs": float("nan"),
+        "entropy": float("nan"),
+        "eff_n": float("nan"),
+    }
+    if n == 0:
+        return out
+    a = np.abs(w)
+    tot = float(a.sum())
+    out["mean"] = float(np.mean(w))
+    out["var"] = float(np.var(w))
+    out["sum_abs"] = tot
+    if tot <= 0 or n < 2:
+        return out
+    p = a / tot
+    nz = p > 0
+    h = float(-np.sum(p[nz] * np.log(p[nz])))
+    out["entropy"] = h / np.log(n)
+    out["eff_n"] = float(np.exp(h))
+    return out
+
+
 def train_network(
     weights,
     mp,
@@ -498,7 +591,16 @@ def train_network(
             "inh_max": [],
             "inh_samples": [],  # list of [K_inh] values (tracked weights)
             "sleep_segments": [],  # list of (t_start, t_end) in the same plot-time reference
+            # One row per sleep episode: the weight distribution before and
+            # after that episode. See _dist_metrics / _spearman above.
+            "episodes": [],
         }
+        # Fixed synapse sets for the episode metrics. The connectivity mask does
+        # not change during training (no structural plasticity), so freezing the
+        # index set once keeps before/after strictly element-comparable even if a
+        # weight later reaches exactly zero.
+        epi_mask_exc = np.flatnonzero(weights[:ex, st:ih] != 0)
+        epi_mask_inh = np.flatnonzero(weights[ex:ih, st:ex] != 0)
         # Select a small number of active synapses to track (prefer non-zero)
         rng = np.random.default_rng(42)
         try:
@@ -731,6 +833,19 @@ def train_network(
 
             sleep_iter = 0
             sleep_time_counter = 0
+
+            # --- episode "before" snapshot -----------------------------------
+            epi_before = None
+            if track_weights and weight_tracking_sleep is not None:
+                try:
+                    w_exc_before = weights[:ex, st:ih].ravel()[epi_mask_exc].copy()
+                    w_inh_before = weights[ex:ih, st:ex].ravel()[epi_mask_inh].copy()
+                    epi_before = {
+                        "exc": _dist_metrics(w_exc_before),
+                        "inh": _dist_metrics(w_inh_before),
+                    }
+                except Exception:
+                    epi_before = None
 
             while True:
                 # Compute current sums
@@ -982,6 +1097,35 @@ def train_network(
                         0, seg_end - max(1, (sleep_time_counter // sleep_record_every))
                     )
                     weight_tracking_sleep["sleep_segments"].append((seg_start, seg_end))
+                except Exception:
+                    pass
+
+            # --- episode "after" snapshot, paired with the "before" above -----
+            if (
+                track_weights
+                and weight_tracking_sleep is not None
+                and epi_before is not None
+            ):
+                try:
+                    w_exc_after = weights[:ex, st:ih].ravel()[epi_mask_exc].copy()
+                    w_inh_after = weights[ex:ih, st:ex].ravel()[epi_mask_inh].copy()
+                    row = {
+                        "episode": len(weight_tracking_sleep["episodes"]),
+                        "t": int(t),
+                        "sleep_iters": int(sleep_iter),
+                        # Rank preservation across the episode, per group.
+                        "exc_spearman": _spearman(w_exc_before, w_exc_after),
+                        "inh_spearman": _spearman(w_inh_before, w_inh_after),
+                    }
+                    after = {
+                        "exc": _dist_metrics(w_exc_after),
+                        "inh": _dist_metrics(w_inh_after),
+                    }
+                    for grp in ("exc", "inh"):
+                        for k in ("n", "mean", "var", "sum_abs", "entropy", "eff_n"):
+                            row[f"{grp}_{k}_before"] = epi_before[grp][k]
+                            row[f"{grp}_{k}_after"] = after[grp][k]
+                    weight_tracking_sleep["episodes"].append(row)
                 except Exception:
                     pass
 

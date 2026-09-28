@@ -2198,6 +2198,9 @@ class snn_sleepy:
                 "inh_samples": [],
                 "times": [],
                 "sleep_segments": [],
+                # Per-sleep-episode before/after distribution metrics
+                # (variance, entropy, rank preservation). See train._dist_metrics.
+                "episodes": [],
             }
             _tracking_time_offset = 0.0
 
@@ -2424,8 +2427,17 @@ class snn_sleepy:
                             all_weight_tracking_sleep["sleep_segments"].append((s, te))
                         except Exception:
                             pass
+                    # Sleep-episode rows: renumber so episode ids stay unique
+                    # across batches instead of restarting at 0 each batch.
+                    for _epi in weight_tracking_epoch.get("episodes", []):
+                        _row = dict(_epi)
+                        _row["batch"] = int(e)
+                        _row["episode"] = len(all_weight_tracking_sleep["episodes"])
+                        all_weight_tracking_sleep["episodes"].append(_row)
                     if len(_wt_times) > 0:
                         _tracking_time_offset += float(max(_wt_times)) + 1.0
+                    # Expose for analysis harnesses (sleep-episode metrics).
+                    self.weight_tracking_sleep = all_weight_tracking_sleep
 
                     # Suppress per-epoch plotting during training (plot only after training)
 

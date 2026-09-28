@@ -15,7 +15,7 @@ grey of a bar never carries meaning that the label does not repeat.
 
     python src/glmm/plot_glmms_bw.py
 
-Inputs:  results/glmm/*.csv (written by fit_glmms.R), results/*/*_summary.csv
+Inputs:  results/glmm/*.csv (written by the src/glmm/fit_*.R scripts), results/*/*_summary.csv
 Outputs: figures/sweep_ratio_BW.pdf
          figures/baselines_methods_BW.pdf
          figures/ablation_components_BW.pdf
@@ -135,12 +135,10 @@ def fig_sweep():
     markers, model-predicted means as filled markers, both with 95% intervals
     and dotted connectors.
 
-    Predictions come from the ratio x dataset interaction fit, not the
-    main-effect fit. The main-effect model's dataset random intercept is
-    ~0, so it would draw the identical curve in all four panels and visibly
-    miss the observed points; the interaction is preferred at
-    chi2(32) = 159.1, p < 2.2e-16. The pooled main-effect fit remains the one
-    reported in the table.
+    Predictions come from the same model as the (appendix) regression table,
+    ratio * dataset + (1|seed): each panel is that dataset's fitted mean at
+    every sleep duration with its 95% CI, seed at zero. The interaction is
+    preferred over ratio + dataset at chi2(30) = 153.1, p < 2.2e-16.
 
     The published version of this figure carried a second series for the
     surrogate-gradient model. That model is dropped from the revision (its
