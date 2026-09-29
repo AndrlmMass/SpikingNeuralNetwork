@@ -204,31 +204,23 @@ def fig_sweep():
 
 
 def fig_baselines():
-    """Bars of the five stabilization methods, GROUPED BY DATASET, each the
-    observed mean of five seeds with a 95% interval.
+    """Bars of the five stabilization methods, GROUPED BY DATASET: the
+    model-predicted accuracy of each method on each dataset with its 95% CI.
 
-    Grouping by dataset rather than pooling is what makes the continuous-decay
-    result legible: its rate was calibrated on MNIST, and it only works there.
-    Pooled, that shows up as unexplained bimodal spread; grouped, it is a clean
-    per-dataset pattern.
-
-    Bars show observed means, so the axis is "test accuracy" and not
-    "predicted". Note what a bar cannot show: several cells here are bimodal
-    across seeds (Fashion-MNIST/none runs 0.126 to 0.571), and a mean with a
-    symmetric interval represents that badly. The box version of this figure is
-    recoverable from git if that spread needs to be visible.
+    Predictions come from the same model as the regression table,
+    method * dataset + (1|seed) in fit_baselines.R, seed at zero. The
+    interaction is what makes per-dataset bars legitimate: continuous decay was
+    calibrated on MNIST and only works there, and a model without the
+    interaction would predict it failing on MNIST too. The interaction is
+    preferred over method + dataset at chi2(12) = 87.3, p < .001.
 
     Method identity is carried twice -- grey step and hatch -- because within a
-    group it is position, not an axis label, that separates the boxes. The GLMM
-    estimates are not drawn here: the fitted model has no method x dataset
-    interaction, so a per-group prediction would differ only by the dataset
-    intercept and would imply structure the model does not contain. Those
-    estimates belong in the table.
+    group it is position, not an axis label, that separates the bars.
     """
-    runs = collections.defaultdict(lambda: collections.defaultdict(list))
-    for r in rd(os.path.join(REPO, "results", "baselines", "baselines_summary.csv")):
-        if r["test_accuracy"]:
-            runs[r["dataset"]][r["method"]].append(float(r["test_accuracy"]))
+    pred = collections.defaultdict(dict)
+    for r in rd(os.path.join(GL, "baselines_predictions_by_dataset.csv")):
+        pred[r["dataset"]][r["method"]] = (
+            float(r["fit"]), float(r["lo"]), float(r["hi"]))
 
     order = ["none", "decay", "norm_neuron", "sleep", "norm_layer"]
     # Abbreviated so the five entries fit on a single legend row; the caption
@@ -246,25 +238,19 @@ def fig_baselines():
 
     W = 0.155                      # bar width
     STEP = 0.171                   # spacing between methods within a group
-    top = 0.0                      # tallest bar + interval, for the y limit
+    top = 0.0                      # tallest interval, for the y limit
     for gi, (d, _) in enumerate(dsets):
         for mi, m in enumerate(order):
-            v = runs[d].get(m, [])
-            if not v:
+            if m not in pred[d]:
                 continue
             pos = gi + (mi - (len(order) - 1) / 2) * STEP
-            mean = st.mean(v)
-            se = st.stdev(v) / (len(v) ** 0.5) if len(v) > 1 else 0.0
-            top = max(top, mean + 1.96 * se, *(to_draw(v) or [0.0]))
-            ax.bar(pos, mean, width=W, color=GREY[mi], hatch=HATCH[mi],
+            fit, lo, hi = pred[d][m]
+            top = max(top, hi)
+            ax.bar(pos, fit, width=W, color=GREY[mi], hatch=HATCH[mi],
                    edgecolor=T["ink"], lw=1.0, zorder=3)
-            ax.errorbar(pos, mean, yerr=1.96 * se, fmt="none",
+            ax.errorbar(pos, fit, yerr=[[fit - lo], [hi - fit]], fmt="none",
                         ecolor=T["ink"], elinewidth=1.1, capsize=3.5,
                         capthick=1.1, zorder=5)
-            dv = to_draw(v)
-            if dv:
-                ax.plot([pos] * len(dv), dv, "o", mfc="none", mec=T["ink2"],
-                        ms=3.8, mew=0.9, ls="none", zorder=6)
 
     for gi in range(1, len(dsets)):
         ax.axvline(gi - 0.5, color=T["grid"], lw=1.0, zorder=1)
@@ -272,19 +258,15 @@ def fig_baselines():
     ax.set_xticks(range(len(dsets)))
     ax.set_xticklabels([lab for _, lab in dsets], fontsize=FS_TICK + 1)
     ax.set_xlim(-0.52, len(dsets) - 0.48)
-    ax.set_ylabel("test accuracy", fontsize=FS_LABEL, color=T["ink2"])
+    ax.set_ylabel("predicted test accuracy", fontsize=FS_LABEL, color=T["ink2"])
     # Full 0-1 accuracy range. The legend sits outside the axes to the right,
-    # so it costs the data no headroom. `top` (the tallest bar plus interval)
+    # so it costs the data no headroom. `top` (the highest interval end)
     # is still computed above and is used only to check nothing is clipped.
     assert top <= 1.0, f"an interval exceeds 1.0 ({top:.3f}); the axis would clip it"
     ax.set_ylim(0, 1.0)
 
     handles = [Patch(facecolor=GREY[i], hatch=HATCH[i], edgecolor=T["ink"],
                      label=nice[m]) for i, m in enumerate(order)]
-    if RUN_LABEL is not None:
-        handles.append(plt.Line2D([], [], marker="o", mfc="none",
-                                  mec=T["ink2"], ls="none", ms=4.5,
-                                  label=RUN_LABEL))
     # One horizontal row above the panel, left-to-right in the same order the
     # bars appear within each group. Labels are abbreviated (see `nice`) so all
     # five fit on one line at this width.
