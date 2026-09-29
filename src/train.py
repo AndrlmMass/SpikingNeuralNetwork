@@ -480,6 +480,15 @@ def train_network(
     sleep_noise: bool = True,          # Gaussian membrane noise during sleep
     sleep_stdp: bool = True,           # STDP active during sleep ("replay")
     sleep_suppress_input: bool = True, # zero the sensory drive
+    # --- one-shot reduction arm -------------------------------------------
+    # The power-law pull is exactly linear in u = log(w / w_target):
+    #     u <- lambda * u    =>    u_n = lambda^n u_0
+    # so n applications at rate lambda equal ONE application at lambda^n.
+    # With this on, the episode applies that single op and returns: no membrane
+    # dynamics, no noise, no sleep-phase STDP, no input gating, and 1 iteration
+    # instead of `sleep_window`. It is the compute-free reduction of the sleep
+    # phase, and the arm that tests whether anything else in the window matters.
+    sleep_oneshot: bool = False,
     # Invert the STDP window during sleep (depression-dominant). Noise-driven
     # coincidences are spurious by construction, so punishing them prunes noise
     # instead of imprinting it -- the mechanism Thiele et al. (2017) use to
@@ -847,7 +856,59 @@ def train_network(
                 except Exception:
                     epi_before = None
 
-            while True:
+            # --- one-shot reduction: collapse the window to a single op ------
+            _oneshot_done = False
+            if sleep_oneshot and train_weights and sleep_downscale:
+                # lambda^window is the exact total contraction the looped arm
+                # reaches after `sleep_window` iterations (identity, not an
+                # approximation). sleep_func is reused verbatim so sign
+                # handling, per-post targets and the nonzero masks are
+                # guaranteed identical to the looped path.
+                weights, _, _ = sleep_func(
+                    weights=weights,
+                    max_sum=max_sum,
+                    max_sum_exc=max_sum_exc,
+                    max_sum_inh=max_sum_inh,
+                    sleep_now_inh=True,
+                    sleep_now_exc=True,
+                    w_target_exc=w_target_exc_cur,
+                    w_target_inh=w_target_inh_cur,
+                    use_post_targets=use_post_targets,
+                    w_target_exc_vec=w_target_exc_vec,
+                    w_target_inh_vec=w_target_inh_vec,
+                    weight_decay_rate_exc=float(weight_decay_rate_exc)
+                    ** max(1, int(sleep_window)),
+                    weight_decay_rate_inh=float(weight_decay_rate_inh)
+                    ** max(1, int(sleep_window)),
+                    baseline_sum_exc=baseline_sum_exc,
+                    baseline_sum_inh=baseline_sum_inh,
+                    sleep_synchronized=sleep_synchronized,
+                    nz_rows=nz_rows,
+                    nz_cols=nz_cols,
+                    baseline_sum=baseline_sum,
+                    nz_rows_exc=nz_rows_exc,
+                    nz_rows_inh=nz_rows_inh,
+                    nz_cols_exc=nz_cols_exc,
+                    nz_cols_inh=nz_cols_inh,
+                )
+                weights = clip_weights(
+                    weights=weights,
+                    nz_cols_exc=nz_cols_exc,
+                    nz_cols_inh=nz_cols_inh,
+                    nz_rows_exc=nz_rows_exc,
+                    nz_rows_inh=nz_rows_inh,
+                    min_weight_exc=min_weight_exc,
+                    max_weight_exc=max_weight_exc,
+                    min_weight_inh=min_weight_inh,
+                    max_weight_inh=max_weight_inh,
+                )
+                sleep_iter = 1
+                sleep_time_counter = 1
+                virtual_sleep_iters_epoch += 1
+                t_virtual += 1
+                _oneshot_done = True
+
+            while not _oneshot_done:
                 # Compute current sums
                 current_sum_exc = np.sum(np.abs(weights[:ex, st:ih]))
                 current_sum_inh = np.sum(np.abs(weights[ex:ih, st:ex]))

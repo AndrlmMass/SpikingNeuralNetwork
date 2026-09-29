@@ -222,6 +222,7 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         sleep_stdp=_components["stdp"],
         sleep_suppress_input=_components["suppress"],
         sleep_anti_stdp=bool(getattr(args, "sleep_anti_stdp", False)),
+        sleep_oneshot=bool(getattr(args, "sleep_oneshot", False)),
     )
 
     if getattr(args, "profile", False):
@@ -309,6 +310,17 @@ def main():
             "when a sleep episode ends: 'below_target' is the published "
             "one-sided criterion W(t) <= alpha_base*W(0); 'band' is the "
             "historical two-sided tolerance window"
+        ),
+    )
+    parser.add_argument(
+        "--sleep-oneshot",
+        action="store_true",
+        help=(
+            "collapse each sleep episode to a single application of the "
+            "power-law pull with exponent lambda^window. Exact: the rule is "
+            "linear in log(w/w_target), so n steps at lambda equal one step at "
+            "lambda^n. Simulates no dynamics during sleep, so noise, sleep-phase "
+            "STDP and input gating are inert by construction"
         ),
     )
     parser.add_argument(
@@ -605,6 +617,7 @@ def main():
             "normalize_weights": args.normalize_weights,
             "reg_method": getattr(args, "reg_method", "legacy"),
             "sleep_components": getattr(args, "sleep_components", None),
+            "sleep_oneshot": bool(getattr(args, "sleep_oneshot", False)),
             "sleep_anti_stdp": getattr(args, "sleep_anti_stdp", False),
             "sleep_noise_var": getattr(args, "sleep_noise_var", 2.0),
             "num_steps": getattr(args, "num_steps", None),

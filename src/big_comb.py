@@ -1583,6 +1583,7 @@ class snn_sleepy:
         sleep_stdp=True,
         sleep_suppress_input=True,
         sleep_anti_stdp=False,
+        sleep_oneshot=False,
     ):
         self.dt = dt
         self.pca_variance = pca_variance
@@ -1830,6 +1831,7 @@ class snn_sleepy:
                 sleep_stdp=sleep_stdp,
                 sleep_suppress_input=sleep_suppress_input,
                 sleep_anti_stdp=sleep_anti_stdp,
+                sleep_oneshot=sleep_oneshot,
                 initial_sum_post_exc=initial_sum_post_exc,
                 initial_sum_post_inh=initial_sum_post_inh,
                 # pass hard-pause knobs
