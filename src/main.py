@@ -46,13 +46,15 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
     use_geomfig = getattr(args, "dataset", None) and args.dataset.lower() == "geomfig"
     is_test_mode = bool(getattr(args, "test_mode", False))
     # Use a lower gain for geomfig to reduce input drive
-    gain_for_dataset = float(getattr(args, "geom_gain", 0.5)) if use_geomfig else 1.0
+    gain_for_dataset = (
+        float(getattr(args, "geom_gain", 0.5)) if use_geomfig else float(args.input_gain)
+    )
     if is_test_mode and use_geomfig:
         img_tr, img_va, img_te = 4, 4, 4
         b_tr, b_va, b_te = 4, 4, 4
         force_recreate_flag = True
     else:
-        img_tr, img_va, img_te = 4000, 100, 1000
+        img_tr, img_va, img_te = int(args.n_train), 100, int(args.n_test)
         b_tr, b_va, b_te = 1000, 100, 200
         force_recreate_flag = False
     snn_N.prepare_data(
@@ -105,10 +107,10 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         w_dense_se=0.1,
         w_dense_ei=0.2,
         w_dense_ie=0.25,
-        se_weights=0.15,
-        ee_weights=0.3,
-        ei_weights=0.3,
-        ie_weights=-0.3,
+        se_weights=float(args.se_weights),
+        ee_weights=float(args.ee_weights),
+        ei_weights=float(args.ei_weights),
+        ie_weights=float(args.ie_weights),
         create_network=False,
     )
 
@@ -195,8 +197,11 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         A_plus=0.5,
         tau_LTD=10,
         tau_LTP=10,
-        learning_rate_exc=0.0005,
-        learning_rate_inh=0.0005,
+        learning_rate_exc=float(args.lr_exc),
+        learning_rate_inh=float(args.lr_inh),
+        w_target_exc=float(args.w_target_exc),
+        w_target_inh=float(args.w_target_inh),
+        stdp_ltd_scale=float(args.ltd_scale),
         accuracy_method="pca_lr",
         test_only=False,
         use_QDA=False,
@@ -329,6 +334,34 @@ def main():
         help=("invert the STDP window during sleep (depression-dominant), "
               "after Thiele et al. 2017; wake plasticity is unchanged"),
     )
+    # --- operating point -----------------------------------------------------
+    # Defaults are the operating point tuned on 2026-09-30 for the corrected
+    # model (Hebbian STDP; results/op_tune2, results/sleep_tune; tuning seeds
+    # 100-101). Values before that date: se 0.15, ltd 1.0, targets +/-0.01.
+    parser.add_argument("--se-weights", type=float, default=0.3,
+                        help="initial input->excitatory weight (pre-2026-09-30: 0.15)")
+    parser.add_argument("--ee-weights", type=float, default=0.3,
+                        help="initial excitatory->excitatory weight")
+    parser.add_argument("--ei-weights", type=float, default=0.3,
+                        help="initial excitatory->inhibitory weight")
+    parser.add_argument("--ie-weights", type=float, default=-0.3,
+                        help="initial inhibitory->excitatory weight (negative)")
+    parser.add_argument("--input-gain", type=float, default=1.0,
+                        help="multiplier on per-pixel Poisson spike probability")
+    parser.add_argument("--lr-exc", type=float, default=0.0005,
+                        help="STDP learning rate, excitatory synapses")
+    parser.add_argument("--lr-inh", type=float, default=0.0005,
+                        help="STDP learning rate, inhibitory synapses")
+    parser.add_argument("--n-train", type=int, default=4000,
+                        help="training images (multiple of the 1000-image batch)")
+    parser.add_argument("--n-test", type=int, default=1000,
+                        help="test images (multiple of the 200-image test batch)")
+    parser.add_argument("--ltd-scale", type=float, default=0.1,
+                        help="STDP depression amplitude relative to potentiation (pre-2026-09-30: 1.0)")
+    parser.add_argument("--w-target-exc", type=float, default=0.5,
+                        help="downscaling target magnitude, excitatory (pre-2026-09-30: 0.01)")
+    parser.add_argument("--w-target-inh", type=float, default=-0.5,
+                        help="downscaling target, inhibitory (negative; pre-2026-09-30: -0.01)")
     parser.add_argument(
         "--sleep-noise-var",
         type=float,

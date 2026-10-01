@@ -314,6 +314,7 @@ def spike_timing(
     N_x,  # Starting index for postsynaptic neurons
     spikes,  # Binary spike indicator array
     nonzero_pre_idx,  # Typed list: for each post neuron, an array of nonzero pre indices
+    ltd_scale,  # depression amplitude relative to potentiation (1.0 = symmetric)
 ):
     n_neurons = spike_times.shape[0]
 
@@ -332,19 +333,24 @@ def spike_timing(
                 continue
 
             t_pre = spike_times[j]
-            dt = t_post - t_pre
+            # spike_times holds the time SINCE each neuron's last spike, so a
+            # causal pairing (pre fired before post) has t_pre > t_post.
+            # dt > 0 therefore means pre-before-post -> potentiation. (Until
+            # 2026-09-30 this was t_post - t_pre, which inverted the rule:
+            # causal pairs were depressed and anti-causal pairs potentiated.)
+            dt = t_pre - t_post
 
             # Determine if the connection is excitatory or inhibitory.
             if j < (n_neurons - N_inh):  # excitatory pre–synaptic neuron
                 if dt >= 0:
                     weights[j, i] += math.exp(-dt / tau_LTP) * learning_rate_exc
                 else:
-                    weights[j, i] -= math.exp(dt / tau_LTD) * learning_rate_exc
+                    weights[j, i] -= ltd_scale * math.exp(dt / tau_LTD) * learning_rate_exc
             else:  # inhibitory pre–synaptic neuron
                 if dt >= 0:
                     weights[j, i] -= math.exp(-dt / tau_LTP) * learning_rate_inh
                 else:
-                    weights[j, i] += math.exp(dt / tau_LTD) * learning_rate_inh
+                    weights[j, i] += ltd_scale * math.exp(dt / tau_LTD) * learning_rate_inh
 
     return weights
 

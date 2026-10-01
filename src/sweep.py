@@ -90,7 +90,8 @@ CHECK_SLEEP_INTERVAL = 3500  # scaled with NUM_STEPS to hold episode cadence
 # the original configuration: lambda=0.99997, interval 35000, 2 episodes/batch,
 # N=14000 -> 0.99997^14000 = 0.66), which produced the best published MNIST
 # accuracy (0.7329). So the endpoint is anchored to a condition known to work.
-RHO = 0.66
+RHO = 0.4  # 2026-09-30: retuned for the corrected model (results/sleep_tune);
+           # the 0.66 rationale above refers to the pre-fix model.
 
 # Sleep episodes per training batch, from the loop bound t % interval == 0 over
 # range(1, T) with T = images_per_batch * num_steps.

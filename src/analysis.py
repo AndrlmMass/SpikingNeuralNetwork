@@ -46,7 +46,44 @@ def _save_tsne_inputs(
     return path
 
 
-def bin_spikes_by_label_no_breaks(spikes, labels):
+def bin_spikes_by_image(spikes, labels, steps_per_sample):
+    """One feature row per presented image: the mean activity over its
+    `steps_per_sample` timesteps, excluding timesteps labelled -1 (break) or -2
+    (the step at which a sleep episode was inserted).
+
+    Replaces label-change segmentation for image data, which merged
+    consecutive images of the same class into a single averaged sample
+    (~10% of samples at 10 classes), and split an image in two wherever a sleep
+    marker fell inside it.
+    """
+    T = min(spikes.shape[0], len(labels))
+    n = int(steps_per_sample)
+    feats, labs = [], []
+    for start in range(0, T, n):
+        seg_lab = np.asarray(labels[start:min(start + n, T)])
+        keep = (seg_lab != -1) & (seg_lab != -2)
+        if not keep.any():
+            continue
+        vals = np.unique(seg_lab[keep])
+        if vals.size != 1:
+            raise ValueError(
+                f"image block at t={start} has mixed labels {vals.tolist()}; "
+                "spikes and labels are not aligned to steps_per_sample"
+            )
+        feats.append(np.mean(spikes[start:start + n][keep], axis=0))
+        labs.append(vals[0])
+    if not feats:
+        return np.empty((0, spikes.shape[1])), np.empty((0,), dtype=int)
+    return np.array(feats), np.array(labs)
+
+
+def bin_spikes_by_label_no_breaks(spikes, labels, steps_per_sample=None):
+    if steps_per_sample:
+        return bin_spikes_by_image(spikes, labels, steps_per_sample)
+    return _bin_by_label_change(spikes, labels)
+
+
+def _bin_by_label_change(spikes, labels):
     """
     Splits spike data into segments based on contiguous blocks in the labels vector,
     skipping any segments where the label is -1.

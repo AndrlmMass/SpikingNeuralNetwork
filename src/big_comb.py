@@ -1582,6 +1582,7 @@ class snn_sleepy:
         sleep_noise=True,
         sleep_stdp=True,
         sleep_suppress_input=True,
+        stdp_ltd_scale=1.0,
         sleep_anti_stdp=False,
         sleep_oneshot=False,
     ):
@@ -1830,6 +1831,8 @@ class snn_sleepy:
                 sleep_noise=sleep_noise,
                 sleep_stdp=sleep_stdp,
                 sleep_suppress_input=sleep_suppress_input,
+                sleep_replay_steps=int(self.num_steps),
+                stdp_ltd_scale=float(stdp_ltd_scale),
                 sleep_anti_stdp=sleep_anti_stdp,
                 sleep_oneshot=sleep_oneshot,
                 initial_sum_post_exc=initial_sum_post_exc,
@@ -2113,6 +2116,7 @@ class snn_sleepy:
                         X_te, y_te = bin_spikes_by_label_no_breaks(
                             spikes=spikes_te_out[:, self.st : self.ih],
                             labels=labels_te_out,
+                            steps_per_sample=self.num_steps,
                         )
                         if X_te.size == 0:
                             acc_pca = 0.0
@@ -2517,6 +2521,7 @@ class snn_sleepy:
                             X_tr, y_tr = bin_spikes_by_label_no_breaks(
                                 spikes=exc_spikes,
                                 labels=labels_tr_out,
+                                steps_per_sample=self.num_steps,
                             )
 
                             if X_tr.size > 0:
@@ -2952,12 +2957,14 @@ class snn_sleepy:
                             X_tr_dist, y_tr_dist = bin_spikes_by_label_no_breaks(
                                 spikes=spikes_tr_out[:, self.st : self.ih],
                                 labels=labels_tr_out,
+                                steps_per_sample=self.num_steps,
                             )
 
                             # Prepare features from validation data for testing
                             X_te_dist, y_te_dist = bin_spikes_by_label_no_breaks(
                                 spikes=spikes_te_out[:, self.st : self.ih],
                                 labels=labels_te_out,
+                                steps_per_sample=self.num_steps,
                             )
 
                             if X_tr_dist.size > 0 and X_te_dist.size > 0:
@@ -3079,10 +3086,12 @@ class snn_sleepy:
                         X_tr, y_tr = bin_spikes_by_label_no_breaks(
                             spikes=spikes_tr_out[:, self.st : self.ih],
                             labels=labels_tr_out,
+                            steps_per_sample=self.num_steps,
                         )
                         X_te, y_te = bin_spikes_by_label_no_breaks(
                             spikes=spikes_te_out[:, self.st : self.ih],
                             labels=labels_te_out,
+                            steps_per_sample=self.num_steps,
                         )
 
                         if X_tr.size == 0 or X_te.size == 0:
@@ -3805,7 +3814,8 @@ class snn_sleepy:
                         from analysis import bin_spikes_by_label_no_breaks as _bin
 
                         feats, _labs = _bin(
-                            spikes_te_out[:, self.st : self.ih], labels_te_out
+                            spikes_te_out[:, self.st : self.ih], labels_te_out,
+                            steps_per_sample=self.num_steps,
                         )
                         print(
                             f"Final test alignment: timesteps={bs}, bins={feats.shape[0]}"
@@ -4405,10 +4415,12 @@ class snn_sleepy:
                 X_tr, y_tr = bin_spikes_by_label_no_breaks(
                     spikes=self.spikes_train[:, self.st : self.ih],
                     labels=self.labels_train,
+                    steps_per_sample=self.num_steps,
                 )
                 X_te, y_te = bin_spikes_by_label_no_breaks(
                     spikes=self.spikes_test[:, self.st : self.ih],
                     labels=self.labels_test,
+                    steps_per_sample=self.num_steps,
                 )
                 if X_tr.size > 0 and X_te.size > 0:
                     # Simple split of training for val

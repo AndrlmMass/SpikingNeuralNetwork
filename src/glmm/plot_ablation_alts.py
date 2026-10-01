@@ -36,7 +36,7 @@ from plot_glmms_bw import T, FS_LABEL, FS_TICK, FS_SERIES, GREY, HATCH, style, r
 
 FACTORS = ("downscale", "noise", "stdp", "suppress")
 NICE = {"downscale": "downscaling", "noise": "membrane noise",
-        "stdp": "sleep-phase STDP", "suppress": "input suppression"}
+        "stdp": "STDP", "suppress": "input suppression"}
 
 
 def load_cells():
@@ -301,6 +301,120 @@ def alt_C():
 
 
 
+# =============================================================================
+# D -- what each component adds and what removing it costs
+# =============================================================================
+def alt_D():
+    """Two bars per component against a shared zero: the change in accuracy from
+    switching the component ON with everything else off (hatched), and from
+    switching it OFF with everything else on (solid).
+
+    The two references are the fitted all-off and all-on cells of the same Beta
+    GLMM (fit_ablation_marginal.R). Unlike an average over contexts, this keeps
+    the interactions: removing downscaling from the full protocol costs far more
+    than adding it to an empty one gains, and STDP hurts only when downscaling
+    is absent. Each bar is one path through the factorial, so its interval is
+    wider than that of an averaged effect.
+    """
+    rows = rd(os.path.join(GL, "ablation_paths.csv"))
+    est = {(r["kind"], r["component"]): r for r in rows}
+    comps = sorted({r["component"] for r in rows},
+                   key=lambda c: -max(abs(float(est[("add", c)]["est"])),
+                                      abs(float(est[("drop", c)]["est"]))))
+
+    fig = plt.figure(figsize=(11.0, 7.0), facecolor=T["surface"])
+    ax = fig.add_axes([0.13, 0.15, 0.84, 0.80])
+    style(ax)
+    w, gap = 0.36, 0.40
+    lim = 0
+    for i, c in enumerate(comps):
+        for x, kind in ((i - gap / 2, "add"), (i + gap / 2, "drop")):
+            r = est[(kind, c)]
+            v, lo, hi = float(r["est"]), float(r["lo"]), float(r["hi"])
+            lim = max(lim, abs(v), abs(lo), abs(hi))
+            ax.bar(x, v, width=w, color=GREY[3] if kind == "drop" else GREY[1],
+                   hatch="" if kind == "drop" else "///",
+                   edgecolor=T["ink"], lw=1.1, zorder=3)
+            ax.errorbar(x, v, yerr=[[v - lo], [hi - v]], fmt="none", ecolor=T["ink"],
+                        elinewidth=1.2, capsize=4, capthick=1.2, zorder=5)
+    ax.axhline(0, color=T["ink"], lw=1.2, zorder=4)
+    ax.set_xlim(-0.6, len(comps) - 0.4)
+    ax.set_ylim(-lim - 0.13, lim + 0.08)
+    ax.set_ylabel("change in test accuracy", fontsize=FS_LABEL, color=T["ink2"])
+    ax.set_xticks(range(len(comps)))
+    ax.set_xticklabels([NICE[c].replace(" ", "\n", 1) for c in comps],
+                       fontsize=FS_TICK - 2, linespacing=1.1)
+    ax.tick_params(axis="x", length=0)
+    ax.legend(handles=[
+        Patch(facecolor=GREY[1], hatch="///", edgecolor=T["ink"],
+              label="add (all others off)"),
+        Patch(facecolor=GREY[3], edgecolor=T["ink"],
+              label="remove (all others on)")],
+        loc="upper right", frameon=True, edgecolor=T["axis"], facecolor=T["surface"],
+        framealpha=1.0, borderpad=0.55, fontsize=FS_SERIES, labelcolor=T["ink2"])
+    save(fig, "ablation_D_marginal_BW")
+
+
+# =============================================================================
+# E -- add / remove effects per component, per dataset
+# =============================================================================
+DS_ORDER = ["mnist", "kmnist", "fmnist", "notmnist"]
+DS_NICE = {"mnist": "MNIST", "kmnist": "KMNIST", "fmnist": "Fashion-\nMNIST",
+           "notmnist": "NotMNIST"}
+
+
+def alt_E():
+    """Dataset-resolved version of D: one panel per component, the four
+    datasets along x, each with the add (component alone vs all off, hatched)
+    and remove (all on vs all but the component, solid) contrast and its 95% CI.
+
+    From the components x dataset Beta GLMM (fit_ablation_datasets.R,
+    results/glmm/ablation_ds_paths.csv). Panels have their own y-scale:
+    downscaling's effect is an order of magnitude larger than the others and
+    would otherwise flatten them; the zero line is drawn in every panel. For
+    components other than downscaling the add contrast starts from the
+    chance-level all-off cell, so it cannot show harm; the remove contrast is
+    the informative one for them.
+    """
+    rows = rd(os.path.join(GL, "ablation_ds_paths.csv"))
+    est = {(r["dataset"], r["kind"], r["component"]): r for r in rows}
+    comps = ["downscale", "stdp", "noise", "suppress"]
+
+    fig, axes = plt.subplots(2, 2, figsize=(13.0, 9.0), facecolor=T["surface"])
+    w, gap = 0.36, 0.40
+    for ax, comp in zip(axes.ravel(), comps):
+        style(ax)
+        lim = 0.0
+        for i, ds in enumerate(DS_ORDER):
+            for x, kind in ((i - gap / 2, "add"), (i + gap / 2, "remove")):
+                r = est[(ds, kind, comp)]
+                v, lo, hi = float(r["est"]), float(r["lo"]), float(r["hi"])
+                lim = max(lim, abs(lo), abs(hi))
+                ax.bar(x, v, width=w, color=GREY[3] if kind == "remove" else GREY[1],
+                       hatch="" if kind == "remove" else "///",
+                       edgecolor=T["ink"], lw=1.1, zorder=3)
+                ax.errorbar(x, v, yerr=[[v - lo], [hi - v]], fmt="none", ecolor=T["ink"],
+                            elinewidth=1.2, capsize=4, capthick=1.2, zorder=5)
+        ax.axhline(0, color=T["ink"], lw=1.2, zorder=4)
+        ax.set_ylim(-lim * 1.15, lim * 1.15)
+        ax.set_xlim(-0.6, len(DS_ORDER) - 0.4)
+        ax.set_xticks(range(len(DS_ORDER)))
+        ax.set_xticklabels([DS_NICE[d] for d in DS_ORDER], fontsize=FS_TICK - 4, linespacing=1.0)
+        ax.tick_params(axis="x", length=0)
+        ax.tick_params(axis="y", labelsize=FS_TICK - 4)
+        ax.text(0.02, 0.97, NICE[comp], transform=ax.transAxes, ha="left", va="top",
+                fontsize=FS_SERIES - 1, color=T["ink"])
+    fig.supylabel("change in test accuracy", fontsize=FS_LABEL - 2, color=T["ink2"], x=0.01)
+    fig.legend(handles=[
+        Patch(facecolor=GREY[1], hatch="///", edgecolor=T["ink"], label="add (all others off)"),
+        Patch(facecolor=GREY[3], edgecolor=T["ink"], label="remove (all others on)")],
+        loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.0), frameon=True,
+        edgecolor=T["axis"], facecolor=T["surface"], framealpha=1.0,
+        fontsize=FS_SERIES - 2, labelcolor=T["ink2"])
+    fig.tight_layout(rect=(0.03, 0, 1, 0.94))
+    save(fig, "ablation_E_by_dataset_BW")
+
+
 if __name__ == "__main__":
     print("writing ablation alternatives to figures")
-    alt_A(); alt_B(); alt_C()
+    alt_A(); alt_B(); alt_C(); alt_D()

@@ -146,7 +146,7 @@ def resolve_sleep_ratio(override=None):
 # weight scale -- so the comparison isolates *how* growth is constrained rather
 # than *how much* -- interpolates to lambda ~= 1.6e-5. Holding W0 exactly
 # instead would want ~2.4e-5.
-DECAY_RATE = 1.6e-5
+DECAY_RATE = 1e-5  # 2026-10-01: accuracy-optimal on tuning seeds 100-101, MNIST (results/decay_tune; window ~7.5e-6 to 1.25e-5)
 
 # Regularization cadence comes from CHECK_SLEEP_INTERVAL, so sleep and both
 # normalization arms fire on the same schedule as in the sweep. Not passed as

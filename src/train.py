@@ -12,6 +12,25 @@ from weight_funcs import (
 )
 
 
+def sleep_step_spikes(spikes_prev, st, held_input=None, sleep_iter=0):
+    """Spike vector a sleep step starts from, before threshold crossings.
+
+    Network entries are always zero: update_spikes only ever sets spikes to 1,
+    so starting from a copy of the previous step would carry every spike
+    forward, and within ~50 steps every neuron would read as firing on every
+    step (the "sticky spikes" bug). The wake loop avoids this implicitly by
+    writing into a fresh row of the batch array; this makes sleep do the same.
+
+    Input entries are zero when the sensory drive is suppressed
+    (held_input is None); otherwise they replay the held image's spike
+    train, one row per step, cyclically.
+    """
+    cur = np.zeros_like(spikes_prev)
+    if held_input is not None:
+        cur[:st] = held_input[sleep_iter % held_input.shape[0]]
+    return cur
+
+
 def report_numba_status():
     """Print a minimal Numba status summary (no large IR dumps)."""
     try:
@@ -105,6 +124,7 @@ def update_weights(
     learning_rate_inh,
     tau_LTP,
     tau_LTD,
+    ltd_scale=1.0,
 ):
     """
     Apply the STDP rule to update synaptic weights using a fully vectorized approach.
@@ -152,6 +172,7 @@ def update_weights(
             N_x=N_x,
             spikes=spikes,
             nonzero_pre_idx=nonzero_pre_idx,
+            ltd_scale=float(ltd_scale),
         )
 
     if vectorized_trace:
@@ -480,6 +501,12 @@ def train_network(
     sleep_noise: bool = True,          # Gaussian membrane noise during sleep
     sleep_stdp: bool = True,           # STDP active during sleep ("replay")
     sleep_suppress_input: bool = True, # zero the sensory drive
+    # Timesteps per image. With suppression off, the last image's spike train
+    # (the final `sleep_replay_steps` input rows before the episode) is looped
+    # for the whole window, so the input keeps its wake-time statistics.
+    sleep_replay_steps: int = 0,
+    # Depression amplitude of the timing STDP rule relative to potentiation.
+    stdp_ltd_scale: float = 1.0,
     # --- one-shot reduction arm -------------------------------------------
     # The power-law pull is exactly linear in u = log(w / w_target):
     #     u <- lambda * u    =>    u_n = lambda^n u_0
@@ -856,6 +883,18 @@ def train_network(
                 except Exception:
                     epi_before = None
 
+            # Input held on during the episode when suppression is off: the
+            # last image's own spike train, replayed cyclically. None means
+            # the sensory drive is zero, as with suppression on.
+            held_input = None
+            if not sleep_suppress_input:
+                if sleep_replay_steps <= 0 or t < sleep_replay_steps:
+                    raise ValueError(
+                        "input suppression is off but there is no complete "
+                        f"image to replay (sleep_replay_steps={sleep_replay_steps}, t={t})"
+                    )
+                held_input = spikes[t - sleep_replay_steps:t, :st].copy()
+
             # --- one-shot reduction: collapse the window to a single op ------
             _oneshot_done = False
             if sleep_oneshot and train_weights and sleep_downscale:
@@ -989,11 +1028,9 @@ def train_network(
                 sleep_now_inh = True
                 slept_this_step = True
 
-                # Zero sensory input (do not consume data)
-                # Zero sensory input (do not consume data). With
-                # suppression off, the last presented frame is held for the
-                # window instead -- real time is frozen, so there is no
-                # fresh input to stream in.
+                # Zero sensory input (do not consume data). With suppression
+                # off, the input is instead the last image replayed (see
+                # held_input); real time is frozen, so no new data streams in.
                 if sleep_suppress_input:
                     spikes_prev[:st] = 0
 
@@ -1016,9 +1053,12 @@ def train_network(
                     weights_T=weights_T_cache,
                 )
 
-                # Prepare current spikes vector: keep prior network activity but zero sensory inputs
-                sleep_spikes_cur = spikes_prev.copy()
-                sleep_spikes_cur[:st] = 0
+                # Fresh spike vector for this step: network spikes come only
+                # from this step's threshold crossings, and the input is either
+                # zero or the replayed image (see sleep_step_spikes).
+                sleep_spikes_cur = sleep_step_spikes(
+                    spikes_prev, st, held_input, sleep_iter
+                )
 
                 # Update spikes and thresholds
                 (
@@ -1132,6 +1172,7 @@ def train_network(
                         tau_LTP=tau_LTP,
                         tau_LTD=tau_LTD,
                         dt=dt,
+                        ltd_scale=stdp_ltd_scale,
                     )
 
                 # Record decimated snapshots during sleep (only if tracking enabled)
@@ -1294,6 +1335,7 @@ def train_network(
                 tau_LTP=tau_LTP,
                 tau_LTD=tau_LTD,
                 dt=dt,
+                ltd_scale=stdp_ltd_scale,
             )
 
             # Instantaneous weight normalization, on the same schedule sleep

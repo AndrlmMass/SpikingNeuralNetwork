@@ -20,10 +20,13 @@ consolidate what it reactivates. Leave-one-out cannot see that; 2^4 can.
 
 Two things to know when reading the results:
 
-1. With `suppress` OFF, the last presented frame is *held* for the duration of
-   the window rather than fresh input streaming in — real time is frozen during
-   sleep, so there is no new data to consume. The contrast is therefore
-   "no sensory drive" vs "a static frame repeated", not "sleep" vs "wake".
+1. With `suppress` OFF, the last presented image stays on: its own spike
+   train is replayed cyclically for the duration of the window, rather than
+   fresh input streaming in — real time is frozen during sleep, so there is no
+   new data to consume. The contrast is therefore "no sensory drive" vs "the
+   last image held on", not "sleep" vs "wake". (Before 2026-09-30 the code held
+   the input for only the first step of each window, so suppression was
+   effectively always on; results from before that date do not test it.)
 
 2. With both `downscale` and `stdp` off, weights are untouched for the whole
    window, so that cell is close to the no-sleep reference — it differs only in
@@ -250,7 +253,7 @@ def collect():
 
 
 def main():
-    global RESOLVED_RATIO
+    global RESOLVED_RATIO, DATASETS, OUT_DIR
     ap = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -263,8 +266,19 @@ def main():
                     help="override the sweep-derived sleep ratio")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--skip-done", action="store_true")
+    # Defaults reproduce the original MNIST-only study. Extending to other
+    # datasets goes to its own directory: the grid is dataset-major, so a
+    # different dataset list renumbers every cell, and --collect rebuilds the
+    # summary from the per-cell records it finds.
+    ap.add_argument("--datasets", default=",".join(DATASETS),
+                    help="comma-separated datasets (default: %(default)s)")
+    ap.add_argument("--out-dir", default=OUT_DIR,
+                    help="where per-cell records and the summary are written")
     ap.add_argument("extra", nargs="*")
     args = ap.parse_args()
+
+    DATASETS = [d.strip() for d in args.datasets.split(",") if d.strip()]
+    OUT_DIR = os.path.abspath(args.out_dir)
 
     RESOLVED_RATIO = resolve_sleep_ratio(args.sleep_ratio)
     grid = build_grid()
@@ -272,6 +286,7 @@ def main():
     if args.list:
         print(f"{len(grid)} cells = (2^4 component combinations + 1 no-sleep "
               f"reference) x {len(DATASETS)} dataset x {len(SEEDS)} seeds")
+        print(f"datasets {DATASETS} -> {OUT_DIR}")
         print(f"SLURM array range: 0-{len(grid) - 1}")
         print(f"sleep ratio {RESOLVED_RATIO[0]} "
               f"({RESOLVED_RATIO[1]['source']})\n")
@@ -280,7 +295,7 @@ def main():
             names = "(no sleep reference)" if c["code"] == "none" else (
                 ", ".join(c["active"]) or "(all off)")
             print(f"  {c['cell_id']:3d}  {c['code']:>4}  {names:34s} "
-                  f"seed={c['seed']}{done}")
+                  f"{c['dataset']:9s} seed={c['seed']}{done}")
         return 0
 
     if args.collect:

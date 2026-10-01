@@ -87,7 +87,10 @@ write.csv(ctr_ds, file.path(OUT, "baselines_contrasts_by_dataset.csv"),
 # =============================================================================
 # Regression table
 # =============================================================================
-label <- c(sleep = "Sleep 10\\%", none = "No regularization",
+# Label the sleep row with the ratio the sleep arm actually ran at (it comes
+# from the sweep, so it is not fixed at 10%).
+sleep_pct <- round(100 * max(bl$sleep_ratio[as.character(bl$method) == "sleep"], na.rm = TRUE))
+label <- c(sleep = sprintf("Sleep %d\\%%", sleep_pct), none = "No regularization",
            decay = "Weight decay", norm_layer = "Layer normalization",
            norm_neuron = "Synaptic scaling")
 order_terms <- c("none", "decay", "norm_layer", "norm_neuron")

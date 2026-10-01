@@ -25,14 +25,19 @@ import matplotlib.pyplot as plt
 
 from plot_glmms_bw import T, FS_LABEL, REPO, style, save
 
-X_MAX = 2.35
+# 'raw': test accuracy. 'relative': divided by the dataset's no-sleep mean --
+# meaningful only while no-sleep runs learn; after the 2026-09-30 fixes the
+# no-sleep reference is at chance and every sleep run lands at 4-8x it.
+SCALE = "raw"
+X_MAX = 1.0 if SCALE == "raw" else 2.35
 
 
 def load():
     d = pd.read_csv(os.path.join(REPO, "results", "sweep", "sweep_summary.csv"))
     d = d[d.test_accuracy.notna()].copy()
     base = d[d.sleep_rate == 0].groupby("dataset").test_accuracy.mean()
-    d["rel"] = d.test_accuracy / d.dataset.map(base)
+    d["rel"] = (d.test_accuracy if SCALE == "raw"
+                else d.test_accuracy / d.dataset.map(base))
     d["pct"] = (d.sleep_rate * 100).round().astype(int)
     return d
 
@@ -60,7 +65,8 @@ def main():
 
     fig, ax = plt.subplots(figsize=(10.0, 8.5), facecolor=T["surface"])
     style(ax, ygrid=False)
-    xgrid = np.linspace(-0.1, X_MAX, 500)
+    x_lo = 0.0 if SCALE == "raw" else -0.1
+    xgrid = np.linspace(x_lo, X_MAX, 500)
     step, height = 1.0, 1.45
     pcts = sorted(d.pct.unique())
     dens = {p: gaussian_kde(d.rel[d.pct == p], bw_method=0.25)(xgrid)
@@ -83,9 +89,9 @@ def main():
     ax.set_yticks([i * step for i in range(len(pcts))])
     ax.set_yticklabels([f"{p}%" for p in pcts])
     ax.set_ylim(-0.3, top_y)
-    ax.set_xlim(-0.1, X_MAX)
-    ax.set_xticks(np.arange(0, X_MAX, 0.5))
-    ax.set_xlabel("test accuracy relative to no-sleep",
+    ax.set_xlim(x_lo, X_MAX)
+    ax.set_xticks(np.arange(0, X_MAX + 1e-9, 0.2 if SCALE == "raw" else 0.5))
+    ax.set_xlabel("test accuracy" if SCALE == "raw" else "test accuracy relative to no-sleep",
                   fontsize=1.5 * (FS_LABEL - 3), color=T["ink2"])
     ax.set_ylabel("sleep duration", fontsize=1.5 * (FS_LABEL - 3),
                   color=T["ink2"])

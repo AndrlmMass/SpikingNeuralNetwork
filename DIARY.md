@@ -10,6 +10,172 @@ session. Capture focus, findings, decisions, and open items. Keep it scannable.
 
 ---
 
+## 2026-09-30 — Four simulator bugs invalidate every result; all studies must be re-run
+
+**Focus:** Extend the component ablation from MNIST to all four datasets (it
+showed the MNIST-only conclusions do not generalize), then chase an oddity in
+it ("all components off" ≠ "no sleep") into the sleep loop. That turned into a
+code audit of the training loop, the learning rule and the data pipeline.
+
+### BLOCKING — four bugs, all fixed with regression tests (`src/tests/`)
+
+1. **Sticky sleep spikes** (`train.py`, sleep loop). Each sleep step started
+   from a *copy* of the previous step's spike vector, and `update_spikes` only
+   ever sets spikes to 1. Spikes accumulated: measured on a real MNIST run,
+   12 → 87 → 236 → **all 250** network neurons "firing" by step 50 of every
+   episode, for the rest of the episode (membranes pinned at reset, adaptation
+   climbing, sleep-STDP seeing every pair co-active). Present since at least
+   2025-11-25, i.e. in the published runs. Fix: `sleep_step_spikes()` builds a
+   fresh vector each step, as the wake loop does implicitly. After the fix:
+   11 → 5 → 1 → 0–1 per step. Tests: `test_sleep_spikes.py` (unit + a slow
+   real-episode test, `SNN_SLOW_TESTS=1`).
+2. **Timing STDP was anti-Hebbian** (`weight_funcs.spike_timing`).
+   `spike_times` is time *since* last spike, but `dt = t_post - t_pre` was
+   treated as if it were a spike time: causal pairs were depressed
+   (dw = −0.006), anti-causal potentiated (+0.006). Affects **every run of
+   every method**, including the non-sleep baselines, since wake learning uses
+   the same rule. Fix: `dt = t_pre - t_post`. Test: `test_stdp_sign.py`
+   (exc and inh, causal and anti-causal).
+3. **Input suppression was never really off** (`train.py`). With suppression
+   "off" the input was zeroed from the second sleep step anyway, so the
+   ablation's suppression factor barely existed — its "no effect anywhere" was
+   an artifact. Fix (decided with Andreas): with suppression off, the last
+   image's own 100-step spike train is replayed cyclically for the episode
+   (passed through as `sleep_replay_steps` from `big_comb.py`).
+4. **Readout binning merged images** (`analysis.bin_spikes_by_label_no_breaks`).
+   Samples were cut at label *changes*, so consecutive same-class images
+   became one averaged sample (~10%: 177–182 samples per 200-image test
+   batch), and a sleep marker split an image in two. Fix: `bin_spikes_by_image`
+   — one row per image, raises on misalignment; all 9 call sites in
+   `big_comb.py` pass `steps_per_sample`. Test: `test_binning.py`.
+
+**Consequence:** every existing result is invalid — the sweep, the baselines
+(all five methods, because of bug 2), the ablation (MNIST and the new three
+datasets), the downscaling-vs-layer-norm reduction, and the published paper.
+The 2026-09-24 conclusion below ("neither the sign of the STDP window nor the
+noise dose matters") was drawn with bugs 1 and 2 active and is void.
+
+Pre-fix results kept for the record only (all invalid): the cross-dataset
+ablation (`results/ablation_datasets/`, GLMM `results/glmm/ablation_ds_*`,
+components×dataset χ²(45)=327.9) found downscaling alone works only on MNIST
+and STDP+noise "rescue" the others — a pattern produced under stuck-on sleep
+activity and inverted STDP. Downscaling-only vs layer norm
+(`results/reduction/`): tie on MNIST, collapse elsewhere. Same caveat.
+
+### Non-blocking audit findings (decide before the re-run / fix in the text)
+
+- `clip_weights` only enforces signs; `min/max_weight` are passed but unused,
+  despite comments claiming hard bounds. No upper bound on weights.
+- `--sleep-noise-var` is used as the **standard deviation**, not the variance.
+- Membrane updates use a transposed weight cache refreshed every 100 steps,
+  and not at all within a sleep episode (dynamics lag weights ≤100 steps).
+- Readout is fit on the last training batch's spikes, recorded while weights
+  still change (the known data-starved probe).
+- Classifier failures silently return 0.0: every per-epoch *validation* PCA+LR
+  on Windows fails on an emoji print (cp1252). No final test accuracy was hit
+  (checked: no exact zeros). Separate session is fixing the encoding; re-runs
+  use `PYTHONIOENCODING=utf-8`.
+- **Paper text vs code:** the test set is not the official test set — train
+  and test are merged, shuffled per seed, and partitioned (4000/100/1000),
+  disjoint so no leakage. There is no class balancing, though the draft says
+  "until an even class distribution is achieved".
+- Legacy flags `no_sleep`/`normalize_weights` default True and are recorded in
+  results JSON — misleading metadata, not used under `--reg-method`.
+- Checked and fine: no train/test leakage; bit-for-bit reproducible; sleep
+  runs its full window (9800 steps/batch at 10%); λ formula matches the loop;
+  parallel runs are safe; rate coding clips probabilities to [0, 1].
+
+### Other work this session
+
+- `ablation.py` gained `--datasets` / `--out-dir` (defaults unchanged).
+  MNIST summary backed up to `results/ablation/ablation_summary_mnist_backup.csv`.
+- `src/glmm/fit_ablation_datasets.R`: `acc ~ downscale*noise*stdp*suppress*dataset + (1|seed)`,
+  add/remove paths per dataset. `fit_ablation_marginal.R` + figure D
+  (add/remove bars, legend top-right) for the single-dataset version.
+- Paper text: revised MNIST-family methods, GLMM section for the baselines,
+  ridge-plot paragraph (collapse rate, not accuracy; needs a logistic test).
+
+### Decisions
+
+- Re-run **everything**, locally, in article order: sweep → baselines (all 5
+  methods) → ablation (all datasets) → reduction.
+- Before that: tune sleep noise on the corrected model (`src/noise_sweep.py`,
+  sd ∈ {0.5,1,2,4,8,16}, 10% sleep, **tuning seeds 100–102**, disjoint from
+  evaluation seeds 42–46), and recalibrate `DECAY_RATE`
+  (`src/decay_calibration.py`, same procedure as before: match W(70k)/W0 to
+  the sleep arm on MNIST). The old 1.6e-5 was tuned under inverted STDP.
+- ρ = 0.66 stays as a fixed hyperparameter, but its "best published config"
+  justification came from the buggy model; reword in the appendix.
+
+### Later the same day — the corrected model does not function at current parameters
+
+- **Noise sweep (`results/noise_sweep/`) is uninformative:** every σ gave the
+  identical chance accuracy on every dataset. Cause: sleep downscaling pulls
+  toward w_target = ±0.01 from initial weights 0.15–0.3 at ρ = 0.66/batch, so
+  after 4 batches weights are ~15× smaller (m_exc 0.029 → 0.002) and the
+  network is silent. That setting only worked because inverted STDP grew
+  weights ~9×/batch against it.
+- **Decay calibration (`results/decay_calibration/`):** with correct STDP the
+  unregularized network does not grow (W(70k)/W0 = 0.98). Decay then just
+  shrinks weights, W/W0 = exp(−rate·t) to within rounding. Nothing left to
+  calibrate against.
+- **No-sleep diagnostic (`results/diag_postfix/`, MNIST, seeds 100–102):**
+  none 0.125–0.135, layer norm 0.125–0.14 test accuracy; train ≈ 0.20. Weights
+  stay at initialization and wake activity is ~0.2 spikes/step of 250 — the
+  network barely responds to input.
+- **Pre-fix comparison:** the pre-fix `none` run (FMNIST s42) grew m_exc
+  0.029 → 0.646 (22×) and m_inh 0.062 → 2.95 (48×) and reached 0.49. Every
+  pre-fix accuracy relied on runaway growth produced by the inverted rule, and
+  that runaway is also the "instability" the paper says sleep regularizes.
+- **Consequence:** re-running is not enough. The corrected model needs its
+  operating point re-set (input drive / thresholds / learning rate) before
+  sleep, noise and decay can be tuned. Decision pending with Andreas.
+
+### Evening — operating point re-tuned; runaway growth reproduced with the correct rule
+
+- New CLI knobs in `main.py` (config only): `--se-weights/--ee/--ei/--ie-weights`,
+  `--input-gain`, `--lr-exc/--lr-inh`, `--ltd-scale` (STDP depression relative
+  to potentiation; threaded through `spike_timing`, tested), `--w-target-exc/inh`,
+  `--n-train/--n-test` (for fast screening). Defaults initially reproduced the
+  old values exactly (verified: 0.135 reproduced).
+- Isolation (MNIST s100, no reg.): frozen network 0.715; correct STDP 0.135
+  (activity dies: 0.12 spikes/img, 90% of test images silent — depression
+  dominates); old inverted STDP 0.46; old binning 0.093 (binning not the cause).
+- Joint scan `results/op_tune2/` (gain × input weight × LTD ratio, half-length):
+  LTD ≥ 0.5 → depression, silence; LTD 0.1 (or 0.3 with strong input) →
+  **runaway growth 54–163×** and collapse to chance; stable band near 0.3.
+  So the paper's premise (runaway STDP) holds with a correct, potentiation-
+  biased rule.
+- Rescue test `results/rescue/` at runaway point B (gain 1, se 0.3, LTD 0.1):
+  none 0.11 (82× growth); layer norm 0.75, synaptic scaling 0.71; sleep at the
+  old ρ = 0.66 only partial (0.40, 13×).
+- Sleep tuning `results/sleep_tune/` (3 points × ρ {0.66,0.4,0.2} × target
+  {0.3,0.5}, seeds 100–101): **B, ρ = 0.4, target ±0.5 → 0.780 / 0.785** (goal
+  was ≥ 0.75). Stronger per-batch pull contains the runaway (growth ~8×).
+  Repeat cells reproduced the rescue run exactly.
+- Andreas: frozen network is not reported in the paper.
+
+### Overnight run (launched 19:14, detached)
+
+Config set as defaults: `main.py` se 0.3, LTD 0.1, targets ±0.5 (gain 1, σ = 2
+unchanged); `sweep.py` RHO = 0.4. Pipeline (`results/overnight/overnight.py`,
+log `results/overnight/pipeline.log`): sweep (220) → decay recalibration at the
+sweep-selected ratio (writes `DECAY_RATE` in `experiment.py`) → baselines (100)
+→ ablation, all 4 datasets (85 + 255) → all GLMM fits and figures. Evaluation
+seeds 42–46, full length (4000 train / 1000 test). Old outputs archived to
+`results/archive_prefix_2026-09-30/` (incl. a copy of `figures/`).
+
+### Open items
+
+- Review overnight results; re-derive every claim in the text from them.
+- Sleep noise σ and ratio were not re-tuned beyond the sweep itself.
+- Not yet audited: nothing in the run path; plotting code only lightly.
+- Not yet audited: `create_network.py`.
+- After re-runs: rerun GLMMs, figures, and re-derive every claim in the text.
+- Tell co-authors: the published results are affected by bugs 1, 2 and 4.
+
+---
+
 ## 2026-09-23 — Conventional-stabilization baselines built; five bugs found, one of which invalidates the published sleep-ratio sweep
 
 **Focus:** Implement the three conventional baselines Reviewer 3 asks for in
