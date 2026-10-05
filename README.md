@@ -1,4 +1,6 @@
 # SpikingNeuralNetwork PhD project
+
+> **Reproducing the sleep paper's results:** see [REPRODUCE.md](REPRODUCE.md).
 This project aims to replicate and expand the model developed in [Zenke et al.'s 2015 article](https://www.nature.com/articles/ncomms7922).
 
 **Disclaimer**: Currently, the study is in its initial phase, developing a basic SNN model which will serve as the foundation of the model. 

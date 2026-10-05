@@ -1,0 +1,56 @@
+{
+\setlength{\tabcolsep}{10pt} % Only affects this table
+\begin{longtable}{lrrrrl}
+    \caption{Mixed effect model with beta regression: sleep against conventional stabilization \label{tab:betareg_baselines}}\\
+    \toprule
+    Effect  & Estimate & Std. Error & \textit{z} value & \textit{p}-value & \\
+    \midrule
+    \endfirsthead
+
+    \toprule
+    Effect  & Estimate & Std. Error & \textit{z} value & \textit{p}-value & \\
+    \midrule
+    \endhead
+        \multicolumn{6}{l}{\textit{Averaged over datasets}}\\
+        Sleep 30\% & .690 & .031 & 22.039 & $<.001$ & ***\\
+        \quad No regularization & -2.951 & .060 & -49.328 & $<.001$ & ***\\
+        \quad Continuous decay & -1.448 & .173 & -8.356 & $<.001$ & ***\\
+        \quad Layer normalization & -.277 & .034 & -8.196 & $<.001$ & ***\\
+        \quad Synaptic scaling & -.273 & .032 & -8.407 & $<.001$ & ***\\
+        \midrule
+        \multicolumn{6}{l}{\textit{MNIST}}\\
+        Sleep 30\% & 1.170 & .037 & 31.956 & $<.001$ & ***\\
+        \quad No regularization & -3.371 & .184 & -18.332 & $<.001$ & ***\\
+        \quad Continuous decay & -1.532 & .496 & -3.091 & .002 & **\\
+        \quad Layer normalization & -.235 & .062 & -3.816 & $<.001$ & ***\\
+        \quad Synaptic scaling & -.210 & .068 & -3.068 & .002 & **\\
+        \midrule
+        \multicolumn{6}{l}{\textit{KMNIST}}\\
+        Sleep 30\% & .152 & .025 & 6.070 & $<.001$ & ***\\
+        \quad No regularization & -2.296 & .076 & -30.314 & $<.001$ & ***\\
+        \quad Continuous decay & -.201 & .071 & -2.815 & .005 & **\\
+        \quad Layer normalization & -.136 & .073 & -1.876 & .061 & \\
+        \quad Synaptic scaling & -.064 & .078 & -.827 & .408 & \\
+        \midrule
+        \multicolumn{6}{l}{\textit{Fashion-MNIST}}\\
+        Sleep 30\% & .567 & .067 & 8.431 & $<.001$ & ***\\
+        \quad No regularization & -3.010 & .094 & -31.902 & $<.001$ & ***\\
+        \quad Continuous decay & -2.882 & .098 & -29.476 & $<.001$ & ***\\
+        \quad Layer normalization & -.390 & .084 & -4.665 & $<.001$ & ***\\
+        \quad Synaptic scaling & -.483 & .068 & -7.111 & $<.001$ & ***\\
+        \midrule
+        \multicolumn{6}{l}{\textit{NotMNIST}}\\
+        Sleep 30\% & .872 & .045 & 19.591 & $<.001$ & ***\\
+        \quad No regularization & -3.127 & .094 & -33.310 & $<.001$ & ***\\
+        \quad Continuous decay & -1.179 & .469 & -2.511 & .012 & *\\
+        \quad Layer normalization & -.348 & .047 & -7.330 & $<.001$ & ***\\
+        \quad Synaptic scaling & -.335 & .039 & -8.543 & $<.001$ & ***\\
+        \midrule
+        \multicolumn{2}{l}{Random effect variance}\\
+        Groups & Name & Variance & Std.Dev.& &\\
+        Seed & (Intercept) & .003 & .055 & &\\
+
+        \bottomrule
+    \multicolumn{6}{p{0.9\linewidth}}{\footnotesize Estimates on the logit scale. In each block the first row is sleep's accuracy and the indented rows are each regularizer minus sleep. Model: accuracy $\sim$ method $\times$ dataset + (1$|$seed), with the Beta precision $\phi$ estimated separately for each method--dataset combination; the averaged block is taken over the four datasets. Significance levels: * $p<.05$, ** $p<.01$, *** $p<.001$.}\\
+\end{longtable}
+}

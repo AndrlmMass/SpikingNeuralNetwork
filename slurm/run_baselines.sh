@@ -78,7 +78,7 @@ fi
 
 # ---- run one grid cell ----------------------------------------------------
 singularity exec noise_env.sif conda run -n noise_env python \
-    src/experiment.py --task-id "${TASK_ID}"
+    src/experiment.py --task-id "${TASK_ID}" "$@"
 
 STATUS=$?
 echo "Finished : $(date)  (exit ${STATUS})"

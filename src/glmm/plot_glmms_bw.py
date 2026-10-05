@@ -18,7 +18,7 @@ grey of a bar never carries meaning that the label does not repeat.
 Inputs:  results/glmm/*.csv (written by the src/glmm/fit_*.R scripts), results/*/*_summary.csv
 Outputs: figures/sweep_ratio_BW.pdf
          figures/baselines_methods_BW.pdf
-         figures/ablation_components_BW.pdf
+         figures/ablation_slope_BW.pdf
 """
 import csv
 import math
@@ -29,6 +29,7 @@ import statistics as st
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -281,73 +282,72 @@ def fig_baselines():
 
 
 # =============================================================================
-# Figure 3 — component ablation (R3.2)
+# Figure 3 -- component ablation (R3.2): each component off -> on, per dataset
 # =============================================================================
+DS_ORDER = ["mnist", "kmnist", "fmnist", "notmnist"]
+DS_NICE = {"mnist": "MNIST", "kmnist": "KMNIST", "fmnist": "Fashion-MNIST",
+           "notmnist": "NotMNIST"}
+DS_MARK = {"mnist": "o", "kmnist": "s", "fmnist": "^", "notmnist": "D"}
+# Panel titles, short enough to fit on one line at this size; the caption gives
+# the full names (membrane noise, input suppression).
+SHORT = {"downscale": "downscaling", "stdp": "STDP", "noise": "noise",
+         "suppress": "no input"}
+
+
 def fig_ablation():
-    pred = rd(os.path.join(GL, "ablation_predictions.csv"))
-    ref = float(rd(os.path.join(GL, "ablation_nosleep_reference.csv"))[0]["mean_acc"])
+    """One panel per sleep component: predicted accuracy with the component off
+    and on, one line per dataset. A slope chart rather than bars, to set it
+    apart from the baselines figure.
 
-    def on(v):
-        return str(v).strip().lower() in ("on", "true", "1")
+    From the components x dataset Beta GLMM (fit_ablation_datasets.R,
+    results/glmm/ablation_ds_marginal.csv): each end is the mean predicted
+    accuracy over the eight combinations of the other three components. The
+    panels share the y-axis, so slopes are directly comparable: downscaling is
+    the only steep one. Because those eight combinations include the four with
+    downscaling off (all at chance), the other components sit near 0.35-0.43,
+    the average of a collapsed and a working network, not at a typical accuracy.
+    The 95% CIs are in the CSV but not drawn: the widest half-width is about .02,
+    smaller than the markers. The no-sleep reference is the mean over datasets
+    of the runs without sleep.
+    """
+    rows = rd(os.path.join(GL, "ablation_ds_marginal.csv"))
+    m = {(r["dataset"], r["component"], r["state"]): float(r["fit"]) for r in rows}
+    ref = st.mean(float(r["mean_acc"])
+                  for r in rd(os.path.join(GL, "ablation_ds_nosleep_reference.csv")))
+    comps = ["downscale", "stdp", "noise", "suppress"]
+    dodge = dict(zip(DS_ORDER, (-0.09, -0.03, 0.03, 0.09)))
 
-    rows = []
-    for r in pred:
-        rows.append(dict(
-            ds=on(r["downscale"]), no=on(r["noise"]),
-            sd=on(r["stdp"]), su=on(r["suppress"]),
-            fit=float(r["fit"]), lo=float(r["lo"]), hi=float(r["hi"])))
+    fig, axes = plt.subplots(1, 4, figsize=(15.0, 6.0), sharey=True,
+                             facecolor=T["surface"])
+    for ax, comp in zip(axes, comps):
+        style(ax)
+        col = T["ink"] if comp == "downscale" else GREY[3]
+        for ds in DS_ORDER:
+            xs = [0 + dodge[ds], 1 + dodge[ds]]
+            ys = [m[(ds, comp, s)] for s in ("off", "on")]
+            ax.plot(xs, ys, color=col, lw=3.4, zorder=3)
+            ax.plot(xs, ys, ls="", marker=DS_MARK[ds], ms=13, mfc=col, mec=T["surface"],
+                    mew=1.0, zorder=5)
+        ax.axhline(ref, color=T["muted"], ls=":", lw=2.2, zorder=2)
+        ax.set_xlim(-0.4, 1.4)
+        ax.set_xticks([0, 1])
+        ax.set_xticklabels(["off", "on"])
+        ax.tick_params(labelsize=FS_TICK + 4)
+        ax.set_title(SHORT[comp], fontsize=FS_LABEL + 1, color=T["ink"], pad=12)
+    axes[0].set_ylim(0, 0.85)
+    axes[0].set_ylabel("predicted test accuracy", fontsize=FS_LABEL + 3, color=T["ink2"])
 
-    fig = plt.figure(figsize=(11.0, 7.0), facecolor=T["surface"])
-    axes = [fig.add_axes([0.30, 0.565, 0.56, 0.355]),
-            fig.add_axes([0.30, 0.105, 0.56, 0.355])]
-
-    for ax, want, title in zip(
-            axes, (True, False),
-            ("downscaling ON", "downscaling OFF")):
-        sub = sorted([r for r in rows if r["ds"] is want], key=lambda r: r["fit"])
-        style(ax, ygrid=False, xgrid=True)
-        ypos = range(len(sub))
-        for y, r in zip(ypos, sub):
-            # Hatch marks sleep-phase STDP, the component the factorial shows to
-            # be harmful; grey depth is fixed within a panel so the hatch is the
-            # only encoding that varies and cannot be misread as magnitude.
-            ax.barh(y, r["fit"], height=0.66,
-                    color=GREY[1] if r["sd"] else GREY[3],
-                    hatch="///" if r["sd"] else "",
-                    edgecolor=T["ink"], lw=1.1, zorder=3)
-            ax.errorbar(r["fit"], y, xerr=[[r["fit"] - r["lo"]], [r["hi"] - r["fit"]]],
-                        fmt="none", ecolor=T["ink"], elinewidth=1.2,
-                        capsize=4, capthick=1.2, zorder=5)
-            # past the upper CI, not the point estimate, or the label lands
-            # on the error-bar cap
-            ax.text(r["hi"] + 0.015, y, f"{r['fit']:.3f}", va="center",
-                    fontsize=FS_SERIES - 1, color=T["ink"])
-        labs = []
-        for r in sub:
-            act = [n for n, f in (("noise", r["no"]), ("STDP", r["sd"]),
-                                  ("suppress", r["su"])) if f]
-            labs.append(", ".join(act) if act else "(none)")
-        ax.set_yticks(list(ypos))
-        ax.set_yticklabels(labs, fontsize=FS_TICK)
-        ax.axvline(ref, color=T["muted"], lw=1.2, ls="--", zorder=1)
-        ax.set_xlim(0, 0.95)
-        ax.set_ylim(-0.7, len(sub) - 0.3)
-        ax.set_title(title, fontsize=FS_LABEL, color=T["ink"], loc="left", pad=8)
-
-    axes[1].set_xlabel("predicted test accuracy", fontsize=FS_LABEL, color=T["ink2"])
-    axes[0].set_xticklabels([])   # shared with the lower panel
-    handles = [
-        Patch(facecolor=GREY[3], edgecolor=T["ink"], label="sleep-phase STDP off"),
-        Patch(facecolor=GREY[1], hatch="///", edgecolor=T["ink"],
-              label="sleep-phase STDP on"),
-        plt.Line2D([], [], color=T["muted"], ls="--", lw=1.2,
-                   label="no-sleep reference"),
-    ]
-    axes[0].legend(handles=handles, loc="lower left", bbox_to_anchor=(0.0, 1.16),
-                   frameon=True, edgecolor=T["axis"], facecolor=T["surface"],
-              framealpha=1.0, borderpad=0.55, fontsize=FS_SERIES, ncol=3,
-                   labelcolor=T["ink2"])
-    save(fig, "ablation_components_BW")
+    # Stacked, centred on the last panel's right edge: half inside the empty
+    # area above the flat lines, half outside.
+    handles = [Line2D([], [], ls="", marker=DS_MARK[d], ms=14, mfc=T["muted"],
+                      mec=T["surface"], label=DS_NICE[d]) for d in DS_ORDER]
+    handles.append(Line2D([], [], color=T["muted"], ls=":", lw=2.4, label="no sleep"))
+    axes[-1].legend(handles=handles, loc="upper center", bbox_to_anchor=(1.0, 1.0),
+                    ncol=1, frameon=True, edgecolor=T["axis"], facecolor=T["surface"],
+                    framealpha=1.0, fontsize=FS_SERIES, labelcolor=T["ink2"],
+                    handletextpad=0.4, borderpad=0.4, labelspacing=0.2, handlelength=1.6)
+    fig.tight_layout(w_pad=2.5)
+    save(fig, "ablation_slope_BW")
 
 
 if __name__ == "__main__":

@@ -13,16 +13,22 @@
 # itself an interaction — noise is meant to matter *because* STDP is active to
 # consolidate what it reactivates — and leave-one-out cannot detect that.
 #
-# RUN ORDER MATTERS: the sleep ratio is read from results/sweep/, so run the
-# sweep first. Without it the driver falls back to 0.1 (the paper's optimum from
-# the capped sweep) and says so loudly.
+# The sleep ratio is read from the sweep (results/sweep/, per-run records or the
+# committed sweep_summary.csv). Without either, the driver falls back to 0.1 and
+# says so loudly. To hold the paper's value regardless, pass --sleep-ratio 0.3.
 #
-#   sbatch slurm/run_sweep.sh          # first
-#   python src/sweep.py --collect      # confirm the optimum
-#   sbatch slurm/run_ablation.sh       # then this
+#   sbatch slurm/run_ablation.sh --sleep-ratio 0.3          # MNIST grid, 85 runs
 #   python src/ablation.py --collect
 #
-# Check the mapping before submitting:  python src/ablation.py --list
+# The paper's other three datasets are a second grid of 255 runs; arguments after
+# the script name are passed through to src/ablation.py:
+#
+#   sbatch --array=0-254 slurm/run_ablation.sh --sleep-ratio 0.3 \
+#       --datasets fmnist,kmnist,notmnist --out-dir results/ablation_datasets
+#   python src/ablation.py --collect --datasets fmnist,kmnist,notmnist \
+#       --out-dir results/ablation_datasets
+#
+# Check the mapping before submitting:  python src/ablation.py --list [same args]
 #
 #SBATCH --job-name=snn_ablation
 #SBATCH --array=0-84
@@ -56,7 +62,7 @@ echo "Node   : $(hostname)   Started : $(date)"
 echo "Root   : ${PROJECT_ROOT}"
 echo "========================================"
 
-if [ ! -d results/sweep ] || [ -z "$(ls -A results/sweep/*.json 2>/dev/null)" ]; then
+if [ -z "$(ls -A results/sweep/*.json 2>/dev/null)" ] && [ ! -f results/sweep/sweep_summary.csv ]; then
     echo "WARNING: results/sweep/ is empty — the sleep ratio will fall back to" >&2
     echo "         0.1 rather than the sweep optimum. Run the sweep first." >&2
 fi
@@ -70,7 +76,7 @@ if [ ! -f noise_env.sif ]; then
 fi
 
 singularity exec noise_env.sif conda run -n noise_env python \
-    src/ablation.py --task-id "${TASK_ID}"
+    src/ablation.py --task-id "${TASK_ID}" "$@"
 
 STATUS=$?
 echo "Finished : $(date)  (exit ${STATUS})"

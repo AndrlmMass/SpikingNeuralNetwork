@@ -1,12 +1,12 @@
 # =============================================================================
 # Shared setup for the three revision-study GLMM scripts
 # =============================================================================
-# Sourced by fit_sweep.R, fit_baselines.R and fit_ablation.R, each of which is
-# run on its own from the repo root:
+# Sourced by fit_sweep.R, fit_baselines.R and fit_ablation_datasets.R, each of
+# which is run on its own from the repo root:
 #
 #   Rscript src/glmm/fit_sweep.R
 #   Rscript src/glmm/fit_baselines.R
-#   Rscript src/glmm/fit_ablation.R
+#   Rscript src/glmm/fit_ablation_datasets.R
 #
 # Why Beta and not beta-binomial: the manuscript's existing analysis is a
 # hierarchical Beta regression on test accuracy. The RF-article convention is
@@ -20,8 +20,8 @@ suppressPackageStartupMessages({
     library(glmmTMB)
 })
 
-# `%||%` entered base R in 4.4; glmmTMB's print methods use it. This R is older,
-# so define it here rather than upgrading the toolchain mid-revision.
+# `%||%` entered base R in 4.4 and glmmTMB's print methods use it; define it for
+# older R versions so the scripts run there too.
 if (!exists("%||%")) `%||%` <- function(a, b) if (is.null(a)) b else a
 
 REPO <- getwd()

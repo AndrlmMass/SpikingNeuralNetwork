@@ -7,7 +7,13 @@ determine which component is responsible for the observed improvement. A
 component-wise ablation separating weight decay, spontaneous noise, sleep-phase
 STDP, and the full protocol is therefore needed."
 
-Design: full 2^4 factorial over the four components, MNIST only, 5 seeds.
+Design: full 2^4 factorial over the four components, 5 seeds, plus a no-sleep
+reference per dataset. The default run is MNIST into results/ablation/; the
+paper's other three datasets were run as a second grid into its own directory:
+
+    python ablation.py --datasets fmnist,kmnist,notmnist --out-dir results/ablation_datasets
+
+src/glmm/fit_ablation_datasets.R reads both summaries.
 
     downscale  power-law pull of each weight toward w_target
     noise      Gaussian membrane noise during sleep
@@ -42,6 +48,8 @@ Usage
   python ablation.py --task-id 7
   python ablation.py --all --skip-done
   python ablation.py --collect
+
+Pass the same --datasets / --out-dir to every call for the second grid.
 """
 
 import argparse

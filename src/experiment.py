@@ -81,10 +81,22 @@ def resolve_sleep_ratio(override=None):
         return float(override), {"source": "--sleep-ratio override"}
 
     import collections
+    import csv
     sweep_dir = os.path.join(REPO, "results", "sweep")
     pooled = collections.defaultdict(list)
     per_ds = collections.defaultdict(lambda: collections.defaultdict(list))
     n_cells = 0
+    source = "sweep"
+
+    def add(acc, rate, dataset):
+        nonlocal n_cells
+        n_cells += 1
+        pooled[float(rate)].append(float(acc))
+        per_ds[dataset or "?"][float(rate)].append(float(acc))
+
+    # Per-cell records (written by sweep.py) are gitignored; a fresh clone has
+    # only the collected summary, which holds the same 220 rows. Without this
+    # fallback a clone would silently run the sleep arm at SLEEP_RATIO_FALLBACK.
     if os.path.isdir(sweep_dir):
         for fn in os.listdir(sweep_dir):
             if not fn.endswith(".json"):
@@ -93,12 +105,16 @@ def resolve_sleep_ratio(override=None):
                 r = json.load(open(os.path.join(sweep_dir, fn)))
             except Exception:
                 continue
-            acc, rate = r.get("test_accuracy"), r.get("sleep_rate")
-            if acc is None or rate is None:
+            if r.get("test_accuracy") is None or r.get("sleep_rate") is None:
                 continue
-            n_cells += 1
-            pooled[float(rate)].append(acc)
-            per_ds[r.get("dataset", "?")][float(rate)].append(acc)
+            add(r["test_accuracy"], r["sleep_rate"], r.get("dataset"))
+    summary = os.path.join(sweep_dir, "sweep_summary.csv")
+    if n_cells == 0 and os.path.exists(summary):
+        source = "sweep (results/sweep/sweep_summary.csv)"
+        with open(summary, newline="") as f:
+            for r in csv.DictReader(f):
+                if r.get("test_accuracy") and r.get("sleep_rate"):
+                    add(r["test_accuracy"], r["sleep_rate"], r.get("dataset"))
 
     # Exclude 0: it is the reference condition, not a sleep duration.
     candidates = {k: v for k, v in pooled.items() if k > 0}
@@ -117,7 +133,7 @@ def resolve_sleep_ratio(override=None):
         if any(k > 0 for k in m)
     }
     return best, {
-        "source": "sweep",
+        "source": source,
         "n_cells": n_cells,
         "pooled_mean_by_ratio": {k: round(means[k], 4) for k in sorted(means)},
         "per_dataset_optimum": ds_opt,
@@ -126,27 +142,18 @@ def resolve_sleep_ratio(override=None):
 
 
 
-# Per-timestep decay rate for the "decay" arm, calibrated rather than guessed.
+# Per-timestep decay rate for the "decay" arm (w <- w * (1 - rate) every step).
 #
-# Total excitatory |w| in the unregularized network grows exponentially, not
-# linearly: STDP potentiation scales with activity, which scales with weight, so
-# dW/dt = (c - lambda) W with c = 2.17e-5 per timestep measured on MNIST
-# (doubling every ~32k timesteps, i.e. ~320 images at 100 ms). Continuous decay
-# therefore has no attractor -- it is marginally stable only at lambda = c, and
-# any mismatch compounds exponentially. This is a structural difference from
-# sleep and normalization, which measure the current weight sum and correct
-# toward a target (closed loop) where decay cannot (open loop).
-#
-# Measured sweep at T=70k on MNIST:
-#     0.5c = 1.08e-5 -> 2.52x W0      1.2c = 2.60e-5 -> 0.92x W0
-#     0.8c = 1.74e-5 -> 1.60x W0      1.5c = 3.25e-5 -> 0.67x W0
-#     1.0c = 2.17e-5 -> 1.18x W0      2.0c = 4.34e-5 -> 0.40x W0
-#
-# The sleep arm settles at 1.80x W0 under the same conditions. Matching that
-# weight scale -- so the comparison isolates *how* growth is constrained rather
-# than *how much* -- interpolates to lambda ~= 1.6e-5. Holding W0 exactly
-# instead would want ~2.4e-5.
-DECAY_RATE = 1e-5  # 2026-10-01: accuracy-optimal on tuning seeds 100-101, MNIST (results/decay_tune; window ~7.5e-6 to 1.25e-5)
+# Tuned for accuracy on MNIST with tuning seeds 100-101, disjoint from the
+# evaluation seeds 42-46, at 2000 train / 500 test images (2026-10-01). Rates
+# from 2.5e-6 to 2e-4 were tried (results/decay_tune/): accuracy is high only in
+# a narrow window, ~7.5e-6 to 1.25e-5, and 1e-5 was best. Below the window the
+# weights still run away; above it they shrink until the network falls silent.
+# Continuous decay is open-loop -- it never measures the weights it shrinks --
+# which is why the window is narrow and why the rate does not transfer across
+# datasets. An earlier rule that matched decay's weight scale to the sleep arm
+# was dropped: under the corrected STDP it gave a rate at which decay did nothing.
+DECAY_RATE = 1e-5
 
 # Regularization cadence comes from CHECK_SLEEP_INTERVAL, so sleep and both
 # normalization arms fire on the same schedule as in the sweep. Not passed as
@@ -376,23 +383,6 @@ def collect():
         print(f"Cells that exited non-zero: {failed}")
 
 
-def calibrate_decay_rate():
-    """Print guidance for choosing DECAY_RATE. Not run automatically.
-
-    The continuous-decay arm is only a fair comparator if it reaches a
-    *comparable* steady-state weight magnitude to sleep. Otherwise the
-    comparison measures how much shrinkage each method applies rather than how
-    it applies it, which is exactly the objection Reviewer 3 raised about the
-    original no-sleep baseline.
-
-    Procedure: run the decay arm on the validation split at several rates,
-    record the steady-state total |w| in the excitatory block, and pick the rate
-    whose plateau matches the level the sleep arm converges to. Report both the
-    chosen rate and the matched plateau in the paper.
-    """
-    print(calibrate_decay_rate.__doc__)
-
-
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     g = ap.add_mutually_exclusive_group(required=True)
@@ -400,11 +390,6 @@ def main():
     g.add_argument("--task-id", type=int, help="run a single cell by id (SLURM arrays)")
     g.add_argument("--all", action="store_true", help="run every cell sequentially")
     g.add_argument("--collect", action="store_true", help="merge cells into a CSV")
-    g.add_argument(
-        "--calibrate-help",
-        action="store_true",
-        help="explain how to choose the decay rate",
-    )
     ap.add_argument(
         "--sleep-ratio",
         type=float,
@@ -431,11 +416,11 @@ def main():
     ratio, prov = RESOLVED_RATIO
     print(f"Sleep ratio for the sleep arm: {ratio}  ({prov['source']})")
     if prov["source"].startswith("FALLBACK"):
-        print("  WARNING: no sweep results in results/sweep/. The sleep arm will")
-        print(f"  use the fallback {SLEEP_RATIO_FALLBACK}, which is the paper's")
-        print("  reported optimum from the sweep that was capped at 28.57%. Run")
+        print("  WARNING: no sweep results in results/sweep/ (neither per-cell")
+        print(f"  records nor sweep_summary.csv). The sleep arm will use the fallback")
+        print(f"  {SLEEP_RATIO_FALLBACK}, the optimum of the original, capped sweep. Run")
         print("  src/sweep.py first, or pass --sleep-ratio explicitly.")
-    else:
+    elif "n_cells" in prov:
         print(f"  from {prov['n_cells']} sweep cells; "
               f"pooled means {prov['pooled_mean_by_ratio']}")
         print(f"  per-dataset optima {prov['per_dataset_optimum']}"
@@ -461,10 +446,6 @@ def main():
 
     if args.collect:
         collect()
-        return 0
-
-    if args.calibrate_help:
-        calibrate_decay_rate()
         return 0
 
     if args.task_id is not None:

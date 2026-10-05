@@ -1,0 +1,5 @@
+"dataset","mean_acc","n"
+"fmnist",0.08,5
+"kmnist",0.105,5
+"mnist",0.1,5
+"notmnist",0.095,5

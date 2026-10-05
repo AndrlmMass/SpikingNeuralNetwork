@@ -68,7 +68,7 @@ if [ ! -f noise_env.sif ]; then
 fi
 
 singularity exec noise_env.sif conda run -n noise_env python \
-    src/sweep.py --task-id "${TASK_ID}"
+    src/sweep.py --task-id "${TASK_ID}" "$@"
 
 STATUS=$?
 echo "Finished : $(date)  (exit ${STATUS})"

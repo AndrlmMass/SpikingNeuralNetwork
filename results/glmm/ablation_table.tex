@@ -1,0 +1,39 @@
+{
+\setlength{\tabcolsep}{10pt} % Only affects this table
+\begin{longtable}{lrrrrl}
+    \caption{Mixed effect model with beta regression: main effects and pairwise interactions of the sleep components \label{tab:betareg_ablation}}\\
+    \toprule
+    Effect  & Estimate & Std. Error & \textit{z} value & \textit{p}-value & \\
+    \midrule
+    \endfirsthead
+
+    \toprule
+    Effect  & Estimate & Std. Error & \textit{z} value & \textit{p}-value & \\
+    \midrule
+    \endhead
+        \multicolumn{6}{l}{\textit{Downscaling}}\\
+        Main effect (on vs off) & 2.819 & .033 & 84.612 & $<.001$ & ***\\
+        \quad $\times$ STDP & .026 & .066 & .390 & .696 & \\
+        \quad $\times$ membrane noise & -.057 & .066 & -.852 & .394 & \\
+        \quad $\times$ input suppression & .041 & .066 & .624 & .533 & \\
+        \midrule
+        \multicolumn{6}{l}{\textit{STDP}}\\
+        Main effect (on vs off) & .029 & .033 & .869 & .385 & \\
+        \quad $\times$ membrane noise & .079 & .066 & 1.187 & .235 & \\
+        \quad $\times$ input suppression & -.033 & .066 & -.504 & .615 & \\
+        \midrule
+        \multicolumn{6}{l}{\textit{Membrane noise}}\\
+        Main effect (on vs off) & .030 & .033 & .897 & .369 & \\
+        \quad $\times$ input suppression & -.087 & .066 & -1.307 & .191 & \\
+        \midrule
+        \multicolumn{6}{l}{\textit{Input suppression}}\\
+        Main effect (on vs off) & .026 & .033 & .787 & .431 & \\
+        \midrule
+        \multicolumn{2}{l}{Random effect variance}\\
+        Groups & Name & Variance & Std.Dev.& &\\
+        Seed & (Intercept) & .015 & .123 & &\\
+
+        \bottomrule
+    \multicolumn{6}{p{0.9\linewidth}}{\footnotesize Log odds ratios on the logit scale. Main effects compare each component on versus off, averaged over the four datasets and over all combinations of the other components; interactions give the change in the first component's log odds ratio when the second component is also switched on, and each pair is reported once. Model: accuracy $\sim$ downscaling $\times$ STDP $\times$ membrane noise $\times$ input suppression $\times$ dataset + (1$|$seed), with the Beta precision $\phi$ estimated separately for each combination of components and dataset. Significance levels: * $p<.05$, ** $p<.01$, *** $p<.001$.}\\
+\end{longtable}
+}
