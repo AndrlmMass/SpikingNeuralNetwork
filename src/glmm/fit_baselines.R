@@ -5,10 +5,21 @@
 #
 # Same structure as fit_sweep.R. Dataset is a FIXED effect crossed with method,
 # not a random intercept: there are only four datasets, and the methods do not
-# shift by a constant across them -- continuous decay was calibrated on MNIST
-# and works only there (0.74 on MNIST, 0.11-0.29 elsewhere), which a random
-# intercept cannot represent. The additive model is kept only for the
-# likelihood-ratio test that justifies the interaction.
+# shift by a constant across them -- continuous decay is level with sleep on
+# KMNIST and at chance on Fashion-MNIST -- which a random intercept cannot
+# represent. The additive model is kept only for the likelihood-ratio test that
+# justifies the interaction.
+#
+# The Beta precision (phi) is estimated per method x dataset cell
+# (dispformula = ~ method * dataset). Seed-to-seed spread is not a property of
+# the dataset: continuous decay is bimodal on MNIST and NotMNIST (two of five
+# seeds collapse to chance) while every other method stays within a few points.
+# A per-dataset phi spreads that bimodality onto every method in the dataset,
+# widening sleep's MNIST interval to 0.59-0.84 around seeds within +-0.015, and
+# pulling the cell means. The candidate dispersion structures are compared by
+# AIC below (baselines_dispersion_aic.csv); the per-cell model wins on AIC and
+# BIC. Each cell's phi rests on five seeds, so treat the phi values themselves
+# as rough.
 #
 # Sleep is the reference level: every reported effect is a method minus sleep.
 #
@@ -21,6 +32,8 @@
 #          results/glmm/baselines_predictions_by_dataset.csv   (figure bars)
 #          results/glmm/baselines_contrasts_by_dataset.csv     (simple effects)
 #          results/glmm/baselines_table.{csv,tex}, baselines_table_random.csv
+#          results/glmm/baselines_table_dispersion.csv          (phi per cell)
+#          results/glmm/baselines_dispersion_aic.csv            (phi structures)
 # =============================================================================
 
 source("src/glmm/common.R")
@@ -39,14 +52,50 @@ bl$seed <- factor(bl$seed)
 contrasts(bl$dataset) <- contr.sum(nlevels(bl$dataset))
 
 fit_add <- glmmTMB(acc ~ method + dataset + (1 | seed),
+                   dispformula = ~ method * dataset,
                    family = beta_family(link = "logit"), data = bl)
 fit_bl <- glmmTMB(acc ~ method * dataset + (1 | seed),
+                  dispformula = ~ method * dataset,
                   family = beta_family(link = "logit"), data = bl)
-report(fit_bl, "BASELINES  acc ~ method * dataset + (1|seed), sleep as reference")
+report(fit_bl, "BASELINES  acc ~ method * dataset + (1|seed), phi ~ method * dataset, sleep as reference")
 
 lrt <- anova(fit_add, fit_bl)
 cat("\n--- method x dataset interaction (LRT against the additive model) ---\n")
 print(lrt)
+
+# Dispersion structure: same mean model, five candidate phi models.
+disp_forms <- list("~ 1" = ~ 1, "~ dataset" = ~ dataset, "~ method" = ~ method,
+                   "~ method + dataset" = ~ method + dataset)
+disp_fits <- lapply(disp_forms, function(d)
+    glmmTMB(acc ~ method * dataset + (1 | seed), dispformula = d,
+            family = beta_family(link = "logit"), data = bl))
+disp_fits[["~ method * dataset"]] <- fit_bl
+disp_aic <- data.frame(
+    dispersion = names(disp_fits),
+    k = sapply(disp_fits, function(x) attr(logLik(x), "df")),
+    logLik = sapply(disp_fits, function(x) as.numeric(logLik(x))),
+    AIC = sapply(disp_fits, AIC), BIC = sapply(disp_fits, BIC),
+    pdHess = sapply(disp_fits, function(x) isTRUE(x$sdr$pdHess)),
+    row.names = NULL)
+disp_aic$dAIC <- disp_aic$AIC - min(disp_aic$AIC)
+write.csv(disp_aic, file.path(OUT, "baselines_dispersion_aic.csv"), row.names = FALSE)
+cat("\n--- dispersion structure (mean model fixed at method * dataset) ---\n")
+print(disp_aic, digits = 5)
+cat("\n--- per-cell dispersion (LRT against phi ~ method + dataset) ---\n")
+print(anova(disp_fits[["~ method + dataset"]], fit_bl))
+
+# Precision per cell on the response scale. The dispersion model uses the same
+# coding as the mean model (treatment on method, sum-to-zero on dataset), so
+# build the design rows directly and check they line up with the coefficients.
+cells <- expand.grid(method = levels(bl$method), dataset = levels(bl$dataset))
+mm_phi <- model.matrix(~ method * dataset, cells,
+                       contrasts.arg = list(method = contrasts(bl$method),
+                                            dataset = contrasts(bl$dataset)))
+stopifnot(identical(colnames(mm_phi), names(fixef(fit_bl)$disp)))
+phi <- data.frame(method = as.character(cells$method),
+                  dataset = as.character(cells$dataset),
+                  phi = as.numeric(exp(mm_phi %*% fixef(fit_bl)$disp)))
+phi <- phi[order(phi$dataset, phi$method), ]
 
 write.csv(tidy_fit(fit_bl, "baselines"), file.path(OUT, "baselines_coefs.csv"),
           row.names = FALSE)
@@ -91,7 +140,7 @@ write.csv(ctr_ds, file.path(OUT, "baselines_contrasts_by_dataset.csv"),
 # from the sweep, so it is not fixed at 10%).
 sleep_pct <- round(100 * max(bl$sleep_ratio[as.character(bl$method) == "sleep"], na.rm = TRUE))
 label <- c(sleep = sprintf("Sleep %d\\%%", sleep_pct), none = "No regularization",
-           decay = "Weight decay", norm_layer = "Layer normalization",
+           decay = "Continuous decay", norm_layer = "Layer normalization",
            norm_neuron = "Synaptic scaling")
 order_terms <- c("none", "decay", "norm_layer", "norm_neuron")
 
@@ -135,6 +184,7 @@ re$sd <- sqrt(re$variance)
 
 write.csv(tab, file.path(OUT, "baselines_table.csv"), row.names = FALSE)
 write.csv(re, file.path(OUT, "baselines_table_random.csv"), row.names = FALSE)
+write.csv(phi, file.path(OUT, "baselines_table_dispersion.csv"), row.names = FALSE)
 
 # --- LaTeX, same layout as sweep_table.tex -----------------------------------
 apa <- function(x, d = 3) {
@@ -184,7 +234,9 @@ tex <- c(tex, "", "        \\bottomrule",
          paste0("    \\multicolumn{6}{p{0.9\\linewidth}}{\\footnotesize Estimates on the ",
                 "logit scale. In each block the first row is sleep's accuracy and ",
                 "the indented rows are each regularizer minus sleep. ",
-                "Model: accuracy $\\sim$ method $\\times$ dataset + (1$|$seed); ",
+                "Model: accuracy $\\sim$ method $\\times$ dataset + (1$|$seed), ",
+                "with the Beta precision $\\phi$ estimated separately for each ",
+                "method--dataset combination; ",
                 "the averaged block is taken over the four datasets. ",
                 "Significance levels: * $p<.05$, ** $p<.01$, *** $p<.001$.}\\\\"),
          "\\end{longtable}", "}")
@@ -194,6 +246,7 @@ writeLines(tex, file.path(OUT, "baselines_table.tex"))
 cat("\n--- table (logit scale, averaged over datasets) ---\n")
 print(tab, digits = 4)
 print(re, digits = 4)
+print(phi, digits = 4)
 cat("\n--- per-dataset contrasts vs sleep ---\n")
 print(ctr_ds, digits = 3)
 cat("\n--- sign agreement across datasets ---\n")
@@ -204,4 +257,4 @@ for (m in order_terms) {
 }
 cat("\nwrote baselines_coefs.csv, baselines_predictions{,_by_dataset}.csv,",
     "baselines_contrasts_by_dataset.csv, baselines_table.{csv,tex},",
-    "baselines_table_random.csv\n")
+    "baselines_table_random.csv, baselines_table_dispersion.csv\n")

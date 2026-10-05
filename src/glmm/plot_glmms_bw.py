@@ -208,11 +208,13 @@ def fig_baselines():
     model-predicted accuracy of each method on each dataset with its 95% CI.
 
     Predictions come from the same model as the regression table,
-    method * dataset + (1|seed) in fit_baselines.R, seed at zero. The
-    interaction is what makes per-dataset bars legitimate: continuous decay was
-    calibrated on MNIST and only works there, and a model without the
-    interaction would predict it failing on MNIST too. The interaction is
-    preferred over method + dataset at chi2(12) = 87.3, p < .001.
+    method * dataset + (1|seed) with phi ~ method * dataset in
+    fit_baselines.R, seed at zero. The interaction is what makes per-dataset
+    bars legitimate: the methods do not shift by a constant across datasets
+    (continuous decay is level with sleep on KMNIST and at chance on
+    Fashion-MNIST). Because phi is per cell, the wide intervals on decay
+    (bimodal over seeds on MNIST and NotMNIST) do not spill onto the other
+    methods.
 
     Method identity is carried twice -- grey step and hatch -- because within a
     group it is position, not an axis label, that separates the bars.
