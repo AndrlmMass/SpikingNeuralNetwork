@@ -57,7 +57,8 @@ GRIDS = [
      ["--datasets", "fmnist,kmnist,notmnist", "--out-dir", "results/ablation_datasets"],
      "ablation_other"),
 ]
-R_SCRIPTS = ["fit_sweep.R", "fit_baselines.R", "fit_ablation_datasets.R"]
+R_SCRIPTS = ["fit_sweep.R", "fit_baselines.R", "fit_ablation_datasets.R",
+             "ablation_figure_data.R"]
 
 
 def log(msg):

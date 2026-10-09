@@ -1,260 +1,117 @@
 # =============================================================================
 # BASELINES — sleep against conventional stabilization (R3.1)
 # =============================================================================
-#   accuracy ~ regularization method x dataset (5 methods, 4 datasets, 5 seeds)
+#   accuracy ~ method + (1 | dataset) + (1 | seed) + (1 | dataset:seed)
+#   5 methods, 4 datasets, 5 seeds; Beta family, logit link, one shared
+#   precision parameter.
 #
-# Same structure as fit_sweep.R. Dataset is a FIXED effect crossed with method,
-# not a random intercept: there are only four datasets, and the methods do not
-# shift by a constant across them -- continuous decay is level with sleep on
-# KMNIST and at chance on Fashion-MNIST -- which a random intercept cannot
-# represent. The additive model is kept only for the likelihood-ratio test that
-# justifies the interaction.
-#
-# The Beta precision (phi) is estimated per method x dataset cell
-# (dispformula = ~ method * dataset). Seed-to-seed spread is not a property of
-# the dataset: continuous decay is bimodal on MNIST and NotMNIST (two of five
-# seeds collapse to chance) while every other method stays within a few points.
-# A per-dataset phi spreads that bimodality onto every method in the dataset,
-# widening sleep's MNIST interval to 0.59-0.84 around seeds within +-0.015, and
-# pulling the cell means. The candidate dispersion structures are compared by
-# AIC below (baselines_dispersion_aic.csv); the per-cell model wins on AIC and
-# BIC. Each cell's phi rests on five seeds, so treat the phi values themselves
-# as rough.
-#
-# Sleep is the reference level: every reported effect is a method minus sleep.
+# Method is a fixed factor with sleep as the reference level, so every reported
+# effect is a method minus sleep. Dataset, seed and their combination are random
+# intercepts (each dataset x seed pair is one training setup shared by all five
+# methods), matching the structure of the submitted article. Reported effects
+# are population-level: a typical dataset and seed (random effects at zero).
 #
 # Usage (from the repo root):
 #   Rscript src/glmm/fit_baselines.R
 #
 # Inputs:  results/baselines/baselines_summary.csv
 # Outputs: results/glmm/baselines_coefs.csv
-#          results/glmm/baselines_predictions.csv             (dataset-averaged)
+#          results/glmm/baselines_predictions.csv             (population level)
 #          results/glmm/baselines_predictions_by_dataset.csv   (figure bars)
-#          results/glmm/baselines_contrasts_by_dataset.csv     (simple effects)
 #          results/glmm/baselines_table.{csv,tex}, baselines_table_random.csv
-#          results/glmm/baselines_table_dispersion.csv          (phi per cell)
-#          results/glmm/baselines_dispersion_aic.csv            (phi structures)
 # =============================================================================
 
 source("src/glmm/common.R")
-suppressPackageStartupMessages(library(emmeans))
-emm_options(msg.interaction = FALSE, msg.nesting = FALSE)
 
 bl <- read.csv(file.path(REPO, "results", "baselines", "baselines_summary.csv"))
 bl <- bl[!is.na(bl$test_accuracy), ]
-bl$acc <- squeeze(bl$test_accuracy, 700)
+bl$acc <- squeeze(bl$test_accuracy, N_TEST)
 bl$method <- relevel(factor(bl$method), ref = "sleep")
 bl$dataset <- factor(bl$dataset)
 bl$seed <- factor(bl$seed)
-# Sum-to-zero coding on dataset so the raw method coefficients read as the
-# effect for an average dataset (see fit_sweep.R). emmeans results are
-# identical under either coding.
-contrasts(bl$dataset) <- contr.sum(nlevels(bl$dataset))
 
-fit_add <- glmmTMB(acc ~ method + dataset + (1 | seed),
-                   dispformula = ~ method * dataset,
-                   family = beta_family(link = "logit"), data = bl)
-fit_bl <- glmmTMB(acc ~ method * dataset + (1 | seed),
-                  dispformula = ~ method * dataset,
+fit_bl <- glmmTMB(acc ~ method + (1 | dataset) + (1 | seed) + (1 | dataset:seed),
                   family = beta_family(link = "logit"), data = bl)
-report(fit_bl, "BASELINES  acc ~ method * dataset + (1|seed), phi ~ method * dataset, sleep as reference")
-
-lrt <- anova(fit_add, fit_bl)
-cat("\n--- method x dataset interaction (LRT against the additive model) ---\n")
-print(lrt)
-
-# Dispersion structure: same mean model, five candidate phi models.
-disp_forms <- list("~ 1" = ~ 1, "~ dataset" = ~ dataset, "~ method" = ~ method,
-                   "~ method + dataset" = ~ method + dataset)
-disp_fits <- lapply(disp_forms, function(d)
-    glmmTMB(acc ~ method * dataset + (1 | seed), dispformula = d,
-            family = beta_family(link = "logit"), data = bl))
-disp_fits[["~ method * dataset"]] <- fit_bl
-disp_aic <- data.frame(
-    dispersion = names(disp_fits),
-    k = sapply(disp_fits, function(x) attr(logLik(x), "df")),
-    logLik = sapply(disp_fits, function(x) as.numeric(logLik(x))),
-    AIC = sapply(disp_fits, AIC), BIC = sapply(disp_fits, BIC),
-    pdHess = sapply(disp_fits, function(x) isTRUE(x$sdr$pdHess)),
-    row.names = NULL)
-disp_aic$dAIC <- disp_aic$AIC - min(disp_aic$AIC)
-write.csv(disp_aic, file.path(OUT, "baselines_dispersion_aic.csv"), row.names = FALSE)
-cat("\n--- dispersion structure (mean model fixed at method * dataset) ---\n")
-print(disp_aic, digits = 5)
-cat("\n--- per-cell dispersion (LRT against phi ~ method + dataset) ---\n")
-print(anova(disp_fits[["~ method + dataset"]], fit_bl))
-
-# Precision per cell on the response scale. The dispersion model uses the same
-# coding as the mean model (treatment on method, sum-to-zero on dataset), so
-# build the design rows directly and check they line up with the coefficients.
-cells <- expand.grid(method = levels(bl$method), dataset = levels(bl$dataset))
-mm_phi <- model.matrix(~ method * dataset, cells,
-                       contrasts.arg = list(method = contrasts(bl$method),
-                                            dataset = contrasts(bl$dataset)))
-stopifnot(identical(colnames(mm_phi), names(fixef(fit_bl)$disp)))
-phi <- data.frame(method = as.character(cells$method),
-                  dataset = as.character(cells$dataset),
-                  phi = as.numeric(exp(mm_phi %*% fixef(fit_bl)$disp)))
-phi <- phi[order(phi$dataset, phi$method), ]
-
+report(fit_bl, "BASELINES  acc ~ method + (1|dataset) + (1|seed) + (1|dataset:seed)")
 write.csv(tidy_fit(fit_bl, "baselines"), file.path(OUT, "baselines_coefs.csv"),
           row.names = FALSE)
 
 # =============================================================================
-# Estimated marginal means and contrasts (emmeans)
+# Population-level estimates (predict(); random effects at zero)
 # =============================================================================
-emm_md <- emmeans(fit_bl, ~ method * dataset)   # all 20 cells
-emm_m <- emmeans(fit_bl, ~ method)              # averaged over datasets
-
-s_md <- summary(emm_md, type = "response", infer = c(TRUE, FALSE))
-pred_ds <- data.frame(dataset = as.character(s_md$dataset),
-                      method = as.character(s_md$method),
-                      fit = s_md$response, lo = s_md$asymp.LCL, hi = s_md$asymp.UCL)
-write.csv(pred_ds[order(pred_ds$dataset, pred_ds$method), ],
-          file.path(OUT, "baselines_predictions_by_dataset.csv"), row.names = FALSE)
-
-s_m <- summary(emm_m, type = "response", infer = c(TRUE, FALSE))
-write.csv(data.frame(method = as.character(s_m$method), fit = s_m$response,
-                     lo = s_m$asymp.LCL, hi = s_m$asymp.UCL),
+pred <- pop_pred(fit_bl, data.frame(method = factor(levels(bl$method),
+                                                    levels = levels(bl$method))))
+write.csv(data.frame(method = as.character(pred$method), fit = pred$fit,
+                     lo = pred$lo, hi = pred$hi),
           file.path(OUT, "baselines_predictions.csv"), row.names = FALSE)
 
-# 1. Each method vs sleep, averaged over datasets (main text).
-# 2. Each method vs sleep within one dataset (appendix).
-# Unadjusted Wald tests, as in the sweep.
-ctr <- as.data.frame(contrast(emm_m, "trt.vs.ctrl1", adjust = "none"))
-ctr_ds <- as.data.frame(contrast(emm_md, "trt.vs.ctrl1", by = "dataset",
-                                 adjust = "none"))
-method_of <- function(x) sub(" *-.*$", "", as.character(x))
-ctr$method <- method_of(ctr$contrast)
-ctr_ds$method <- method_of(ctr_ds$contrast)
-ctr_ds <- ctr_ds[order(ctr_ds$dataset, ctr_ds$method),
-                 c("dataset", "method", "estimate", "SE", "z.ratio", "p.value")]
-names(ctr_ds) <- c("dataset", "method", "estimate", "std_error", "z", "p")
-write.csv(ctr_ds, file.path(OUT, "baselines_contrasts_by_dataset.csv"),
-          row.names = FALSE)
+# Sleep (intercept) and each method vs sleep (coefficients), Wald z tests.
+cf <- coef_rows(fit_bl, "method")
+
+# Dataset-specific predictions for the figure: fixed effects plus each dataset's
+# random intercept, seed at zero. No per-dataset tests are made.
+pred_ds <- cond_pred(fit_bl, expand.grid(method = levels(bl$method),
+                                         dataset = levels(bl$dataset)), bl$seed)
+pred_ds <- data.frame(dataset = as.character(pred_ds$dataset),
+                      method = as.character(pred_ds$method),
+                      fit = pred_ds$fit, lo = pred_ds$lo, hi = pred_ds$hi)
+write.csv(pred_ds[order(pred_ds$dataset, pred_ds$method), ],
+          file.path(OUT, "baselines_predictions_by_dataset.csv"), row.names = FALSE)
 
 # =============================================================================
 # Regression table
 # =============================================================================
-# Label the sleep row with the ratio the sleep arm actually ran at (it comes
-# from the sweep, so it is not fixed at 10%).
+# First row: sleep's accuracy (logit scale); then every other method minus sleep.
+# The row label carries the ratio the sleep arm actually ran at (from the sweep).
 sleep_pct <- round(100 * max(bl$sleep_ratio[as.character(bl$method) == "sleep"], na.rm = TRUE))
 label <- c(sleep = sprintf("Sleep %d\\%%", sleep_pct), none = "No regularization",
            decay = "Continuous decay", norm_layer = "Layer normalization",
            norm_neuron = "Synaptic scaling")
 order_terms <- c("none", "decay", "norm_layer", "norm_neuron")
-
 stars <- function(p) ifelse(p < 0.001, "***", ifelse(p < 0.01, "**",
                      ifelse(p < 0.05, "*", "")))
 
-# One block averaged over datasets, then one block per dataset. Each block is
-# sleep's accuracy (logit scale) followed by every other method minus sleep.
-# The dataset blocks are the simple effects in baselines_contrasts_by_dataset.csv;
-# they are what the averaged block can hide (decay is level with sleep on MNIST
-# and far below it elsewhere).
-datasets <- c(mnist = "MNIST", kmnist = "KMNIST", fmnist = "Fashion-MNIST",
-              notmnist = "NotMNIST")
-
-ref_avg <- as.data.frame(summary(emm_m, infer = c(FALSE, TRUE)))
-ref_avg <- ref_avg[ref_avg$method == "sleep", ]
-ref_ds <- as.data.frame(summary(emm_md, infer = c(FALSE, TRUE)))
-ref_ds <- ref_ds[ref_ds$method == "sleep", ]
-
-block_df <- function(block, ref, c) {
-    c <- c[match(order_terms, c$method), ]
-    rbind(data.frame(block = block, term = "sleep", estimate = ref$emmean,
-                     std_error = ref$SE, z = ref$z.ratio, p = ref$p.value),
-          data.frame(block = block, term = c$method, estimate = c$estimate,
-                     std_error = c[["SE"]] %||% c$std_error,
-                     z = c[["z.ratio"]] %||% c$z, p = c[["p.value"]] %||% c$p))
-}
-tab <- block_df("average", ref_avg, ctr)
-for (d in names(datasets)) {
-    tab <- rbind(tab, block_df(d, ref_ds[ref_ds$dataset == d, ],
-                               ctr_ds[ctr_ds$dataset == d, ]))
-}
+cf$level[cf$level == "(Intercept)"] <- "sleep"
+cf <- cf[match(c("sleep", order_terms), cf$level), ]
+stopifnot(!anyNA(cf$level))
+tab <- data.frame(term = cf$level, estimate = cf$estimate, std_error = cf$SE,
+                  z = cf$z.ratio, p = cf$p.value)
 rownames(tab) <- NULL
 tab$sig <- stars(tab$p)
 
-vcl <- glmmTMB::VarCorr(fit_bl)$cond
-re <- data.frame(group = names(vcl),
-                 variance = sapply(vcl, function(v) as.numeric(v)[1]),
-                 row.names = NULL)
-re$sd <- sqrt(re$variance)
-
+re <- random_effects(fit_bl)
 write.csv(tab, file.path(OUT, "baselines_table.csv"), row.names = FALSE)
 write.csv(re, file.path(OUT, "baselines_table_random.csv"), row.names = FALSE)
-write.csv(phi, file.path(OUT, "baselines_table_dispersion.csv"), row.names = FALSE)
 
 # --- LaTeX, same layout as sweep_table.tex -----------------------------------
-apa <- function(x, d = 3) {
-    out <- sprintf(paste0("%.", d, "f"), x)
-    out <- sub("^0\\.", ".", out)
-    sub("^-0\\.", "-.", out)
-}
-apa_p <- function(p) ifelse(p < 0.001, "$<.001$", apa(p, 3))
 tex_row <- function(lab, r) sprintf("        %s & %s & %s & %s & %s & %s\\\\",
     lab, apa(r$estimate), apa(r$std_error), apa(r$z), apa_p(r$p), r$sig)
-small <- function(x, d = 3) ifelse(x < 10^(-d), sprintf("$< .%s1$", strrep("0", d - 1)), apa(x, d))
-subhead <- function(txt) sprintf("        \\multicolumn{6}{l}{\\textit{%s}}\\\\", txt)
-block_tex <- function(block, head) {
-    b <- tab[tab$block == block, ]
-    out <- subhead(head)
-    for (i in seq_len(nrow(b))) {
-        lab <- if (b$term[i] == "sleep") label[["sleep"]] else
-            paste0("\\quad ", label[[b$term[i]]])
-        out <- c(out, tex_row(lab, b[i, ]))
-    }
-    out
-}
 header <- "    Effect  & Estimate & Std. Error & \\textit{z} value & \\textit{p}-value & \\\\"
-
 tex <- c(
     "{",
     "\\setlength{\\tabcolsep}{10pt} % Only affects this table",
     "\\begin{longtable}{lrrrrl}",
     "    \\caption{Mixed effect model with beta regression: sleep against conventional stabilization \\label{tab:betareg_baselines}}\\\\",
     "    \\toprule", header, "    \\midrule", "    \\endfirsthead", "",
-    "    \\toprule", header, "    \\midrule", "    \\endhead",
-    block_tex("average", "Averaged over datasets")
+    "    \\toprule", header, "    \\midrule", "    \\endhead"
 )
-for (d in names(datasets)) {
-    tex <- c(tex, "        \\midrule", block_tex(d, datasets[[d]]))
+for (i in seq_len(nrow(tab))) {
+    lab <- if (tab$term[i] == "sleep") label[["sleep"]] else
+        paste0("\\quad ", label[[tab$term[i]]])
+    tex <- c(tex, tex_row(lab, tab[i, ]))
 }
-pretty_grp <- c(dataset = "Dataset", seed = "Seed")
-tex <- c(tex, "        \\midrule",
-         "        \\multicolumn{2}{l}{Random effect variance}\\\\",
-         "        Groups & Name & Variance & Std.Dev.& &\\\\")
-for (i in seq_len(nrow(re))) {
-    tex <- c(tex, sprintf("        %s & (Intercept) & %s & %s & &\\\\",
-                          pretty_grp[[re$group[i]]], small(re$variance[i]),
-                          small(re$sd[i])))
-}
-tex <- c(tex, "", "        \\bottomrule",
+tex <- c(tex, re_tex(re), "", "        \\bottomrule",
          paste0("    \\multicolumn{6}{p{0.9\\linewidth}}{\\footnotesize Estimates on the ",
-                "logit scale. In each block the first row is sleep's accuracy and ",
-                "the indented rows are each regularizer minus sleep. ",
-                "Model: accuracy $\\sim$ method $\\times$ dataset + (1$|$seed), ",
-                "with the Beta precision $\\phi$ estimated separately for each ",
-                "method--dataset combination; ",
-                "the averaged block is taken over the four datasets. ",
+                "logit scale. The first row is sleep's accuracy and the indented rows ",
+                "are each regularizer minus sleep. Model: accuracy $\\sim$ method + ",
+                "(1$|$dataset) + (1$|$seed) + (1$|$dataset:seed), with a single ",
+                "precision parameter; estimates are for a typical dataset and seed. ",
                 "Significance levels: * $p<.05$, ** $p<.01$, *** $p<.001$.}\\\\"),
          "\\end{longtable}", "}")
 writeLines(tex, file.path(OUT, "baselines_table.tex"))
 
-# --- console ---
-cat("\n--- table (logit scale, averaged over datasets) ---\n")
+cat("\n--- table (logit scale, population level) ---\n")
 print(tab, digits = 4)
 print(re, digits = 4)
-print(phi, digits = 4)
-cat("\n--- per-dataset contrasts vs sleep ---\n")
-print(ctr_ds, digits = 3)
-cat("\n--- sign agreement across datasets ---\n")
-for (m in order_terms) {
-    e <- ctr_ds$estimate[ctr_ds$method == m]
-    cat(sprintf("%-12s %s\n", m,
-                if (max(e) > 0 && min(e) < 0) "CROSSOVER" else "same sign"))
-}
 cat("\nwrote baselines_coefs.csv, baselines_predictions{,_by_dataset}.csv,",
-    "baselines_contrasts_by_dataset.csv, baselines_table.{csv,tex},",
-    "baselines_table_random.csv, baselines_table_dispersion.csv\n")
+    "baselines_table.{csv,tex}, baselines_table_random.csv\n")

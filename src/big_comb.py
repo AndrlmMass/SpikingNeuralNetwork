@@ -2444,6 +2444,15 @@ class snn_sleepy:
                         _tracking_time_offset += float(max(_wt_times)) + 1.0
                     # Expose for analysis harnesses (sleep-episode metrics).
                     self.weight_tracking_sleep = all_weight_tracking_sleep
+                    # Opt-in: with SNN_DUMP_EPISODES set (see train._dump_episode),
+                    # also write the snapshot trajectory; rewritten each batch, so
+                    # the file is complete once training ends.
+                    _dump_dir = os.environ.get("SNN_DUMP_EPISODES")
+                    if _dump_dir:
+                        import json as _json
+                        os.makedirs(_dump_dir, exist_ok=True)
+                        with open(os.path.join(_dump_dir, "tracking.json"), "w") as _f:
+                            _json.dump(all_weight_tracking_sleep, _f, default=float)
 
                     # Suppress per-epoch plotting during training (plot only after training)
 

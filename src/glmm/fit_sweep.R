@@ -32,11 +32,11 @@ sw$acc <- squeeze(sw$test_accuracy, sw$n_test)
 # Sleep duration as a FACTOR, not continuous: the manuscript reports one
 # coefficient per level against 0%, and the response is non-monotonic, so a
 # linear term would misrepresent it. Treatment-coded, 0% as reference.
-sw$ratio_f <- relevel(factor(sw$sleep_rate), ref = "0")
+sw$sleep_ratio <- relevel(factor(sw$sleep_rate), ref = "0")
 sw$dataset <- factor(sw$dataset)
 sw$seed <- factor(sw$seed)
 
-# Sum-to-zero (deviation) coding on dataset, so that the raw ratio_f
+# Sum-to-zero (deviation) coding on dataset, so that the raw sleep_ratio
 # coefficients read as the effect of sleep for an AVERAGE dataset rather than
 # the effect at whichever dataset sorts first, which is what R's default
 # treatment coding gives. This affects only the coefficient dump in
@@ -55,7 +55,7 @@ contrasts(sw$dataset) <- contr.sum(nlevels(sw$dataset))
 # (1|dataset:seed) is not used: it was estimated at SD ~0 (singular) and
 # left the fixed effects unchanged to 1e-5.
 fit_sw <- glmmTMB(
-    acc ~ ratio_f * dataset + (1 | seed),
+    acc ~ sleep_ratio * dataset + (1 | seed),
     family = beta_family(link = "logit"), data = sw
 )
 report(fit_sw, "SWEEP  acc ~ factor(sleep duration) * dataset + (1|seed)")
@@ -68,19 +68,19 @@ write.csv(tidy_fit(fit_sw, "sweep"), file.path(OUT, "sweep_coefs.csv"), row.name
 # scale, so a dataset-averaged value back-transforms to the accuracy of a
 # typical dataset rather than to the mean of four accuracies. Random effects sit
 # at zero throughout, i.e. a typical seed.
-emm_rd <- emmeans(fit_sw, ~ ratio_f * dataset)   # all 44 cells
-emm_r <- emmeans(fit_sw, ~ ratio_f)              # averaged over datasets
+emm_rd <- emmeans(fit_sw, ~ sleep_ratio * dataset)   # all 44 cells
+emm_r <- emmeans(fit_sw, ~ sleep_ratio)              # averaged over datasets
 
 # Predictions for the figure panels and for the dataset-averaged curve.
 pred_out <- function(emm, ...) {
     s <- summary(emm, type = "response", infer = c(TRUE, FALSE))
-    data.frame(..., sleep_rate = as.numeric(as.character(s$ratio_f)),
+    data.frame(..., sleep_rate = as.numeric(as.character(s$sleep_ratio)),
                fit = s$response, lo = s$asymp.LCL, hi = s$asymp.UCL)
 }
 s_rd <- summary(emm_rd, type = "response", infer = c(TRUE, FALSE))
 sweep_pred_ds <- data.frame(
     dataset = as.character(s_rd$dataset),
-    sleep_rate = as.numeric(as.character(s_rd$ratio_f)),
+    sleep_rate = as.numeric(as.character(s_rd$sleep_ratio)),
     fit = s_rd$response, lo = s_rd$asymp.LCL, hi = s_rd$asymp.UCL
 )
 sweep_pred_ds <- sweep_pred_ds[order(sweep_pred_ds$dataset, sweep_pred_ds$sleep_rate), ]
@@ -109,7 +109,7 @@ ctr_ds <- as.data.frame(contrast(emm_rd, "trt.vs.ctrl1", by = "dataset",
 # interpret without undoing the subtraction.
 
 # Recover the numeric sleep level from the emmeans contrast label, which reads
-# "ratio_f0.1 - ratio_f0". Drop everything from the minus sign on, then the
+# "sleep_ratio0.1 - sleep_ratio0". Drop everything from the minus sign on, then the
 # factor-name prefix.
 rate_of <- function(x) {
     lab <- sub(" *-.*$", "", as.character(x))
@@ -145,10 +145,10 @@ grab <- function(df) df[, c("estimate", "SE", "z.ratio", "p.value")]
 names_std <- c("estimate", "std_error", "z", "p")
 
 ref0 <- as.data.frame(summary(emm_r, infer = c(FALSE, TRUE)))
-ref0 <- data.frame(estimate = ref0$emmean[ref0$ratio_f == "0"],
-                   SE = ref0$SE[ref0$ratio_f == "0"],
-                   z.ratio = ref0$z.ratio[ref0$ratio_f == "0"],
-                   p.value = ref0$p.value[ref0$ratio_f == "0"])
+ref0 <- data.frame(estimate = ref0$emmean[ref0$sleep_ratio == "0"],
+                   SE = ref0$SE[ref0$sleep_ratio == "0"],
+                   z.ratio = ref0$z.ratio[ref0$sleep_ratio == "0"],
+                   p.value = ref0$p.value[ref0$sleep_ratio == "0"])
 
 tab <- rbind(
     cbind(block = "reference", sleep_rate = 0,

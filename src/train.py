@@ -2,6 +2,7 @@ from numba.typed import List
 from numba import njit
 from tqdm import tqdm
 import numpy as np
+import os
 from weight_funcs import (
     sleep_func,
     spike_timing,
@@ -351,6 +352,38 @@ def _spearman(a, b):
     if denom <= 0:
         return float("nan")
     return float(np.sum(ra * rb) / denom)
+
+
+_DUMP_COUNTER = [0]
+
+
+def _episode_targets(use_post_targets, vec, scalar, mask, col0, width):
+    """|w_target| for every synapse in a flattened block mask. Per-post targets
+    vary by column (postsynaptic neuron); otherwise one scalar for all."""
+    if use_post_targets:
+        return np.abs(np.asarray(vec)[col0 + (mask % width)])
+    return np.full(mask.shape[0], abs(float(scalar)))
+
+
+def _dump_episode(t, sleep_iters, rate_exc, rate_inh, exc_b, exc_a, inh_b, inh_a,
+                  tgt_exc, tgt_inh):
+    """Opt-in: if SNN_DUMP_EPISODES names a directory, save the raw weights of
+    every synapse before and after this sleep episode, with each synapse's
+    target, for mechanism analysis. Off by default, so normal runs are unchanged."""
+    out = os.environ.get("SNN_DUMP_EPISODES")
+    if not out:
+        return
+    os.makedirs(out, exist_ok=True)
+    k = _DUMP_COUNTER[0]
+    _DUMP_COUNTER[0] += 1
+    np.savez_compressed(
+        os.path.join(out, f"episode_{k:04d}.npz"),
+        t=int(t), sleep_iters=int(sleep_iters),
+        rate_exc=float(rate_exc), rate_inh=float(rate_inh),
+        exc_before=exc_b.astype(np.float32), exc_after=exc_a.astype(np.float32),
+        inh_before=inh_b.astype(np.float32), inh_after=inh_a.astype(np.float32),
+        target_exc=tgt_exc.astype(np.float32), target_inh=tgt_inh.astype(np.float32),
+    )
 
 
 def _dist_metrics(w):
@@ -1228,6 +1261,14 @@ def train_network(
                             row[f"{grp}_{k}_before"] = epi_before[grp][k]
                             row[f"{grp}_{k}_after"] = after[grp][k]
                     weight_tracking_sleep["episodes"].append(row)
+                    _dump_episode(
+                        t, sleep_iter, weight_decay_rate_exc, weight_decay_rate_inh,
+                        w_exc_before, w_exc_after, w_inh_before, w_inh_after,
+                        _episode_targets(use_post_targets, w_target_exc_vec,
+                                         w_target_exc_cur, epi_mask_exc, st, ih - st),
+                        _episode_targets(use_post_targets, w_target_inh_vec,
+                                         w_target_inh_cur, epi_mask_inh, st, ex - st),
+                    )
                 except Exception:
                     pass
 

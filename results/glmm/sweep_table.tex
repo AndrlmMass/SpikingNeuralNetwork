@@ -4,30 +4,33 @@
     \caption{Mixed effect model with beta regression \label{tab:betareg}}\\
     \toprule
     Effect  & Estimate & Std. Error & \textit{z} value & \textit{p}-value & \\
+    \midrule
     \endfirsthead
 
     \toprule
     Effect  & Estimate & Std. Error & \textit{z} value & \textit{p}-value & \\
+    \midrule
     \endhead
-        0\% sleep & -2.274 & .049 & -46.724 & $<.001$ & ***\\[6pt]
-        \multicolumn{6}{l}{\textit{Main effect of sleep duration (vs.\ 0\%, averaged over datasets)}}\\
-        $\beta_{j=10}$ & 2.944 & .053 & 55.596 & $<.001$ & ***\\
-        $\beta_{j=20}$ & 2.926 & .053 & 55.419 & $<.001$ & ***\\
-        $\beta_{j=30}$ & 2.963 & .053 & 55.978 & $<.001$ & ***\\
-        $\beta_{j=40}$ & 2.930 & .053 & 55.433 & $<.001$ & ***\\
-        $\beta_{j=50}$ & 2.945 & .053 & 55.642 & $<.001$ & ***\\
-        $\beta_{j=60}$ & 2.899 & .053 & 54.915 & $<.001$ & ***\\
-        $\beta_{j=70}$ & 2.958 & .053 & 55.876 & $<.001$ & ***\\
-        $\beta_{j=80}$ & 2.935 & .053 & 55.446 & $<.001$ & ***\\
-        $\beta_{j=90}$ & 2.961 & .053 & 55.928 & $<.001$ & ***\\
-        $\beta_{j=100}$ & 2.900 & .053 & 54.876 & $<.001$ & ***\\
+        0\% sleep & -2.378 & .194 & -12.266 & $<.001$ & ***\\[6pt]
+        \multicolumn{6}{l}{\textit{Main effect of sleep duration (vs.\ 0\%)}}\\
+        $\beta_{j=10}$ & 3.042 & .064 & 47.315 & $<.001$ & ***\\
+        $\beta_{j=20}$ & 3.032 & .064 & 47.074 & $<.001$ & ***\\
+        $\beta_{j=30}$ & 3.067 & .064 & 47.583 & $<.001$ & ***\\
+        $\beta_{j=40}$ & 3.033 & .064 & 47.123 & $<.001$ & ***\\
+        $\beta_{j=50}$ & 3.047 & .064 & 47.333 & $<.001$ & ***\\
+        $\beta_{j=60}$ & 3.002 & .064 & 46.708 & $<.001$ & ***\\
+        $\beta_{j=70}$ & 3.059 & .064 & 47.496 & $<.001$ & ***\\
+        $\beta_{j=80}$ & 3.033 & .064 & 47.175 & $<.001$ & ***\\
+        $\beta_{j=90}$ & 3.062 & .064 & 47.545 & $<.001$ & ***\\
+        $\beta_{j=100}$ & 2.999 & .064 & 46.695 & $<.001$ & ***\\
         \midrule
         \multicolumn{2}{l}{Random effect variance}\\
         Groups & Name & Variance & Std.Dev.& &\\
-        Seed & (Intercept) & .002 & .043 & &\\
+        Dataset & (Intercept) & .136 & .369 & &\\
+        Seed & (Intercept) & .001 & .038 & &\\
+        Dataset $\times$ seed & (Intercept) & .003 & .059 & &\\
 
         \bottomrule
-    \multicolumn{6}{p{0.9\linewidth}}{\footnotesize Estimates on the logit scale, averaged over the four datasets. Effects within each dataset are reported separately in the appendix.}\\
-    %\caption*{Significance levels: * $p<.05$, ** $p<.01$, *** $p<.001$.}
+    \multicolumn{6}{p{0.9\linewidth}}{\footnotesize Estimates on the logit scale. Model: accuracy $\sim$ sleep duration + (1$|$dataset) + (1$|$seed) + (1$|$dataset:seed), with a single precision parameter; estimates are for a typical dataset and seed. Significance levels: * $p<.05$, ** $p<.01$, *** $p<.001$.}\\
 \end{longtable}
 }

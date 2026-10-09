@@ -1,0 +1,68 @@
+% Draft "Future work" subsection for NEUCOM-D-26-00713 (revision).
+% Goes after \subsection{Limitations} in the Discussion.
+% Two lengths: SHORT (~25%, active) and MEDIUM (~50%, commented out below).
+% New citation keys are in latex/future_work_refs.bib (unused entries are harmless).
+
+%% ---------- SHORT (~200 words) ----------
+\subsection{Future work}
+Three extensions follow directly from our results. First, our claims of
+generalization rest on a narrow sample. Adding datasets from other modalities,
+and sampling architecture, training set size and the weight target $w_{tgt}$
+rather than fixing them, would show whether the effect of sleep holds for a
+typical network as well as a typical dataset. Second, sleep, layer-wise
+normalization and synaptic scaling reach similar accuracy but correct the weights
+differently, so they may diverge under distribution shift, when rejecting
+out-of-distribution inputs \citep{hendrycks_baseline_2017}, or when tasks are
+learned in sequence \citep{tadros_sleep-like_2022}. Third, sleep should help most
+when the learning rule has no check of its own on weight growth. Comparing it
+across reward-modulated STDP \citep{fremaux_neuromodulated_2016}, e-prop
+\citep{bellec_solution_2020} and surrogate gradient training
+\citep{neftci_surrogate_2019} would show whether the benefit is specific to
+Hebbian learning.
+
+Two further questions concern the components of sleep. The noise we used was
+unstructured, so its lack of effect does not rule out a role for structured
+activity, such as replay of recently seen inputs \citep{deperrois_learning_2022}.
+And because $n$ downscaling steps with factor $\lambda$ equal a single step with
+factor $\lambda^{n}$, sleep could be implemented as one update per synapse, a
+saving worth measuring on neuromorphic hardware \citep{davies_loihi_2018}.
+
+%% ---------- MEDIUM (~430 words) ----------
+% \subsection{Future work}
+% Our results point to downscaling as the active ingredient of sleep, and to a
+% benefit that holds across the datasets we sampled. The most direct extension is
+% to widen that sample. Adding datasets from other modalities, such as natural
+% images, spoken digits and event-based recordings, would sharpen the estimate of
+% between-dataset variance. Architecture, training set size and the weight target
+% $w_{tgt}$ could likewise be sampled rather than fixed, so that the reported
+% effect describes a typical network as well as a typical dataset. Scaling up also
+% makes the cost of sleep relevant: because $n$ downscaling steps with factor
+% $\lambda$ equal a single step with factor $\lambda^{n}$
+% (Appendix~\ref{sec:app:mech_weight_decay}), sleep could be implemented as one
+% update per synapse, a saving worth measuring on neuromorphic hardware
+% \citep{davies_loihi_2018}.
+%
+% We evaluated all models on test images from the training distribution. Sleep,
+% layer-wise normalization and synaptic scaling reached similar accuracy, but
+% normalization rescales the weights to a fixed total, whereas sleep compresses
+% their distribution toward the target. These differences may matter under
+% distribution shift, or when the network must reject inputs from an unseen
+% dataset, for which the spike count of the most responsive class-assigned
+% neurons offers a natural signal \citep{hendrycks_baseline_2017}. Learning tasks
+% in sequence is a related test \citep{tadros_sleep-like_2022}: pulling all
+% weights toward a common target may protect earlier representations, or erase
+% them faster.
+%
+% The ablation leaves the role of noise open. The noise we used was unstructured
+% and may carry no information for STDP to strengthen; replacing it with
+% structured activity, such as replay of recently seen inputs
+% \citep{deperrois_learning_2022}, would test whether sleep-phase plasticity
+% contributes once it has something to consolidate.
+%
+% Finally, sleep should help most when the learning rule has no check of its own
+% on weight growth, as with unsupervised STDP. Surrogate gradient training
+% \citep{neftci_surrogate_2019} corrects weights whenever their growth harms the
+% objective and may gain little from sleep, while reward-modulated STDP
+% \citep{fremaux_neuromodulated_2016} and e-prop \citep{bellec_solution_2020} lie
+% between the two. Comparing sleep with normalization across these rules would
+% show whether its benefit is specific to Hebbian learning.
