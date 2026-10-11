@@ -55,7 +55,7 @@ def run_once(run_idx: int, total_runs: int, args, disable_plotting: bool = False
         force_recreate_flag = True
     else:
         img_tr, img_va, img_te = int(args.n_train), 100, int(args.n_test)
-        b_tr, b_va, b_te = 1000, 100, 200
+        b_tr, b_va, b_te = int(getattr(args, "batch_train", 1000)), 100, 200
         force_recreate_flag = False
     snn_N.prepare_data(
         all_audio_train=22000,
@@ -353,7 +353,9 @@ def main():
     parser.add_argument("--lr-inh", type=float, default=0.0005,
                         help="STDP learning rate, inhibitory synapses")
     parser.add_argument("--n-train", type=int, default=4000,
-                        help="training images (multiple of the 1000-image batch)")
+                        help="training images (multiple of --batch-train)")
+    parser.add_argument("--batch-train", type=int, default=1000,
+                        help="training images per batch; the sleep schedule restarts each batch")
     parser.add_argument("--n-test", type=int, default=1000,
                         help="test images (multiple of the 200-image test batch)")
     parser.add_argument("--ltd-scale", type=float, default=0.1,
