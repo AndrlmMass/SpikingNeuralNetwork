@@ -192,9 +192,13 @@ def fig_sweep():
                     label="predicted mean, 95% CI")
 
         ax.set_title(title, fontsize=FS_LABEL - 3, color=T["ink"], pad=8)
-        ax.set_xlabel("sleep duration (%)", fontsize=FS_LABEL - 5,
+        ax.set_xlabel("sleep-to-wake ratio $r$", fontsize=FS_LABEL - 5,
                       color=T["ink2"])
-        ax.set_xticks([0, 20, 40, 60, 80, 100])
+        # Positions stay in percent so the offsets above need no rescaling;
+        # the labels show r itself, as the paper reports it (0.3, not 30%).
+        ticks = [0, 20, 40, 60, 80, 100]
+        ax.set_xticks(ticks)
+        ax.set_xticklabels([f"{v / 100:g}" for v in ticks])
         ax.set_xlim(-6, 108)
         ax.set_ylim(0, 1.0)
 
@@ -471,9 +475,12 @@ def fig_sweep_aggregated(variant):
     pop = Line2D([], [], color=T["ink"], lw=2.6, marker="v", ms=9, label="population (95% CI)")
     ax.axhline(0.1, color=T["muted"], ls=":", lw=1.4, zorder=1)
     ax.text(99, 0.115, "chance", ha="right", fontsize=FS_SERIES - 3, color=T["muted"])
-    ax.set_xlabel("sleep duration (%)", fontsize=FS_LABEL + 2, color=T["ink2"])
+    ax.set_xlabel("sleep-to-wake ratio $r$", fontsize=FS_LABEL + 2, color=T["ink2"])
     ax.set_ylabel("test accuracy", fontsize=FS_LABEL + 2, color=T["ink2"])
-    ax.set_xticks(range(0, 101, 10))
+    # Positions in percent (the dodge offsets are in those units); labels in r.
+    ticks = list(range(0, 101, 10))
+    ax.set_xticks(ticks)
+    ax.set_xticklabels([f"{v / 100:g}" for v in ticks])
     ax.set_xlim(-5.5, 105.5)
     ax.set_ylim(0, 1.0)
     ax.tick_params(labelsize=FS_TICK + 1)

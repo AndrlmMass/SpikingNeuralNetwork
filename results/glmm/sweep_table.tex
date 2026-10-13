@@ -1,7 +1,11 @@
 {
-\setlength{\tabcolsep}{15pt} % Only affects this table
-\begin{longtable}{lrrrrl}
-    \caption{Mixed effect model with beta regression \label{tab:betareg}}\\
+% Full text width: LTleft/LTright = 0 plus \extracolsep{\fill} stretches the
+% table to exactly \linewidth, so it can neither overflow nor sit narrow.
+\setlength{\tabcolsep}{4pt}
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+\begin{longtable}{@{\extracolsep{\fill}}lrrrrl@{}}
+    \caption{Mixed effect model with beta regression \label{tab:betareg}\label{tab:sleep_sweep}}\\
     \toprule
     Effect  & Estimate & Std. Error & \textit{z} value & \textit{p}-value & \\
     \midrule
@@ -11,26 +15,25 @@
     Effect  & Estimate & Std. Error & \textit{z} value & \textit{p}-value & \\
     \midrule
     \endhead
-        0\% sleep & -2.378 & .194 & -12.266 & $<.001$ & ***\\[6pt]
-        \multicolumn{6}{l}{\textit{Main effect of sleep duration (vs.\ 0\%)}}\\
-        $\beta_{j=10}$ & 3.042 & .064 & 47.315 & $<.001$ & ***\\
-        $\beta_{j=20}$ & 3.032 & .064 & 47.074 & $<.001$ & ***\\
-        $\beta_{j=30}$ & 3.067 & .064 & 47.583 & $<.001$ & ***\\
-        $\beta_{j=40}$ & 3.033 & .064 & 47.123 & $<.001$ & ***\\
-        $\beta_{j=50}$ & 3.047 & .064 & 47.333 & $<.001$ & ***\\
-        $\beta_{j=60}$ & 3.002 & .064 & 46.708 & $<.001$ & ***\\
-        $\beta_{j=70}$ & 3.059 & .064 & 47.496 & $<.001$ & ***\\
-        $\beta_{j=80}$ & 3.033 & .064 & 47.175 & $<.001$ & ***\\
-        $\beta_{j=90}$ & 3.062 & .064 & 47.545 & $<.001$ & ***\\
-        $\beta_{j=100}$ & 2.999 & .064 & 46.695 & $<.001$ & ***\\
+        No sleep ($r = 0$) & -2.378 & .194 & -12.266 & $<.001$ & ***\\[6pt]
+        \multicolumn{6}{l}{\textit{Main effect of sleep-to-wake ratio $r$ (vs.\ $r = 0$)}}\\
+        $r = 0.1$ & 3.042 & .064 & 47.315 & $<.001$ & ***\\
+        $r = 0.2$ & 3.032 & .064 & 47.074 & $<.001$ & ***\\
+        $r = 0.3$ & 3.067 & .064 & 47.583 & $<.001$ & ***\\
+        $r = 0.4$ & 3.033 & .064 & 47.123 & $<.001$ & ***\\
+        $r = 0.5$ & 3.047 & .064 & 47.333 & $<.001$ & ***\\
+        $r = 0.6$ & 3.002 & .064 & 46.708 & $<.001$ & ***\\
+        $r = 0.7$ & 3.059 & .064 & 47.496 & $<.001$ & ***\\
+        $r = 0.8$ & 3.033 & .064 & 47.175 & $<.001$ & ***\\
+        $r = 0.9$ & 3.062 & .064 & 47.545 & $<.001$ & ***\\
+        $r = 1$ & 2.999 & .064 & 46.695 & $<.001$ & ***\\
         \midrule
         \multicolumn{2}{l}{Random effect variance}\\
-        Groups & Name & Variance & Std.Dev.& &\\
+        Groups & Name & Variance & Std.Dev. & &\\
         Dataset & (Intercept) & .136 & .369 & &\\
         Seed & (Intercept) & .001 & .038 & &\\
         Dataset $\times$ seed & (Intercept) & .003 & .059 & &\\
-
         \bottomrule
-    \multicolumn{6}{p{0.9\linewidth}}{\footnotesize Estimates on the logit scale. Model: accuracy $\sim$ sleep duration + (1$|$dataset) + (1$|$seed) + (1$|$dataset:seed), with a single precision parameter; estimates are for a typical dataset and seed. Significance levels: * $p<.05$, ** $p<.01$, *** $p<.001$.}\\
+    \multicolumn{6}{@{}p{\linewidth}@{}}{\footnotesize Estimates on the logit scale. Model: accuracy $\sim$ $r$ + (1$|$dataset) + (1$|$seed) + (1$|$dataset:seed), with a single precision parameter; estimates are for a typical dataset and seed. Significance levels: * $p<.05$, ** $p<.01$, *** $p<.001$.}\\
 \end{longtable}
 }

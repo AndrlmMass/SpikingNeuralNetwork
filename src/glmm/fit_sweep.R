@@ -1,7 +1,7 @@
 # =============================================================================
-# SWEEP — accuracy as a function of sleep duration, per dataset
+# SWEEP — accuracy as a function of the sleep-to-wake ratio r, per dataset
 # =============================================================================
-#   accuracy ~ sleep duration x dataset (11 levels, 4 datasets, 5 seeds)
+#   accuracy ~ r x dataset (11 levels, 4 datasets, 5 seeds)
 #
 # Usage (from the repo root):
 #   Rscript src/glmm/fit_sweep.R
@@ -29,9 +29,9 @@ sw <- sw[!is.na(sw$test_accuracy), ]
 sw$n_test <- 700   # fixed within dataset; used only for the (0,1) squeeze
 sw$acc <- squeeze(sw$test_accuracy, sw$n_test)
 
-# Sleep duration as a FACTOR, not continuous: the manuscript reports one
-# coefficient per level against 0%, and the response is non-monotonic, so a
-# linear term would misrepresent it. Treatment-coded, 0% as reference.
+# r as a FACTOR, not continuous: the manuscript reports one
+# coefficient per level against r = 0, and the response is non-monotonic, so a
+# linear term would misrepresent it. Treatment-coded, r = 0 as reference.
 sw$sleep_ratio <- relevel(factor(sw$sleep_rate), ref = "0")
 sw$dataset <- factor(sw$dataset)
 sw$seed <- factor(sw$seed)
@@ -58,7 +58,7 @@ fit_sw <- glmmTMB(
     acc ~ sleep_ratio * dataset + (1 | seed),
     family = beta_family(link = "logit"), data = sw
 )
-report(fit_sw, "SWEEP  acc ~ factor(sleep duration) * dataset + (1|seed)")
+report(fit_sw, "SWEEP  acc ~ factor(r) * dataset + (1|seed)")
 write.csv(tidy_fit(fit_sw, "sweep"), file.path(OUT, "sweep_coefs.csv"), row.names = FALSE)
 
 # =============================================================================
@@ -92,10 +92,10 @@ sweep_pred <- sweep_pred[order(sweep_pred$sleep_rate), ]
 write.csv(sweep_pred, file.path(OUT, "sweep_predictions.csv"), row.names = FALSE)
 
 # --- the three contrast families --------------------------------------------
-# 1. Averaged effect of each sleep duration vs 0%, over datasets (main text).
+# 1. Averaged effect of each r vs r = 0, over datasets (main text).
 ctr <- as.data.frame(contrast(emm_r, "trt.vs.ctrl1", adjust = "none"))
 
-# 2. Simple effects: each sleep duration vs 0% WITHIN one dataset, with its own
+# 2. Simple effects: each r vs r = 0 WITHIN one dataset, with its own
 #    SE (appendix). This is the table that actually shows the divergence. The
 #    interaction coefficients cannot be read this way -- they are deviations
 #    from the average, so recovering a dataset's effect from them needs a sum of
@@ -152,9 +152,9 @@ ref0 <- data.frame(estimate = ref0$emmean[ref0$sleep_ratio == "0"],
 
 tab <- rbind(
     cbind(block = "reference", sleep_rate = 0,
-          term = "0\\% sleep", setNames(grab(ref0), names_std)),
+          term = "No sleep (r = 0)", setNames(grab(ref0), names_std)),
     cbind(block = "sleep", sleep_rate = ctr$sleep_rate,
-          term = sprintf("Sleep duration %g\\%%", ctr$sleep_rate * 100),
+          term = sprintf("r = %g", ctr$sleep_rate),
           setNames(grab(ctr), names_std))
 )
 rownames(tab) <- NULL
@@ -176,7 +176,7 @@ write.csv(re, file.path(OUT, "sweep_table_random.csv"), row.names = FALSE)
 bar <- strrep("=", 72)
 cat("\n", bar, "\n",
     "MAIN RUN -- Beta GLMM (logit link)\n",
-    "acc ~ factor(sleep duration) * dataset + (1|seed)\n",
+    "acc ~ factor(r) * dataset + (1|seed)\n",
     "sleep rows averaged over datasets\n",
     bar, "\n", sep = "")
 cat(sprintf("%-30s %9s %8s %7s %11s\n", "Effect", "Estimate", "SE", "z", "p"))
@@ -222,7 +222,7 @@ cat(bar, "\n", sep = "")
 # =============================================================================
 # LaTeX, matching the manuscript's existing beta-regression table
 # =============================================================================
-# longtable with a repeated header, beta_{j=..} row labels, a separate
+# longtable with a repeated header, "r = .." row labels, a separate
 # significance column, and APA number style (no leading zero). The submitted
 # version carried an SG-SNN main effect and a sleep x model interaction; that
 # model is dropped from the revision, and the dataset main effect and the
@@ -240,9 +240,12 @@ subhead <- function(txt) sprintf("        \\multicolumn{6}{l}{\\textit{%s}}\\\\"
 
 tex <- c(
     "{",
-    "\\setlength{\\tabcolsep}{15pt} % Only affects this table",
-    "\\begin{longtable}{lrrrrl}",
-    "    \\caption{Mixed effect model with beta regression \\label{tab:betareg}}\\\\",
+    # LTleft/LTright = 0 plus \extracolsep{\fill}: exactly \linewidth wide.
+    "\\setlength{\\tabcolsep}{4pt}",
+    "\\setlength{\\LTleft}{0pt}",
+    "\\setlength{\\LTright}{0pt}",
+    "\\begin{longtable}{@{\\extracolsep{\\fill}}lrrrrl@{}}",
+    "    \\caption{Mixed effect model with beta regression \\label{tab:betareg}\\label{tab:sleep_sweep}}\\\\",
     "    \\toprule",
     "    Effect  & Estimate & Std. Error & \\textit{z} value & \\textit{p}-value & \\\\",
     "    \\endfirsthead",
@@ -253,11 +256,11 @@ tex <- c(
 )
 
 i0 <- which(tab$block == "reference")
-tex <- c(tex, sub("\\\\\\\\$", "\\\\\\\\[6pt]", tex_row("0\\% sleep", i0)))
+tex <- c(tex, sub("\\\\\\\\$", "\\\\\\\\[6pt]", tex_row("No sleep ($r = 0$)", i0)))
 
-tex <- c(tex, subhead("Main effect of sleep duration (vs.\\ 0\\%, averaged over datasets)"))
+tex <- c(tex, subhead("Main effect of sleep-to-wake ratio $r$ (vs.\\ $r = 0$, averaged over datasets)"))
 for (i in which(tab$block == "sleep")) {
-    tex <- c(tex, tex_row(sprintf("$\\beta_{j=%g}$", tab$sleep_rate[i] * 100), i))
+    tex <- c(tex, tex_row(sprintf("$r = %g$", tab$sleep_rate[i]), i))
 }
 
 # Random effects block: variance and SD, in the manuscript's layout.
@@ -273,7 +276,7 @@ for (nm in names(vcl)) {
                           gname, small(v), small(sqrt(v))))
 }
 tex <- c(tex, "", "        \\bottomrule",
-         paste0("    \\multicolumn{6}{p{0.9\\linewidth}}{\\footnotesize Estimates on the ",
+         paste0("    \\multicolumn{6}{@{}p{\\linewidth}@{}}{\\footnotesize Estimates on the ",
                 "logit scale, averaged over the four datasets. Effects within each ",
                 "dataset are reported separately in the appendix.}\\\\"),
          "    %\\caption*{Significance levels: * $p<.05$, ** $p<.01$, *** $p<.001$.}",
