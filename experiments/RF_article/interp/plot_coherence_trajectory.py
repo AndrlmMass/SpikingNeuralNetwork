@@ -67,7 +67,7 @@ def main():
 
     init = load(p1, "frozen")[1][0]        # frozen cell: the only no-plasticity t=0
     # Greyscale for print: identity by line style, named in a legend (09-17 feedback).
-    series = [("R-STDP", load(p2, "oriented"), "solid"),
+    series = [("R-Hebb", load(p2, "oriented"), "solid"),
               ("trace-STDP", load(p1, "base_ori"), (0, (6, 2.5))),
               ("triplet-STDP", load(p1, "triplet"), (0, (1, 1.6)))]
     series = [(n, b, m, s, c) for n, (b, m, s), c in series if m is not None]

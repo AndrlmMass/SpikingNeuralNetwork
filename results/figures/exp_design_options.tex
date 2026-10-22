@@ -26,7 +26,7 @@
 \node[stage, fit=(a1)(a4), label={[font=\small\bfseries]above:Unsupervised model}] (P1) {};
 
 % --- supervised model
-\node[key] (b0) at (4.6,0) {\textbf{RF vs.\ random}\\under R-STDP};
+\node[key] (b0) at (4.6,0) {\textbf{RF vs.\ random}\\under R-Hebb};
 \node[ref, below=2mm of b0] (b1) {\textbf{Frozen RF prior}\\control};
 \node[note, below=2mm of b1] (b2) {learned readout;\\linear probe};
 \node[stage, fit=(b0)(b2), label={[font=\small\bfseries]above:Supervised model}] (P2) {};
@@ -34,7 +34,7 @@
 % --- uncertainty of the trained supervised model
 \node[item] (c0) at (9.2,0) {\textbf{Selective prediction}\\abstain on high entropy};
 \node[item, below=2mm of c0] (c1) {\textbf{OOD rejection}\\trained on MNIST; KMNIST,\\notMNIST, Fashion as probes};
-\node[note, below=2mm of c1] (c2) {RF + R-STDP model;\\coverage, AUROC};
+\node[note, below=2mm of c1] (c2) {RF + R-Hebb model;\\coverage, AUROC};
 \node[stage, fit=(c0)(c2), label={[font=\small\bfseries]above:Uncertainty}] (P3) {};
 
 \draw[arr] (P1.east |- a1) -- (P2.west |- b0);
@@ -47,8 +47,8 @@
 \caption{Experimental design. The unsupervised model is tested against its frozen
 receptive-field prior under three plasticity rules and two mechanism ablations, with a
 diagnostic RF-versus-random contrast under trace-STDP. The supervised model repeats that
-contrast under R-STDP as the confirmatory test, with the frozen prior as a control. The
-trained RF + R-STDP model is then evaluated for selective prediction and
+contrast under R-Hebb as the confirmatory test, with the frozen prior as a control. The
+trained RF + R-Hebb model is then evaluated for selective prediction and
 out-of-distribution rejection. Grey boxes are frozen references; the bold box is the
 confirmatory contrast.}
 \label{fig:exp_design}

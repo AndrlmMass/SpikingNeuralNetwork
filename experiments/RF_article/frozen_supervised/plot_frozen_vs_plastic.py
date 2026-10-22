@@ -2,7 +2,7 @@
 Supervised model, five datasets: oriented-RF vs random init vs FROZEN, one box per cell.
 
 Adds the third condition the phase-2 figure never had. Phase 2 compared two PLASTIC arms
-(oriented vs random W_se init under R-STDP); with no frozen arm there was no way to say
+(oriented vs random W_se init under R-Hebb); with no frozen arm there was no way to say
 whether plasticity contributed anything at all in the supervised model -- the only frozen
 evidence came from phase 1, which differs in six config parameters at once.
 
@@ -43,9 +43,9 @@ FROZEN = os.path.join(REPO, "results", "frozen_supervised", "run_cheap")
 DATASETS = ["mnist", "kmnist", "fmnist", "notmnist"]
 PRETTY = {"mnist": "MNIST", "fmnist": "Fashion-MNIST", "kmnist": "KMNIST",
           "notmnist": "notMNIST"}
-LABELS = {"oriented": "RF prior\n+ R-STDP", "random": "random init\n+ R-STDP",
+LABELS = {"oriented": "RF prior\n+ R-Hebb", "random": "random init\n+ R-Hebb",
           "frozen": "RF prior\nFROZEN"}
-FLAT = {"oriented": "RF prior + R-STDP", "random": "random init + R-STDP",
+FLAT = {"oriented": "RF prior + R-Hebb", "random": "random init + R-Hebb",
         "frozen": "RF prior, frozen"}          # single-line, for the stdout table
 ORDER = ["frozen", "random", "oriented"]     # weakest-claim first, left to right
 N_YTICKS = 5                                 # same tick count in every panel

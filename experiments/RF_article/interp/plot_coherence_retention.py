@@ -30,7 +30,7 @@ INK, MUTED, GRID, INIT = "#0b0b0b", "#52514e", "#d8d7d2", "#9a9892"
 # `base_rnd` is deliberately NOT a row: random weights never carried the prior, so a
 # "retained" fraction is undefined for them. They appear as the floor band instead.
 ROWS = [("p1", "base_ori", "oriented RF", "trace-STDP",   SLATE),
-        ("p2", "oriented", "oriented RF", "R-STDP",       ROSE),
+        ("p2", "oriented", "oriented RF", "R-Hebb",       ROSE),
         ("p1", "triplet",  "oriented RF", "triplet-STDP", SAGE)]
 # The random floor is context, not a result: it is the only band without a retained
 # fraction, so it is drawn in neutral grey and never competes with the three rules.
