@@ -53,7 +53,7 @@ def glyph(ax,x,y,c,label,fs,hw=.055,bh=.030,wh=.058):
     ax.text(x+hw+.07,y,label,transform=ax.transAxes,fontsize=fs,va="center",ha="left",color=INK)
 
 DS=["mnist","kmnist","notmnist","fmnist"]
-NICE={"mnist":"MNIST","kmnist":"KMNIST","notmnist":"notMNIST","fmnist":"Fashion","svhn":"SVHN"}
+NICE={"mnist":"MNIST","kmnist":"KMNIST","notmnist":"notMNIST","fmnist":"FMNIST","svhn":"SVHN"}
 # frozen is the dashed reference line only -- drawing it as a box too would show the same
 # cell twice. Colour then carries the one thing the x labels do not say: which weight
 # configuration sits underneath. Matches the phase-2 figure (rose = oriented, slate = random).

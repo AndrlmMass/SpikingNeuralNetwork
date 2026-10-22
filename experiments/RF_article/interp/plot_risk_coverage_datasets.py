@@ -43,7 +43,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")
 PHASE2 = os.path.join(REPO, "results", "interp", "json", "experiments", "RF_article",
                       "interp", "mnist_family_sweep", "results", "run_20260819_112250")
 DS = ["mnist", "notmnist", "kmnist", "fmnist"]      # by how much abstention buys
-PRETTY = {"mnist": "MNIST", "fmnist": "Fashion", "kmnist": "KMNIST",
+PRETTY = {"mnist": "MNIST", "fmnist": "FMNIST", "kmnist": "KMNIST",
           "notmnist": "notMNIST", "svhn": "SVHN"}
 # The project's three-colour palette, paired by tier, with line style carrying the split
 # inside each pair. Five distinct hues read louder than every other figure in the paper,

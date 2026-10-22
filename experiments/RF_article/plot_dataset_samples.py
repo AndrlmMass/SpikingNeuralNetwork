@@ -23,7 +23,7 @@ os.chdir(REPO)   # the notMNIST deeplake copy is looked up by relative path
 from neurosnn._data.get_data import ImageDataStreamer  # noqa: E402
 
 DATASETS = [("mnist", "MNIST"), ("kmnist", "KMNIST"),
-            ("fmnist", "Fashion-MNIST"), ("notmnist", "notMNIST")]
+            ("fmnist", "FMNIST"), ("notmnist", "notMNIST")]
 # Column headers: the class index is shared, but its meaning is not.
 CLASS_NAMES = {
     "mnist":    [str(i) for i in range(10)],

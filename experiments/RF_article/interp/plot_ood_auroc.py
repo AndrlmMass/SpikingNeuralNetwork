@@ -31,7 +31,7 @@ from sklearn.metrics import roc_auc_score
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 RUN = os.path.join(REPO, "results", "ood_mnist", "run1", "mnist_ood_s0")
 OOD = ["kmnist", "notmnist", "fmnist"]   # decreasing low-level similarity to MNIST (SVHN dropped)
-PRETTY = {"kmnist": "KMNIST", "notmnist": "notMNIST", "fmnist": "Fashion-MNIST",
+PRETTY = {"kmnist": "KMNIST", "notmnist": "notMNIST", "fmnist": "FMNIST",
           "svhn": "SVHN"}
 
 

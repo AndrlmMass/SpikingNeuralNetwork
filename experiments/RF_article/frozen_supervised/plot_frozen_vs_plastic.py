@@ -41,7 +41,7 @@ PHASE2 = os.path.join(REPO, "results", "interp", "json", "experiments", "RF_arti
 PHASE2_RANDOM = os.path.join(os.path.dirname(PHASE2), "run_20260916_105832")
 FROZEN = os.path.join(REPO, "results", "frozen_supervised", "run_cheap")
 DATASETS = ["mnist", "kmnist", "fmnist", "notmnist"]
-PRETTY = {"mnist": "MNIST", "fmnist": "Fashion-MNIST", "kmnist": "KMNIST",
+PRETTY = {"mnist": "MNIST", "fmnist": "FMNIST", "kmnist": "KMNIST",
           "notmnist": "notMNIST"}
 LABELS = {"oriented": "RF prior\n+ R-Hebb", "random": "random init\n+ R-Hebb",
           "frozen": "RF prior\nFROZEN"}
