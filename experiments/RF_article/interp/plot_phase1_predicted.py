@@ -57,9 +57,11 @@ NICE={"mnist":"MNIST","kmnist":"KMNIST","notmnist":"notMNIST","fmnist":"FMNIST",
 # frozen is the dashed reference line only -- drawing it as a box too would show the same
 # cell twice. Colour then carries the one thing the x labels do not say: which weight
 # configuration sits underneath. Matches the phase-2 figure (rose = oriented, slate = random).
-ORDER=["triplet","base_ori","ee_off","ie_off","vogels","base_rnd"]
-LBL={"triplet":"triplet","base_ori":"trace","ee_off":"no E–E","ie_off":"no I–E",
-     "vogels":"+ Vogels","base_rnd":"random"}
+# Base first; every other label names its one change from Base: + adds a component,
+# − removes one, a bare name replaces one. Grouped as learning rule, connectivity, prior.
+ORDER=["base_ori","triplet","vogels","ee_off","ie_off","base_rnd"]
+LBL={"base_ori":"Base","triplet":"Triplet","vogels":"+iSTDP","ee_off":"−Recurrence",
+     "ie_off":"−Inhibition","base_rnd":"Random"}
 COL={c:("random" if c=="base_rnd" else "oriented") for c in ORDER}
 
 fig,axes=plt.subplots(1,4,figsize=(15.5,4.3))
@@ -93,7 +95,7 @@ for j,(ax,ds) in enumerate(zip(flat,DS)):
 # No legend: the x labels name each box, and the dashed reference is labelled once,
 # to the right of the last panel.
 last=flat[len(DS)-1]; fz_last=np.mean(D[(1,"probe",DS[-1],"frozen")])
-last.annotate("frozen weights",xy=(1.0,fz_last),xycoords=("axes fraction","data"),
+last.annotate("Frozen",xy=(1.0,fz_last),xycoords=("axes fraction","data"),
               xytext=(6,0),textcoords="offset points",ha="left",va="center",
               fontsize=BASE-1,annotation_clip=False)
 fig.tight_layout()
