@@ -17,9 +17,8 @@ Sources:
     <phase2 runs>/results.json                  selective-prediction coverage, per seed
 
 Tables written to results/tables/:
-    tab_phase1.tex           mechanism ablations vs frozen, plus the RF-vs-random
-                             contrast (one table: the second was a difference of two
-                             rows of the first)
+    tab_phase1.tex           every single change against the base configuration,
+                             the RF-vs-random contrast included as its own row
     tab_phase2_prior.tex     oriented vs random under R-STDP, both decoders
     tab_selective.tex        coverage attainable at three accuracy targets
 
@@ -39,8 +38,8 @@ DS = ["mnist", "fmnist", "kmnist", "notmnist"]
 PRETTY = {"mnist": "MNIST", "fmnist": "Fashion", "kmnist": "KMNIST",
           "notmnist": "notMNIST", "svhn": "SVHN"}
 COND = {"base_ori": "trace-STDP", "triplet": "triplet-STDP", "vogels": "+ iSTDP (Vogels)",
-        "ee_off": "no E$\\to$E recurrence", "ie_off": "no I$\\to$E inhibition",
-        "base_rnd": "trace-STDP, random init"}
+        "frozen": "frozen weights", "ee_off": "no E$\\to$E recurrence",
+        "ie_off": "no I$\\to$E inhibition", "base_rnd": "random initialization"}
 
 
 def load_draws():
@@ -93,52 +92,47 @@ def write(name, body):
 
 # ------------------------------------------------------- table 1 (phase 1, merged)
 
-# Mechanism ablations: oriented prior throughout, so each row changes exactly one thing
-# against the oriented frozen reference. base_rnd is deliberately NOT here -- it changes
-# the prior AND the rule at once, so it is not comparable to these rows and appears below
-# as the prior contrast instead.
-LADDER = ["base_ori", "triplet", "vogels", "ee_off", "ie_off"]
+# Single changes from the base configuration (trace-STDP, E->E recurrence, I->E inhibition,
+# oriented prior, plastic weights), which is the GLMM's reference level. Every other cell
+# differs from base in exactly one thing, so with base as the reference the prior contrast
+# (base_rnd) sits in the same block as the mechanism ablations instead of needing its own.
+# Grouped as in the phase-1 figure: learning rule, connectivity, prior.
+GROUPS = [("learning rule", ["triplet", "vogels", "frozen"]),
+          ("connectivity", ["ee_off", "ie_off"]),
+          ("prior", ["base_rnd"])]
+LADDER = [c for _, cs in GROUPS for c in cs]
 
 
 def tab_phase1(D):
-    """One phase-1 table: mechanism ablations against frozen, then the prior contrast.
+    """One phase-1 table: each single change against the base configuration.
 
-    These were two tables until it became clear the second was a difference of two rows of
-    the first -- base_ori-frozen minus base_rnd-frozen reproduces the prior contrast to the
-    last reported decimal on all five datasets. Only the interval is new information, since
-    the two cells covary and the width of a difference cannot be read off two separate
-    intervals. So the contrast keeps a row, and the redundant table goes.
+    The reference used to be frozen weights, which put the receptive-field contrast in a
+    second block (its reference was random connectivity). Against base, that contrast is
+    just the random-initialization row, with its sign flipped.
     """
     rows = []
-    for cond in LADDER:
-        cells = [f"${c[0]:+.2f}{stars(c[3])}$" if (c := contrast(D, cond, "frozen", ds))
-                 else "--" for ds in DS]
-        rows.append(f"{COND[cond]} & " + " & ".join(cells) + " \\\\")
-    prior = []
-    for ds in DS:
-        c = contrast(D, "base_ori", "base_rnd", ds)
-        prior.append("--" if c is None else f"${c[0]:+.2f}{stars(c[3])}$")
+    for name, conds in GROUPS:
+        rows.append(f"\\multicolumn{{5}}{{l}}{{\\emph{{{name}}}}} \\\\")
+        for cond in conds:
+            cells = [f"${c[0]:+.2f}{stars(c[3])}$" if (c := contrast(D, cond, "base_ori", ds))
+                     else "--" for ds in DS]
+            rows.append(f"{COND[cond]} & " + " & ".join(cells) + " \\\\")
     header = " & ".join(PRETTY[d] for d in DS)
     # RAW f-string: in a normal one "\begin" is a backspace and "\toprule" a tab, which
     # silently emits control characters into the .tex instead of LaTeX commands.
     return rf"""\begin{{table}}[t]
 \centering
-\caption{{Unsupervised model, in percentage points of accuracy on the linear probe.
-The upper block compares each plastic configuration against frozen weights, holding the
-oriented prior fixed, so every row changes one mechanism. The lower block is the
-receptive-field contrast, holding trace-STDP fixed and changing only the initialization;
-it is reported separately because its reference is random connectivity rather than frozen
-weights. Entries without a marker have intervals spanning zero.}}
+\caption{{Unsupervised model, in percentage points of accuracy on the linear probe,
+against the base configuration: trace-STDP with E$\to$E recurrence and I$\to$E inhibition,
+oriented prior and plastic weights. Every row changes one thing from base, so a positive
+entry means that change improves on it. Entries without a marker have intervals spanning
+zero.}}
 \label{{tab:phase1}}
 \begin{{tabular}}{{lrrrr}}
 \toprule
 & {header} \\
 \midrule
-\multicolumn{{5}}{{l}}{{\emph{{against frozen weights, oriented prior}}}} \\
 {chr(10).join(rows)}
-\midrule
-\multicolumn{{5}}{{l}}{{\emph{{against random connectivity, trace-STDP}}}} \\
-oriented receptive fields & {" & ".join(prior)} \\
 \bottomrule
 \end{{tabular}}
 
@@ -247,8 +241,9 @@ def main():
         c = contrast(D, "base_ori", "base_rnd", ds)
         print(f"  {PRETTY[ds]:<9} {c[0]:+6.2f} pp [{c[1]:+6.2f},{c[2]:+6.2f}] p={c[3]:.4f}")
     print("\n--- phase 1: best plastic - frozen ---")
+    plastic = ["base_ori"] + [c for c in LADDER if c not in ("frozen", "base_rnd")]
     for ds in DS:
-        best = max(LADDER, key=lambda c: D[("1", "probe", ds, c)].mean())
+        best = max(plastic, key=lambda c: D[("1", "probe", ds, c)].mean())
         c = contrast(D, best, "frozen", ds)
         print(f"  {PRETTY[ds]:<9} {best:<9} {c[0]:+6.2f} pp "
               f"[{c[1]:+6.2f},{c[2]:+6.2f}] p={c[3]:.4f}")

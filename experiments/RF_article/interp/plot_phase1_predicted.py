@@ -54,20 +54,20 @@ def glyph(ax,x,y,c,label,fs,hw=.055,bh=.030,wh=.058):
 
 DS=["mnist","kmnist","notmnist","fmnist"]
 NICE={"mnist":"MNIST","kmnist":"KMNIST","notmnist":"notMNIST","fmnist":"FMNIST","svhn":"SVHN"}
-# frozen is the dashed reference line only -- drawing it as a box too would show the same
-# cell twice. Colour then carries the one thing the x labels do not say: which weight
-# configuration sits underneath. Matches the phase-2 figure (rose = oriented, slate = random).
-# Base first; every other label names its one change from Base: + adds a component,
-# − removes one, a bare name replaces one. Grouped as learning rule, connectivity, prior.
-ORDER=["base_ori","triplet","vogels","ee_off","ie_off","base_rnd"]
-LBL={"base_ori":"Base","triplet":"Triplet","vogels":"+iSTDP","ee_off":"−Recurrence",
+# Base is the GLMM's reference level and the dashed reference line only -- drawing it as a
+# box too would show the same cell twice. Every box names its one change from Base:
+# + adds a component, − removes one, a bare name replaces one. Grouped as learning rule,
+# connectivity, prior.
+REF="base_ori"
+ORDER=["triplet","vogels","frozen","ee_off","ie_off","base_rnd"]
+LBL={"triplet":"Triplet","vogels":"+iSTDP","frozen":"Frozen","ee_off":"−Recurrence",
      "ie_off":"−Inhibition","base_rnd":"Random"}
 COL={c:("random" if c=="base_rnd" else "oriented") for c in ORDER}
 
 fig,axes=plt.subplots(1,4,figsize=(15.5,4.3))
 flat=axes.ravel()
 for j,(ax,ds) in enumerate(zip(flat,DS)):
-    fz=np.mean(D[(1,"probe",ds,"frozen")])
+    fz=np.mean(D[(1,"probe",ds,REF)])
     for i,cd in enumerate(ORDER):
         v=D[(1,"probe",ds,cd)]
         if not v: continue
@@ -75,8 +75,7 @@ for j,(ax,ds) in enumerate(zip(flat,DS)):
         o=O[(1,"probe",ds,cd)]
         ax.scatter(np.full(len(o),i),o,s=16,marker=STYLE[COL[cd]][2],facecolors="white",
                    edgecolors="black",linewidths=.8,zorder=5)
-    # Where the frozen value lands on a y-tick (KMNIST 0.7199 against the 0.72 tick,
-    # Fashion 0.7799 against 0.78) the sage dashes and the grey gridline sit two pixels
+    # Where the reference value lands on a y-tick the dashes and the grey gridline sit two pixels
     # apart and blur into one grey rule at print size. A white casing under the reference
     # clears the gridline locally; both sit below the boxes, which draw over them.
     ax.axhline(fz,color="white",lw=5.0,ls="-",zorder=2.4)
@@ -94,8 +93,8 @@ for j,(ax,ds) in enumerate(zip(flat,DS)):
 
 # No legend: the x labels name each box, and the dashed reference is labelled once,
 # to the right of the last panel.
-last=flat[len(DS)-1]; fz_last=np.mean(D[(1,"probe",DS[-1],"frozen")])
-last.annotate("Frozen",xy=(1.0,fz_last),xycoords=("axes fraction","data"),
+last=flat[len(DS)-1]; fz_last=np.mean(D[(1,"probe",DS[-1],REF)])
+last.annotate("Base",xy=(1.0,fz_last),xycoords=("axes fraction","data"),
               xytext=(6,0),textcoords="offset points",ha="left",va="center",
               fontsize=BASE-1,annotation_clip=False)
 fig.tight_layout()

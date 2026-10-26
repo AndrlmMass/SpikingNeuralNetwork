@@ -23,7 +23,9 @@ interaction, $b_{\mathrm{seed}(i)} \sim \mathcal{N}(0, \sigma^2_{\mathrm{seed}})
 per-seed random intercept, and $\phi > 0$ the dispersion parameter, with the binomial case
 recovered as $\phi \to \infty$. The phases differ only in what $c$ encodes and in which
 decoder supplies $y_i$. In Phase 1, $c$ is the seven-level ablation factor referenced to
-the frozen configuration, and $y_i$ comes from the linear probe, which is the only decoder
+the base configuration (trace-STDP with recurrence and lateral inhibition, oriented prior,
+plastic weights), so that each other level is a single change from it, and $y_i$ comes
+from the linear probe, which is the only decoder
 the ungrouped unsupervised architecture admits. In Phase 2, $c$ is the prior, oriented or
 random and referenced to random, and we fit the model separately to the learned readout and
 to the probe. In both cases we test the configuration $\times$ dataset interaction by a
