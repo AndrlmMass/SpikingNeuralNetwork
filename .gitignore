@@ -20,6 +20,42 @@ plots/
 !/results/tables/
 !/results/figures/
 
+# Analysis inputs, so the GLMMs, tables and figures regenerate on a fresh clone: the R
+# scripts and their CSVs, the phase-2 run JSON, and the OOD run JSON/CSV (not its npz).
+# Same rule as above, one level at a time: un-exclude a directory, then re-filter its
+# contents. The un-excludes also override the unanchored `model/` and `results/` rules,
+# which would otherwise catch interp/model/ and mnist_family_sweep/results/.
+!/results/interp/
+/results/interp/*
+!/results/interp/model/
+/results/interp/model/*
+!/results/interp/model/*.R
+!/results/interp/model/*.csv
+!/results/interp/json/
+/results/interp/json/*
+!/results/interp/json/experiments/
+/results/interp/json/experiments/*
+!/results/interp/json/experiments/RF_article/
+/results/interp/json/experiments/RF_article/*
+!/results/interp/json/experiments/RF_article/interp/
+/results/interp/json/experiments/RF_article/interp/*
+!/results/interp/json/experiments/RF_article/interp/mnist_family_sweep/
+/results/interp/json/experiments/RF_article/interp/mnist_family_sweep/*
+!/results/interp/json/experiments/RF_article/interp/mnist_family_sweep/results/
+/results/interp/json/experiments/RF_article/interp/mnist_family_sweep/results/*
+!/results/interp/json/experiments/RF_article/interp/mnist_family_sweep/results/run_20260819_112250/
+!/results/ood_mnist/
+/results/ood_mnist/*
+!/results/ood_mnist/run1/
+/results/ood_mnist/run1/*
+!/results/ood_mnist/run1/mnist_ood_s0/
+/results/ood_mnist/run1/mnist_ood_s0/*
+!/results/ood_mnist/run1/mnist_ood_s0/*.json
+!/results/ood_mnist/run1/mnist_ood_s0/*.csv
+!/results/ood_mnist/run1/mnist_ood_s0/stats/
+/results/ood_mnist/run1/mnist_ood_s0/stats/*
+!/results/ood_mnist/run1/mnist_ood_s0/stats/*.jsonl
+
 # Data
 data/
 sdata/

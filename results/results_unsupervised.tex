@@ -1,0 +1,51 @@
+\subsubsection{Receptive fields under unsupervised learning}
+Receptive field (RF) connectivity outperforms random connectivity on every dataset, but
+none of the unsupervised plasticity rules we tested improves on the RFs it starts from.
+Averaged over the four datasets, \textit{Frozen} reaches $82.9\%$ accuracy, against
+$80.5\%$ for \textit{Base} and $77.9\%$ for \textit{Random}
+(Figure~\ref{fig:phase_1_predicted}). The beta-binomial GLMM
+(Table~\ref{tab:glmm_phase1}, Appendix~\ref{sec:app:glmm_unsup}) takes \textit{Base} on
+MNIST as its reference, so each configuration coefficient is the logit-scale effect of one
+change on MNIST, and each interaction is how that effect shifts on another dataset.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.7\linewidth]{fig_phase1_average_BW.pdf}
+    \caption{Predicted linear-probe accuracy of the unsupervised model, averaged over the
+    four datasets, for the six conditions that each make one change to \textit{Base}
+    (dashed line). Boxes give the uncertainty of the model's mean prediction, simulated
+    from the fitted fixed effects of the beta-binomial GLMM, and open circles the observed
+    accuracy of each of the five seeds, averaged over the same four datasets.
+    \textit{Base} is the oriented receptive fields condition under trace-STDP with
+    recurrent excitation and fixed lateral inhibition; each other condition adds ($+$),
+    removes ($-$), or replaces (unsigned) one component (Section~\ref{sec:exp1}).}
+    \label{fig:phase_1_predicted}
+\end{figure}
+
+Disabling plasticity has the largest effect of any single change on MNIST
+($\hat{\beta}_3 = 0.290$, $p<.001$), and \textit{Frozen} stays ahead of \textit{Base} on
+KMNIST and notMNIST; only on FMNIST does a negative interaction
+($\hat{\beta}_{12} = -0.267$, $p<.001$) cancel the advantage. Neither alternative learning
+rule differs from trace-STDP on MNIST, with $\hat{\beta}_5 = 0.041$ ($p = .224$) for
+\textit{Triplet} and $\hat{\beta}_6 = 0.003$ ($p = .908$) for \textit{$+$iSTDP}. \textit{Triplet} gains
+on KMNIST and notMNIST through positive interactions ($\hat{\beta}_{20} = 0.105$ and
+$\hat{\beta}_{26} = 0.173$, $p \leq .002$) but loses on FMNIST, whereas none of the
+\textit{$+$iSTDP} interactions differs from zero.
+
+Removing lateral inhibition is the more harmful connectivity change, with the largest
+penalty of any condition on MNIST ($\hat{\beta}_4 = -0.203$, $p<.001$), whereas removing
+recurrent excitation slightly improves accuracy on MNIST ($\hat{\beta}_2 = 0.082$,
+$p = .004$), which indicates that recurrence contributes little to the representation.
+Replacing the RFs with random connectivity costs comparatively little on MNIST
+($\hat{\beta}_1 = -0.072$, $p = .013$), but all of its interactions are negative, so the
+penalty grows on the other datasets and \textit{Random} ends up the least accurate
+configuration. The seed intercept is singular and the dispersion very large
+($\hat{\phi} = 1.8\times10^{5}$), so the variation between seeds stays within binomial
+sampling noise and these effects are reproducible across seeds.
+
+Taken together, the weight structure supplied by the receptive fields is worth more than
+anything unsupervised plasticity adds to it. Receptive field connectivity outperforms random
+wiring, and every rule we tested erodes that advantage, \textit{Triplet} least of all. These
+findings shape the next stage of our experiments, in which we keep lateral inhibition,
+remove recurrent excitation, and redesign the network architecture around the supervised
+learning rule R-Hebb.

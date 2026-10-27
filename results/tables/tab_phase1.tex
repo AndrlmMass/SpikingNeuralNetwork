@@ -1,24 +1,24 @@
 \begin{table}[t]
 \centering
 \caption{Unsupervised model, in percentage points of accuracy on the linear probe,
-against the base configuration: trace-STDP with E$\to$E recurrence and I$\to$E inhibition,
-oriented prior and plastic weights. Every row changes one thing from base, so a positive
+against \textit{Base}: oriented receptive fields under trace-STDP, with recurrent excitation
+and fixed lateral inhibition. Every row changes one thing from Base, so a positive
 entry means that change improves on it. Entries without a marker have intervals spanning
 zero.}
 \label{tab:phase1}
 \begin{tabular}{lrrrr}
 \toprule
-& MNIST & Fashion & KMNIST & notMNIST \\
+& MNIST & FMNIST & KMNIST & notMNIST \\
 \midrule
 \multicolumn{5}{l}{\emph{learning rule}} \\
-triplet-STDP & $+0.33$ & $-1.22^{***}$ & $+3.08^{***}$ & $+2.37^{***}$ \\
-+ iSTDP (Vogels) & $+0.01$ & $-1.01^{***}$ & $-1.12^{***}$ & $-1.26^{**}$ \\
-frozen weights & $+2.19^{***}$ & $+0.38$ & $+4.28^{***}$ & $+2.78^{***}$ \\
+Triplet & $+0.33$ & $-1.22^{***}$ & $+3.08^{***}$ & $+2.37^{***}$ \\
+$+$iSTDP & $+0.01$ & $-1.01^{***}$ & $-1.12^{***}$ & $-1.26^{**}$ \\
+Frozen & $+2.19^{***}$ & $+0.38$ & $+4.28^{***}$ & $+2.78^{***}$ \\
 \multicolumn{5}{l}{\emph{connectivity}} \\
-no E$\to$E recurrence & $+0.67^{***}$ & $-0.08$ & $+0.67^{*}$ & $-0.10$ \\
-no I$\to$E inhibition & $-1.90^{***}$ & $-0.52$ & $-1.27^{***}$ & $-0.53$ \\
+$-$Recurrence & $+0.67^{***}$ & $-0.08$ & $+0.67^{*}$ & $-0.10$ \\
+$-$Inhibition & $-1.90^{***}$ & $-0.52$ & $-1.27^{***}$ & $-0.53$ \\
 \multicolumn{5}{l}{\emph{prior}} \\
-random initialization & $-0.64^{***}$ & $-3.12^{***}$ & $-3.48^{***}$ & $-3.24^{***}$ \\
+Random & $-0.64^{***}$ & $-3.12^{***}$ & $-3.48^{***}$ & $-3.24^{***}$ \\
 \bottomrule
 \end{tabular}
 

@@ -35,11 +35,13 @@ PHASE2 = os.path.join(REPO, "results", "interp", "json", "experiments", "RF_arti
                       "interp", "mnist_family_sweep", "results", "run_20260819_112250")
 OUT = os.path.join(REPO, "results", "tables")
 DS = ["mnist", "fmnist", "kmnist", "notmnist"]
-PRETTY = {"mnist": "MNIST", "fmnist": "Fashion", "kmnist": "KMNIST",
+PRETTY = {"mnist": "MNIST", "fmnist": "FMNIST", "kmnist": "KMNIST",
           "notmnist": "notMNIST", "svhn": "SVHN"}
-COND = {"base_ori": "trace-STDP", "triplet": "triplet-STDP", "vogels": "+ iSTDP (Vogels)",
-        "frozen": "frozen weights", "ee_off": "no E$\\to$E recurrence",
-        "ie_off": "no I$\\to$E inhibition", "base_rnd": "random initialization"}
+# Base/+/- names as in the Methods and the phase-1 figure: signed labels add or remove a
+# component, unsigned ones replace it.
+COND = {"base_ori": "Base", "triplet": "Triplet", "vogels": "$+$iSTDP",
+        "frozen": "Frozen", "ee_off": "$-$Recurrence",
+        "ie_off": "$-$Inhibition", "base_rnd": "Random"}
 
 
 def load_draws():
@@ -123,8 +125,8 @@ def tab_phase1(D):
     return rf"""\begin{{table}}[t]
 \centering
 \caption{{Unsupervised model, in percentage points of accuracy on the linear probe,
-against the base configuration: trace-STDP with E$\to$E recurrence and I$\to$E inhibition,
-oriented prior and plastic weights. Every row changes one thing from base, so a positive
+against \textit{{Base}}: oriented receptive fields under trace-STDP, with recurrent excitation
+and fixed lateral inhibition. Every row changes one thing from Base, so a positive
 entry means that change improves on it. Entries without a marker have intervals spanning
 zero.}}
 \label{{tab:phase1}}
