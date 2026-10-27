@@ -21,7 +21,8 @@ plots/
 !/results/figures/
 
 # Analysis inputs, so the GLMMs, tables and figures regenerate on a fresh clone: the R
-# scripts and their CSVs, the phase-2 run JSON, and the OOD run JSON/CSV (not its npz).
+# scripts and their CSVs, the phase-2 run JSON, and the OOD run JSON/CSV plus the two npz
+# files its AUROC and confidence-overlap plots read.
 # Same rule as above, one level at a time: un-exclude a directory, then re-filter its
 # contents. The un-excludes also override the unanchored `model/` and `results/` rules,
 # which would otherwise catch interp/model/ and mnist_family_sweep/results/.
@@ -55,6 +56,10 @@ plots/
 !/results/ood_mnist/run1/mnist_ood_s0/stats/
 /results/ood_mnist/run1/mnist_ood_s0/stats/*
 !/results/ood_mnist/run1/mnist_ood_s0/stats/*.jsonl
+!/results/ood_mnist/run1/mnist_ood_s0/uncertainty_features.npz
+!/results/ood_mnist/run1/mnist_ood_s0/weights/
+/results/ood_mnist/run1/mnist_ood_s0/weights/*
+!/results/ood_mnist/run1/mnist_ood_s0/weights/checkpoint.npz
 
 # Data
 data/
