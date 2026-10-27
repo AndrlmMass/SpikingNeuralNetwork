@@ -14,12 +14,16 @@ Detectors
   pixel PCA residual    from input_density.json: residual outside MNIST's top-50 pixel
                         principal subspace, two-sided AUROC. No network at all.
 
-SVHN here is an OOD *probe* (never trained on), not one of the article's training sets.
+Seeds
+  --run is either one seed's run dir or a run root holding mnist_ood_s*/ (one per seed,
+  from mnist_family_sweep/run_slurm_ood.sh). Each seed is scored on its own network;
+  bars are the mean over seeds and error bars the SD across them (none for one seed).
 
 Usage:
     python experiments/RF_article/interp/plot_ood_auroc.py
+    python experiments/RF_article/interp/plot_ood_auroc.py --run results/ood_mnist/<RUN_ID>
 """
-import argparse, json, os
+import argparse, glob, json, os
 
 import numpy as np
 import matplotlib
@@ -29,7 +33,7 @@ from matplotlib.patches import Patch
 from sklearn.metrics import roc_auc_score
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-RUN = os.path.join(REPO, "results", "ood_mnist", "run1", "mnist_ood_s0")
+RUN = os.path.join(REPO, "results", "ood_mnist", "run1")
 OOD = ["kmnist", "notmnist", "fmnist"]   # decreasing low-level similarity to MNIST (SVHN dropped)
 PRETTY = {"kmnist": "KMNIST", "notmnist": "notMNIST", "fmnist": "FMNIST",
           "svhn": "SVHN"}
@@ -69,8 +73,9 @@ def compute(run):
     assign = z["assignment"]; ng = int(assign.max()) + 1
     Xc, yc, Xt = z["X_cal"].astype(np.float64), z["y_cal"], z["X_test"].astype(np.float64)
     # fitted on the first half of the calibration split; the second half calibrates the
-    # rejection threshold (reproduces the reported 0.879/0.968/0.884/0.847)
-    maha = mahalanobis(Xc[:2500], yc[:2500])
+    # rejection threshold (on run1/s0 this gives KMNIST/notMNIST/FMNIST 0.879/0.968/0.884)
+    cut = len(Xc) // 2
+    maha = mahalanobis(Xc[:cut], yc[:cut])
     res = {"group": {}, "maha": {}, "pca": {}}
     g_id, m_id = group_entropy(Xt, assign, ng), maha(Xt)
     for o in OOD:
@@ -83,6 +88,29 @@ def compute(run):
     return res
 
 
+def seed_dirs(run):
+    """A single seed's run dir, or every mnist_ood_s*/ under a run root."""
+    if os.path.exists(os.path.join(run, "uncertainty_features.npz")):
+        return [run]
+    dirs = sorted(d for d in glob.glob(os.path.join(run, "mnist_ood_s*"))
+                  if os.path.exists(os.path.join(d, "uncertainty_features.npz")))
+    if not dirs:
+        raise SystemExit(f"{run}: no uncertainty_features.npz, and no mnist_ood_s*/ holding one")
+    return dirs
+
+
+def compute_seeds(run):
+    """{key: {ood: (mean, sd, n)}} over seeds; sd is nan for a single seed."""
+    per = [compute(d) for d in seed_dirs(run)]
+    out = {}
+    for key, _, _ in METHODS:
+        out[key] = {}
+        for o in OOD:
+            v = np.array([r[key][o] for r in per])
+            out[key][o] = (v.mean(), v.std(ddof=1) if len(v) > 1 else np.nan, len(v))
+    return out
+
+
 METHODS = [("group", "group concentration (network)", ("white", "")),
            ("maha", "Mahalanobis distance (network)", ("white", "////")),
            ("pca", "pixel PCA residual (no network)", ("#bdbdbd", ""))]
@@ -93,11 +121,15 @@ def figure(res, out):
     fig, ax = plt.subplots(figsize=(9.5, 5.2))
     x = np.arange(len(OOD)); w = 0.26
     for k, (key, label, (fc, hatch)) in enumerate(METHODS):
-        vals = [res[key][o] for o in OOD]
+        vals = np.array([res[key][o][0] for o in OOD])
+        sds = np.array([res[key][o][1] for o in OOD])
+        has_sd = np.isfinite(sds).any()
         ax.bar(x + (k - 1) * w, vals, w * 0.92, color=fc, hatch=hatch, edgecolor="black",
-               lw=1.1, zorder=3)
-        for xi, v in zip(x + (k - 1) * w, vals):
-            ax.text(xi, v + 0.006, f"{v:.2f}", ha="center", va="bottom", fontsize=14)
+               lw=1.1, zorder=3, yerr=(sds if has_sd else None),
+               error_kw=dict(ecolor="black", elinewidth=1.2, capsize=4, zorder=4))
+        tops = vals + (np.nan_to_num(sds) if has_sd else 0.0)
+        for xi, v, t in zip(x + (k - 1) * w, vals, tops):
+            ax.text(xi, t + 0.006, f"{v:.2f}", ha="center", va="bottom", fontsize=14)
     ax.set_ylim(0.5, 1.07)
     ax.set_yticks([0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
     ax.set_xticks(x)
@@ -123,10 +155,13 @@ def main():
     ap.add_argument("--run", default=RUN)
     ap.add_argument("--out", default=os.path.join(REPO, "results", "figures", "ood_auroc"))
     a = ap.parse_args()
-    res = compute(a.run)
-    print(f"{'':30}" + "".join(f"{PRETTY[o]:>15}" for o in OOD))
+    res = compute_seeds(a.run)
+    n = res[METHODS[0][0]][OOD[0]][2]
+    print(f"AUROC, mean +- SD over {n} seed(s)")
+    print(f"{'':34}" + "".join(f"{PRETTY[o]:>17}" for o in OOD))
     for key, label, _ in METHODS:
-        print(f"{label:30}" + "".join(f"{res[key][o]:15.3f}" for o in OOD))
+        print(f"{label:34}" + "".join(f"{m:10.3f} +-{s:5.3f}" for m, s, _ in
+                                      (res[key][o] for o in OOD)))
     figure(res, a.out)
     print("wrote", a.out + ".pdf")
 
