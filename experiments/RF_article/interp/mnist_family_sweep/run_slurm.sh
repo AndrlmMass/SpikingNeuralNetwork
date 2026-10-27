@@ -126,11 +126,13 @@ fi
 # train/val from the dedicated TRAIN split, test = the dedicated TEST split (full).
 #   mnist/fmnist/kmnist : 60000 train / 10000 test -> 59k train + 1k val, FULL 10k test
 #   svhn                : 73257 train / 26032 test -> 59k train + 1k val, FULL 26032 test
-#   notmnist            : no canonical split; 18724 merged -> 15k / 1k / 2724 (seed-fixed)
+#   notmnist            : no canonical split; 18724 merged -> 15k / 1k / 2500, re-partitioned per seed
+#                         (2500 is what the 08-19 RF arm and phase 1 were scored on; the random
+#                         notMNIST cells are rerun at it: sbatch --array=35-39 run_slurm.sh)
 TRAIN_ALL=59000; VAL_ALL=1000; TEST_ALL=10000
 case "${DATASET}" in
     svhn)     TRAIN_ALL=59000; VAL_ALL=1000; TEST_ALL=26032 ;;
-    notmnist) TRAIN_ALL=15000; VAL_ALL=1000; TEST_ALL=2724  ;;
+    notmnist) TRAIN_ALL=15000; VAL_ALL=1000; TEST_ALL=2500  ;;
 esac
 echo "Split    : train=${TRAIN_ALL} val=${VAL_ALL} test=${TEST_ALL}  probe-fit=5000  (dataset=${DATASET})"
 

@@ -43,10 +43,10 @@ FROZEN = os.path.join(REPO, "results", "frozen_supervised", "run_cheap")
 DATASETS = ["mnist", "kmnist", "fmnist", "notmnist"]
 PRETTY = {"mnist": "MNIST", "fmnist": "FMNIST", "kmnist": "KMNIST",
           "notmnist": "notMNIST"}
-LABELS = {"oriented": "RF prior\n+ R-Hebb", "random": "random init\n+ R-Hebb",
-          "frozen": "RF prior\nFROZEN"}
-FLAT = {"oriented": "RF prior + R-Hebb", "random": "random init + R-Hebb",
-        "frozen": "RF prior, frozen"}          # single-line, for the stdout table
+LABELS = {"oriented": "Receptive\nfields", "random": "Random\nweights",
+          "frozen": "Frozen\nweights"}
+FLAT = {"oriented": "Receptive fields", "random": "Random weights",
+        "frozen": "Frozen weights"}            # single-line: legend and stdout table
 ORDER = ["frozen", "random", "oriented"]     # weakest-claim first, left to right
 N_YTICKS = 5                                 # same tick count in every panel
 

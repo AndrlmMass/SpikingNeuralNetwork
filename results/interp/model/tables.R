@@ -3,7 +3,8 @@
 # dispersion in a footer block, significance legend in a caption*.
 #
 #   phase 1  cbind(k, n-k) ~ cond * dataset + (1|seed)      [linear probe]
-#   phase 2  cbind(k, n-k) ~ prior * dataset + (1|seed)     [learned readout | probe]
+#   phase 2  cbind(k, n-k) ~ cond * dataset + (1|seed)      [learned readout | probe]
+#            cond = oriented (RF + R-Hebb, the reference) | random | frozen
 #
 # Phase 2 mirrors contrasts.R exactly: dispersion is allowed to vary by dataset when that
 # fits better and converges, and the seed intercept is dropped when the fit is singular.
@@ -48,6 +49,8 @@ pretty_term <- function(tm) {
   tm <- gsub("condee_off",    "$-$Recurrence",  tm)
   tm <- gsub("condie_off",    "$-$Inhibition",  tm)
   tm <- gsub("priororiented", "oriented RF",    tm)
+  # phase 2: both terms are single changes from RF + R-Hebb, the reference level
+  tm <- gsub("condrandom",    "Random",         tm)
   tm <- gsub("datasetfmnist", "FMNIST",         tm)
   tm <- gsub("datasetkmnist", "KMNIST",         tm)
   tm <- gsub("datasetnotmnist", "notMNIST",     tm)
@@ -146,18 +149,23 @@ writeLines(unlist(L), file.path(OUT, "tab_glmm_phase1.tex"))
 # ---------- phase 2: two models side by side --------------------------------
 fit2 <- function(resp) {
   p2 <- droplevels(subset(d, phase == 2 & response == resp))
-  p2$prior <- relevel(p2$prior, ref = "random")
+  # Referenced to RF + R-Hebb, as phase 1 is referenced to Base: Random changes only the
+  # initialization and Frozen only the input plasticity (the readout still learns), so
+  # each coefficient is one change from the trained RF model. The RF advantage therefore
+  # reads as a NEGATIVE coefficient.
+  # fixed order, so Random is beta_1 and Frozen beta_2 rather than alphabetical
+  p2$cond <- factor(p2$cond, levels = intersect(c("oriented", "random", "frozen"), levels(p2$cond)))
   p2$dataset <- relevel(p2$dataset, ref = "mnist")
-  m0 <- glmmTMB(cbind(k, n - k) ~ prior * dataset + (1 | seed),
+  m0 <- glmmTMB(cbind(k, n - k) ~ cond * dataset + (1 | seed),
                 family = betabinomial(), data = p2, control = CTRL)
-  m1 <- tryCatch(glmmTMB(cbind(k, n - k) ~ prior * dataset + (1 | seed),
+  m1 <- tryCatch(glmmTMB(cbind(k, n - k) ~ cond * dataset + (1 | seed),
                          family = betabinomial(), dispformula = ~ dataset,
                          data = p2, control = CTRL), error = function(e) NULL)
   use_var <- ok(m1) && (!ok(m0) || AIC(m1) < AIC(m0))
   m <- if (use_var) m1 else m0
   re <- TRUE
   if (!ok(m)) {
-    m <- glmmTMB(cbind(k, n - k) ~ prior * dataset,
+    m <- glmmTMB(cbind(k, n - k) ~ cond * dataset,
                  family = betabinomial(), data = p2, control = CTRL)
     use_var <- FALSE; re <- FALSE
   }
@@ -175,7 +183,7 @@ row2 <- function(i, lab) sprintf("    %s & %s & %s & %s & %s & %s & %s\\\\",
 
 ii  <- grepl(":", CL$term)
 ids <- !ii & grepl("^dataset", CL$term)
-ipr <- !ii & grepl("^prior", CL$term)
+ipr <- !ii & grepl("^cond", CL$term)
 
 # Dispersion per dataset when it was modelled that way; otherwise the single fitted phi,
 # shown on the first row and left blank below it rather than repeated four times.
@@ -195,9 +203,13 @@ L2 <- c(
   "\\setlength{\\tabcolsep}{4pt}",
   "\\begin{longtable}{l rrr rrr}",
   "    \\caption{Phase 2 beta-binomial GLMM of supervised accuracy under R-Hebb, by decoder:",
-  "    fixed-effect estimates on the logit scale. The reference cell is random connectivity",
-  "    on MNIST, so \\textit{oriented RF} is the receptive-field effect on MNIST and each",
-  "    interaction row is how it changes on the named dataset.\\label{tab:glmm_phase2}}\\\\",
+  "    fixed-effect estimates on the logit scale. The reference cell is \\textit{RF + R-Hebb}",
+  "    (oriented receptive fields, input weights trained by R-Hebb) on MNIST. \\textit{Random}",
+  "    replaces the receptive fields with random connectivity and \\textit{Frozen} holds the",
+  "    input weights at their receptive-field initialization while the readout still learns,",
+  "    so each is one change from the reference and a negative estimate means the reference",
+  "    is more accurate. Interaction rows give how each effect changes on the named",
+  "    dataset.\\label{tab:glmm_phase2}}\\\\",
   "    \\toprule",
   "    & \\multicolumn{3}{c}{\\textit{Learned readout}} & \\multicolumn{3}{c}{\\textit{Linear probe}}\\\\",
   "    \\cmidrule(lr){2-4}\\cmidrule(lr){5-7}",
@@ -231,8 +243,7 @@ L2 <- c(
   sprintf(paste0("    \\caption*{$p$-values are Holm-adjusted over the fixed effects other than the ",
                  "intercept, within each decoder's model. ",
                  "Significance: * $p<.05$, ** $p<.01$, *** $p<.001$. Reference cell ",
-                 "= random connectivity on MNIST. %s The probe's seed intercept was singular and ",
-                 "was dropped.}"),
+                 "= RF + R-Hebb on MNIST. %s%s}"),
           if (FL$var_disp) {
             lv <- c("mnist", setdiff(levels(droplevels(subset(d, phase == 2 &
                     response == "learned")$dataset)), "mnist"))
@@ -242,7 +253,10 @@ L2 <- c(
                                  sapply(lv, function(x) pretty_term(paste0("dataset", x))),
                                  formatC(unname(v), format = "f", digits = 0)),
                          collapse = ", "), ".")
-          } else ""),
+          } else "",
+          # say which decoder lost its seed intercept, rather than assuming it is the probe
+          paste0(if (!FL$re) " The learned readout's seed intercept was singular and was dropped." else "",
+                 if (!FP$re) " The probe's seed intercept was singular and was dropped." else "")),
   "\\end{longtable}",
   "\\setlength{\\tabcolsep}{6pt}}")
 writeLines(unlist(L2), file.path(OUT, "tab_glmm_phase2.tex"))

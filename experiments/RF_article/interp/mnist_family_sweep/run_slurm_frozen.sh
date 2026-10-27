@@ -7,11 +7,33 @@
 # images and a different driver (run_frozen.py), so it was not like-for-like with the
 # 5-seed plastic arms.
 #
+# This is the Frozen level of the phase-2 GLMM (tables.R / contrasts.R), referenced to
+# RF + R-Hebb from run_20260819_112250. Differs from run_slurm.sh ONLY in --reward-lr
+# (5e-6 -> 0), the dataset list and the tag; no library code has changed since that run.
+#
+# notMNIST is tested on 2500 items, the size the RF arm and phase 1 were scored on.
+#
 # Grid: 4 datasets x 5 seeds = 20 runs (SVHN dropped from the article).
 #   task_id -> seed = task_id % 5, dataset = task_id // 5
+#   0-4 mnist, 5-9 fmnist, 10-14 kmnist, 15-19 notmnist
+#   Orion wall time per cell, from the 08-19 RF arm: mnist 3.6 h, fmnist 4.3-4.9 h,
+#   kmnist 4.2 h, notmnist 1.5 h -> ~5 h for the whole array once it is scheduled.
 #
-# Submit from PROJECT_ROOT:
+# Submit from PROJECT_ROOT, after `git pull`, together with the random notMNIST rerun at the
+# same 2500-item test set (run_slurm.sh tasks 35-39), so every phase-2 arm shares it:
 #   sbatch experiments/RF_article/interp/mnist_family_sweep/run_slurm_frozen.sh
+#   sbatch --array=35-39 experiments/RF_article/interp/mnist_family_sweep/run_slurm.sh
+#
+# Then copy both run folders back and ingest them in ONE call: the ingest refuses to write
+# while any phase-2 arm of a dataset has a different test size, and it asserts that frozen
+# cells never moved W_se and plastic cells did.
+#   rsync -av andreama@login.orion.nmbu.no:/mnt/users/andreama/projects/biosnn4/experiments/RF_article/interp/mnist_family_sweep/results/<RUN_ID>/ \
+#         results/interp/json/experiments/RF_article/interp/mnist_family_sweep/results/<RUN_ID>/
+#   python experiments/RF_article/ingest_phase2_runs.py \
+#         results/interp/json/experiments/RF_article/interp/mnist_family_sweep/results/<FROZEN_RUN_ID> \
+#         results/interp/json/experiments/RF_article/interp/mnist_family_sweep/results/<RANDOM_RUN_ID>
+#   Rscript results/interp/model/tables.R && Rscript results/interp/model/contrasts.R
+#   python experiments/RF_article/make_tables.py
 
 #SBATCH --job-name=rf_phase2_frozen
 #SBATCH --array=0-19
@@ -104,11 +126,11 @@ fi
 # train/val from the dedicated TRAIN split, test = the dedicated TEST split (full).
 #   mnist/fmnist/kmnist : 60000 train / 10000 test -> 59k train + 1k val, FULL 10k test
 #   svhn                : 73257 train / 26032 test -> 59k train + 1k val, FULL 26032 test
-#   notmnist            : no canonical split; 18724 merged -> 15k / 1k / 2724 (seed-fixed)
+#   notmnist            : no canonical split; 18724 merged -> 15k / 1k / 2500, re-partitioned per seed
 TRAIN_ALL=59000; VAL_ALL=1000; TEST_ALL=10000
 case "${DATASET}" in
     svhn)     TRAIN_ALL=59000; VAL_ALL=1000; TEST_ALL=26032 ;;
-    notmnist) TRAIN_ALL=15000; VAL_ALL=1000; TEST_ALL=2724  ;;
+    notmnist) TRAIN_ALL=15000; VAL_ALL=1000; TEST_ALL=2500  ;;
 esac
 echo "Split    : train=${TRAIN_ALL} val=${VAL_ALL} test=${TEST_ALL}  probe-fit=5000  (dataset=${DATASET})"
 

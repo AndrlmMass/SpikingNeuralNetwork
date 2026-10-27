@@ -12,7 +12,7 @@ Sources:
                                                 contrasts, which need draws rather than
                                                 marginal predictions to get an interval
                                                 on a DIFFERENCE.
-    results/interp/model/contrasts.csv          phase-2 oriented-random, already computed
+    results/interp/model/contrasts.csv          phase-2 RF minus random / frozen, computed
                                                 by contrasts.R with per-dataset dispersion
     <phase2 runs>/results.json                  selective-prediction coverage, per seed
 
@@ -148,7 +148,10 @@ zero.}}
 def tab_phase2_prior():
     with open(os.path.join(MODEL, "contrasts.csv")) as f:
         rows = list(csv.DictReader(f))
-    by = {(r["response"], r["dataset"]): r for r in rows}
+    # contrasts.csv now holds RF minus random AND RF minus frozen; this table is the former.
+    # Rows written before the `contrast` column existed are all RF minus random.
+    by = {(r["response"], r["dataset"]): r for r in rows
+          if r.get("contrast", "random") == "random"}
     out = []
     for ds in DS:
         cells = []
@@ -161,7 +164,6 @@ def tab_phase2_prior():
                             100 * float(r["hi"]), float(r["p"]))
             cells.append(f"${m:+.2f}{stars(p)}$ & $[{lo:+.2f},\\, {hi:+.2f}]$")
         out.append(f"{PRETTY[ds]} & " + " & ".join(cells) + " \\\\")
-    disp = sorted({r["disp"] for r in rows if r["response"] == "learned"})
     return f"""\\begin{{table}}[t]
 \\centering
 \\caption{{Oriented receptive fields against random initialization under R-STDP, by
