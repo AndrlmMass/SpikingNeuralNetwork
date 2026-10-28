@@ -1,0 +1,182 @@
+{"timestamp": "2026-10-27T11:17:23.620848", "split": "train", "epoch": 1, "accuracy": 0.921, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:17:23.630517", "split": "train", "epoch": 1, "phi": 0.20405772562091673}
+{"timestamp": "2026-10-27T11:18:15.210315", "split": "val", "epoch": 1, "accuracy": 0.734, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:18:15.235021", "split": "val", "epoch": 1, "phi": 0.12189377763486861}
+{"timestamp": "2026-10-27T11:20:16.873410", "split": "train", "epoch": 2, "accuracy": 0.919, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:20:16.878826", "split": "train", "epoch": 2, "phi": 0.15171481314121793}
+{"timestamp": "2026-10-27T11:21:06.190110", "split": "val", "epoch": 2, "accuracy": 0.744, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:21:06.232783", "split": "val", "epoch": 2, "phi": 0.12198025076809282}
+{"timestamp": "2026-10-27T11:23:04.172757", "split": "train", "epoch": 3, "accuracy": 0.914, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:23:04.193043", "split": "train", "epoch": 3, "phi": 0.1517834354833821}
+{"timestamp": "2026-10-27T11:23:54.431191", "split": "val", "epoch": 3, "accuracy": 0.742, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:23:54.454143", "split": "val", "epoch": 3, "phi": 0.122786251899755}
+{"timestamp": "2026-10-27T11:26:01.563703", "split": "train", "epoch": 4, "accuracy": 0.932, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:26:01.579594", "split": "train", "epoch": 4, "phi": 0.17200599545922612}
+{"timestamp": "2026-10-27T11:26:51.978724", "split": "val", "epoch": 4, "accuracy": 0.736, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:26:51.982715", "split": "val", "epoch": 4, "phi": 0.1229260550188869}
+{"timestamp": "2026-10-27T11:28:45.567838", "split": "train", "epoch": 5, "accuracy": 0.915, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:29:42.861191", "split": "train", "epoch": 5, "phi": 0.16058247572692558}
+{"timestamp": "2026-10-27T11:30:32.857724", "split": "val", "epoch": 5, "accuracy": 0.755, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:30:32.862465", "split": "val", "epoch": 5, "phi": 0.12174057584119871}
+{"timestamp": "2026-10-27T11:34:13.874734", "split": "train", "epoch": 6, "accuracy": 0.93, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:34:13.927986", "split": "train", "epoch": 6, "phi": 0.18965363260819426}
+{"timestamp": "2026-10-27T11:35:05.760509", "split": "val", "epoch": 6, "accuracy": 0.721, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:35:05.774857", "split": "val", "epoch": 6, "phi": 0.12249739508890774}
+{"timestamp": "2026-10-27T11:37:04.570498", "split": "train", "epoch": 7, "accuracy": 0.905, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:37:04.603526", "split": "train", "epoch": 7, "phi": 0.2141498157288987}
+{"timestamp": "2026-10-27T11:37:50.096010", "split": "val", "epoch": 7, "accuracy": 0.766, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:37:50.104744", "split": "val", "epoch": 7, "phi": 0.12322137172310733}
+{"timestamp": "2026-10-27T11:39:42.114017", "split": "train", "epoch": 8, "accuracy": 0.9, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:39:42.143036", "split": "train", "epoch": 8, "phi": 0.1483788132346493}
+{"timestamp": "2026-10-27T11:40:24.839222", "split": "val", "epoch": 8, "accuracy": 0.753, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:40:24.843915", "split": "val", "epoch": 8, "phi": 0.12449300070556459}
+{"timestamp": "2026-10-27T11:42:03.781199", "split": "train", "epoch": 9, "accuracy": 0.917, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:42:03.796267", "split": "train", "epoch": 9, "phi": 0.14873681889147375}
+{"timestamp": "2026-10-27T11:42:43.888133", "split": "val", "epoch": 9, "accuracy": 0.739, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:42:43.894135", "split": "val", "epoch": 9, "phi": 0.11870340887455737}
+{"timestamp": "2026-10-27T11:44:27.195984", "split": "train", "epoch": 10, "accuracy": 0.931, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:44:27.206708", "split": "train", "epoch": 10, "phi": 0.18193006142101129}
+{"timestamp": "2026-10-27T11:45:06.702525", "split": "val", "epoch": 10, "accuracy": 0.747, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:45:06.714483", "split": "val", "epoch": 10, "phi": 0.12252650562421934}
+{"timestamp": "2026-10-27T11:46:55.503671", "split": "train", "epoch": 11, "accuracy": 0.916, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:46:55.536214", "split": "train", "epoch": 11, "phi": 0.14832685292838652}
+{"timestamp": "2026-10-27T11:47:34.409306", "split": "val", "epoch": 11, "accuracy": 0.73, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:47:34.421242", "split": "val", "epoch": 11, "phi": 0.11723945230868518}
+{"timestamp": "2026-10-27T11:49:25.354908", "split": "train", "epoch": 12, "accuracy": 0.934, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:49:25.365571", "split": "train", "epoch": 12, "phi": 0.12091145888021715}
+{"timestamp": "2026-10-27T11:50:09.051636", "split": "val", "epoch": 12, "accuracy": 0.734, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:50:09.057969", "split": "val", "epoch": 12, "phi": 0.12276394455069993}
+{"timestamp": "2026-10-27T11:52:07.460659", "split": "train", "epoch": 13, "accuracy": 0.924, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:52:07.483062", "split": "train", "epoch": 13, "phi": 0.169890161536246}
+{"timestamp": "2026-10-27T11:52:48.676598", "split": "val", "epoch": 13, "accuracy": 0.731, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:52:48.703463", "split": "val", "epoch": 13, "phi": 0.12146403110299935}
+{"timestamp": "2026-10-27T11:54:44.232727", "split": "train", "epoch": 14, "accuracy": 0.934, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:54:44.241976", "split": "train", "epoch": 14, "phi": 0.16556103613277415}
+{"timestamp": "2026-10-27T11:55:24.101404", "split": "val", "epoch": 14, "accuracy": 0.743, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:55:24.152567", "split": "val", "epoch": 14, "phi": 0.1194016236937891}
+{"timestamp": "2026-10-27T11:57:19.853522", "split": "train", "epoch": 15, "accuracy": 0.931, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:57:19.874203", "split": "train", "epoch": 15, "phi": 0.23318965423186397}
+{"timestamp": "2026-10-27T11:58:03.673151", "split": "val", "epoch": 15, "accuracy": 0.772, "method": "pca_lr"}
+{"timestamp": "2026-10-27T11:58:03.691488", "split": "val", "epoch": 15, "phi": 0.11998828005381273}
+{"timestamp": "2026-10-27T12:00:03.199222", "split": "train", "epoch": 16, "accuracy": 0.923, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:00:03.212906", "split": "train", "epoch": 16, "phi": 0.20058371617441506}
+{"timestamp": "2026-10-27T12:00:43.513643", "split": "val", "epoch": 16, "accuracy": 0.745, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:00:43.525998", "split": "val", "epoch": 16, "phi": 0.12083429368776431}
+{"timestamp": "2026-10-27T12:02:34.106379", "split": "train", "epoch": 17, "accuracy": 0.911, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:02:34.131359", "split": "train", "epoch": 17, "phi": 0.1488094386847845}
+{"timestamp": "2026-10-27T12:03:13.009462", "split": "val", "epoch": 17, "accuracy": 0.76, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:03:13.051955", "split": "val", "epoch": 17, "phi": 0.11983737590930346}
+{"timestamp": "2026-10-27T12:05:03.858913", "split": "train", "epoch": 18, "accuracy": 0.914, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:05:03.907494", "split": "train", "epoch": 18, "phi": 0.15216319851542126}
+{"timestamp": "2026-10-27T12:05:45.829786", "split": "val", "epoch": 18, "accuracy": 0.744, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:05:45.864798", "split": "val", "epoch": 18, "phi": 0.11745473676347791}
+{"timestamp": "2026-10-27T12:07:45.656967", "split": "train", "epoch": 19, "accuracy": 0.935, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:07:45.668896", "split": "train", "epoch": 19, "phi": 0.17095145789158697}
+{"timestamp": "2026-10-27T12:08:26.242645", "split": "val", "epoch": 19, "accuracy": 0.729, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:08:26.251368", "split": "val", "epoch": 19, "phi": 0.12039707837446499}
+{"timestamp": "2026-10-27T12:10:25.052588", "split": "train", "epoch": 20, "accuracy": 0.909, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:10:25.079181", "split": "train", "epoch": 20, "phi": 0.15726973765395375}
+{"timestamp": "2026-10-27T12:11:29.957479", "split": "val", "epoch": 20, "accuracy": 0.731, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:12:42.336374", "split": "val", "epoch": 20, "phi": 0.12085252462021172}
+{"timestamp": "2026-10-27T12:14:35.043258", "split": "train", "epoch": 21, "accuracy": 0.938, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:14:35.070961", "split": "train", "epoch": 21, "phi": 0.18941594944796047}
+{"timestamp": "2026-10-27T12:15:12.562999", "split": "val", "epoch": 21, "accuracy": 0.718, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:15:12.575233", "split": "val", "epoch": 21, "phi": 0.11866710811108701}
+{"timestamp": "2026-10-27T12:17:08.229096", "split": "train", "epoch": 22, "accuracy": 0.919, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:17:08.234659", "split": "train", "epoch": 22, "phi": 0.20830539199126366}
+{"timestamp": "2026-10-27T12:17:45.329975", "split": "val", "epoch": 22, "accuracy": 0.748, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:17:45.336041", "split": "val", "epoch": 22, "phi": 0.12167046732551373}
+{"timestamp": "2026-10-27T12:19:43.368737", "split": "train", "epoch": 23, "accuracy": 0.915, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:19:43.380342", "split": "train", "epoch": 23, "phi": 0.14938742449153694}
+{"timestamp": "2026-10-27T12:20:20.483248", "split": "val", "epoch": 23, "accuracy": 0.748, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:20:20.489838", "split": "val", "epoch": 23, "phi": 0.12141217965102358}
+{"timestamp": "2026-10-27T12:22:07.118835", "split": "train", "epoch": 24, "accuracy": 0.92, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:22:07.125367", "split": "train", "epoch": 24, "phi": 0.14785104763913326}
+{"timestamp": "2026-10-27T12:22:48.979119", "split": "val", "epoch": 24, "accuracy": 0.736, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:22:48.990399", "split": "val", "epoch": 24, "phi": 0.12243870189357028}
+{"timestamp": "2026-10-27T12:24:46.356812", "split": "train", "epoch": 25, "accuracy": 0.926, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:24:46.367714", "split": "train", "epoch": 25, "phi": 0.18174967572724998}
+{"timestamp": "2026-10-27T12:25:23.519055", "split": "val", "epoch": 25, "accuracy": 0.741, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:25:23.526234", "split": "val", "epoch": 25, "phi": 0.11900664940158209}
+{"timestamp": "2026-10-27T12:27:12.980027", "split": "train", "epoch": 26, "accuracy": 0.923, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:27:12.986330", "split": "train", "epoch": 26, "phi": 0.14709848262730374}
+{"timestamp": "2026-10-27T12:27:50.936066", "split": "val", "epoch": 26, "accuracy": 0.737, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:27:50.945474", "split": "val", "epoch": 26, "phi": 0.11736386844439073}
+{"timestamp": "2026-10-27T12:29:35.665341", "split": "train", "epoch": 27, "accuracy": 0.938, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:29:35.672912", "split": "train", "epoch": 27, "phi": 0.11896454087650805}
+{"timestamp": "2026-10-27T12:30:10.410337", "split": "val", "epoch": 27, "accuracy": 0.746, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:30:10.415466", "split": "val", "epoch": 27, "phi": 0.11818508386000688}
+{"timestamp": "2026-10-27T12:31:50.334374", "split": "train", "epoch": 28, "accuracy": 0.917, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:31:50.353767", "split": "train", "epoch": 28, "phi": 0.17178691850821098}
+{"timestamp": "2026-10-27T12:32:23.675248", "split": "val", "epoch": 28, "accuracy": 0.749, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:32:23.680239", "split": "val", "epoch": 28, "phi": 0.11923432124007177}
+{"timestamp": "2026-10-27T12:33:52.711455", "split": "train", "epoch": 29, "accuracy": 0.92, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:33:52.718463", "split": "train", "epoch": 29, "phi": 0.16591908397821506}
+{"timestamp": "2026-10-27T12:34:29.807847", "split": "val", "epoch": 29, "accuracy": 0.759, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:34:29.830480", "split": "val", "epoch": 29, "phi": 0.12317936017031665}
+{"timestamp": "2026-10-27T12:36:03.563285", "split": "train", "epoch": 30, "accuracy": 0.93, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:36:03.572655", "split": "train", "epoch": 30, "phi": 0.22684168878448635}
+{"timestamp": "2026-10-27T12:36:40.342182", "split": "val", "epoch": 30, "accuracy": 0.741, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:36:40.349620", "split": "val", "epoch": 30, "phi": 0.12022541090178743}
+{"timestamp": "2026-10-27T12:38:14.444255", "split": "train", "epoch": 31, "accuracy": 0.922, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:38:14.450825", "split": "train", "epoch": 31, "phi": 0.20527365833561895}
+{"timestamp": "2026-10-27T12:38:49.852617", "split": "val", "epoch": 31, "accuracy": 0.752, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:38:49.858188", "split": "val", "epoch": 31, "phi": 0.11899046261183666}
+{"timestamp": "2026-10-27T12:40:22.924755", "split": "train", "epoch": 32, "accuracy": 0.916, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:40:22.932887", "split": "train", "epoch": 32, "phi": 0.1512907209218838}
+{"timestamp": "2026-10-27T12:40:57.736003", "split": "val", "epoch": 32, "accuracy": 0.737, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:40:57.741751", "split": "val", "epoch": 32, "phi": 0.12060836727918596}
+{"timestamp": "2026-10-27T12:42:38.393436", "split": "train", "epoch": 33, "accuracy": 0.921, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:42:38.399505", "split": "train", "epoch": 33, "phi": 0.15333352583947762}
+{"timestamp": "2026-10-27T12:43:16.833214", "split": "val", "epoch": 33, "accuracy": 0.731, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:43:16.843141", "split": "val", "epoch": 33, "phi": 0.12116731925256977}
+{"timestamp": "2026-10-27T12:45:07.316578", "split": "train", "epoch": 34, "accuracy": 0.932, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:45:07.337786", "split": "train", "epoch": 34, "phi": 0.17046932878333312}
+{"timestamp": "2026-10-27T12:45:43.800821", "split": "val", "epoch": 34, "accuracy": 0.722, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:45:43.814199", "split": "val", "epoch": 34, "phi": 0.1207863680923624}
+{"timestamp": "2026-10-27T12:47:27.903592", "split": "train", "epoch": 35, "accuracy": 0.903, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:47:27.953149", "split": "train", "epoch": 35, "phi": 0.15784818147633817}
+{"timestamp": "2026-10-27T12:48:04.359788", "split": "val", "epoch": 35, "accuracy": 0.742, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:48:04.363830", "split": "val", "epoch": 35, "phi": 0.11981752033837213}
+{"timestamp": "2026-10-27T12:49:47.884700", "split": "train", "epoch": 36, "accuracy": 0.937, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:49:47.901049", "split": "train", "epoch": 36, "phi": 0.19587986351235126}
+{"timestamp": "2026-10-27T12:50:24.142257", "split": "val", "epoch": 36, "accuracy": 0.719, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:50:24.146046", "split": "val", "epoch": 36, "phi": 0.12191710920120519}
+{"timestamp": "2026-10-27T12:52:06.751647", "split": "train", "epoch": 37, "accuracy": 0.901, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:52:06.758035", "split": "train", "epoch": 37, "phi": 0.2119211545683887}
+{"timestamp": "2026-10-27T12:52:41.001648", "split": "val", "epoch": 37, "accuracy": 0.741, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:52:41.042800", "split": "val", "epoch": 37, "phi": 0.12121122081142996}
+{"timestamp": "2026-10-27T12:54:23.327267", "split": "train", "epoch": 38, "accuracy": 0.915, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:54:23.331344", "split": "train", "epoch": 38, "phi": 0.1469879731655781}
+{"timestamp": "2026-10-27T12:54:58.336785", "split": "val", "epoch": 38, "accuracy": 0.753, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:54:58.341167", "split": "val", "epoch": 38, "phi": 0.11666979397675088}
+{"timestamp": "2026-10-27T12:56:37.681891", "split": "train", "epoch": 39, "accuracy": 0.923, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:56:37.747253", "split": "train", "epoch": 39, "phi": 0.1521734636045442}
+{"timestamp": "2026-10-27T12:57:16.962127", "split": "val", "epoch": 39, "accuracy": 0.753, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:57:16.978236", "split": "val", "epoch": 39, "phi": 0.12025440970504736}
+{"timestamp": "2026-10-27T12:59:00.230228", "split": "train", "epoch": 40, "accuracy": 0.923, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:59:00.256399", "split": "train", "epoch": 40, "phi": 0.18419238752887224}
+{"timestamp": "2026-10-27T12:59:37.812367", "split": "val", "epoch": 40, "accuracy": 0.741, "method": "pca_lr"}
+{"timestamp": "2026-10-27T12:59:37.816446", "split": "val", "epoch": 40, "phi": 0.11758550296545779}
+{"timestamp": "2026-10-27T13:01:20.306578", "split": "train", "epoch": 41, "accuracy": 0.92, "method": "pca_lr"}
+{"timestamp": "2026-10-27T13:01:20.328488", "split": "train", "epoch": 41, "phi": 0.14977811448909437}
+{"timestamp": "2026-10-27T13:02:02.319908", "split": "val", "epoch": 41, "accuracy": 0.719, "method": "pca_lr"}
+{"timestamp": "2026-10-27T13:02:02.326055", "split": "val", "epoch": 41, "phi": 0.11977410738091268}
+{"timestamp": "2026-10-27T13:03:43.099449", "split": "train", "epoch": 42, "accuracy": 0.931, "method": "pca_lr"}
+{"timestamp": "2026-10-27T13:03:43.140938", "split": "train", "epoch": 42, "phi": 0.11740473053792773}
+{"timestamp": "2026-10-27T13:04:27.662270", "split": "val", "epoch": 42, "accuracy": 0.748, "method": "pca_lr"}
+{"timestamp": "2026-10-27T13:04:27.686814", "split": "val", "epoch": 42, "phi": 0.11956391908945335}
+{"timestamp": "2026-10-27T13:06:05.818145", "split": "train", "epoch": 43, "accuracy": 0.921, "method": "pca_lr"}
+{"timestamp": "2026-10-27T13:06:05.826313", "split": "train", "epoch": 43, "phi": 0.17293306166974087}
+{"timestamp": "2026-10-27T13:06:45.064283", "split": "val", "epoch": 43, "accuracy": 0.747, "method": "pca_lr"}
+{"timestamp": "2026-10-27T13:06:45.090837", "split": "val", "epoch": 43, "phi": 0.12063108774179558}
+{"timestamp": "2026-10-27T13:08:24.994314", "split": "train", "epoch": 44, "accuracy": 0.923, "method": "pca_lr"}
+{"timestamp": "2026-10-27T13:08:25.026258", "split": "train", "epoch": 44, "phi": 0.16756152215384754}
+{"timestamp": "2026-10-27T13:09:01.999480", "split": "val", "epoch": 44, "accuracy": 0.743, "method": "pca_lr"}
+{"timestamp": "2026-10-27T13:09:02.045520", "split": "val", "epoch": 44, "phi": 0.12233118312260254}
+{"timestamp": "2026-10-27T13:10:46.048378", "split": "train", "epoch": 45, "accuracy": 0.939, "method": "pca_lr"}
+{"timestamp": "2026-10-27T13:11:10.516735", "split": "train", "epoch": 45, "phi": 0.22811734496930403}
+{"timestamp": "2026-10-27T13:11:52.454043", "split": "val", "epoch": 45, "accuracy": 0.749, "method": "pca_lr"}
+{"timestamp": "2026-10-27T13:11:52.458608", "split": "val", "epoch": 45, "phi": 0.12062632425189798}
+{"timestamp": "2026-10-27T13:15:07.913773", "split": "test", "epoch": null, "accuracy": 0.7552, "method": "pca_lr"}
+{"timestamp": "2026-10-27T13:15:07.939007", "split": "test", "epoch": null, "phi": 0.16995463738176775}

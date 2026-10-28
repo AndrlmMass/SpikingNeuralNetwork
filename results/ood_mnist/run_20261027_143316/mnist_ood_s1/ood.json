@@ -1,0 +1,817 @@
+[
+  {
+    "readout": "learned_readout",
+    "rows": [
+      {
+        "statistic": "entropy",
+        "ood": "kmnist",
+        "n_ood": 10000,
+        "auroc": 0.89129941,
+        "auroc_2sided": 0.89129941,
+        "tail": "lower",
+        "fpr_at_95tpr": 0.5457,
+        "silent_frac_ood": 0.0011,
+        "oracle": {
+          "tau": -0.06769173612000667,
+          "youden_j": 0.6367,
+          "id_kept": 0.78,
+          "ood_kept": 0.1433,
+          "auroc": 0.89129941
+        },
+        "at_alpha": {
+          "0.01": {
+            "tau": -1.1007588287190158,
+            "ood_rejected": 0.165,
+            "ood_rejected_lo": 0.1348,
+            "ood_rejected_hi": 0.2013,
+            "id_rejected": 0.01
+          },
+          "0.025": {
+            "tau": -0.8354196442686898,
+            "ood_rejected": 0.3174,
+            "ood_rejected_lo": 0.2835,
+            "ood_rejected_hi": 0.3419,
+            "id_rejected": 0.0233
+          },
+          "0.05": {
+            "tau": -0.6437227951734988,
+            "ood_rejected": 0.4574,
+            "ood_rejected_lo": 0.4288,
+            "ood_rejected_hi": 0.4855,
+            "id_rejected": 0.0506
+          },
+          "0.1": {
+            "tau": -0.34791956493692394,
+            "ood_rejected": 0.6442,
+            "ood_rejected_lo": 0.6083,
+            "ood_rejected_hi": 0.6688,
+            "id_rejected": 0.098
+          },
+          "0.2": {
+            "tau": -0.09188682683301178,
+            "ood_rejected": 0.8293,
+            "ood_rejected_lo": 0.81,
+            "ood_rejected_hi": 0.8393,
+            "id_rejected": 0.1959
+          }
+        }
+      },
+      {
+        "statistic": "entropy",
+        "ood": "notmnist",
+        "n_ood": 10000,
+        "auroc": 0.81548923,
+        "auroc_2sided": 0.81548923,
+        "tail": "lower",
+        "fpr_at_95tpr": 0.6414,
+        "silent_frac_ood": 0.0006,
+        "oracle": {
+          "tau": -0.04296607421007846,
+          "youden_j": 0.5115000000000001,
+          "id_kept": 0.7445,
+          "ood_kept": 0.233,
+          "auroc": 0.81548923
+        },
+        "at_alpha": {
+          "0.01": {
+            "tau": -1.1007588287190158,
+            "ood_rejected": 0.1274,
+            "ood_rejected_lo": 0.1059,
+            "ood_rejected_hi": 0.1523,
+            "id_rejected": 0.01
+          },
+          "0.025": {
+            "tau": -0.8354196442686898,
+            "ood_rejected": 0.2378,
+            "ood_rejected_lo": 0.2126,
+            "ood_rejected_hi": 0.2574,
+            "id_rejected": 0.0233
+          },
+          "0.05": {
+            "tau": -0.6437227951734988,
+            "ood_rejected": 0.3611,
+            "ood_rejected_lo": 0.3307,
+            "ood_rejected_hi": 0.3861,
+            "id_rejected": 0.0506
+          },
+          "0.1": {
+            "tau": -0.34791956493692394,
+            "ood_rejected": 0.5299,
+            "ood_rejected_lo": 0.4955,
+            "ood_rejected_hi": 0.5527,
+            "id_rejected": 0.098
+          },
+          "0.2": {
+            "tau": -0.09188682683301178,
+            "ood_rejected": 0.7013,
+            "ood_rejected_lo": 0.6855,
+            "ood_rejected_hi": 0.7128,
+            "id_rejected": 0.1959
+          }
+        }
+      },
+      {
+        "statistic": "entropy",
+        "ood": "fmnist",
+        "n_ood": 10000,
+        "auroc": 0.75544262,
+        "auroc_2sided": 0.75544262,
+        "tail": "lower",
+        "fpr_at_95tpr": 0.7452,
+        "silent_frac_ood": 0.0014,
+        "oracle": {
+          "tau": -0.04299083356145705,
+          "youden_j": 0.42060000000000003,
+          "id_kept": 0.7446,
+          "ood_kept": 0.324,
+          "auroc": 0.75544262
+        },
+        "at_alpha": {
+          "0.01": {
+            "tau": -1.1007588287190158,
+            "ood_rejected": 0.0649,
+            "ood_rejected_lo": 0.0504,
+            "ood_rejected_hi": 0.0807,
+            "id_rejected": 0.01
+          },
+          "0.025": {
+            "tau": -0.8354196442686898,
+            "ood_rejected": 0.1414,
+            "ood_rejected_lo": 0.1257,
+            "ood_rejected_hi": 0.156,
+            "id_rejected": 0.0233
+          },
+          "0.05": {
+            "tau": -0.6437227951734988,
+            "ood_rejected": 0.2571,
+            "ood_rejected_lo": 0.2283,
+            "ood_rejected_hi": 0.2837,
+            "id_rejected": 0.0506
+          },
+          "0.1": {
+            "tau": -0.34791956493692394,
+            "ood_rejected": 0.4182,
+            "ood_rejected_lo": 0.389,
+            "ood_rejected_hi": 0.4414,
+            "id_rejected": 0.098
+          },
+          "0.2": {
+            "tau": -0.09188682683301178,
+            "ood_rejected": 0.6044,
+            "ood_rejected_lo": 0.5815,
+            "ood_rejected_hi": 0.6174,
+            "id_rejected": 0.1959
+          }
+        }
+      },
+      {
+        "statistic": "margin",
+        "ood": "kmnist",
+        "n_ood": 10000,
+        "auroc": 0.8816599,
+        "auroc_2sided": 0.8816599,
+        "tail": "lower",
+        "fpr_at_95tpr": 0.6224,
+        "silent_frac_ood": 0.0011,
+        "oracle": {
+          "tau": 0.9865226801641332,
+          "youden_j": 0.6304,
+          "id_kept": 0.7521,
+          "ood_kept": 0.1217,
+          "auroc": 0.8816599
+        },
+        "at_alpha": {
+          "0.01": {
+            "tau": 0.09587540038228996,
+            "ood_rejected": 0.0789,
+            "ood_rejected_lo": 0.0528,
+            "ood_rejected_hi": 0.1164,
+            "id_rejected": 0.0108
+          },
+          "0.025": {
+            "tau": 0.3093686391496835,
+            "ood_rejected": 0.2318,
+            "ood_rejected_lo": 0.1979,
+            "ood_rejected_hi": 0.2535,
+            "id_rejected": 0.0274
+          },
+          "0.05": {
+            "tau": 0.5561183063047727,
+            "ood_rejected": 0.3984,
+            "ood_rejected_lo": 0.3646,
+            "ood_rejected_hi": 0.4291,
+            "id_rejected": 0.0534
+          },
+          "0.1": {
+            "tau": 0.8361804200642221,
+            "ood_rejected": 0.6222,
+            "ood_rejected_lo": 0.5836,
+            "ood_rejected_hi": 0.6464,
+            "id_rejected": 0.0988
+          },
+          "0.2": {
+            "tau": 0.9698964544251525,
+            "ood_rejected": 0.8201,
+            "ood_rejected_lo": 0.8057,
+            "ood_rejected_hi": 0.8317,
+            "id_rejected": 0.1956
+          }
+        }
+      },
+      {
+        "statistic": "margin",
+        "ood": "notmnist",
+        "n_ood": 10000,
+        "auroc": 0.81101046,
+        "auroc_2sided": 0.81101046,
+        "tail": "lower",
+        "fpr_at_95tpr": 0.6925,
+        "silent_frac_ood": 0.0006,
+        "oracle": {
+          "tau": 0.9854622847820784,
+          "youden_j": 0.51,
+          "id_kept": 0.7565,
+          "ood_kept": 0.2465,
+          "auroc": 0.81101046
+        },
+        "at_alpha": {
+          "0.01": {
+            "tau": 0.09587540038228996,
+            "ood_rejected": 0.0738,
+            "ood_rejected_lo": 0.0459,
+            "ood_rejected_hi": 0.1018,
+            "id_rejected": 0.0108
+          },
+          "0.025": {
+            "tau": 0.3093686391496835,
+            "ood_rejected": 0.1948,
+            "ood_rejected_lo": 0.1687,
+            "ood_rejected_hi": 0.2113,
+            "id_rejected": 0.0274
+          },
+          "0.05": {
+            "tau": 0.5561183063047727,
+            "ood_rejected": 0.327,
+            "ood_rejected_lo": 0.2968,
+            "ood_rejected_hi": 0.3558,
+            "id_rejected": 0.0534
+          },
+          "0.1": {
+            "tau": 0.8361804200642221,
+            "ood_rejected": 0.5211,
+            "ood_rejected_lo": 0.4929,
+            "ood_rejected_hi": 0.5412,
+            "id_rejected": 0.0988
+          },
+          "0.2": {
+            "tau": 0.9698964544251525,
+            "ood_rejected": 0.7024,
+            "ood_rejected_lo": 0.6886,
+            "ood_rejected_hi": 0.7125,
+            "id_rejected": 0.1956
+          }
+        }
+      },
+      {
+        "statistic": "margin",
+        "ood": "fmnist",
+        "n_ood": 10000,
+        "auroc": 0.75462858,
+        "auroc_2sided": 0.75462858,
+        "tail": "lower",
+        "fpr_at_95tpr": 0.7687,
+        "silent_frac_ood": 0.0014,
+        "oracle": {
+          "tau": 0.9910625260126649,
+          "youden_j": 0.4206,
+          "id_kept": 0.7231,
+          "ood_kept": 0.3025,
+          "auroc": 0.75462858
+        },
+        "at_alpha": {
+          "0.01": {
+            "tau": 0.09587540038228996,
+            "ood_rejected": 0.0448,
+            "ood_rejected_lo": 0.0292,
+            "ood_rejected_hi": 0.065,
+            "id_rejected": 0.0108
+          },
+          "0.025": {
+            "tau": 0.3093686391496835,
+            "ood_rejected": 0.137,
+            "ood_rejected_lo": 0.1167,
+            "ood_rejected_hi": 0.1518,
+            "id_rejected": 0.0274
+          },
+          "0.05": {
+            "tau": 0.5561183063047727,
+            "ood_rejected": 0.2471,
+            "ood_rejected_lo": 0.2235,
+            "ood_rejected_hi": 0.2679,
+            "id_rejected": 0.0534
+          },
+          "0.1": {
+            "tau": 0.8361804200642221,
+            "ood_rejected": 0.4182,
+            "ood_rejected_lo": 0.3878,
+            "ood_rejected_hi": 0.4385,
+            "id_rejected": 0.0988
+          },
+          "0.2": {
+            "tau": 0.9698964544251525,
+            "ood_rejected": 0.6033,
+            "ood_rejected_lo": 0.5869,
+            "ood_rejected_hi": 0.6177,
+            "id_rejected": 0.1956
+          }
+        }
+      },
+      {
+        "statistic": "maxp",
+        "ood": "kmnist",
+        "n_ood": 10000,
+        "auroc": 0.88559263,
+        "auroc_2sided": 0.88559263,
+        "tail": "lower",
+        "fpr_at_95tpr": 0.5923,
+        "silent_frac_ood": 0.0011,
+        "oracle": {
+          "tau": 0.9882105118126064,
+          "youden_j": 0.6326,
+          "id_kept": 0.7822,
+          "ood_kept": 0.1496,
+          "auroc": 0.88559263
+        },
+        "at_alpha": {
+          "0.01": {
+            "tau": 0.4982401387792327,
+            "ood_rejected": 0.127,
+            "ood_rejected_lo": 0.0999,
+            "ood_rejected_hi": 0.1516,
+            "id_rejected": 0.0094
+          },
+          "0.025": {
+            "tau": 0.6125329667812867,
+            "ood_rejected": 0.2571,
+            "ood_rejected_lo": 0.2205,
+            "ood_rejected_hi": 0.2895,
+            "id_rejected": 0.0266
+          },
+          "0.05": {
+            "tau": 0.7545470839847679,
+            "ood_rejected": 0.4191,
+            "ood_rejected_lo": 0.3934,
+            "ood_rejected_hi": 0.4406,
+            "id_rejected": 0.0528
+          },
+          "0.1": {
+            "tau": 0.9075268722084288,
+            "ood_rejected": 0.6301,
+            "ood_rejected_lo": 0.5976,
+            "ood_rejected_hi": 0.6567,
+            "id_rejected": 0.0976
+          },
+          "0.2": {
+            "tau": 0.9835320582122618,
+            "ood_rejected": 0.825,
+            "ood_rejected_lo": 0.812,
+            "ood_rejected_hi": 0.8365,
+            "id_rejected": 0.1958
+          }
+        }
+      },
+      {
+        "statistic": "maxp",
+        "ood": "notmnist",
+        "n_ood": 10000,
+        "auroc": 0.81283674,
+        "auroc_2sided": 0.81283674,
+        "tail": "lower",
+        "fpr_at_95tpr": 0.6675,
+        "silent_frac_ood": 0.0006,
+        "oracle": {
+          "tau": 0.992862370840764,
+          "youden_j": 0.511,
+          "id_kept": 0.749,
+          "ood_kept": 0.238,
+          "auroc": 0.81283674
+        },
+        "at_alpha": {
+          "0.01": {
+            "tau": 0.4982401387792327,
+            "ood_rejected": 0.1018,
+            "ood_rejected_lo": 0.0815,
+            "ood_rejected_hi": 0.1225,
+            "id_rejected": 0.0094
+          },
+          "0.025": {
+            "tau": 0.6125329667812867,
+            "ood_rejected": 0.2092,
+            "ood_rejected_lo": 0.1773,
+            "ood_rejected_hi": 0.2343,
+            "id_rejected": 0.0266
+          },
+          "0.05": {
+            "tau": 0.7545470839847679,
+            "ood_rejected": 0.3432,
+            "ood_rejected_lo": 0.3173,
+            "ood_rejected_hi": 0.3624,
+            "id_rejected": 0.0528
+          },
+          "0.1": {
+            "tau": 0.9075268722084288,
+            "ood_rejected": 0.5228,
+            "ood_rejected_lo": 0.4955,
+            "ood_rejected_hi": 0.5489,
+            "id_rejected": 0.0976
+          },
+          "0.2": {
+            "tau": 0.9835320582122618,
+            "ood_rejected": 0.7019,
+            "ood_rejected_lo": 0.6896,
+            "ood_rejected_hi": 0.7128,
+            "id_rejected": 0.1958
+          }
+        }
+      },
+      {
+        "statistic": "maxp",
+        "ood": "fmnist",
+        "n_ood": 10000,
+        "auroc": 0.75471156,
+        "auroc_2sided": 0.75471156,
+        "tail": "lower",
+        "fpr_at_95tpr": 0.7579,
+        "silent_frac_ood": 0.0014,
+        "oracle": {
+          "tau": 0.9938646969315469,
+          "youden_j": 0.42110000000000003,
+          "id_kept": 0.7396,
+          "ood_kept": 0.3185,
+          "auroc": 0.75471156
+        },
+        "at_alpha": {
+          "0.01": {
+            "tau": 0.4982401387792327,
+            "ood_rejected": 0.0526,
+            "ood_rejected_lo": 0.0408,
+            "ood_rejected_hi": 0.0673,
+            "id_rejected": 0.0094
+          },
+          "0.025": {
+            "tau": 0.6125329667812867,
+            "ood_rejected": 0.1408,
+            "ood_rejected_lo": 0.1141,
+            "ood_rejected_hi": 0.1622,
+            "id_rejected": 0.0266
+          },
+          "0.05": {
+            "tau": 0.7545470839847679,
+            "ood_rejected": 0.2505,
+            "ood_rejected_lo": 0.2321,
+            "ood_rejected_hi": 0.2675,
+            "id_rejected": 0.0528
+          },
+          "0.1": {
+            "tau": 0.9075268722084288,
+            "ood_rejected": 0.4175,
+            "ood_rejected_lo": 0.3908,
+            "ood_rejected_hi": 0.4405,
+            "id_rejected": 0.0976
+          },
+          "0.2": {
+            "tau": 0.9835320582122618,
+            "ood_rejected": 0.605,
+            "ood_rejected_lo": 0.588,
+            "ood_rejected_hi": 0.6167,
+            "id_rejected": 0.1958
+          }
+        }
+      },
+      {
+        "statistic": "total_rate",
+        "ood": "kmnist",
+        "n_ood": 10000,
+        "auroc": 0.53100351,
+        "auroc_2sided": 0.53100351,
+        "tail": "lower",
+        "fpr_at_95tpr": 0.9314,
+        "silent_frac_ood": 0.0011,
+        "oracle": {
+          "tau": 0.0256285699217206,
+          "youden_j": 0.046499999999999986,
+          "id_kept": 0.3619,
+          "ood_kept": 0.3154,
+          "auroc": 0.53100351
+        },
+        "at_alpha": {
+          "0.01": {
+            "tau": 0.0019422855339689706,
+            "ood_rejected": 0.0216,
+            "ood_rejected_lo": 0.0192,
+            "ood_rejected_hi": 0.0251,
+            "id_rejected": 0.0086
+          },
+          "0.025": {
+            "tau": 0.003456428432173198,
+            "ood_rejected": 0.0366,
+            "ood_rejected_lo": 0.0336,
+            "ood_rejected_hi": 0.0394,
+            "id_rejected": 0.0213
+          },
+          "0.05": {
+            "tau": 0.005084285500197439,
+            "ood_rejected": 0.0554,
+            "ood_rejected_lo": 0.0507,
+            "ood_rejected_hi": 0.0613,
+            "id_rejected": 0.0403
+          },
+          "0.1": {
+            "tau": 0.007711428294715007,
+            "ood_rejected": 0.0983,
+            "ood_rejected_lo": 0.0918,
+            "ood_rejected_hi": 0.1053,
+            "id_rejected": 0.0785
+          },
+          "0.2": {
+            "tau": 0.011771428398787975,
+            "ood_rejected": 0.1971,
+            "ood_rejected_lo": 0.1859,
+            "ood_rejected_hi": 0.2079,
+            "id_rejected": 0.17
+          }
+        }
+      },
+      {
+        "statistic": "total_rate",
+        "ood": "notmnist",
+        "n_ood": 10000,
+        "auroc": 0.22856353,
+        "auroc_2sided": 0.77143647,
+        "tail": "upper",
+        "fpr_at_95tpr": 0.9455,
+        "silent_frac_ood": 0.0006,
+        "oracle": {
+          "tau": 0.0028285714123353176,
+          "youden_j": 0.017800000000000038,
+          "id_kept": 0.9845,
+          "ood_kept": 0.9667,
+          "auroc": 0.22856353
+        },
+        "at_alpha": {
+          "0.01": {
+            "tau": 0.0019422855339689706,
+            "ood_rejected": 0.0256,
+            "ood_rejected_lo": 0.0227,
+            "ood_rejected_hi": 0.0286,
+            "id_rejected": 0.0086
+          },
+          "0.025": {
+            "tau": 0.003456428432173198,
+            "ood_rejected": 0.0384,
+            "ood_rejected_lo": 0.0358,
+            "ood_rejected_hi": 0.0406,
+            "id_rejected": 0.0213
+          },
+          "0.05": {
+            "tau": 0.005084285500197439,
+            "ood_rejected": 0.0492,
+            "ood_rejected_lo": 0.0468,
+            "ood_rejected_hi": 0.0518,
+            "id_rejected": 0.0403
+          },
+          "0.1": {
+            "tau": 0.007711428294715007,
+            "ood_rejected": 0.0646,
+            "ood_rejected_lo": 0.063,
+            "ood_rejected_hi": 0.0678,
+            "id_rejected": 0.0785
+          },
+          "0.2": {
+            "tau": 0.011771428398787975,
+            "ood_rejected": 0.0959,
+            "ood_rejected_lo": 0.0918,
+            "ood_rejected_hi": 0.0985,
+            "id_rejected": 0.17
+          }
+        }
+      },
+      {
+        "statistic": "total_rate",
+        "ood": "fmnist",
+        "n_ood": 10000,
+        "auroc": 0.27364234,
+        "auroc_2sided": 0.72635766,
+        "tail": "upper",
+        "fpr_at_95tpr": 0.9154,
+        "silent_frac_ood": 0.0014,
+        "oracle": {
+          "tau": 0.0038571427321667236,
+          "youden_j": 0.038900000000000046,
+          "id_kept": 0.9748,
+          "ood_kept": 0.9359,
+          "auroc": 0.27364234
+        },
+        "at_alpha": {
+          "0.01": {
+            "tau": 0.0019422855339689706,
+            "ood_rejected": 0.0412,
+            "ood_rejected_lo": 0.0365,
+            "ood_rejected_hi": 0.0459,
+            "id_rejected": 0.0086
+          },
+          "0.025": {
+            "tau": 0.003456428432173198,
+            "ood_rejected": 0.059,
+            "ood_rejected_lo": 0.0564,
+            "ood_rejected_hi": 0.0619,
+            "id_rejected": 0.0213
+          },
+          "0.05": {
+            "tau": 0.005084285500197439,
+            "ood_rejected": 0.075,
+            "ood_rejected_lo": 0.072,
+            "ood_rejected_hi": 0.0793,
+            "id_rejected": 0.0403
+          },
+          "0.1": {
+            "tau": 0.007711428294715007,
+            "ood_rejected": 0.1018,
+            "ood_rejected_lo": 0.0984,
+            "ood_rejected_hi": 0.1061,
+            "id_rejected": 0.0785
+          },
+          "0.2": {
+            "tau": 0.011771428398787975,
+            "ood_rejected": 0.1447,
+            "ood_rejected_lo": 0.1405,
+            "ood_rejected_hi": 0.1485,
+            "id_rejected": 0.17
+          }
+        }
+      },
+      {
+        "statistic": "topk_sum",
+        "ood": "kmnist",
+        "n_ood": 10000,
+        "auroc": 0.539544685,
+        "auroc_2sided": 0.539544685,
+        "tail": "lower",
+        "fpr_at_95tpr": 0.9276,
+        "silent_frac_ood": 0.0011,
+        "oracle": {
+          "tau": 0.017314285348887036,
+          "youden_j": 0.058800000000000074,
+          "id_kept": 0.6135,
+          "ood_kept": 0.5547,
+          "auroc": 0.539544685
+        },
+        "at_alpha": {
+          "0.01": {
+            "tau": 0.0019422855339689706,
+            "ood_rejected": 0.022,
+            "ood_rejected_lo": 0.0197,
+            "ood_rejected_hi": 0.0257,
+            "id_rejected": 0.0087
+          },
+          "0.025": {
+            "tau": 0.003427856914095173,
+            "ood_rejected": 0.0374,
+            "ood_rejected_lo": 0.0342,
+            "ood_rejected_hi": 0.0409,
+            "id_rejected": 0.0212
+          },
+          "0.05": {
+            "tau": 0.00494285710301483,
+            "ood_rejected": 0.0574,
+            "ood_rejected_lo": 0.0525,
+            "ood_rejected_hi": 0.064,
+            "id_rejected": 0.0395
+          },
+          "0.1": {
+            "tau": 0.007482856725982857,
+            "ood_rejected": 0.1028,
+            "ood_rejected_lo": 0.0966,
+            "ood_rejected_hi": 0.1116,
+            "id_rejected": 0.0785
+          },
+          "0.2": {
+            "tau": 0.011228571273386478,
+            "ood_rejected": 0.2052,
+            "ood_rejected_lo": 0.1949,
+            "ood_rejected_hi": 0.2164,
+            "id_rejected": 0.169
+          }
+        }
+      },
+      {
+        "statistic": "topk_sum",
+        "ood": "notmnist",
+        "n_ood": 10000,
+        "auroc": 0.23314357,
+        "auroc_2sided": 0.76685643,
+        "tail": "upper",
+        "fpr_at_95tpr": 0.9435,
+        "silent_frac_ood": 0.0006,
+        "oracle": {
+          "tau": 0.00325714268180763,
+          "youden_j": 0.01880000000000004,
+          "id_kept": 0.9806,
+          "ood_kept": 0.9618,
+          "auroc": 0.23314357
+        },
+        "at_alpha": {
+          "0.01": {
+            "tau": 0.0019422855339689706,
+            "ood_rejected": 0.0264,
+            "ood_rejected_lo": 0.0233,
+            "ood_rejected_hi": 0.0292,
+            "id_rejected": 0.0087
+          },
+          "0.025": {
+            "tau": 0.003427856914095173,
+            "ood_rejected": 0.039,
+            "ood_rejected_lo": 0.037,
+            "ood_rejected_hi": 0.0419,
+            "id_rejected": 0.0212
+          },
+          "0.05": {
+            "tau": 0.00494285710301483,
+            "ood_rejected": 0.0503,
+            "ood_rejected_lo": 0.0482,
+            "ood_rejected_hi": 0.0531,
+            "id_rejected": 0.0395
+          },
+          "0.1": {
+            "tau": 0.007482856725982857,
+            "ood_rejected": 0.0669,
+            "ood_rejected_lo": 0.0644,
+            "ood_rejected_hi": 0.0707,
+            "id_rejected": 0.0785
+          },
+          "0.2": {
+            "tau": 0.011228571273386478,
+            "ood_rejected": 0.0991,
+            "ood_rejected_lo": 0.0956,
+            "ood_rejected_hi": 0.1018,
+            "id_rejected": 0.169
+          }
+        }
+      },
+      {
+        "statistic": "topk_sum",
+        "ood": "fmnist",
+        "n_ood": 10000,
+        "auroc": 0.27904091,
+        "auroc_2sided": 0.72095909,
+        "tail": "upper",
+        "fpr_at_95tpr": 0.913,
+        "silent_frac_ood": 0.0014,
+        "oracle": {
+          "tau": 0.003714285527586176,
+          "youden_j": 0.0403,
+          "id_kept": 0.9756,
+          "ood_kept": 0.9353,
+          "auroc": 0.27904091
+        },
+        "at_alpha": {
+          "0.01": {
+            "tau": 0.0019422855339689706,
+            "ood_rejected": 0.042,
+            "ood_rejected_lo": 0.0375,
+            "ood_rejected_hi": 0.0471,
+            "id_rejected": 0.0087
+          },
+          "0.025": {
+            "tau": 0.003427856914095173,
+            "ood_rejected": 0.06,
+            "ood_rejected_lo": 0.0576,
+            "ood_rejected_hi": 0.0648,
+            "id_rejected": 0.0212
+          },
+          "0.05": {
+            "tau": 0.00494285710301483,
+            "ood_rejected": 0.0764,
+            "ood_rejected_lo": 0.0737,
+            "ood_rejected_hi": 0.0822,
+            "id_rejected": 0.0395
+          },
+          "0.1": {
+            "tau": 0.007482856725982857,
+            "ood_rejected": 0.1055,
+            "ood_rejected_lo": 0.1025,
+            "ood_rejected_hi": 0.1093,
+            "id_rejected": 0.0785
+          },
+          "0.2": {
+            "tau": 0.011228571273386478,
+            "ood_rejected": 0.1487,
+            "ood_rejected_lo": 0.1456,
+            "ood_rejected_hi": 0.1526,
+            "id_rejected": 0.169
+          }
+        }
+      }
+    ]
+  }
+]

@@ -45,6 +45,13 @@ plots/
 !/results/interp/json/experiments/RF_article/interp/mnist_family_sweep/results/
 /results/interp/json/experiments/RF_article/interp/mnist_family_sweep/results/*
 !/results/interp/json/experiments/RF_article/interp/mnist_family_sweep/results/run_20260819_112250/
+!/results/interp/json/experiments/RF_article/interp/mnist_family_sweep/results/run_20260916_105832/
+!/results/interp/json/experiments/RF_article/interp/mnist_family_sweep/results/run_20261027_111346/
+# Phase 2 runs: keep the JSON/CSV/JSONL that build_model_data.py and the figures read;
+# their plots and feature npz (unused by any script) stay out.
+/results/interp/json/experiments/RF_article/interp/mnist_family_sweep/results/*/**/*.png
+/results/interp/json/experiments/RF_article/interp/mnist_family_sweep/results/*/**/*.pdf
+/results/interp/json/experiments/RF_article/interp/mnist_family_sweep/results/*/**/*.npz
 !/results/ood_mnist/
 /results/ood_mnist/*
 !/results/ood_mnist/run1/
@@ -60,6 +67,11 @@ plots/
 !/results/ood_mnist/run1/mnist_ood_s0/weights/
 /results/ood_mnist/run1/mnist_ood_s0/weights/*
 !/results/ood_mnist/run1/mnist_ood_s0/weights/checkpoint.npz
+# The five-seed OOD run the article reports: everything except its plots (the npz feed
+# plot_ood_auroc.py, plot_confidence_overlap.py and ood_summary.py).
+!/results/ood_mnist/run_20261027_143316/
+/results/ood_mnist/run_20261027_143316/**/*.png
+/results/ood_mnist/run_20261027_143316/**/*.pdf
 
 # Data
 data/

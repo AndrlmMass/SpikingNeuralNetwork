@@ -8,8 +8,9 @@
 #   E->E recurrence and I->E inhibition, oriented prior), so every other level is one change
 #   from it. The prior is aliased with cond (it varies only in base_ori vs base_rnd) so it
 #   cannot be a separate term; it is recovered as that contrast.
-# Phase 2: prior is crossed with dataset -> proper main effect plus a prior x dataset
-#   interaction, which is the formal test of the conditional-advantage claim.
+# Phase 2: `cond` is the 3-level supervised factor, referenced to `oriented` (Base: oriented
+#   RFs under R-Hebb); `random` replaces the RFs with random connectivity and `frozen` turns
+#   R-Hebb off. Crossed with dataset -> main effects plus cond x dataset interactions.
 
 suppressPackageStartupMessages(library(glmmTMB))
 CTRL <- glmmTMBControl(optCtrl = list(iter.max = 5000, eval.max = 5000))
@@ -52,10 +53,10 @@ m1 <- run(p1, cbind(k, n-k) ~ cond * dataset + (1|seed),
 m2 <- list()
 for (resp in c("probe", "learned")) {
   p2 <- droplevels(subset(d, phase == 2 & response == resp))
-  p2$prior <- relevel(p2$prior, ref = "random")
-  m2[[resp]] <- run(p2, cbind(k, n-k) ~ prior * dataset + (1|seed),
-                        cbind(k, n-k) ~ prior + dataset + (1|seed),
-                    paste0("PHASE 2  ", resp, "  ~ prior * dataset"), "prior")
+  p2$cond <- relevel(p2$cond, ref = "oriented")
+  m2[[resp]] <- run(p2, cbind(k, n-k) ~ cond * dataset + (1|seed),
+                        cbind(k, n-k) ~ cond + dataset + (1|seed),
+                    paste0("PHASE 2  ", resp, "  ~ cond * dataset"), "cond")
 }
 
 # ---- population-level predictions (random effects zeroed) -------------------
@@ -69,18 +70,19 @@ pc <- function(m, dat, grp, phase, resp) {
 }
 pred <- rbind(
   pc(m1, p1, "cond", 1, "probe"),
-  pc(m2[["probe"]],   droplevels(subset(d, phase==2 & response=="probe")),   "prior", 2, "probe"),
-  pc(m2[["learned"]], droplevels(subset(d, phase==2 & response=="learned")), "prior", 2, "learned"))
+  pc(m2[["probe"]],   droplevels(subset(d, phase==2 & response=="probe")),   "cond", 2, "probe"),
+  pc(m2[["learned"]], droplevels(subset(d, phase==2 & response=="learned")), "cond", 2, "learned"))
 write.csv(pred, "results/interp/model/predictions.csv", row.names = FALSE)
 
-# ---- phase-2 oriented-vs-random contrast per dataset ------------------------
-cat("\n", strrep("=", 76), "\n  PHASE 2 oriented - random, per dataset (pp, on the response scale)\n",
+# ---- phase-2 predicted accuracy per condition and dataset --------------------
+cat("\n", strrep("=", 76), "\n  PHASE 2 predicted accuracy, per dataset\n",
     strrep("=", 76), "\n", sep = "")
 for (resp in c("probe","learned")) {
   s <- subset(pred, phase == 2 & response == resp)
   for (ds in levels(droplevels(s$dataset))) {
-    a <- s$fit[s$dataset==ds & s$group=="oriented"]; b <- s$fit[s$dataset==ds & s$group=="random"]
-    cat(sprintf("  %-8s %-8s oriented %.3f  random %.3f  delta %+6.2f pp\n", resp, ds, a, b, (a-b)*100))
+    f <- function(g) s$fit[s$dataset==ds & s$group==g]
+    cat(sprintf("  %-8s %-8s oriented %.3f  random %.3f  frozen %.3f\n", resp, ds,
+                f("oriented"), f("random"), f("frozen")))
   }
 }
 cat("\nwrote results/interp/model/predictions.csv (", nrow(pred), "cells )\n")

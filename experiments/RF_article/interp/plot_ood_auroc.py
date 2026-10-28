@@ -2,7 +2,8 @@
 Article OOD figure: AUROC of three novelty detectors, MNIST test vs each OOD set.
 
 Rebuilt 09-17 from the stored run (the original lived in a scratch script that was lost).
-Black and white, with a legend box, per the supervisor's print feedback.
+Black and white, with a legend box, per the supervisor's print feedback. Each bar is the
+mean over the five seeds of run_20261027_143316; the whisker spans the seed range.
 
 Detectors
   group concentration   entropy of excitatory rates pooled per class group; no fitted
@@ -14,12 +15,10 @@ Detectors
   pixel PCA residual    from input_density.json: residual outside MNIST's top-50 pixel
                         principal subspace, two-sided AUROC. No network at all.
 
-SVHN here is an OOD *probe* (never trained on), not one of the article's training sets.
-
 Usage:
-    python experiments/RF_article/interp/plot_ood_auroc.py
+    python experiments/RF_article/interp/plot_ood_auroc.py [--run <run folder of seeds>]
 """
-import argparse, json, os
+import argparse, glob, json, os
 
 import numpy as np
 import matplotlib
@@ -29,7 +28,7 @@ from matplotlib.patches import Patch
 from sklearn.metrics import roc_auc_score
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-RUN = os.path.join(REPO, "results", "ood_mnist", "run1", "mnist_ood_s0")
+RUN = os.path.join(REPO, "results", "ood_mnist", "run_20261027_143316")   # mnist_ood_s0..s4
 OOD = ["kmnist", "notmnist", "fmnist"]   # decreasing low-level similarity to MNIST (SVHN dropped)
 PRETTY = {"kmnist": "KMNIST", "notmnist": "notMNIST", "fmnist": "FMNIST",
           "svhn": "SVHN"}
@@ -69,7 +68,7 @@ def compute(run):
     assign = z["assignment"]; ng = int(assign.max()) + 1
     Xc, yc, Xt = z["X_cal"].astype(np.float64), z["y_cal"], z["X_test"].astype(np.float64)
     # fitted on the first half of the calibration split; the second half calibrates the
-    # rejection threshold (reproduces the reported 0.879/0.968/0.884/0.847)
+    # rejection threshold
     maha = mahalanobis(Xc[:2500], yc[:2500])
     res = {"group": {}, "maha": {}, "pca": {}}
     g_id, m_id = group_entropy(Xt, assign, ng), maha(Xt)
@@ -88,16 +87,20 @@ METHODS = [("group", "group concentration (network)", ("white", "")),
            ("pca", "pixel PCA residual (no network)", ("#bdbdbd", ""))]
 
 
-def figure(res, out):
+def figure(seeds, out):
+    """seeds: one compute() result per seed. Bar = seed mean, whisker = seed range."""
     plt.rcParams.update({"font.family": "DejaVu Sans", "hatch.linewidth": 1.0})
     fig, ax = plt.subplots(figsize=(9.5, 5.2))
     x = np.arange(len(OOD)); w = 0.26
     for k, (key, label, (fc, hatch)) in enumerate(METHODS):
-        vals = [res[key][o] for o in OOD]
-        ax.bar(x + (k - 1) * w, vals, w * 0.92, color=fc, hatch=hatch, edgecolor="black",
+        V = np.array([[r[key][o] for o in OOD] for r in seeds])   # seeds x datasets
+        m, lo, hi = V.mean(0), V.min(0), V.max(0)
+        ax.bar(x + (k - 1) * w, m, w * 0.92, color=fc, hatch=hatch, edgecolor="black",
                lw=1.1, zorder=3)
-        for xi, v in zip(x + (k - 1) * w, vals):
-            ax.text(xi, v + 0.006, f"{v:.2f}", ha="center", va="bottom", fontsize=14)
+        ax.errorbar(x + (k - 1) * w, m, yerr=[m - lo, hi - m], fmt="none", ecolor="black",
+                    elinewidth=1.1, capsize=3, zorder=4)
+        for xi, v, top in zip(x + (k - 1) * w, m, hi):
+            ax.text(xi, top + 0.006, f"{v:.2f}", ha="center", va="bottom", fontsize=14)
     ax.set_ylim(0.5, 1.07)
     ax.set_yticks([0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
     ax.set_xticks(x)
@@ -113,8 +116,9 @@ def figure(res, out):
               bbox_to_anchor=(0.5, 1.0), ncol=2, fontsize=15, frameon=True,
               edgecolor="#666666", fancybox=False, handlelength=2.2, handleheight=1.3)
     fig.tight_layout()
-    for ext in ("pdf", "png"):
-        fig.savefig(f"{out}.{ext}", dpi=300, bbox_inches="tight", facecolor="white")
+    for ext in ("pdf", "png"):   # _BW is the name the article includes
+        for path in (out, out + "_BW"):
+            fig.savefig(f"{path}.{ext}", dpi=300, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
 
@@ -123,12 +127,16 @@ def main():
     ap.add_argument("--run", default=RUN)
     ap.add_argument("--out", default=os.path.join(REPO, "results", "figures", "ood_auroc"))
     a = ap.parse_args()
-    res = compute(a.run)
-    print(f"{'':30}" + "".join(f"{PRETTY[o]:>15}" for o in OOD))
+    dirs = sorted(glob.glob(os.path.join(a.run, "mnist_ood_s*")))
+    seeds = [compute(d) for d in dirs]
+    print(f"{len(dirs)} seeds from {a.run}")
+    print(f"{'':30}" + "".join(f"{PRETTY[o]:>22}" for o in OOD))
     for key, label, _ in METHODS:
-        print(f"{label:30}" + "".join(f"{res[key][o]:15.3f}" for o in OOD))
-    figure(res, a.out)
-    print("wrote", a.out + ".pdf")
+        V = np.array([[r[key][o] for o in OOD] for r in seeds])
+        print(f"{label:30}" + "".join(f"{m:10.3f} [{lo:.3f},{hi:.3f}]"
+                                      for m, lo, hi in zip(V.mean(0), V.min(0), V.max(0))))
+    figure(seeds, a.out)
+    print("wrote", a.out + ".pdf (+ _BW)")
 
 
 if __name__ == "__main__":

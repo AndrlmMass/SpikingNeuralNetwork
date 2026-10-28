@@ -148,6 +148,8 @@ zero.}}
 def tab_phase2_prior():
     with open(os.path.join(MODEL, "contrasts.csv")) as f:
         rows = list(csv.DictReader(f))
+    # contrasts.csv also holds oriented - frozen; this table is the receptive-field contrast.
+    rows = [r for r in rows if r.get("contrast", "oriented - random") == "oriented - random"]
     by = {(r["response"], r["dataset"]): r for r in rows}
     out = []
     for ds in DS:

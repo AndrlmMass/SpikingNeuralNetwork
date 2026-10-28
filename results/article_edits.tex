@@ -1,0 +1,54 @@
+% Smaller edits to the article, in order of appearance. Each block says where it goes.
+% Experiment 1 text: use results_unsupervised.tex (it drops the "main effect ... sum-to-zero"
+% sentence and fixes the figure caption). Experiment 2: results_supervised.tex. OOD:
+% ood_section.tex.
+
+% --- Abstract: replace from "On datasets the network never saw" to "rejects $88$--$99\%$." ---
+On datasets the network never saw, however, entropy separates novel from familiar input
+poorly (mean AUROC $0.82$), so we compare it against scores read from the network's
+internal activity and from the raw pixels. The Mahalanobis distance in the excitatory
+rate space raises the mean AUROC to $0.91$ and rejects $63$--$94\%$ of unseen input while
+refusing only $2.5\%$ of valid digits, outperforming the parameter-free concentration of
+activity across class-specific neuronal populations, yet a subspace model of the raw pixels,
+which uses no network at all, rejects $90$--$99\%$.
+
+% --- Data: append after "...with $224$ samples discarded." ---
+The out-of-distribution experiment (Section~\ref{sec:res:ood}) instead trains its MNIST models
+on $55{,}000$ images and holds out $5{,}000$ as the calibration set from which its rejection
+thresholds are estimated, because thresholds set in the tail of the confidence distribution
+need more held-out samples to be precise; it is tested on the same official $10{,}000$-image
+split.
+
+% --- Experimental design figure, Experiment 3 note: replace
+%     "descriptive; seed $0$ for rejection" with: ---
+descriptive; five seeds
+
+% --- Selective prediction: the FMNIST clause is missing its dataset. Replace
+%     "from $72.3\%$ to $76.2\%$, and" with: ---
+from $72.3\%$ to $76.2\%$ on FMNIST, and
+
+% --- Discussion, "Supervision and the weight connectivity", first paragraph: replace the
+%     sentences from "Read by the same external classifier" to "...$75.5\%$ on KMNIST, the
+%     two datasets on which the weight connectivity and the rule agree." with: ---
+Read by the same linear classifier in both experiments, replacing the receptive fields with
+random connectivity costs little on MNIST in the unsupervised model ($\hat{\beta}_1 = -0.072$)
+and about ten times as much in the supervised one ($\hat{\beta}_1 = -0.737$). Through its own
+readout the supervised network reaches $94.5\%$ on MNIST and $75.5\%$ on KMNIST, the two
+datasets on which the weight connectivity and the rule agree.
+
+% --- Discussion, second paragraph: replace "R-Hebb improves on frozen weights on all four
+%     datasets, by $8.9$ percentage points on MNIST and $22.7$ on KMNIST," with: ---
+R-Hebb improves on frozen weights on all four datasets, raising the learned readout's
+accuracy from $85.4\%$ to $94.5\%$ on MNIST and from $53.4\%$ to $75.5\%$ on KMNIST,
+
+% --- Limitations: replace from "The supervised contrast also depends on which decoder" to
+%     the end of that paragraph with: ---
+The supervised contrast also depends on which decoder reads the representation. The learned
+readout and the linear classifier agree in the sign of every coefficient but differ in
+magnitude, most clearly for \textit{Frozen} ($\hat{\beta}_2 = -1.085$ against $-0.665$ on
+MNIST), so each statement of that contrast has to name its decoder.
+
+% --- Hyperparameter table: add a footnote row after the "Split sizes are those of ..." row ---
+\multicolumn{5}{p{14.5cm}}{\footnotesize The out-of-distribution runs
+(Section~\ref{sec:res:ood}) use $55{,}000$ training and $5{,}000$ calibration images in
+place of the $59{,}000$ and $1{,}000$ above, with the same $10{,}000$ test images.} \\

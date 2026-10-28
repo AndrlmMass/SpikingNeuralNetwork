@@ -1,0 +1,25 @@
+readout,scope,condition,n,base_acc,aurc,zero_error_coverage,zero_error_n,zero_error_lower95,cov_at_0.99_conservative,cov_at_0.99_empirical,cov_at_0.98_conservative,cov_at_0.98_empirical,cov_at_0.95_conservative,cov_at_0.95_empirical
+learned_readout,overall,predicted,10000,0.6637,0.1871,0.0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0025
+learned_readout,class 0,predicted,1273,0.6064,0.2045,0.0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+learned_readout,class 1,predicted,907,0.9272,0.0164,0.2712,246,0.9846,0.0,0.4498,0.3506,0.6748,0.86,0.9383
+learned_readout,class 2,predicted,1432,0.4253,0.4238,0.0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+learned_readout,class 3,predicted,954,0.7736,0.1028,0.0451,43,0.918,0.0,0.0451,0.0,0.0451,0.0,0.2757
+learned_readout,class 4,predicted,1230,0.465,0.4263,0.0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+learned_readout,class 5,predicted,527,0.8577,0.0756,0.1442,76,0.9519,0.0,0.1442,0.0,0.2372,0.1442,0.3567
+learned_readout,class 6,predicted,352,0.3864,0.6223,0.0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+learned_readout,class 7,predicted,1333,0.6842,0.1186,0.0,0,0.0,0.0,0.0,0.0,0.0375,0.0,0.3248
+learned_readout,class 8,predicted,797,0.9184,0.0188,0.2422,193,0.9805,0.0,0.4391,0.2422,0.6361,0.8306,0.8959
+learned_readout,class 9,predicted,1195,0.7305,0.0892,0.0502,60,0.9398,0.0,0.0502,0.0,0.0611,0.241,0.4787
+linear_probe,overall,predicted,10000,0.722,0.1027,0.0313,313,0.9879,0.0,0.084,0.1074,0.2016,0.3674,0.4046
+linear_probe,class 0,predicted,1007,0.6941,0.1692,0.0268,27,0.8754,0.0,0.0268,0.0,0.0268,0.0,0.0278
+linear_probe,class 1,predicted,986,0.9209,0.0081,0.5051,498,0.9923,0.5994,0.7586,0.7586,0.8661,0.9209,0.9574
+linear_probe,class 2,predicted,793,0.5788,0.2875,0.0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0252
+linear_probe,class 3,predicted,1062,0.7307,0.1051,0.0,0,0.0,0.0,0.0,0.0,0.1488,0.0,0.3964
+linear_probe,class 4,predicted,1081,0.5957,0.2868,0.0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+linear_probe,class 5,predicted,1173,0.676,0.1395,0.0367,43,0.918,0.0,0.0367,0.0,0.0673,0.0,0.156
+linear_probe,class 6,predicted,837,0.4205,0.5253,0.0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+linear_probe,class 7,predicted,990,0.8333,0.0579,0.0737,73,0.95,0.0,0.0737,0.0,0.3071,0.3455,0.5263
+linear_probe,class 8,predicted,1025,0.842,0.0384,0.1424,146,0.9744,0.0,0.241,0.0,0.3122,0.6722,0.7678
+linear_probe,class 9,predicted,1046,0.8614,0.0339,0.1166,122,0.9695,0.0,0.2084,0.0,0.5908,0.7304,0.7725
+pool,overall,predicted,10000,0.1,0.8844,0.0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+pool,class 0,predicted,10000,0.1,0.8844,0.0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0

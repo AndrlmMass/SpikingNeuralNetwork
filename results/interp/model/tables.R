@@ -3,7 +3,7 @@
 # dispersion in a footer block, significance legend in a caption*.
 #
 #   phase 1  cbind(k, n-k) ~ cond * dataset + (1|seed)      [linear probe]
-#   phase 2  cbind(k, n-k) ~ prior * dataset + (1|seed)     [learned readout | probe]
+#   phase 2  cbind(k, n-k) ~ cond * dataset + (1|seed)      [learned readout | probe]
 #
 # Phase 2 mirrors contrasts.R exactly: dispersion is allowed to vary by dataset when that
 # fits better and converges, and the seed intercept is dropped when the fit is singular.
@@ -47,6 +47,8 @@ pretty_term <- function(tm) {
   tm <- gsub("condvogels",    "$+$iSTDP",       tm)
   tm <- gsub("condee_off",    "$-$Recurrence",  tm)
   tm <- gsub("condie_off",    "$-$Inhibition",  tm)
+  tm <- gsub("condrandom",    "Random",         tm)   # phase 2
+  tm <- gsub("condoriented",  "Plastic RF",     tm)   # phase 2 reference
   tm <- gsub("priororiented", "oriented RF",    tm)
   tm <- gsub("datasetfmnist", "FMNIST",         tm)
   tm <- gsub("datasetkmnist", "KMNIST",         tm)
@@ -74,9 +76,11 @@ coefs <- function(m) {
   o$p[fam] <- p.adjust(o$p_raw[fam], "holm")
   o
 }
+# NA when the seed intercept was dropped or estimated at zero (singular): either way the
+# data cannot identify it, and the table says so rather than printing .0000.
 seed_var <- function(m) {
   v <- VarCorr(m)$cond$seed
-  if (is.null(v)) NA else as.numeric(v)
+  if (is.null(v) || as.numeric(v) < 1e-6) NA else as.numeric(v)
 }
 phi <- function(m) {
   if (length(fixef(m)$disp) > 1) NA else exp(unname(fixef(m)$disp[1]))
@@ -105,7 +109,7 @@ icf <- grp("^cond[^:]*$"); ids <- grp("^dataset"); iix <- grp(":")
 L <- c(
   "\\footnotesize{",
   "\\begin{longtable}{lrrrl}",
-  "    \\caption{Phase 1 beta-binomial GLMM of linear-probe accuracy: fixed-effect estimates",
+  "    \\caption{Experiment 1 beta-binomial GLMM of linear classifier accuracy: fixed-effect estimates",
   "    on the logit scale. The reference cell is \\textit{Base} (oriented receptive fields",
   "    under trace-STDP, with recurrent excitation and fixed lateral inhibition) on MNIST,",
   "    so each \\textit{configuration} row is the effect on MNIST of changing that one",
@@ -146,18 +150,18 @@ writeLines(unlist(L), file.path(OUT, "tab_glmm_phase1.tex"))
 # ---------- phase 2: two models side by side --------------------------------
 fit2 <- function(resp) {
   p2 <- droplevels(subset(d, phase == 2 & response == resp))
-  p2$prior <- relevel(p2$prior, ref = "random")
+  p2$cond <- factor(p2$cond, levels = c("oriented", "random", "frozen"))   # Plastic RF first
   p2$dataset <- relevel(p2$dataset, ref = "mnist")
-  m0 <- glmmTMB(cbind(k, n - k) ~ prior * dataset + (1 | seed),
+  m0 <- glmmTMB(cbind(k, n - k) ~ cond * dataset + (1 | seed),
                 family = betabinomial(), data = p2, control = CTRL)
-  m1 <- tryCatch(glmmTMB(cbind(k, n - k) ~ prior * dataset + (1 | seed),
+  m1 <- tryCatch(glmmTMB(cbind(k, n - k) ~ cond * dataset + (1 | seed),
                          family = betabinomial(), dispformula = ~ dataset,
                          data = p2, control = CTRL), error = function(e) NULL)
   use_var <- ok(m1) && (!ok(m0) || AIC(m1) < AIC(m0))
   m <- if (use_var) m1 else m0
   re <- TRUE
   if (!ok(m)) {
-    m <- glmmTMB(cbind(k, n - k) ~ prior * dataset,
+    m <- glmmTMB(cbind(k, n - k) ~ cond * dataset,
                  family = betabinomial(), data = p2, control = CTRL)
     use_var <- FALSE; re <- FALSE
   }
@@ -175,7 +179,10 @@ row2 <- function(i, lab) sprintf("    %s & %s & %s & %s & %s & %s & %s\\\\",
 
 ii  <- grepl(":", CL$term)
 ids <- !ii & grepl("^dataset", CL$term)
-ipr <- !ii & grepl("^prior", CL$term)
+ipr <- !ii & grepl("^cond", CL$term)
+# Which decoders' seed intercepts were singular (dropped, or estimated at zero).
+sing <- c(if (!FL$re || is.na(seed_var(FL$m))) "learned readout",
+          if (!FP$re || is.na(seed_var(FP$m))) "linear classifier")
 
 # Dispersion per dataset when it was modelled that way; otherwise the single fitted phi,
 # shown on the first row and left blank below it rather than repeated four times.
@@ -183,9 +190,21 @@ phi_by <- function(m, lv) {
   b <- fixef(m)$disp
   sapply(lv, function(ds) exp(if (ds == lv[1]) b[[1]] else b[[1]] + b[[paste0("dataset", ds)]]))
 }
+phi_num <- function(x) if (x >= 1e4)          # the value alone; the row label names it
+  sprintf("$%s\\times 10^{%d}$", formatC(x / 10^floor(log10(x)), format = "f", digits = 1),
+          floor(log10(x))) else formatC(x, format = "f", digits = 0)
 disp_cells <- function(F, lv) {
-  if (F$var_disp) sapply(unname(phi_by(F$m, lv)), fmt_phi)
-  else c(paste0(fmt_phi(phi(F$m)), " (shared)"), rep("", length(lv) - 1))
+  if (F$var_disp) sapply(unname(phi_by(F$m, lv)), phi_num)
+  else c(paste0(phi_num(phi(F$m)), " (shared)"), rep("", length(lv) - 1))
+}
+LV2 <- c("mnist", setdiff(levels(droplevels(subset(d, phase == 2)$dataset)), "mnist"))
+disp_rows <- function() {
+  if (!FL$var_disp && !FP$var_disp)
+    return(sprintf("    Model & \\multicolumn{3}{c}{%s} & \\multicolumn{3}{c}{%s}\\\\",
+                   phi_num(phi(FL$m)), phi_num(phi(FP$m))))
+  cl <- disp_cells(FL, LV2); cp <- disp_cells(FP, LV2)
+  sprintf("    $\\hat{\\phi}_{\\text{%s}}$ & \\multicolumn{3}{c}{%s} & \\multicolumn{3}{c}{%s}\\\\",
+          sapply(LV2, function(x) pretty_term(paste0("dataset", x))), cl, cp)
 }
 seed_cell <- function(F) if (!F$re || is.na(seed_var(F$m))) "--- (singular)" else
   num(seed_var(F$m), 4)
@@ -194,18 +213,20 @@ L2 <- c(
   "\\footnotesize{",
   "\\setlength{\\tabcolsep}{4pt}",
   "\\begin{longtable}{l rrr rrr}",
-  "    \\caption{Phase 2 beta-binomial GLMM of supervised accuracy under R-Hebb, by decoder:",
-  "    fixed-effect estimates on the logit scale. The reference cell is random connectivity",
-  "    on MNIST, so \\textit{oriented RF} is the receptive-field effect on MNIST and each",
-  "    interaction row is how it changes on the named dataset.\\label{tab:glmm_phase2}}\\\\",
+  "    \\caption{Experiment 2 beta-binomial GLMM of supervised accuracy, by decoder: fixed-effect",
+  "    estimates on the logit scale. The reference cell is \\textit{Plastic RF} (receptive",
+  "    fields trained with R-Hebb) on MNIST, so \\textit{Random} and \\textit{Frozen} are the effects on",
+  "    MNIST of replacing the receptive fields with random connectivity and of disabling",
+  "    R-Hebb, and each interaction row is how that effect changes on the named",
+  "    dataset.\\label{tab:glmm_phase2}}\\\\",
   "    \\toprule",
-  "    & \\multicolumn{3}{c}{\\textit{Learned readout}} & \\multicolumn{3}{c}{\\textit{Linear probe}}\\\\",
+  "    & \\multicolumn{3}{c}{\\textit{Learned readout}} & \\multicolumn{3}{c}{\\textit{Linear classifier}}\\\\",
   "    \\cmidrule(lr){2-4}\\cmidrule(lr){5-7}",
   "    \\textbf{Fixed effect} & Est. & \\textit{z} & \\textit{p}$_{\\text{Holm}}$ & Est. & \\textit{z} & \\textit{p}$_{\\text{Holm}}$\\\\",
   "    \\midrule",
   "    \\endfirsthead",
   "    \\toprule",
-  "    & \\multicolumn{3}{c}{\\textit{Learned readout}} & \\multicolumn{3}{c}{\\textit{Linear probe}}\\\\",
+  "    & \\multicolumn{3}{c}{\\textit{Learned readout}} & \\multicolumn{3}{c}{\\textit{Linear classifier}}\\\\",
   "    \\cmidrule(lr){2-4}\\cmidrule(lr){5-7}",
   "    Fixed effect & Est. & \\textit{z} & \\textit{p}$_{\\text{Holm}}$ & Est. & \\textit{z} & \\textit{p}$_{\\text{Holm}}$\\\\",
   "    \\midrule",
@@ -224,25 +245,15 @@ L2 <- c(
   sprintf("    Seed & \\multicolumn{3}{c}{%s} & \\multicolumn{3}{c}{%s}\\\\",
           seed_cell(FL), seed_cell(FP)),
   "    \\multicolumn{7}{l}{\\textbf{Dispersion}}\\\\",
-  sprintf("    Model & \\multicolumn{3}{c}{%s} & \\multicolumn{3}{c}{%s}\\\\",
-          if (FL$var_disp) "by dataset (see caption)" else fmt_phi(phi(FL$m)),
-          if (FP$var_disp) "by dataset (see caption)" else fmt_phi(phi(FP$m))),
+  disp_rows(),
   "    \\bottomrule",
   sprintf(paste0("    \\caption*{$p$-values are Holm-adjusted over the fixed effects other than the ",
                  "intercept, within each decoder's model. ",
                  "Significance: * $p<.05$, ** $p<.01$, *** $p<.001$. Reference cell ",
-                 "= random connectivity on MNIST. %s The probe's seed intercept was singular and ",
-                 "was dropped.}"),
-          if (FL$var_disp) {
-            lv <- c("mnist", setdiff(levels(droplevels(subset(d, phase == 2 &
-                    response == "learned")$dataset)), "mnist"))
-            v  <- phi_by(FL$m, lv)
-            paste0("The learned readout is fitted with one dispersion per dataset: ",
-                   paste(sprintf("$\\hat{\\phi}_{\\text{%s}} = %s$",
-                                 sapply(lv, function(x) pretty_term(paste0("dataset", x))),
-                                 formatC(unname(v), format = "f", digits = 0)),
-                         collapse = ", "), ".")
-          } else ""),
+                 "= \\textit{Plastic RF} on MNIST. %s%s}"),
+          if (FL$var_disp) "The learned readout is fitted with one dispersion per dataset." else "",
+          if (length(sing)) sprintf(" The seed intercept was singular for the %s and was dropped.",
+                                    paste(sing, collapse = " and ")) else ""),
   "\\end{longtable}",
   "\\setlength{\\tabcolsep}{6pt}}")
 writeLines(unlist(L2), file.path(OUT, "tab_glmm_phase2.tex"))

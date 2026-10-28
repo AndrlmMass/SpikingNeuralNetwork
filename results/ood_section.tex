@@ -1,47 +1,51 @@
-\subsection{Rejecting out-of-distribution input}
-\label{sec:ood}
+% Replaces the article's "Rejecting out-of-distribution data" subsection and its figure.
+% Every number is the mean over the five seeds of results/ood_mnist/run_20261027_143316,
+% from experiments/RF_article/interp/ood_summary.py (per-seed values in
+% results/interp/model/ood_summary.csv) and plot_ood_auroc.py.
 
-We asked whether the network also identifies input it was never trained on, holding an
-MNIST-trained model fixed while presenting KMNIST, notMNIST, Fashion-MNIST, and SVHN.
-The predictive entropy of Section~\ref{sec:sel_pred} separates novel from familiar input
-poorly, at $\mathrm{AUROC}$ $0.694$--$0.870$ across the four probes, but that is a
-property of the readout rather than of the representation. Two scores read from the
-excitatory rates instead do considerably better: the Mahalanobis distance to the nearest
-class-conditional Gaussian fitted on held-out MNIST reaches $0.847$--$0.968$, and the
-concentration of activity across the ten class groups---the entropy of the group-pooled
-rate distribution, which requires no fitted parameters at all---reaches
-$0.765$--$0.907$.\footnote{The Mahalanobis score has fitted parameters, so its threshold
-is calibrated on a held-out half of the MNIST calibration split; calibrating on the same
-data it was fitted to makes in-distribution scores optimistic and inflates the realised
-false-rejection rate from $2.5\%$ to $11.3\%$.} Averaged over the probes, moving from
-predictive entropy to the Mahalanobis score raises $\mathrm{AUROC}$ from $0.775$ to
-$0.896$ and lowers the false-positive rate at $95\%$ true-positive rate from $0.71$ to
-$0.22$.
+\subsubsection{Rejecting out-of-distribution data}
+\label{sec:res:ood}
+We ask whether the network also identifies input it was never trained on, holding an
+MNIST-trained model fixed while presenting KMNIST, notMNIST, and FMNIST. The predictive
+entropy of Section~\ref{sec:sel_pred} separates novel from familiar input poorly, at
+$\mathrm{AUROC}$ $0.773$--$0.884$ across the three datasets, but that is a property of the
+readout rather than of the representation. Two scores extracted from the excitatory rates do
+better on notMNIST and FMNIST, though neither improves on entropy for KMNIST. The Mahalanobis
+distance to the nearest class-conditional Gaussian fitted on held-out MNIST reaches
+$0.884$--$0.969$, and the concentration of activity across the ten class-specific
+populations, the entropy of the rate distribution pooled per population, which requires no
+fitted parameters at all, reaches $0.765$--$0.906$.\footnote{The Mahalanobis score has fitted
+parameters, so its threshold is calibrated on a held-out half of the MNIST calibration split;
+fitting and calibrating it on the same data makes in-distribution scores optimistic and
+inflates the realized false-rejection rate from the nominal $2.5\%$ to $10.5\%$.} Averaged
+over the datasets, moving from predictive entropy to the Mahalanobis score raises
+$\mathrm{AUROC}$ from $0.818$ to $0.914$ and lowers the false-positive rate at $95\%$
+true-positive rate from $0.66$ to $0.21$.
 
-A detector computed on raw pixels and using no network at all still outperforms both: the
-residual outside MNIST's top-$50$ principal subspace reaches $0.971$--$0.999$
+A detector computed on raw pixels and using no network at all still outperforms both, with
+the residual outside MNIST's top-$50$ principal subspace reaching $0.983$--$0.999$
 (Figure~\ref{fig:ood}). We report this as a limitation rather than a defeat, because the
-comparison is specific to the benchmark: these are centred $28 \times 28$ grayscale
-images on a uniform background, so the in-distribution manifold is genuinely
-low-dimensional in pixel space and a linear subspace model captures it almost exactly.
-The network's contribution is visible where such low-level cues are weakest. On KMNIST,
-the probe matched to MNIST in evoked firing rate ($0.00213$ against $0.00225$), mean image
-intensity falls to $0.745$ while the Mahalanobis score holds $0.879$; on SVHN, colour
-photographs that mean brightness alone almost separates ($0.980$), the ordering reverses.
-At a threshold refusing $2.5\%$ of valid MNIST, the group-concentration score refuses
-$27$--$76\%$ of out-of-distribution input and the Mahalanobis score $63$--$94\%$, against
-$88$--$99\%$ for the pixel residual. All of these numbers rest on a single trained
-network.
+comparison is specific to the benchmark. These are centered $28 \times 28$ grayscale images on
+a uniform background, so the in-distribution manifold is genuinely low-dimensional in pixel
+space and a linear subspace model captures it almost exactly. The network's contribution is
+visible where such low-level cues are weakest. On KMNIST, the dataset matched to MNIST in
+evoked firing rate ($0.00213$ against $0.00225$), mean image intensity falls to $0.745$ while
+the Mahalanobis score holds $0.884$. At a threshold refusing $2.5\%$ of valid MNIST, the
+group-concentration score refuses $28$--$71\%$ of out-of-distribution input and the
+Mahalanobis score $63$--$94\%$, against $90$--$99\%$ for the pixel residual. Each number is
+the mean over five independently trained networks, between which the two rate-based scores
+vary by less than $0.01$ in $\mathrm{AUROC}$ and predictive entropy by up to $0.07$.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.75\textwidth]{ood_auroc.pdf}
+\includegraphics[width=0.75\textwidth]{ood_auroc_BW.pdf}
 \caption{Separability of MNIST test input from each out-of-distribution set, as
-$\mathrm{AUROC}$ of three detectors: the concentration of activity across the ten class
-groups and the Mahalanobis distance in the excitatory rate space, both read from the
-network, against the residual outside MNIST's top-$50$ pixel principal subspace, which
-uses no network at all. An $\mathrm{AUROC}$ of $0.5$, the axis floor, is chance. Probes
-are ordered by decreasing similarity of low-level image statistics to MNIST. One trained
-network, seed $0$.}
+$\mathrm{AUROC}$ of three detectors: the concentration of activity across the ten
+class-specific populations and the Mahalanobis distance in the excitatory rate space, both
+read from the network, against the residual outside MNIST's top-$50$ pixel principal
+subspace, which uses no network at all. An $\mathrm{AUROC}$ of $0.5$, the axis floor, is
+chance. Datasets are ordered by decreasing similarity of low-level image statistics to MNIST.
+Bars give the mean over five independently trained networks and whiskers the range between
+them.}
 \label{fig:ood}
 \end{figure}

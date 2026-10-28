@@ -1,10 +1,10 @@
 """
-Supervised model, five datasets: oriented-RF vs random init vs FROZEN, one box per cell.
+Supervised model, four datasets: Plastic RF vs Random vs Frozen, one box per cell.
 
-Adds the third condition the phase-2 figure never had. Phase 2 compared two PLASTIC arms
-(oriented vs random W_se init under R-Hebb); with no frozen arm there was no way to say
-whether plasticity contributed anything at all in the supervised model -- the only frozen
-evidence came from phase 1, which differs in six config parameters at once.
+Plastic RF (RF weights trained with R-Hebb) is the Experiment 2 reference; Random replaces
+the RFs with random weights (still R-Hebb) and Frozen keeps the RFs fixed (R-Hebb off,
+readout still learns). The run folders are the same ones build_model_data.py feeds the
+GLMM, so the figure and the table show the same runs.
 
 Every box is the SAME decoder: the learned dense softmax-delta readout, on the test set.
 Never `test_acc`, which is the PCA+LR evaluator probe in the harness schema and the learned
@@ -34,19 +34,21 @@ TEXT_SCALE = 1.5
 F_LABEL, F_TICK, F_SERIES = (int(round(v * TEXT_SCALE))
                              for v in (FS_LABEL, FS_TICK, FS_SERIES))
 
-PHASE2 = os.path.join(REPO, "results", "interp", "json", "experiments", "RF_article",
-                      "interp", "mnist_family_sweep", "results", "run_20260819_112250")
-# The 08-19 random arm silently got global instead of within-group I->E inhibition
-# (fixed in 9159d743); its rerun lives in its own run folder and replaces it.
-PHASE2_RANDOM = os.path.join(os.path.dirname(PHASE2), "run_20260916_105832")
-FROZEN = os.path.join(REPO, "results", "frozen_supervised", "run_cheap")
+RUNS = os.path.join(REPO, "results", "interp", "json", "experiments", "RF_article",
+                    "interp", "mnist_family_sweep", "results")
 DATASETS = ["mnist", "kmnist", "fmnist", "notmnist"]
+# (run folder, arm, datasets), as in build_model_data.py. Random on MNIST/FMNIST/KMNIST is
+# the 09-16 rerun with within-group I->E inhibition (9159d743); notMNIST random and every
+# frozen run are the 10-27 runs, on the same 2500 notMNIST test images as Plastic RF.
+SOURCES = [
+    ("run_20260819_112250", "oriented", DATASETS),
+    ("run_20260916_105832", "random", ["mnist", "fmnist", "kmnist"]),
+    ("run_20261027_111346", "random", ["notmnist"]),
+    ("run_20261027_111346", "frozen", DATASETS),
+]
 PRETTY = {"mnist": "MNIST", "fmnist": "FMNIST", "kmnist": "KMNIST",
           "notmnist": "notMNIST"}
-LABELS = {"oriented": "RF prior\n+ R-Hebb", "random": "random init\n+ R-Hebb",
-          "frozen": "RF prior\nFROZEN"}
-FLAT = {"oriented": "RF prior + R-Hebb", "random": "random init + R-Hebb",
-        "frozen": "RF prior, frozen"}          # single-line, for the stdout table
+FLAT = {"oriented": "Plastic RF", "random": "Random", "frozen": "Frozen"}
 ORDER = ["frozen", "random", "oriented"]     # weakest-claim first, left to right
 N_YTICKS = 5                                 # same tick count in every panel
 
@@ -66,22 +68,12 @@ def learned_readout(path):
 def collect():
     """{dataset: {condition: [per-seed accuracies]}}"""
     out = {ds: {c: [] for c in ORDER} for ds in DATASETS}
-    paths = (glob.glob(os.path.join(PHASE2, "*_oriented_s*", "results.json"))
-             + glob.glob(os.path.join(PHASE2_RANDOM, "*_random_s*", "results.json")))
-    for p in sorted(paths):
-        tag = os.path.basename(os.path.dirname(p))
-        ds, prior, _ = tag.rsplit("_", 2)
-        a = learned_readout(p)
-        if a is not None and ds in out and prior in out[ds]:
-            out[ds][prior].append(a)
-    for p in sorted(glob.glob(os.path.join(FROZEN, "*", "results.json"))):
-        try:
-            ds = json.load(open(p))["config"]["dataset"]
-        except Exception:
-            continue
-        a = learned_readout(p)
-        if a is not None and ds in out:
-            out[ds]["frozen"].append(a)
+    for run, arm, datasets in SOURCES:
+        for ds in datasets:
+            for p in sorted(glob.glob(os.path.join(RUNS, run, f"{ds}_{arm}_s*", "results.json"))):
+                a = learned_readout(p)
+                if a is not None:
+                    out[ds][arm].append(a)
     return out
 
 
@@ -144,9 +136,10 @@ def figure(data, out_path, theme="light", palette="project"):
     fig.subplots_adjust(left=0.07, right=0.80, bottom=0.06, top=0.90, wspace=0.62)
     fig.legend(handles=handles, loc="center left", bbox_to_anchor=(0.815, 0.5),
                fontsize=F_TICK - 4, frameon=True, edgecolor="#666666", fancybox=False)
-    for ext in ("png", "pdf"):
-        fig.savefig(f"{out_path}.{ext}", dpi=200, facecolor=T["surface"],
-                    bbox_inches="tight", pad_inches=0.15)
+    for ext in ("png", "pdf"):   # _BW is the name the article includes
+        for path in (out_path, out_path + "_BW"):
+            fig.savefig(f"{path}.{ext}", dpi=200, facecolor=T["surface"],
+                        bbox_inches="tight", pad_inches=0.15)
     plt.close(fig)
     return out_path + ".png"
 

@@ -1,0 +1,67 @@
+% Experiment 2: replaces the article's "Protocol" (first paragraph only; the readout
+% evaluation paragraph after it is unchanged) and "Receptive fields under reward-modulated
+% plasticity", including the figure and the inline table.
+
+\subsubsection{Protocol}
+We define the contribution of each configuration $c$ relative to a supervised reference,
+\textit{Plastic RF}, which combines receptive field connectivity, the R-Hebb rule in the
+excitatory (hidden) layer, and the softmax delta rule in the readout. Each of the other two
+configurations changes a single component. In \textit{Random}, the receptive field
+connectivity is replaced by random weights of matched input drive, isolating the effect of
+weight structure. In \textit{Frozen}, the receptive field weights are held at their
+initialization (no R-Hebb), while the readout still learns with the softmax delta rule,
+isolating the contribution of hidden-layer learning. In Equation~\eqref{eq:glmm_lin}, $c$
+ranges over these three conditions with \textit{Plastic RF} as the reference, and we fit the
+model separately to the learned readout and to the linear classifier.
+
+% (readout evaluation paragraph and equation unchanged)
+
+\subsubsection{Receptive fields under reward-modulated plasticity}
+Under R-Hebb, plasticity improves on the frozen receptive fields on every dataset, whereas the
+benefit of receptive fields over random connectivity depends on the dataset
+(Figure~\ref{fig:phase2_glmm}). The beta-binomial GLMM (Table~\ref{tab:glmm_phase2}) takes
+\textit{Plastic RF} on MNIST as its reference, so each configuration coefficient is the
+logit-scale effect of one change on MNIST, and each interaction is how that effect shifts on
+another dataset.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=1\linewidth]{frozen_vs_plastic_BW.pdf}
+    \caption{Learned-readout test accuracy of the supervised model on MNIST, KMNIST, FMNIST,
+    and notMNIST for \textit{Plastic RF} (white; receptive fields trained with R-Hebb),
+    \textit{Random} (hatched; random connectivity trained with R-Hebb), and \textit{Frozen}
+    (grey; receptive fields held at their initialization). The readout is trained in all
+    three conditions. Markers give the five individual seeds. Each panel has its own accuracy
+    scale.}
+    \label{fig:phase2_glmm}
+\end{figure}
+
+% table: paste results/tables/tab_glmm_phase2.tex here, replacing the old inline table
+
+Disabling R-Hebb has the larger effect of the two changes. On MNIST, \textit{Frozen} lowers
+the learned readout's accuracy from $94.5\%$ to $85.4\%$ ($\hat{\beta}_2 = -1.085$,
+$p<.001$), and although its interactions with the other datasets are positive, none outweighs
+this main effect, so \textit{Frozen} is the least accurate configuration on every dataset. On
+KMNIST the interaction does not differ from zero ($\hat{\beta}_9 = 0.095$, $p = .183$), which
+leaves the largest gap of all, $53.4\%$ against $75.5\%$.
+
+Replacing the receptive fields with random connectivity also lowers accuracy on MNIST, to
+$90.2\%$ ($\hat{\beta}_1 = -0.640$, $p<.001$), but all three of its interactions are positive
+($p<.001$). On KMNIST the interaction ($\hat{\beta}_8 = 0.457$) recovers only part of the main
+effect, so the receptive fields keep their lead, whereas on FMNIST and notMNIST it exceeds
+the main effect ($\hat{\beta}_6 = 0.847$ and $\hat{\beta}_{10} = 1.218$) and random
+connectivity becomes the more accurate of the two, reaching $88.0\%$ on notMNIST against
+$80.4\%$ for \textit{Plastic RF}. The linear classifier reproduces the sign of every
+coefficient ($\hat{\beta}_1 = -0.737$ and $\hat{\beta}_2 = -0.665$, with all interactions
+positive), so the dependence on the dataset is a property of the representation rather than
+of the readout that decodes it. Seed-to-seed variation of the learned readout differs about
+sixteenfold between datasets, from $\hat{\phi}_{\text{FMNIST}} = 320$ to
+$\hat{\phi}_{\text{KMNIST}} = 5239$, so we estimate its dispersion separately for each
+dataset, while the seed variance itself is negligible.
+
+Taken together, directed plasticity supplies what the unsupervised model lacked. Once the
+rule receives information about the task, it improves on the frozen receptive fields on every
+dataset, where every unsupervised rule fell short of them. The receptive fields themselves,
+however, help only on handwritten digits and characters and cost accuracy on garments and
+letter glyphs, so their benefit depends on whether the data carry the local, oriented
+structure they assume.
